@@ -1,0 +1,9 @@
+balance_id,balance_date,account_id,balance,balance_usd,retrieved_at
+2026-10-10-chase_checking,2026-10-10,chase_checking,960,960,2026-10-13 02:18:28
+2026-10-10-sbi_nro,2026-10-10,sbi_nro,20000,206.9536424,2026-10-13 02:18:28
+2026-10-10-chase_freedom_rise,2026-10-10,chase_freedom_rise,-450,-450,2026-10-13 02:18:28
+2026-10-11-chase_checking,2026-10-11,chase_checking,1550,1550,2026-10-13 02:18:28
+2026-10-11-sbi_nro,2026-10-11,sbi_nro,0,0,2026-10-13 02:18:28
+2026-10-11-chase_freedom_rise,2026-10-11,chase_freedom_rise,-85,-85,2026-10-13 02:18:28
+2026-10-12-chase_checking,2026-10-12,chase_checking,1560,1560,2026-10-13 02:18:28
+2026-10-12-chase_freedom_rise,2026-10-12,chase_freedom_rise,-85,-85,2026-10-13 02:18:28

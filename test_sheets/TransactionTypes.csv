@@ -1,0 +1,5 @@
+type_id,display_name,source_side_required,destination_side_required,expense_multiplier
+expense,Expense,TRUE,FALSE,1
+income,Income,FALSE,TRUE,0
+reimbursement,Reimbursement,FALSE,TRUE,-1
+transfer,Transfer,TRUE,TRUE,0

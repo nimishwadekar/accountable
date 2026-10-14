@@ -1,0 +1,16 @@
+category_id,category_name,allowed_transaction_types
+housing,Housing,"expense,reimbursement"
+bills,Bills,"expense,reimbursement"
+dining,Dining,"expense,reimbursement"
+groceries,Groceries,"expense,reimbursement"
+transport,Transport,"expense,reimbursement"
+travel,Travel,"expense,reimbursement"
+health,Health,"expense,reimbursement"
+nightlife,Nightlife,"expense,reimbursement"
+gifts,Gifts,"expense,reimbursement"
+shopping,Shopping,"expense,reimbursement"
+financial_fees,Financial Fees,"expense,reimbursement"
+entertainment,Entertainment,"expense,reimbursement"
+other,Other,"expense,reimbursement"
+,,
+salary,Salary,income

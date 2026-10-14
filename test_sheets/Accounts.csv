@@ -1,0 +1,4 @@
+account_id,name,account_type,currency,opening_balance,current_balance,opening_date,closing_date
+chase_checking,Chase Checking,Bank,USD,1000,1560,2026-10-01,
+sbi_nro,SBI NRO,Bank,INR,20000,0,2026-10-02,2026-10-11
+chase_freedom_rise,Chase Freedom Rise,Credit,USD,-450,-85,2026-10-03,
