@@ -264,3 +264,20 @@ The first responsive app shell is implemented and uses the local asset snapshot 
 - Tapping a row may show read-only details; edit and delete remain out of scope for now.
 
 The transaction list, responsive filters, grouped rows, read-only detail sheet, and scroll-to-top action are implemented.
+
+## Transaction entry decisions recorded
+
+- Use one Add Transaction button on the Transactions page only.
+- Keep one shared transaction form flow for all four transaction types; specialized quick-entry forms can be added later on top of the same transaction builder and validation rules.
+- Present the type chooser as a bottom sheet on compact widths and a dialog/menu on desktop.
+- Prefill the transaction date with today's local calendar date while keeping it editable.
+- Generate `created_at` automatically as the current UTC timestamp.
+- Return to the Transactions list with a confirmation message after successful submission.
+- In local Chrome mode, persist the complete test dataset in browser storage while leaving bundled CSV fixtures unchanged.
+- Select existing tags only; add new tags in Sheets for now.
+
+Transaction entry is implemented with local Chrome persistence, shared validation, UUID transaction IDs, and asset fixtures kept read-only.
+
+- New transaction entries require both a tag and a non-empty description.
+- The description field appears at the top of the transaction form.
+- Existing fixture rows may remain blank for these fields during migration; entry validation is stricter than legacy-data parsing.

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/data.dart';
 import '../formatters.dart';
 import '../theme/design_tokens.dart';
+import 'transaction_form.dart';
 
 bool isTransactionDateInRange(DateTime transactionDate, DateTimeRange range) {
   final date = _dateOnlyUtc(transactionDate);
@@ -16,9 +17,14 @@ DateTime _dateOnlyUtc(DateTime value) {
 }
 
 class TransactionsPage extends StatefulWidget {
-  const TransactionsPage({super.key, required this.data});
+  const TransactionsPage({
+    super.key,
+    required this.data,
+    required this.onTransactionAdded,
+  });
 
   final AppDataSnapshot data;
+  final Future<void> Function(Transaction transaction) onTransactionAdded;
 
   @override
   State<TransactionsPage> createState() => _TransactionsPageState();
@@ -50,69 +56,121 @@ class _TransactionsPageState extends State<TransactionsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isCompact =
-        MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
+    final isCompact = MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
     final transactions = _filteredTransactions;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: AppBreakpoints.maxContentWidth,
-            ),
-            child: SizedBox(
-              height: constraints.maxHeight,
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Transactions',
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      '${transactions.length} of ${widget.data.transactions.length} transactions',
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: AppColors.mutedText,
-                          ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    if (isCompact)
-                      _buildCompactFilterButton(context)
-                    else
-                      _buildDesktopFilters(context),
-                    const SizedBox(height: AppSpacing.md),
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          if (transactions.isEmpty)
-                            const EmptyTransactionsState()
-                          else
-                            _buildGroupedList(transactions),
-                          if (_showScrollToTop)
-                            Positioned(
-                              right: AppSpacing.md,
-                              bottom: AppSpacing.md,
-                              child: FloatingActionButton.small(
-                                onPressed: _scrollToTop,
-                                tooltip: 'Back to top',
-                                child: const Icon(Icons.arrow_upward),
-                              ),
-                            ),
-                        ],
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openAddTransaction,
+        icon: const Icon(Icons.add),
+        label: const Text('Add transaction'),
+      ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: AppBreakpoints.maxContentWidth,
+              ),
+              child: SizedBox(
+                height: constraints.maxHeight,
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Transactions',
+                        style: Theme.of(context).textTheme.headlineMedium,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        '${transactions.length} of ${widget.data.transactions.length} transactions',
+                        style: Theme.of(context).textTheme.bodyLarge
+                            ?.copyWith(color: AppColors.mutedText),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      if (isCompact)
+                        _buildCompactFilterButton(context)
+                      else
+                        _buildDesktopFilters(context),
+                      const SizedBox(height: AppSpacing.md),
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            if (transactions.isEmpty)
+                              const EmptyTransactionsState()
+                            else
+                              _buildGroupedList(transactions),
+                            if (_showScrollToTop)
+                              Positioned(
+                                right: AppSpacing.md,
+                                bottom: AppSpacing.md,
+                                child: FloatingActionButton.small(
+                                  onPressed: _scrollToTop,
+                                  tooltip: 'Back to top',
+                                  child: const Icon(Icons.arrow_upward),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
+  }
+
+  Future<void> _openAddTransaction() async {
+    final isCompact = MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
+    final type = isCompact
+        ? await showModalBottomSheet<TransactionType>(
+            context: context,
+            showDragHandle: true,
+            builder: (context) => const TransactionTypeChooser(),
+          )
+        : await showDialog<TransactionType>(
+            context: context,
+            builder: (context) => const TransactionTypeChooser(),
+          );
+    if (!mounted || type == null) return;
+
+    final transaction = isCompact
+        ? await showModalBottomSheet<Transaction>(
+            context: context,
+            isScrollControlled: true,
+            showDragHandle: true,
+            builder: (context) =>
+                TransactionFormSheet(type: type, data: widget.data),
+          )
+        : await showDialog<Transaction>(
+            context: context,
+            builder: (context) => Dialog(
+              child: SizedBox(
+                width: 560,
+                child: TransactionFormSheet(type: type, data: widget.data),
+              ),
+            ),
+          );
+    if (!mounted || transaction == null) return;
+
+    try {
+      await widget.onTransactionAdded(transaction);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Transaction added.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not add transaction: $error')),
+      );
+    }
   }
 
   List<Transaction> get _filteredTransactions {
@@ -156,10 +214,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
         ),
         if (_hasFilters) ...[
           const SizedBox(width: AppSpacing.sm),
-          TextButton(
-            onPressed: _clearFilters,
-            child: const Text('Clear'),
-          ),
+          TextButton(onPressed: _clearFilters, child: const Text('Clear')),
         ],
       ],
     );
@@ -174,22 +229,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
           runSpacing: AppSpacing.md,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            SizedBox(
-              width: 180,
-              child: _buildTypeDropdown(),
-            ),
-            SizedBox(
-              width: 220,
-              child: _buildAccountDropdown(),
-            ),
-            SizedBox(
-              width: 220,
-              child: _buildCategoryDropdown(),
-            ),
-            SizedBox(
-              width: 180,
-              child: _buildTagDropdown(),
-            ),
+            SizedBox(width: 180, child: _buildTypeDropdown()),
+            SizedBox(width: 220, child: _buildAccountDropdown()),
+            SizedBox(width: 220, child: _buildCategoryDropdown()),
+            SizedBox(width: 180, child: _buildTagDropdown()),
             OutlinedButton.icon(
               onPressed: _selectDateRange,
               icon: const Icon(Icons.date_range),
@@ -237,7 +280,8 @@ class _TransactionsPageState extends State<TransactionsPage> {
       padding: const EdgeInsets.only(bottom: AppSpacing.xl),
       itemCount: children.length,
       itemBuilder: (context, index) => children[index],
-      separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.xs),
+      separatorBuilder: (context, index) =>
+          const SizedBox(height: AppSpacing.xs),
     );
   }
 
@@ -254,7 +298,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
         for (final type in TransactionType.values)
           DropdownMenuItem<TransactionType?>(
             value: type,
-            child: Text(_transactionTypeLabel(type)),
+            child: Text(transactionTypeLabel(type)),
           ),
       ],
       onChanged: (value) => setState(() => _transactionType = value),
@@ -307,15 +351,9 @@ class _TransactionsPageState extends State<TransactionsPage> {
       isExpanded: true,
       decoration: const InputDecoration(labelText: 'Tag'),
       items: [
-        const DropdownMenuItem<String?>(
-          value: null,
-          child: Text('All tags'),
-        ),
+        const DropdownMenuItem<String?>(value: null, child: Text('All tags')),
         for (final tag in widget.data.tags)
-          DropdownMenuItem<String?>(
-            value: tag.id,
-            child: Text(tag.name),
-          ),
+          DropdownMenuItem<String?>(value: tag.id, child: Text(tag.name)),
       ],
       onChanged: (value) => setState(() => _tagId = value),
     );
@@ -388,10 +426,8 @@ class _TransactionsPageState extends State<TransactionsPage> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (context) => TransactionDetailsSheet(
-        transaction: transaction,
-        data: widget.data,
-      ),
+      builder: (context) =>
+          TransactionDetailsSheet(transaction: transaction, data: widget.data),
     );
   }
 
@@ -446,7 +482,8 @@ class _TransactionFilterSheet extends StatefulWidget {
   final _TransactionFilters initialFilters;
 
   @override
-  State<_TransactionFilterSheet> createState() => _TransactionFilterSheetState();
+  State<_TransactionFilterSheet> createState() =>
+      _TransactionFilterSheetState();
 }
 
 class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
@@ -491,10 +528,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
                 onPressed: _apply,
                 child: const Text('Apply filters'),
               ),
-              TextButton(
-                onPressed: _clear,
-                child: const Text('Clear filters'),
-              ),
+              TextButton(onPressed: _clear, child: const Text('Clear filters')),
             ],
           ),
         ),
@@ -514,7 +548,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
         for (final type in TransactionType.values)
           DropdownMenuItem<TransactionType?>(
             value: type,
-            child: Text(_transactionTypeLabel(type)),
+            child: Text(transactionTypeLabel(type)),
           ),
       ],
       onChanged: (value) => setState(() => _transactionType = value),
@@ -564,15 +598,9 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
       initialValue: _tagId,
       decoration: const InputDecoration(labelText: 'Tag'),
       items: [
-        const DropdownMenuItem<String?>(
-          value: null,
-          child: Text('All tags'),
-        ),
+        const DropdownMenuItem<String?>(value: null, child: Text('All tags')),
         for (final tag in widget.data.tags)
-          DropdownMenuItem<String?>(
-            value: tag.id,
-            child: Text(tag.name),
-          ),
+          DropdownMenuItem<String?>(value: tag.id, child: Text(tag.name)),
       ],
       onChanged: (value) => setState(() => _tagId = value),
     );
@@ -625,16 +653,11 @@ class _DateHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(
-        top: AppSpacing.sm,
-        bottom: AppSpacing.xs,
-      ),
+      padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.xs),
       child: Text(
         formatDate(date),
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: AppColors.navy,
-              fontWeight: FontWeight.w700,
-            ),
+        style: Theme.of(context).textTheme.titleMedium
+            ?.copyWith(color: AppColors.navy, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -692,13 +715,15 @@ class TransactionListRow extends StatelessWidget {
         ),
         title: Text(
           transaction.description.isEmpty
-              ? _transactionTypeLabel(transaction.type)
+              ? transactionTypeLabel(transaction.type)
               : transaction.description,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          detailParts.isEmpty ? _transactionTypeLabel(transaction.type) : detailParts.join(' · '),
+          detailParts.isEmpty
+              ? transactionTypeLabel(transaction.type)
+              : detailParts.join(' · '),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -745,27 +770,39 @@ class TransactionListRow extends StatelessWidget {
   Color _backgroundColor(BuildContext context) {
     return switch (transaction.type) {
       TransactionType.expense => Theme.of(context).colorScheme.errorContainer,
-      TransactionType.income => Theme.of(context).colorScheme.secondaryContainer,
-      TransactionType.reimbursement => Theme.of(context).colorScheme.tertiaryContainer,
-      TransactionType.transfer => Theme.of(context).colorScheme.surfaceContainerHighest,
+      TransactionType.income => Theme.of(
+        context,
+      ).colorScheme.secondaryContainer,
+      TransactionType.reimbursement => Theme.of(
+        context,
+      ).colorScheme.tertiaryContainer,
+      TransactionType.transfer => Theme.of(
+        context,
+      ).colorScheme.surfaceContainerHighest,
     };
   }
 
   Color _foregroundColor(BuildContext context) {
     return switch (transaction.type) {
       TransactionType.expense => Theme.of(context).colorScheme.onErrorContainer,
-      TransactionType.income => Theme.of(context).colorScheme.onSecondaryContainer,
-      TransactionType.reimbursement => Theme.of(context).colorScheme.onTertiaryContainer,
-      TransactionType.transfer => Theme.of(context).colorScheme.onSurfaceVariant,
+      TransactionType.income => Theme.of(
+        context,
+      ).colorScheme.onSecondaryContainer,
+      TransactionType.reimbursement => Theme.of(
+        context,
+      ).colorScheme.onTertiaryContainer,
+      TransactionType.transfer => Theme.of(
+        context,
+      ).colorScheme.onSurfaceVariant,
     };
   }
 
   IconData get _icon => switch (transaction.type) {
-        TransactionType.expense => Icons.arrow_upward,
-        TransactionType.income => Icons.arrow_downward,
-        TransactionType.reimbursement => Icons.replay,
-        TransactionType.transfer => Icons.swap_horiz,
-      };
+    TransactionType.expense => Icons.arrow_upward,
+    TransactionType.income => Icons.arrow_downward,
+    TransactionType.reimbursement => Icons.replay,
+    TransactionType.transfer => Icons.swap_horiz,
+  };
 }
 
 class TransactionDetailsSheet extends StatelessWidget {
@@ -794,7 +831,7 @@ class TransactionDetailsSheet extends StatelessWidget {
             children: [
               Text(
                 transaction.description.isEmpty
-                    ? _transactionTypeLabel(transaction.type)
+                    ? transactionTypeLabel(transaction.type)
                     : transaction.description,
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
@@ -803,20 +840,21 @@ class TransactionDetailsSheet extends StatelessWidget {
               const SizedBox(height: AppSpacing.lg),
               _DetailLine(
                 label: 'Type',
-                value: _transactionTypeLabel(transaction.type),
+                value: transactionTypeLabel(transaction.type),
               ),
               _DetailLine(
                 label: 'Category',
                 value: transaction.categoryId == null
                     ? '—'
                     : data.categoriesById[transaction.categoryId!]?.name ??
-                        transaction.categoryId!,
+                          transaction.categoryId!,
               ),
               _DetailLine(
                 label: 'Tag',
                 value: transaction.tagId == null
                     ? '—'
-                    : data.tagsById[transaction.tagId!]?.name ?? transaction.tagId!,
+                    : data.tagsById[transaction.tagId!]?.name ??
+                          transaction.tagId!,
               ),
               const SizedBox(height: AppSpacing.md),
               if (transaction.sourceAccountId != null)
@@ -885,7 +923,11 @@ class EmptyTransactionsState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.receipt_long_outlined, size: 48, color: AppColors.mutedText),
+          const Icon(
+            Icons.receipt_long_outlined,
+            size: 48,
+            color: AppColors.mutedText,
+          ),
           const SizedBox(height: AppSpacing.md),
           Text(
             'No transactions match these filters.',
@@ -897,13 +939,4 @@ class EmptyTransactionsState extends StatelessWidget {
       ),
     );
   }
-}
-
-String _transactionTypeLabel(TransactionType type) {
-  return switch (type) {
-    TransactionType.expense => 'Expense',
-    TransactionType.income => 'Income',
-    TransactionType.reimbursement => 'Reimbursement',
-    TransactionType.transfer => 'Transfer',
-  };
 }

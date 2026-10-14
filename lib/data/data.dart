@@ -6,3 +6,4 @@ export 'repositories/asset_repositories.dart';
 export 'repositories/data_load_exception.dart';
 export 'repositories/repositories.dart';
 export 'sources/asset_reader.dart';
+export 'sources/local_dataset_store.dart';

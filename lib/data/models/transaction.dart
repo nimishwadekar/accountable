@@ -1,3 +1,4 @@
+import 'currency.dart';
 import 'money.dart';
 
 enum TransactionType {
@@ -61,6 +62,42 @@ const transactionTypeRules = <TransactionType, TransactionTypeRule>{
   ),
 };
 
+Map<String, String> transactionToRow(
+  Transaction transaction,
+  Map<String, CurrencyDefinition> currencies,
+  Map<String, String> accountCurrencies,
+) {
+  String? amountFor(Money? amount, String? accountId) {
+    if (amount == null || accountId == null) return null;
+    final currencyId = accountCurrencies[accountId];
+    final currency = currencyId == null ? null : currencies[currencyId];
+    if (currency == null) {
+      throw StateError('Unknown currency for account $accountId.');
+    }
+    return amount.toMajorUnits(currency).toString();
+  }
+
+  return {
+    'transaction_id': transaction.id,
+    'created_at': transaction.createdAt.toUtc().toIso8601String(),
+    'date': _dateToString(transaction.date),
+    'transaction_type': transaction.type.wireValue,
+    'source_amount': amountFor(transaction.sourceAmount, transaction.sourceAccountId) ?? '',
+    'source_account_id': transaction.sourceAccountId ?? '',
+    'dest_amount': amountFor(transaction.destinationAmount, transaction.destinationAccountId) ?? '',
+    'dest_account_id': transaction.destinationAccountId ?? '',
+    'category': transaction.categoryId ?? '',
+    'tag': transaction.tagId ?? '',
+    'description': transaction.description,
+  };
+}
+
+String _dateToString(DateTime date) {
+  return '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+}
+
 class Transaction {
   const Transaction({
     required this.id,
@@ -119,6 +156,13 @@ class Transaction {
       errors.add('${type.wireValue} requires a category.');
     }
 
+    return errors;
+  }
+
+  List<String> validateForEntry() {
+    final errors = [...validate()];
+    if (tagId == null) errors.add('A tag is required.');
+    if (description.trim().isEmpty) errors.add('A description is required.');
     return errors;
   }
 }

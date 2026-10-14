@@ -1,7 +1,10 @@
+import 'package:csv/csv.dart';
+
 import '../app_data_snapshot.dart';
 import '../csv/csv.dart';
 import '../models/models.dart';
 import '../sources/asset_reader.dart';
+import '../sources/local_dataset_store.dart';
 import 'data_load_exception.dart';
 import 'repositories.dart';
 
@@ -9,8 +12,7 @@ abstract final class DataAssetPaths {
   static const accounts = 'test_sheets/Accounts.csv';
   static const categories = 'test_sheets/Categories.csv';
   static const currencies = 'test_sheets/Currencies.csv';
-  static const dailyAccountBalances =
-      'test_sheets/DailyAccountBalances.csv';
+  static const dailyAccountBalances = 'test_sheets/DailyAccountBalances.csv';
   static const dailyExchangeRates = 'test_sheets/DailyExchangeRates.csv';
   static const dailyNetWorth = 'test_sheets/DailyNetWorth.csv';
   static const tags = 'test_sheets/Tags.csv';
@@ -77,9 +79,8 @@ class AssetTagRepository implements TagRepository {
   Future<List<Tag>> load() {
     return _loadTable(
       tableName: 'Tags',
-      action: () async => ModelParsers.parseTags(
-        await reader.readString(DataAssetPaths.tags),
-      ),
+      action: () async =>
+          ModelParsers.parseTags(await reader.readString(DataAssetPaths.tags)),
     );
   }
 }
@@ -163,29 +164,11 @@ class AssetDailyNetWorthRepository implements DailyNetWorthRepository {
 }
 
 class AssetAppDataRepository implements AppDataRepository {
-  AssetAppDataRepository({AssetReader? reader})
-      : this._withRepositories(
-          reader ?? const FlutterAssetReader(),
-        );
+  AssetAppDataRepository({AssetReader? reader, this.store})
+    : reader = reader ?? const FlutterAssetReader();
 
-  AssetAppDataRepository._withRepositories(AssetReader reader)
-      : currencies = AssetCurrencyRepository(reader),
-        accounts = AssetAccountRepository(reader),
-        categories = AssetCategoryRepository(reader),
-        tags = AssetTagRepository(reader),
-        transactions = AssetTransactionRepository(reader),
-        exchangeRates = AssetExchangeRateRepository(reader),
-        dailyAccountBalances = AssetDailyAccountBalanceRepository(reader),
-        dailyNetWorth = AssetDailyNetWorthRepository(reader);
-
-  final CurrencyRepository currencies;
-  final AccountRepository accounts;
-  final CategoryRepository categories;
-  final TagRepository tags;
-  final TransactionRepository transactions;
-  final ExchangeRateRepository exchangeRates;
-  final DailyAccountBalanceRepository dailyAccountBalances;
-  final DailyNetWorthRepository dailyNetWorth;
+  final AssetReader reader;
+  final LocalDatasetStore? store;
 
   AppDataSnapshot? _cachedSnapshot;
 
@@ -201,43 +184,143 @@ class AssetAppDataRepository implements AppDataRepository {
     return snapshot;
   }
 
+  @override
+  Future<AppDataSnapshot> addTransaction(Transaction transaction) async {
+    final current = await load();
+    final tables = await _readDataset();
+    final accountCurrencies = {
+      for (final account in current.accounts) account.id: account.currencyId,
+    };
+    final row = transactionToRow(
+      transaction,
+      current.currenciesById,
+      accountCurrencies,
+    );
+    tables[DataAssetPaths.transactions] = _appendCsvRow(
+      tables[DataAssetPaths.transactions]!,
+      row,
+    );
+    if (store == null) {
+      throw StateError('This data source is read-only.');
+    }
+    await store!.write(tables);
+    _cachedSnapshot = null;
+    return reload();
+  }
+
   Future<AppDataSnapshot> _loadFreshSnapshot() async {
-    final currencyList = await currencies.load();
-    final currencyById = {
-      for (final currency in currencyList) currency.id: currency,
-    };
-    final accountList = await accounts.load(currencies: currencyById);
-    final accountById = {
-      for (final account in accountList) account.id: account,
-    };
+    final tables = await _readDataset();
+    try {
+      final currencyList = ModelParsers.parseCurrencies(
+        tables[DataAssetPaths.currencies]!,
+      );
+      final currencyById = {
+        for (final currency in currencyList) currency.id: currency,
+      };
+      final accountList = ModelParsers.parseAccounts(
+        tables[DataAssetPaths.accounts]!,
+        currencyById,
+      );
+      final accountById = {
+        for (final account in accountList) account.id: account,
+      };
+      final categoryList = ModelParsers.parseCategories(
+        tables[DataAssetPaths.categories]!,
+      );
+      final tagList = ModelParsers.parseTags(tables[DataAssetPaths.tags]!);
+      final transactionList = ModelParsers.parseTransactions(
+        tables[DataAssetPaths.transactions]!,
+        accounts: accountById,
+        currencies: currencyById,
+      );
+      final exchangeRateList = ModelParsers.parseExchangeRates(
+        tables[DataAssetPaths.dailyExchangeRates]!,
+      );
+      final dailyAccountBalanceList = ModelParsers.parseDailyAccountBalances(
+        tables[DataAssetPaths.dailyAccountBalances]!,
+        accounts: accountById,
+        currencies: currencyById,
+      );
+      final dailyNetWorthList = ModelParsers.parseDailyNetWorth(
+        tables[DataAssetPaths.dailyNetWorth]!,
+        currencyById,
+      );
 
-    final categoryList = await categories.load();
-    final tagList = await tags.load();
-    final transactionList = await transactions.load(
-      accounts: accountById,
-      currencies: currencyById,
-    );
-    final exchangeRateList = await exchangeRates.load();
-    final dailyAccountBalanceList = await dailyAccountBalances.load(
-      accounts: accountById,
-      currencies: currencyById,
-    );
-    final dailyNetWorthList = await dailyNetWorth.load(
-      currencies: currencyById,
-    );
+      return AppDataSnapshot(
+        accounts: accountList,
+        categories: categoryList,
+        currencies: currencyList,
+        tags: tagList,
+        transactions: transactionList,
+        exchangeRates: exchangeRateList,
+        dailyAccountBalances: dailyAccountBalanceList,
+        dailyNetWorth: dailyNetWorthList,
+      );
+    } catch (error) {
+      throw DataLoadException(
+        tableName: 'local dataset',
+        message: error.toString(),
+        cause: error,
+      );
+    }
+  }
 
-    return AppDataSnapshot(
-      accounts: accountList,
-      categories: categoryList,
-      currencies: currencyList,
-      tags: tagList,
-      transactions: transactionList,
-      exchangeRates: exchangeRateList,
-      dailyAccountBalances: dailyAccountBalanceList,
-      dailyNetWorth: dailyNetWorthList,
-    );
+  Future<Map<String, String>> _readDataset() async {
+    final stored = await store?.read();
+    if (stored != null) {
+      for (final path in _runtimeAssetPaths) {
+        if (!stored.containsKey(path)) {
+          throw DataLoadException(
+            tableName: 'local dataset',
+            message: 'Stored dataset is missing $path.',
+          );
+        }
+      }
+      return Map.of(stored);
+    }
+
+    final tables = <String, String>{};
+    for (final path in _runtimeAssetPaths) {
+      try {
+        tables[path] = await reader.readString(path);
+      } catch (error) {
+        throw DataLoadException(
+          tableName: _tableNameFromPath(path),
+          message: error.toString(),
+          cause: error,
+        );
+      }
+    }
+    if (store != null) await store!.write(tables);
+    return tables;
+  }
+
+  static String _appendCsvRow(String source, Map<String, String> row) {
+    final rows = csv.decode(source);
+    if (rows.isEmpty) throw const FormatException('CSV has no header row.');
+    final headers = rows.first.map((value) => value.toString()).toList();
+    rows.add([for (final header in headers) row[header] ?? '']);
+    return csv.encode(rows);
   }
 }
+
+String _tableNameFromPath(String path) {
+  final fileName = path.split('/').last;
+  return fileName.endsWith('.csv')
+      ? fileName.substring(0, fileName.length - 4)
+      : fileName;
+}
+
+const _runtimeAssetPaths = <String>[
+  DataAssetPaths.currencies,
+  DataAssetPaths.accounts,
+  DataAssetPaths.categories,
+  DataAssetPaths.dailyAccountBalances,
+  DataAssetPaths.dailyExchangeRates,
+  DataAssetPaths.dailyNetWorth,
+  DataAssetPaths.tags,
+  DataAssetPaths.transactions,
+];
 
 Future<T> _loadTable<T>({
   required String tableName,

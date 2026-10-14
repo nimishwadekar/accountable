@@ -159,7 +159,10 @@ class _AppShellState extends State<AppShell> {
 
     return switch (_selectedSection) {
       AppSection.overview => OverviewPage(data: data),
-      AppSection.transactions => TransactionsPage(data: data),
+      AppSection.transactions => TransactionsPage(
+          data: data,
+          onTransactionAdded: _handleTransactionAdded,
+        ),
       AppSection.accounts => AccountsPage(data: data),
       AppSection.analysis => PlaceholderPage(
           title: 'Analysis',
@@ -184,5 +187,13 @@ class _AppShellState extends State<AppShell> {
     setState(() {
       _snapshotFuture = widget.dataRepository.reload();
     });
+  }
+
+  Future<void> _handleTransactionAdded(Transaction transaction) async {
+    final future = widget.dataRepository.addTransaction(transaction);
+    setState(() {
+      _snapshotFuture = future;
+    });
+    await future;
   }
 }

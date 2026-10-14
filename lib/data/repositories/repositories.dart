@@ -47,4 +47,6 @@ abstract interface class AppDataRepository {
   Future<AppDataSnapshot> load();
 
   Future<AppDataSnapshot> reload();
+
+  Future<AppDataSnapshot> addTransaction(Transaction transaction);
 }
