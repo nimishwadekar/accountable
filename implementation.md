@@ -354,8 +354,13 @@ The first Analysis page and its daily-series calculation services are implemente
 - The release build will not expose a runtime data-source toggle and will default to Sheets.
 - Standardize Google OAuth Flutter web testing on `http://localhost:9000`; authorize this origin in the Google Cloud OAuth client.
 - Tests and local development can inject the asset repository directly; normal app runs follow the committed runtime config unless a repository is injected.
-- Attempt silent Google authentication on startup with a loading state; show interactive sign-in only when silent authentication fails.
-- Request Sheets read/write consent only when the required scope has not already been granted.
+- Attempt silent Google authentication on startup with a loading state; wait up to 3 seconds for restoration before showing the sign-in action.
+- After account restoration, attempt Sheets scope authorization silently; request interactive consent only when needed.
+- Where Google permits it, combine account restoration and Sheets authorization into the earliest possible flow.
+- On expired/invalid Sheets tokens, retry once after silently reacquiring authorization; show reauthorization only if that fails.
+- Provide an explicit account-switch/sign-out action.
+- Use distinct UI states for restoring session, signing in, granting Sheets access, loading data, unauthorized account, and configuration errors.
+- Expired-token retry remains a follow-up integration task.
 - Separate a Google OAuth/Sheets API service from repositories; the service handles tokens, range reads, batch reads, row appends, and full-rebuild writes, while repositories map API data into domain models.
 - Use A1 ranges based on current tab names and headers, such as `Transactions!A:K`, `Accounts!A:H`, and daily date-column ranges; spreadsheet ID is the only spreadsheet-specific configuration value.
 - After authentication and startup catch-up, read all current runtime tables; support appending new transactions and the confirmed manual full rebuild, while editing and deletion remain deferred.

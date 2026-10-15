@@ -25,6 +25,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   bool _loading = true;
   bool _authorizing = false;
   bool _needsConsent = false;
+  bool _loadingData = false;
   GoogleSignInAccount? _account;
   AppDataRepository? _repository;
   Future<void> Function()? _rebuildDailyTables;
@@ -110,8 +111,14 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
                     const SizedBox(height: AppSpacing.lg),
                     if (!configured)
                       const SizedBox.shrink()
-                    else if (_loading || _authorizing)
-                      const Center(child: CircularProgressIndicator())
+                    else if (_loading || _authorizing || _loadingData)
+                      Column(
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: AppSpacing.md),
+                          Text(_message, textAlign: TextAlign.center),
+                        ],
+                      )
                     else if (_needsConsent)
                       FilledButton.icon(
                         onPressed: _grantSheetsAccess,
@@ -123,6 +130,13 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
                     if (_error != null) ...[
                       const SizedBox(height: AppSpacing.sm),
                       TextButton(onPressed: _retry, child: const Text('Retry')),
+                    ],
+                    if (_account != null && _repository == null) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      TextButton(
+                        onPressed: _switchAccount,
+                        child: const Text('Use a different Google account'),
+                      ),
                     ],
                   ],
                 ),
@@ -139,7 +153,8 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       return 'Add the Google OAuth client ID, spreadsheet ID, and allowed email in assets/config.json.';
     }
     if (_loading) return 'Restoring your Google session…';
-    if (_authorizing) return 'Connecting to Google Sheets…';
+    if (_authorizing) return 'Signing in to Google…';
+    if (_loadingData) return 'Loading your financial data…';
     if (_needsConsent) {
       return 'Authorize Sheets access for your account to continue.';
     }
@@ -152,9 +167,21 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       return;
     }
     try {
-      final account = await _authService.attemptSilentAuthentication();
-      if (!mounted) return;
-      setState(() => _loading = false);
+      final attempt = await _authService.attemptSilentAuthentication();
+      GoogleSignInAccount? account;
+      if (attempt != null) {
+        account = await attempt.timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => null,
+        );
+      } else {
+        await Future<void>.delayed(const Duration(seconds: 3));
+      }
+      if (!mounted || _account != null) return;
+      setState(() {
+        _loading = false;
+        _error = null;
+      });
       if (account != null) await _finishSignIn(account);
     } catch (error) {
       if (!mounted) return;
@@ -177,7 +204,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       if (!mounted) return;
       setState(() {
         _authorizing = false;
-        _error = error.toString();
+        _error = _isBenignAuthenticationError(error) ? null : error.toString();
       });
     }
   }
@@ -205,6 +232,12 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     });
     try {
       _authService.validateAllowedAccount(account);
+      if (mounted) {
+        setState(() {
+          _authorizing = false;
+          _loadingData = true;
+        });
+      }
       final accessToken = interactiveConsent
           ? await _authService.authorizeSheetsInteractively(account)
           : await _authService.authorizeSheets(account);
@@ -231,20 +264,37 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       setState(() {
         _repository = repository;
         _authorizing = false;
+        _loadingData = false;
       });
     } on GoogleAuthException {
       if (!mounted) return;
       setState(() {
         _authorizing = false;
+        _loadingData = false;
         _needsConsent = true;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _authorizing = false;
+        _loadingData = false;
         _error = error.toString();
       });
     }
+  }
+
+  Future<void> _switchAccount() async {
+    await _authService.signOut();
+    if (!mounted) return;
+    setState(() {
+      _account = null;
+      _repository = null;
+      _needsConsent = false;
+      _loading = false;
+      _authorizing = false;
+      _loadingData = false;
+      _error = null;
+    });
   }
 
   bool _isBenignAuthenticationError(Object error) {

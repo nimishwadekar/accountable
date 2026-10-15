@@ -10,13 +10,16 @@ class GoogleAuthService {
 
   final AccountableConfig config;
   final GoogleSignIn _signIn = GoogleSignIn.instance;
-  bool _initialized = false;
+  static Future<void>? _initialization;
 
   Stream<GoogleSignInAuthenticationEvent> get authenticationEvents =>
       _signIn.authenticationEvents;
 
-  Future<void> initialize() async {
-    if (_initialized) return;
+  Future<void> initialize() {
+    return _initialization ??= _initializeOnce();
+  }
+
+  Future<void> _initializeOnce() async {
     if (kIsWeb) {
       final currentOrigin = Uri.base.origin;
       if (currentOrigin != config.oauthOrigin) {
@@ -27,13 +30,11 @@ class GoogleAuthService {
       }
     }
     await _signIn.initialize(clientId: config.googleClientId);
-    _initialized = true;
   }
 
-  Future<GoogleSignInAccount?> attemptSilentAuthentication() async {
+  Future<Future<GoogleSignInAccount?>?> attemptSilentAuthentication() async {
     await initialize();
-    final future = _signIn.attemptLightweightAuthentication();
-    return future ?? Future<GoogleSignInAccount?>.value();
+    return _signIn.attemptLightweightAuthentication();
   }
 
   Future<GoogleSignInAccount> authenticate() async {
@@ -42,9 +43,8 @@ class GoogleAuthService {
   }
 
   Future<String> authorizeSheets(GoogleSignInAccount account) async {
-    final authorization = await account.authorizationClient.authorizationForScopes(
-      [config.sheetsScope],
-    );
+    final authorization = await account.authorizationClient
+        .authorizationForScopes([config.sheetsScope]);
     if (authorization == null) {
       throw const GoogleAuthException(
         'Sheets permission requires an interactive authorization action.',

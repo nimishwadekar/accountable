@@ -308,6 +308,16 @@ Missing-rate fallback:
 
 OAuth configuration, account gating, the Sheets-backed runtime repository, and daily catch-up are implemented.
 
+### Authentication refinement — implemented
+
+- Wait up to 3 seconds for silent browser-session restoration before showing interactive sign-in.
+- Attempt Sheets-scope authorization silently after account restoration.
+- Combine account restoration and Sheets authorization as early as the platform permits.
+- Provide explicit account switching/sign-out.
+- Show state-specific messages for restoration, sign-in, Sheets consent, data loading, unauthorized accounts, and configuration errors.
+
+Expired-token retry remains a follow-up integration task.
+
 Normal production startup will be:
 
 1. Attempt silent Google OAuth.
