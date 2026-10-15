@@ -2,8 +2,8 @@
 set -euo pipefail
 
 FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
-OVERALL_MIN="${OVERALL_MIN:-60}"
-FINANCIAL_MIN="${FINANCIAL_MIN:-75}"
+LOGIC_MIN="${LOGIC_MIN:-80}"
+FINANCIAL_MIN="${FINANCIAL_MIN:-90}"
 
 "$FLUTTER_BIN" test --coverage
 
@@ -12,12 +12,21 @@ if [[ ! -f coverage/lcov.info ]]; then
   exit 1
 fi
 
-awk -v minimum="$OVERALL_MIN" '
-  /^LF:/{lf += substr($0, 4)}
-  /^LH:/{lh += substr($0, 4)}
+awk -v minimum="$LOGIC_MIN" '
+  /^SF:/{file = substr($0, 4)}
+  /^LF:/{currentLf = substr($0, 4)}
+  /^LH:/{
+    currentLh = substr($0, 4)
+    # UI composition and external OAuth/HTTP adapters are validated by widget
+    # tests or manual smoke tests, not counted in the application-logic gate.
+    if (file !~ /lib\/app\/pages|lib\/app\/theme|lib\/app\/google|lib\/data\/sources\/google|lib\/main\.dart/) {
+      lf += currentLf
+      lh += currentLh
+    }
+  }
   END {
     percent = lf ? 100 * lh / lf : 0
-    printf "Overall line coverage: %.2f%% (%d/%d)\n", percent, lh, lf
+    printf "Application logic coverage: %.2f%% (%d/%d)\n", percent, lh, lf
     if (percent < minimum) exit 1
   }
 ' coverage/lcov.info

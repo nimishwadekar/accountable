@@ -56,6 +56,29 @@ void main() {
     );
   });
 
+  test('rebuild replaces all three derived tables', () async {
+    final data = await AssetAppDataRepository().load();
+    final client = _FakeSheetsClient({});
+    final httpClient = MockClient(
+      (_) async => http.Response(
+        jsonEncode({'rates': {'INR': 96.4}}),
+        200,
+      ),
+    );
+
+    await DailyMaintenanceService(
+      client: client,
+      data: data,
+      httpClient: httpClient,
+    ).rebuild();
+
+    expect(client.replacedRanges.keys, containsAll(<String>[
+      GoogleSheetsRanges.dailyExchangeRates,
+      GoogleSheetsRanges.dailyAccountBalances,
+      GoogleSheetsRanges.dailyNetWorth,
+    ]));
+  });
+
   test('includes an account through its inclusive closing date', () async {
     final data = await AssetAppDataRepository().load();
     final client = _FakeSheetsClient({
@@ -193,6 +216,7 @@ class _ResumableSheetsClient implements SheetsTableClient {
   };
 
   final List<List<String>> appendedRows = [];
+  final Map<String, List<List<String>>> replacedRanges = {};
   int appendCount = 0;
   int? failOnAppendNumber = 2;
 
@@ -224,7 +248,9 @@ class _ResumableSheetsClient implements SheetsTableClient {
       tables[range] ?? [];
 
   @override
-  Future<void> replaceRange(String range, List<List<String>> values) async {}
+  Future<void> replaceRange(String range, List<List<String>> values) async {
+    replacedRanges[range] = values;
+  }
 }
 
 class _FakeSheetsClient implements SheetsTableClient {
@@ -232,6 +258,7 @@ class _FakeSheetsClient implements SheetsTableClient {
 
   final Map<String, List<List<String>>> tables;
   final List<List<String>> appendedRows = [];
+  final Map<String, List<List<String>>> replacedRanges = {};
 
   @override
   Future<void> appendRow(String range, List<String> values) async {
@@ -252,5 +279,6 @@ class _FakeSheetsClient implements SheetsTableClient {
   @override
   Future<void> replaceRange(String range, List<List<String>> values) async {
     tables[range] = values;
+    replacedRanges[range] = values;
   }
 }

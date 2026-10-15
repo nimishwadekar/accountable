@@ -322,7 +322,7 @@ The first Analysis page and its daily-series calculation services are implemente
 - Daily maintenance tests verify that only currencies with open accounts receive rates and only open accounts receive daily balances.
 - Every production bug must receive a regression test.
 - Coverage is measured with [`tool/check_coverage.sh`](./tool/check_coverage.sh).
-- Current coverage thresholds are 60% overall and 75% for financial logic files.
+- Current coverage thresholds are 80% application logic and 90% for financial logic files. Application-logic coverage excludes UI composition, visual theme code, OAuth UI, and low-level external HTTP adapters; those areas use widget/manual smoke tests.
 
 - Closed accounts are charted only through their closing date, inclusive, and show a `Closed on YYYY-MM-DD` subtitle.
 - Chart x-axes use actual calendar-day positions with adaptive, sensible date intervals based on chart width and period span, avoiding repeated or overcrowded labels.

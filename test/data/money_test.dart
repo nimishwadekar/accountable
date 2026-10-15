@@ -21,6 +21,15 @@ void main() {
     expect(() => dollars - rupees, throwsArgumentError);
   });
 
+  test('creates zero and negates balances', () {
+    final zero = Money.zero(usd);
+    final one = Money.fromMajorUnits(value: '1', currency: usd);
+
+    expect(zero.minorUnits, 0);
+    expect((-one).minorUnits, -100);
+    expect(one.toString(), 'USD:100');
+  });
+
   test('preserves signed balances for subtraction', () {
     final balance = Money.fromMajorUnits(value: '-450', currency: usd);
     final expense = Money.fromMajorUnits(value: '35', currency: usd);

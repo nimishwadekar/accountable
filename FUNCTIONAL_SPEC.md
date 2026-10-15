@@ -362,7 +362,7 @@ Catch-up is idempotent:
 - Rebuild and catch-up tests include partial-write failures and retry behavior.
 - Every production bug must add a regression test before the fix is considered complete.
 - Run [`tool/check_coverage.sh`](./tool/check_coverage.sh) regularly.
-- Current coverage policy: at least 60% overall line coverage and at least 75% for financial logic files.
+- Current coverage policy: at least 80% application-logic line coverage and at least 90% for financial logic files. Application-logic coverage excludes UI composition, visual theme code, OAuth UI, and low-level external HTTP adapters; those areas use widget/manual smoke tests.
 
 ## Verification checklist
 
