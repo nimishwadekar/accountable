@@ -313,6 +313,16 @@ Transaction entry is implemented with local Chrome persistence, shared validatio
 
 The first Analysis page and its daily-series calculation services are implemented, including responsive account controls.
 
+## Testing policy decisions recorded
+
+- OAuth live testing is excluded from automated tests and remains a manual smoke test.
+- Financial calculations require unit tests for rounding, currency conversion, signed balances, transaction effects, daily aggregation, and retry/idempotency behavior.
+- Google Sheets API calls use deterministic fake clients in tests.
+- Rebuild and catch-up tests cover partial-write failures and retry behavior.
+- Every production bug must receive a regression test.
+- Coverage is measured with [`tool/check_coverage.sh`](./tool/check_coverage.sh).
+- Current coverage thresholds are 60% overall and 75% for financial logic files.
+
 - Closed accounts are charted only through their closing date, inclusive, and show a `Closed on YYYY-MM-DD` subtitle.
 - Chart x-axes use actual calendar-day positions with adaptive, sensible date intervals based on chart width and period span, avoiding repeated or overcrowded labels.
 

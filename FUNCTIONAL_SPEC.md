@@ -347,6 +347,16 @@ Catch-up is idempotent:
 - Dark theme.
 - Lazy/selective loading optimization.
 
+## Testing policy
+
+- OAuth live testing is excluded from automated tests; it remains a manual smoke test.
+- Financial calculations require unit tests for rounding, currency conversion, signed balances, transaction effects, daily aggregation, and retry/idempotency behavior.
+- Google Sheets API calls are tested through deterministic fake clients.
+- Rebuild and catch-up tests include partial-write failures and retry behavior.
+- Every production bug must add a regression test before the fix is considered complete.
+- Run [`tool/check_coverage.sh`](./tool/check_coverage.sh) regularly.
+- Current coverage policy: at least 60% overall line coverage and at least 75% for financial logic files.
+
 ## Verification checklist
 
 ### Data and calculations
