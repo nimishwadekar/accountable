@@ -46,6 +46,55 @@ void main() {
     );
     expect(checkingBalance[3], '1560');
     expect(checkingBalance[4], '1560');
+    expect(
+      client.appendedRows.any((row) => row.first == '2026-10-13-INR'),
+      isFalse,
+    );
+    expect(
+      client.appendedRows.any((row) => row.any((value) => value == 'sbi_nro')),
+      isFalse,
+    );
+  });
+
+  test('includes an account through its inclusive closing date', () async {
+    final data = await AssetAppDataRepository().load();
+    final client = _FakeSheetsClient({
+      'DailyExchangeRates!B:B': [
+        ['rate_date'],
+        ['2026-10-10'],
+      ],
+      'DailyAccountBalances!B:B': [
+        ['balance_date'],
+        ['2026-10-10'],
+      ],
+      'DailyNetWorth!B:B': [
+        ['net_worth_date'],
+        ['2026-10-10'],
+      ],
+    });
+    final httpClient = MockClient(
+      (_) async => http.Response(
+        jsonEncode({
+          'rates': {'INR': 96.4},
+        }),
+        200,
+      ),
+    );
+
+    await DailyMaintenanceService(
+      client: client,
+      data: data,
+      httpClient: httpClient,
+    ).catchUp(yesterday: DateTime.utc(2026, 10, 11));
+
+    expect(
+      client.appendedRows.any((row) => row.first == '2026-10-11-INR'),
+      isTrue,
+    );
+    expect(
+      client.appendedRows.any((row) => row.first == '2026-10-11-sbi_nro'),
+      isTrue,
+    );
   });
 
   test(
@@ -145,7 +194,7 @@ class _ResumableSheetsClient implements SheetsTableClient {
 
   final List<List<String>> appendedRows = [];
   int appendCount = 0;
-  int? failOnAppendNumber = 3;
+  int? failOnAppendNumber = 2;
 
   @override
   Future<void> appendRow(String range, List<String> values) async {

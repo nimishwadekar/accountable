@@ -319,6 +319,7 @@ The first Analysis page and its daily-series calculation services are implemente
 - Financial calculations require unit tests for rounding, currency conversion, signed balances, transaction effects, daily aggregation, and retry/idempotency behavior.
 - Google Sheets API calls use deterministic fake clients in tests.
 - Rebuild and catch-up tests cover partial-write failures and retry behavior.
+- Daily maintenance tests verify that only currencies with open accounts receive rates and only open accounts receive daily balances.
 - Every production bug must receive a regression test.
 - Coverage is measured with [`tool/check_coverage.sh`](./tool/check_coverage.sh).
 - Current coverage thresholds are 60% overall and 75% for financial logic files.

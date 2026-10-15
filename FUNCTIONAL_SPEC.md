@@ -251,6 +251,13 @@ DailyAccountBalances.balance_usd   // USD toggle
 
 It does not recalculate historical values from current transactions or use `Accounts.current_balance`.
 
+### Daily table inclusion rules
+
+- Add exchange rates only for currencies used by at least one account open on that date.
+- Add daily account balances only for accounts open on that date.
+- An account is open when `opening_date <= date` and either `closing_date` is empty or `date <= closing_date`.
+- Rebuilds apply the same rules, replacing any stale rows for closed accounts or unused currencies.
+
 ### Missing daily data
 
 For a requested date range:

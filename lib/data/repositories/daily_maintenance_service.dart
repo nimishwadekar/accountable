@@ -167,7 +167,7 @@ class DailyMaintenanceService {
       if (rawRates is! Map<String, dynamic>) continue;
       final retrievedAt = DateTime.now().toUtc();
       return [
-        for (final currency in data.currencies)
+        for (final currency in _currenciesWithOpenAccounts(date))
           ExchangeRate(
             id: '${_dateString(date)}-${currency.id}',
             date: date,
@@ -226,7 +226,7 @@ class DailyMaintenanceService {
       }
       if (date.isBefore(startDate)) continue;
       final retrievedAt = DateTime.now().toUtc();
-      for (final account in data.accounts) {
+      for (final account in _openAccountsOn(date)) {
         final balance = balances[account.id]!;
         final usd = _toUsd(balance, rateFor(rates, account.currencyId, date));
         result.add(
@@ -330,6 +330,22 @@ class DailyMaintenanceService {
         'No exchange rate for $currencyId on ${_dateString(date)}.',
       ),
     );
+  }
+
+  Iterable<Account> _openAccountsOn(DateTime date) {
+    return data.accounts.where((account) {
+      final opened = !_dateOnly(account.openingDate).isAfter(date);
+      final closed = account.closingDate != null &&
+          _dateOnly(account.closingDate!).isBefore(date);
+      return opened && !closed;
+    });
+  }
+
+  Iterable<CurrencyDefinition> _currenciesWithOpenAccounts(DateTime date) {
+    final openCurrencyIds = {
+      for (final account in _openAccountsOn(date)) account.currencyId,
+    };
+    return data.currencies.where((currency) => openCurrencyIds.contains(currency.id));
   }
 
   DateTime? get _earliestSourceDate {
