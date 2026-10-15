@@ -1,3 +1,3 @@
-currency_id,currency_symbol
-USD,$
-INR,₹
+currency_id,currency_symbol,decimal_places
+USD,$,2
+INR,₹,2

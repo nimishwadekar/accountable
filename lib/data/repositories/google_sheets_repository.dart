@@ -12,7 +12,7 @@ abstract final class GoogleSheetsRanges {
   static const categories = 'Categories!A:C';
   static const currencies = 'Currencies!A:C';
   static const dailyAccountBalances = 'DailyAccountBalances!A:F';
-  static const dailyExchangeRates = 'DailyExchangeRates!A:E';
+  static const dailyExchangeRates = 'DailyExchangeRates!A:F';
   static const dailyNetWorth = 'DailyNetWorth!A:D';
   static const tags = 'Tags!A:B';
   static const transactions = 'Transactions!A:K';
@@ -150,7 +150,7 @@ const _columnCount = <String, int>{
   GoogleSheetsRanges.categories: 3,
   GoogleSheetsRanges.currencies: 2,
   GoogleSheetsRanges.dailyAccountBalances: 6,
-  GoogleSheetsRanges.dailyExchangeRates: 5,
+  GoogleSheetsRanges.dailyExchangeRates: 6,
   GoogleSheetsRanges.dailyNetWorth: 4,
   GoogleSheetsRanges.tags: 2,
   GoogleSheetsRanges.transactions: 11,
@@ -158,14 +158,14 @@ const _columnCount = <String, int>{
 
 const _transactionHeaders = <String>[
   'transaction_id',
-  'created_at',
   'date',
+  'description',
+  'category',
   'transaction_type',
   'source_amount',
   'source_account_id',
   'dest_amount',
   'dest_account_id',
-  'category',
   'tag',
-  'description',
+  'created_at',
 ];

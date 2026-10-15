@@ -158,6 +158,10 @@ class ModelParsers {
           ),
           currencyId: requiredValue(row, 'currency'),
           rateToUsd: Decimal.parse(requiredValue(row, 'rate_to_usd')),
+          sourceRateDate: parseDateOnly(
+            requiredValue(row, 'source_rate_date'),
+            fieldName: 'source_rate_date',
+          ),
           retrievedAt: parseUtcTimestamp(
             requiredValue(row, 'retrieved_at'),
             fieldName: 'retrieved_at',

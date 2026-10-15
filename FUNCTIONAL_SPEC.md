@@ -36,7 +36,17 @@ Google Sheets will be the default production data source.
 - The spreadsheet ID, allowed-email value, client ID, OAuth origin, and scope live in checked-in, non-secret configuration.
 - Editing and deletion are deferred; appending transactions is supported first.
 
-## Runtime tables
+## Runtime table schemas
+
+Current column order is part of the Sheets/CSV contract:
+
+```text
+Currencies: currency_id, currency_symbol, decimal_places
+Transactions: transaction_id, date, description, category, transaction_type, source_amount, source_account_id, dest_amount, dest_account_id, tag, created_at
+DailyExchangeRates: rate_id, rate_date, currency, rate_to_usd, source_rate_date, retrieved_at
+```
+
+`source_rate_date` records the actual Frankfurter date used when the requested sequential rate date fell on a weekend or holiday.
 
 The runtime data snapshot contains:
 

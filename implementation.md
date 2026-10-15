@@ -320,6 +320,7 @@ The first Analysis page and its daily-series calculation services are implemente
 - Google Sheets API calls use deterministic fake clients in tests.
 - Rebuild and catch-up tests cover partial-write failures and retry behavior.
 - Daily maintenance tests verify that only currencies with open accounts receive rates and only open accounts receive daily balances.
+- The current Sheets/CSV schema contract includes `Currencies.decimal_places`, the reordered Transactions columns, and `DailyExchangeRates.source_rate_date`.
 - Every production bug must receive a regression test.
 - Coverage is measured with [`tool/check_coverage.sh`](./tool/check_coverage.sh).
 - Current coverage thresholds are 80% application logic and 90% for financial logic files. Application-logic coverage excludes UI composition, visual theme code, OAuth UI, and low-level external HTTP adapters; those areas use widget/manual smoke tests.

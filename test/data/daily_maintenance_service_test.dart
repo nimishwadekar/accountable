@@ -61,7 +61,9 @@ void main() {
     final client = _FakeSheetsClient({});
     final httpClient = MockClient(
       (_) async => http.Response(
-        jsonEncode({'rates': {'INR': 96.4}}),
+        jsonEncode({
+          'rates': {'INR': 96.4},
+        }),
         200,
       ),
     );
@@ -72,11 +74,14 @@ void main() {
       httpClient: httpClient,
     ).rebuild();
 
-    expect(client.replacedRanges.keys, containsAll(<String>[
-      GoogleSheetsRanges.dailyExchangeRates,
-      GoogleSheetsRanges.dailyAccountBalances,
-      GoogleSheetsRanges.dailyNetWorth,
-    ]));
+    expect(
+      client.replacedRanges.keys,
+      containsAll(<String>[
+        GoogleSheetsRanges.dailyExchangeRates,
+        GoogleSheetsRanges.dailyAccountBalances,
+        GoogleSheetsRanges.dailyNetWorth,
+      ]),
+    );
   });
 
   test('includes an account through its inclusive closing date', () async {
@@ -158,6 +163,7 @@ void main() {
             date: DateTime.utc(2026, 10, 13),
             currencyId: 'USD',
             rateToUsd: Decimal.one,
+            sourceRateDate: DateTime.utc(2026, 10, 13),
             retrievedAt: DateTime.utc(2026, 10, 15),
           ),
           ExchangeRate(
@@ -165,6 +171,7 @@ void main() {
             date: DateTime.utc(2026, 10, 13),
             currencyId: 'INR',
             rateToUsd: Decimal.parse('0.01037344398'),
+            sourceRateDate: DateTime.utc(2026, 10, 13),
             retrievedAt: DateTime.utc(2026, 10, 15),
           ),
         ],
@@ -228,7 +235,7 @@ class _ResumableSheetsClient implements SheetsTableClient {
     }
     appendedRows.add(values);
     final dateRange = switch (range) {
-      'DailyExchangeRates!A:E' => 'DailyExchangeRates!B:B',
+      'DailyExchangeRates!A:F' => 'DailyExchangeRates!B:B',
       'DailyAccountBalances!A:F' => 'DailyAccountBalances!B:B',
       'DailyNetWorth!A:D' => 'DailyNetWorth!B:B',
       _ => null,

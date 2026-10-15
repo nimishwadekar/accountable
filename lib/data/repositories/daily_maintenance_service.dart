@@ -98,13 +98,14 @@ class DailyMaintenanceService {
     final netWorths = _netWorthThrough(balances);
 
     await client.replaceRange(GoogleSheetsRanges.dailyExchangeRates, [
-      ['rate_id', 'rate_date', 'currency', 'rate_to_usd', 'retrieved_at'],
+      ['rate_id', 'rate_date', 'currency', 'rate_to_usd', 'source_rate_date', 'retrieved_at'],
       for (final rate in rates)
         [
           rate.id,
           _dateString(rate.date),
           rate.currencyId,
           rate.rateToUsd.toString(),
+          _dateString(rate.sourceRateDate),
           rate.retrievedAt.toUtc().toIso8601String(),
         ],
     ]);
@@ -175,6 +176,7 @@ class DailyMaintenanceService {
             rateToUsd: currency.id == 'USD'
                 ? Decimal.one
                 : _rateToUsd(rawRates, currency.id),
+            sourceRateDate: queryDate,
             retrievedAt: retrievedAt,
           ),
       ];
@@ -200,6 +202,7 @@ class DailyMaintenanceService {
         _dateString(rate.date),
         rate.currencyId,
         rate.rateToUsd.toString(),
+        _dateString(rate.sourceRateDate),
         rate.retrievedAt.toUtc().toIso8601String(),
       ]);
     }

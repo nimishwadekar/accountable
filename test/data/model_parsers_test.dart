@@ -11,7 +11,7 @@ void main() {
       'test_sheets/Transactions.csv',
     );
 
-    expect(transactions, contains('transaction_id,created_at'));
+    expect(transactions, contains('transaction_id,date,description'));
   });
 
   const currenciesCsv = '''
@@ -67,6 +67,7 @@ checking,Checking,Bank,USD,1000,1200,2026-10-01,
     expect(tags, hasLength(1));
     expect(transactions, hasLength(8));
     expect(exchangeRates, hasLength(6));
+    expect(exchangeRates.first.sourceRateDate, DateTime.utc(2026, 10, 10));
     expect(dailyBalances, hasLength(8));
     expect(dailyNetWorth, hasLength(3));
   });
@@ -117,8 +118,8 @@ salary,Salary,income
         account.id: account,
     };
     const source = '''
-transaction_id,created_at,date,transaction_type,source_amount,source_account_id,dest_amount,dest_account_id,category,tag,description
-expense-1,2026-10-09 11:03:04,2026-10-10,expense,40,checking,,,groceries,,Lunch
+transaction_id,date,description,category,transaction_type,source_amount,source_account_id,dest_amount,dest_account_id,tag,created_at
+expense-1,2026-10-10,Lunch,groceries,expense,40,checking,,,,2026-10-09 11:03:04
 ''';
 
     final transactions = ModelParsers.parseTransactions(
@@ -157,8 +158,8 @@ expense-1,2026-10-09 11:03:04,2026-10-10,expense,40,checking,,,groceries,,Lunch
         account.id: account,
     };
     const source = '''
-transaction_id,created_at,date,transaction_type,source_amount,source_account_id,dest_amount,dest_account_id,category,tag,description
-income-1,2026-10-09T11:03:04Z,2026-10-10,income,40,checking,,,,,Invalid income
+transaction_id,date,description,category,transaction_type,source_amount,source_account_id,dest_amount,dest_account_id,tag,created_at
+income-1,2026-10-10,Invalid income,,income,40,checking,,,,2026-10-09T11:03:04Z
 ''';
 
     expect(

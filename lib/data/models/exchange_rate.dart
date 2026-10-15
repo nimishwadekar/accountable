@@ -6,6 +6,7 @@ class ExchangeRate {
     required this.date,
     required this.currencyId,
     required this.rateToUsd,
+    required this.sourceRateDate,
     required this.retrievedAt,
   });
 
@@ -13,5 +14,6 @@ class ExchangeRate {
   final DateTime date;
   final String currencyId;
   final Decimal rateToUsd;
+  final DateTime sourceRateDate;
   final DateTime retrievedAt;
 }

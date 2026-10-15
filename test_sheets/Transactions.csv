@@ -1,9 +1,9 @@
-transaction_id,created_at,date,transaction_type,source_amount,source_account_id,dest_amount,dest_account_id,category,tag,description
-t001,2026-10-09 11:03:04,2026-10-10,expense,40,chase_checking,,,groceries,,Lunch
-ba3ed0e6,2026-10-11 20:23:12,2026-10-11,expense,30,chase_checking,,,transport,,Dinner
-b21221b5,2026-10-11 20:24:12,2026-10-11,expense,15,chase_freedom_rise,,,dining,,Some credit
-94d3ac9f,2026-10-12 02:25:54,2026-10-11,income,,,1000,chase_checking,,,Red Hat
-a6f8df34,2026-10-12 20:02:36,2026-10-11,expense,2000,sbi_nro,,,dining,boston,india
-8a44bda6,2026-10-12 02:29:33,2026-10-11,transfer,380,chase_checking,380,chase_freedom_rise,,,Credit Payment
-a6f8df35,2026-10-12 20:02:37,2026-10-11,expense,18000,sbi_nro,,,other,boston,checkout
-e2f4409d,2026-10-12 19:29:13,2026-10-12,reimbursement,,,10,chase_checking,dining,boston,reimbur
+transaction_id,date,description,category,transaction_type,source_amount,source_account_id,dest_amount,dest_account_id,tag,created_at
+t001,2026-10-10,Lunch,groceries,expense,40,chase_checking,,,,2026-10-09 11:03:04
+ba3ed0e6,2026-10-11,Dinner,transport,expense,30,chase_checking,,,,2026-10-11 20:23:12
+b21221b5,2026-10-11,Some credit,dining,expense,15,chase_freedom_rise,,,,2026-10-11 20:24:12
+94d3ac9f,2026-10-11,Red Hat,,income,,,1000,chase_checking,,2026-10-12 02:25:54
+a6f8df34,2026-10-11,india,dining,expense,2000,sbi_nro,,,boston,2026-10-12 20:02:36
+8a44bda6,2026-10-11,Credit Payment,,transfer,380,chase_checking,380,chase_freedom_rise,,2026-10-12 02:29:33
+a6f8df35,2026-10-11,checkout,other,expense,18000,sbi_nro,,,boston,2026-10-12 20:02:37
+e2f4409d,2026-10-12,reimbur,dining,reimbursement,,,10,chase_checking,boston,2026-10-12 19:29:13
