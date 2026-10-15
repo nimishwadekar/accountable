@@ -48,7 +48,7 @@ void main() {
     expect(checkingBalance[4], '1560');
     expect(
       client.appendedRows.any((row) => row.first == '2026-10-13-INR'),
-      isFalse,
+      isTrue,
     );
     expect(
       client.appendedRows.any((row) => row.any((value) => value == 'sbi_nro')),

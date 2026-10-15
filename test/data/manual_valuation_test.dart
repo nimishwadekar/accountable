@@ -22,6 +22,7 @@ void main() {
         openingBalance: Money.zero(currencies['USD']!),
         openingDate: DateTime.utc(2026, 1, 1),
         closingDate: null,
+        usesManualValuations: true,
       ),
     };
     final valuations = ModelParsers.parseDailyManualValuations(
@@ -34,69 +35,72 @@ void main() {
     expect(valuations.single.value.minorUnits, 123456);
   });
 
-  test('manual valuation replaces the asset account in daily net worth', () async {
-    final source = await AssetAppDataRepository().load();
-    final checking = source.accountsById['chase_checking']!;
-    final valuationAccount = Account(
-      id: checking.id,
-      name: checking.name,
-      accountType: 'asset',
-      currencyId: checking.currencyId,
-      openingBalance: checking.openingBalance,
-      openingDate: checking.openingDate,
-      closingDate: checking.closingDate,
-    );
-    final data = AppDataSnapshot(
-      accounts: [
-        valuationAccount,
-        ...source.accounts.where((account) => account.id != checking.id),
-      ],
-      categories: source.categories,
-      currencies: source.currencies,
-      tags: source.tags,
-      transactions: source.transactions,
-      exchangeRates: source.exchangeRates,
-      dailyAccountBalances: const [],
-      dailyNetWorth: const [],
-      dailyManualValuations: [
-        DailyManualValuation(
-          id: '2026-10-10-chase_checking',
-          date: DateTime.utc(2026, 10, 10),
-          accountId: checking.id,
-          value: Money.fromMajorUnits(
-            value: '2000',
-            currency: source.currenciesById['USD']!,
+  test(
+    'manual valuation replaces the asset account in daily net worth',
+    () async {
+      final source = await AssetAppDataRepository().load();
+      final checking = source.accountsById['chase_checking']!;
+      final valuationAccount = Account(
+        id: checking.id,
+        name: checking.name,
+        accountType: 'asset',
+        currencyId: checking.currencyId,
+        openingBalance: checking.openingBalance,
+        openingDate: checking.openingDate,
+        closingDate: checking.closingDate,
+        usesManualValuations: true,
+      );
+      final data = AppDataSnapshot(
+        accounts: [
+          valuationAccount,
+          ...source.accounts.where((account) => account.id != checking.id),
+        ],
+        categories: source.categories,
+        currencies: source.currencies,
+        tags: source.tags,
+        transactions: source.transactions,
+        exchangeRates: source.exchangeRates,
+        dailyAccountBalances: const [],
+        dailyNetWorth: const [],
+        dailyManualValuations: [
+          DailyManualValuation(
+            id: '2026-10-10-chase_checking',
+            date: DateTime.utc(2026, 10, 10),
+            accountId: checking.id,
+            value: Money.fromMajorUnits(
+              value: '2000',
+              currency: source.currenciesById['USD']!,
+            ),
+          ),
+        ],
+      );
+      final client = _MaintenanceClient();
+      await DailyMaintenanceService(
+        client: client,
+        data: data,
+        httpClient: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'rates': {'INR': 96.4},
+            }),
+            200,
           ),
         ),
-      ],
-    );
-    final client = _MaintenanceClient();
-    await DailyMaintenanceService(
-      client: client,
-      data: data,
-      httpClient: MockClient(
-        (_) async => http.Response(
-          jsonEncode({'rates': {'INR': 96.4}}),
-          200,
-        ),
-      ),
-    ).catchUp(yesterday: DateTime.utc(2026, 10, 10));
+      ).catchUp(yesterday: DateTime.utc(2026, 10, 10));
 
-    expect(
-      client.replacedNetWorthRows,
-      isEmpty,
-    );
-    final netWorthRow = client.appendedRows.firstWhere(
-      (row) => row.first == '2026-10-10-net',
-    );
-    expect(netWorthRow[2], '1757.47');
-    expect(
-      client.appendedRows.any(
-        (row) => row.first == '2026-10-10-chase_checking',
-      ),
-      isFalse,
-    );
-  });
+      expect(client.replacedNetWorthRows, isEmpty);
+      final netWorthRow = client.appendedRows.firstWhere(
+        (row) => row.first == '2026-10-10-net',
+      );
+      expect(netWorthRow[2], '1757.47');
+      expect(
+        client.appendedRows.any(
+          (row) => row.first == '2026-10-10-chase_checking',
+        ),
+        isFalse,
+      );
+    },
+  );
 
   test('rejects valuation rows for ledger accounts', () {
     const currencies = {
@@ -111,6 +115,7 @@ void main() {
         openingBalance: Money.zero(currencies['USD']!),
         openingDate: DateTime.utc(2026, 1, 1),
         closingDate: null,
+        usesManualValuations: false,
       ),
     };
 
@@ -128,9 +133,15 @@ void main() {
 
 class _MaintenanceClient implements SheetsTableClient {
   final Map<String, List<List<String>>> tables = {
-    'DailyExchangeRates!B:B': const [['rate_date']],
-    'DailyAccountBalances!B:B': const [['balance_date']],
-    'DailyNetWorth!B:B': const [['net_worth_date']],
+    'DailyExchangeRates!B:B': const [
+      ['rate_date'],
+    ],
+    'DailyAccountBalances!B:B': const [
+      ['balance_date'],
+    ],
+    'DailyNetWorth!B:B': const [
+      ['net_worth_date'],
+    ],
   };
   final List<List<String>> appendedRows = [];
   final List<List<String>> replacedNetWorthRows = [];
@@ -148,13 +159,11 @@ class _MaintenanceClient implements SheetsTableClient {
   }
 
   @override
-  Future<List<List<String>>> readRange(String range) async => tables[range] ?? [];
+  Future<List<List<String>>> readRange(String range) async =>
+      tables[range] ?? [];
 
   @override
-  Future<void> replaceRange(
-    String range,
-    List<List<String>> values,
-  ) async {
+  Future<void> replaceRange(String range, List<List<String>> values) async {
     if (range == GoogleSheetsRanges.dailyNetWorth) {
       replacedNetWorthRows.addAll(values);
     }

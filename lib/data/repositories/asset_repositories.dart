@@ -323,7 +323,7 @@ class AssetAppDataRepository implements AppDataRepository {
 
   Future<Map<String, String>> _readDataset() async {
     final stored = await store?.read();
-    if (stored != null) {
+    if (stored != null && _storedDatasetMatchesSchema(stored)) {
       final tables = Map.of(stored);
       for (final path in _runtimeAssetPaths) {
         if (tables.containsKey(path)) continue;
@@ -357,6 +357,20 @@ class AssetAppDataRepository implements AppDataRepository {
     return tables;
   }
 
+  static bool _storedDatasetMatchesSchema(Map<String, String> tables) {
+    for (final entry in _runtimeHeaders.entries) {
+      final source = tables[entry.key];
+      if (source == null) return false;
+      final rows = csv.decode(source);
+      if (rows.isEmpty ||
+          rows.first.map((value) => value.toString()).join(',') !=
+              entry.value.join(',')) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   static String _appendCsvRow(String source, Map<String, String> row) {
     final rows = csv.decode(source);
     if (rows.isEmpty) throw const FormatException('CSV has no header row.');
@@ -372,6 +386,71 @@ String _tableNameFromPath(String path) {
       ? fileName.substring(0, fileName.length - 4)
       : fileName;
 }
+
+const _runtimeHeaders = <String, List<String>>{
+  DataAssetPaths.currencies: [
+    'currency_id',
+    'currency_symbol',
+    'decimal_places',
+  ],
+  DataAssetPaths.accounts: [
+    'account_id',
+    'name',
+    'account_type',
+    'currency',
+    'opening_balance',
+    'opening_date',
+    'closing_date',
+    'uses_manual_valuations',
+  ],
+  DataAssetPaths.categories: [
+    'category_id',
+    'category_name',
+    'allowed_transaction_types',
+  ],
+  DataAssetPaths.dailyAccountBalances: [
+    'balance_id',
+    'balance_date',
+    'account_id',
+    'balance',
+    'balance_usd',
+    'retrieved_at',
+  ],
+  DataAssetPaths.dailyExchangeRates: [
+    'rate_id',
+    'rate_date',
+    'currency',
+    'rate_to_usd',
+    'source_rate_date',
+    'retrieved_at',
+  ],
+  DataAssetPaths.dailyNetWorth: [
+    'net_worth_id',
+    'net_worth_date',
+    'amount',
+    'retrieved_at',
+  ],
+  DataAssetPaths.dailyManualValuations: [
+    'valuation_id',
+    'date',
+    'account_id',
+    'value',
+  ],
+  DataAssetPaths.tags: ['tag_id', 'tag_name'],
+  DataAssetPaths.transactions: [
+    'transaction_id',
+    'date',
+    'description',
+    'category',
+    'transaction_type',
+    'source_amount',
+    'source_account_id',
+    'dest_amount',
+    'dest_account_id',
+    'tag',
+    'created_at',
+  ],
+};
 
 const _runtimeAssetPaths = <String>[
   DataAssetPaths.currencies,

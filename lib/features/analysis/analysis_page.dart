@@ -154,6 +154,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
         builder: (context, constraints) {
           final accountDropdown = DropdownButtonFormField<String>(
             initialValue: _selectedAccountId,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Account'),
             items: [
               for (final item in widget.data.accounts)

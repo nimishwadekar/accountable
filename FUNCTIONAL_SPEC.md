@@ -50,10 +50,13 @@ For now:
 
 - `cash` and `credit` accounts use transaction-derived balances.
 - `asset` and `liability` accounts use `DailyManualValuations`.
-- The Assets & liabilities app section lists only `asset` and `liability` accounts.
+- The Assets & liabilities app section lists only accounts with `uses_manual_valuations=TRUE`.
+- `Accounts.account_type` values are `cash`, `liability`, or `asset`; `uses_manual_valuations=TRUE` is valid only for `asset` or `liability` accounts.
+- `uses_manual_valuations` accepts Google Sheets boolean output (`TRUE`/`FALSE`, including normalized casing) and rejects other values.
 - Valuation dates use the user's local calendar timezone for every account.
 - The valuation form order is account, date, valuation.
 - The valuation is entered in the selected account's currency.
+- Daily valuation batch saves are all-or-nothing; blank, malformed, negative, duplicate, or out-of-range values prevent the entire batch from saving.
 - Stored liability values are positive; net-worth calculations apply the negative sign for `liability` accounts.
 - Duplicate account/date valuation entries are prevented.
 - Dates before an account's opening date and after its closing date are disabled.
@@ -62,8 +65,22 @@ For now:
 - If a valuation is missing on a date, carry forward the latest prior valuation and mark it stale.
 - `DailyAccountBalances` remains limited to open `cash` and `credit` accounts.
 - `DailyNetWorth` combines ledger-derived balances with manual valuations for `asset` and `liability` accounts.
-- Future UI work may color-code positive account classes (`cash`, `asset`) and negative account classes (`credit`, `liability`) and show explanatory subtext.
-- Whether `credit` and `liability` should eventually be merged remains deferred.
+- Future UI work may color-code positive account classes (`cash`, `asset`) and negative account classes (`liability`) and show explanatory subtext.
+- Transfer account-type pairs are allowed without validation restrictions; transfer interpretation will be designed when transfer analysis is implemented.
+
+## Account schema and ledger balance
+
+`Accounts` now contains:
+
+```text
+account_id,name,account_type,currency,opening_balance,opening_date,closing_date,uses_manual_valuations
+```
+
+- `account_type` is `cash`, `liability`, or `asset`.
+- `uses_manual_valuations` is case-sensitive `TRUE` or `FALSE`.
+- Manual valuation accounts must have `opening_balance=0`.
+- Current ledger balances are calculated from opening balances plus transaction effects.
+- `current_balance` is not stored in Accounts.
 
 ## Runtime table schemas
 
@@ -405,6 +422,32 @@ Catch-up is idempotent:
 - Full rebuild replaces all rows in `DailyExchangeRates`, `DailyAccountBalances`, and `DailyNetWorth` with freshly calculated results.
 - After rebuilding, only those three daily tables are reloaded.
 - Transaction refresh is a separate full-table pull.
+
+## Future Apps Script backend option
+
+A future no-cost alternative to direct browser Sheets access may be an Apps Script backend:
+
+```text
+Flutter web app → Apps Script web endpoint → Google Sheets
+```
+
+Potential responsibilities:
+
+- Server-side Sheets reads and writes.
+- Transaction append operations.
+- Daily catch-up.
+- Manual daily-table rebuild.
+- Google authorization stored on the Apps Script side.
+
+Before implementation, the following must be designed and tested:
+
+- Endpoint authentication and single-user authorization.
+- CORS behavior for Flutter web.
+- Script Properties for spreadsheet configuration.
+- Abuse protection if the endpoint is publicly reachable.
+- Apps Script execution and daily quotas.
+
+This is a future alternative and does not replace the current direct Google OAuth/Sheets implementation yet.
 
 ## Deferred functionality
 

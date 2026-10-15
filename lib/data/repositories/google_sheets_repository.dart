@@ -278,7 +278,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
 }
 
 const _columnCount = <String, int>{
-  GoogleSheetsRanges.accounts: 7,
+  GoogleSheetsRanges.accounts: 8,
   GoogleSheetsRanges.categories: 3,
   GoogleSheetsRanges.currencies: 2,
   GoogleSheetsRanges.dailyAccountBalances: 6,

@@ -1,4 +1,6 @@
-account_id,name,account_type,currency,opening_balance,opening_date,closing_date
-chase_checking,Chase Checking,Bank,USD,1000,2026-10-01,
-sbi_nro,SBI NRO,Bank,INR,20000,2026-10-02,2026-10-11
-chase_freedom_rise,Chase Freedom Rise,Credit,USD,-450,2026-10-03,
+account_id,name,account_type,currency,opening_balance,opening_date,closing_date,uses_manual_valuations
+chase_checking,Chase Checking,cash,USD,1000,2026-10-01,,FALSE
+sbi_nro,SBI NRO,cash,INR,20000,2026-10-02,2026-10-11,FALSE
+chase_freedom_rise,Chase Freedom Rise,liability,USD,-450,2026-10-03,,FALSE
+hdfc-credila-loan,HDFC Credila Loan,liability,INR,0,2026-10-01,,TRUE
+fidelity-401k-2065,Fidelity 401k - 2065 Fund,asset,USD,0,2026-10-05,,TRUE

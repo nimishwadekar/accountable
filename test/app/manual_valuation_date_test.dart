@@ -14,6 +14,7 @@ void main() {
     ),
     openingDate: DateTime.utc(2026, 1, 10),
     closingDate: DateTime.utc(2026, 1, 20),
+    usesManualValuations: true,
   );
 
   test('default daily valuation date is after the latest entry', () {
@@ -65,6 +66,7 @@ void main() {
       openingBalance: Money.zero(usd),
       openingDate: DateTime.utc(2026, 1, 1),
       closingDate: null,
+      usesManualValuations: true,
     );
     final data = AppDataSnapshot(
       accounts: [account, second],

@@ -13,6 +13,7 @@ void main() {
       openingBalance: Money.fromMajorUnits(value: '1000', currency: usd),
       openingDate: DateTime.utc(2026, 1, 1),
       closingDate: null,
+      usesManualValuations: false,
     );
     final transactions = [
       Transaction(

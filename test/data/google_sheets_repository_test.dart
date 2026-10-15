@@ -32,10 +32,10 @@ void main() {
     final repository = GoogleSheetsAppDataRepository(_FakeSheetsClient(tables));
     final snapshot = await repository.load();
 
-    expect(snapshot.accounts, hasLength(3));
+    expect(snapshot.accounts, hasLength(5));
     expect(snapshot.transactions, hasLength(8));
     expect(snapshot.dailyNetWorth, hasLength(3));
-    expect(snapshot.dailyManualValuations, isEmpty);
+    expect(snapshot.dailyManualValuations, hasLength(2));
   });
 
   test('appends a canonical transaction row', () async {

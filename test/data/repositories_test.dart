@@ -14,7 +14,7 @@ void main() {
 
     expect(identical(snapshot, cachedSnapshot), isTrue);
     expect(identical(snapshot, reloadedSnapshot), isFalse);
-    expect(snapshot.accounts, hasLength(3));
+    expect(snapshot.accounts, hasLength(5));
     expect(snapshot.transactions, hasLength(8));
     expect(snapshot.dailyNetWorth, hasLength(3));
     expect(snapshot.accountsById['chase_checking']?.name, 'Chase Checking');

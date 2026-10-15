@@ -160,6 +160,10 @@ class DataValidationPage extends StatelessWidget {
       final key = '${issue.table}|${issue.field}|${issue.message}';
       grouped.putIfAbsent(key, () => []).add(issue);
     }
+    final byTable = <String, List<List<DataValidationIssue>>>{};
+    for (final issues in grouped.values) {
+      byTable.putIfAbsent(issues.first.table, () => []).add(issues);
+    }
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.lg),
@@ -188,36 +192,36 @@ class DataValidationPage extends StatelessWidget {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  for (final entry in grouped.entries) ...[
+                  for (final tableEntry in byTable.entries) ...[
                     Text(
-                      entry.value.first.table,
+                      tableEntry.key,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    Builder(
-                      builder: (context) {
-                        final issues = entry.value;
-                        final first = issues.first;
-                        final rows = issues
-                            .map((issue) => issue.row)
-                            .whereType<int>()
-                            .toList();
-                        return ListTile(
-                          dense: true,
-                          leading: Icon(
-                            Icons.error_outline,
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                          title: Text(first.message),
-                          subtitle: Text(
-                            _formatValidationLocation(
-                              first.table,
-                              first.field,
-                              rows,
+                    for (final issues in tableEntry.value)
+                      Builder(
+                        builder: (context) {
+                          final first = issues.first;
+                          final rows = issues
+                              .map((issue) => issue.row)
+                              .whereType<int>()
+                              .toList();
+                          return ListTile(
+                            dense: true,
+                            leading: Icon(
+                              Icons.error_outline,
+                              color: Theme.of(context).colorScheme.error,
                             ),
-                          ),
-                        );
-                      },
-                    ),
+                            title: Text(first.message),
+                            subtitle: Text(
+                              _formatValidationLocation(
+                                first.table,
+                                first.field,
+                                rows,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                   ],
                   const SizedBox(height: AppSpacing.md),
                   FilledButton.icon(

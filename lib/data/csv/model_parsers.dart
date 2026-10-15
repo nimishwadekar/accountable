@@ -20,10 +20,11 @@ class ModelParsers {
     final issues = <DataValidationIssue>[];
     for (var index = 0; index < table.rows.length; index++) {
       try {
-        values.add(parseRow(csv.encode([
-          table.headers,
-          table.rows[index].values.toList(),
-        ])));
+        values.add(
+          parseRow(
+            csv.encode([table.headers, table.rows[index].values.toList()]),
+          ),
+        );
       } catch (error) {
         issues.add(
           DataValidationIssue(
@@ -69,71 +70,71 @@ class ModelParsers {
       );
 
   static ModelParseResult<Tag> parseTagsWithIssues(String source) => _parseRows(
-        source,
-        tableName: 'Tags',
-        parseRow: (row) => parseTags(row).single,
-      );
+    source,
+    tableName: 'Tags',
+    parseRow: (row) => parseTags(row).single,
+  );
 
   static ModelParseResult<Transaction> parseTransactionsWithIssues(
     String source, {
     required Map<String, Account> accounts,
     required Map<String, CurrencyDefinition> currencies,
   }) => _parseRows(
-        source,
-        tableName: 'Transactions',
-        parseRow: (row) => parseTransactions(
-          row,
-          accounts: accounts,
-          currencies: currencies,
-        ).single,
-      );
+    source,
+    tableName: 'Transactions',
+    parseRow: (row) => parseTransactions(
+      row,
+      accounts: accounts,
+      currencies: currencies,
+    ).single,
+  );
 
   static ModelParseResult<ExchangeRate> parseExchangeRatesWithIssues(
     String source,
   ) => _parseRows(
-        source,
-        tableName: 'DailyExchangeRates',
-        parseRow: (row) => parseExchangeRates(row).single,
-      );
+    source,
+    tableName: 'DailyExchangeRates',
+    parseRow: (row) => parseExchangeRates(row).single,
+  );
 
   static ModelParseResult<DailyAccountBalance>
-      parseDailyAccountBalancesWithIssues(
+  parseDailyAccountBalancesWithIssues(
     String source, {
     required Map<String, Account> accounts,
     required Map<String, CurrencyDefinition> currencies,
   }) => _parseRows(
-        source,
-        tableName: 'DailyAccountBalances',
-        parseRow: (row) => parseDailyAccountBalances(
-          row,
-          accounts: accounts,
-          currencies: currencies,
-        ).single,
-      );
+    source,
+    tableName: 'DailyAccountBalances',
+    parseRow: (row) => parseDailyAccountBalances(
+      row,
+      accounts: accounts,
+      currencies: currencies,
+    ).single,
+  );
 
   static ModelParseResult<DailyNetWorth> parseDailyNetWorthWithIssues(
     String source,
     Map<String, CurrencyDefinition> currencies,
   ) => _parseRows(
-        source,
-        tableName: 'DailyNetWorth',
-        parseRow: (row) => parseDailyNetWorth(row, currencies).single,
-      );
+    source,
+    tableName: 'DailyNetWorth',
+    parseRow: (row) => parseDailyNetWorth(row, currencies).single,
+  );
 
   static ModelParseResult<DailyManualValuation>
-      parseDailyManualValuationsWithIssues(
+  parseDailyManualValuationsWithIssues(
     String source, {
     required Map<String, Account> accounts,
     required Map<String, CurrencyDefinition> currencies,
   }) => _parseRows(
-        source,
-        tableName: 'DailyManualValuations',
-        parseRow: (row) => parseDailyManualValuations(
-          row,
-          accounts: accounts,
-          currencies: currencies,
-        ).single,
-      );
+    source,
+    tableName: 'DailyManualValuations',
+    parseRow: (row) => parseDailyManualValuations(
+      row,
+      accounts: accounts,
+      currencies: currencies,
+    ).single,
+  );
 
   static List<CurrencyDefinition> parseCurrencies(String source) {
     final table = CsvTable.parse(source, tableName: 'Currencies');
@@ -153,20 +154,36 @@ class ModelParsers {
       table.rows.map((row) {
         final currencyId = requiredValue(row, 'currency');
         final currency = _currency(currencies, currencyId);
+        final accountType = requiredValue(row, 'account_type');
+        final usesManualValuations = _parseBoolean(
+          requiredValue(row, 'uses_manual_valuations'),
+          fieldName: 'uses_manual_valuations',
+        );
+        if (usesManualValuations &&
+            accountType.trim().toLowerCase() == 'cash') {
+          throw FormatException('Cash accounts cannot use manual valuations.');
+        }
+        final openingBalance = Money.fromMajorUnits(
+          value: requiredValue(row, 'opening_balance'),
+          currency: currency,
+        );
+        if (usesManualValuations && openingBalance.minorUnits != 0) {
+          throw FormatException(
+            'Manual valuation accounts must have opening_balance 0.',
+          );
+        }
         return Account(
           id: requiredValue(row, 'account_id'),
           name: requiredValue(row, 'name'),
-          accountType: requiredValue(row, 'account_type'),
+          accountType: accountType,
           currencyId: currencyId,
-          openingBalance: Money.fromMajorUnits(
-            value: requiredValue(row, 'opening_balance'),
-            currency: currency,
-          ),
+          openingBalance: openingBalance,
           openingDate: parseDateOnly(
             requiredValue(row, 'opening_date'),
             fieldName: 'opening_date',
           ),
           closingDate: _optionalDate(row, 'closing_date'),
+          usesManualValuations: usesManualValuations,
         );
       }),
       (account) => account.id,
@@ -429,6 +446,17 @@ class ModelParsers {
       value: rawAmount,
       currency: _currency(currencies, account.currencyId),
     );
+  }
+
+  static bool _parseBoolean(String value, {required String fieldName}) {
+    switch (value.trim().toUpperCase()) {
+      case 'TRUE':
+        return true;
+      case 'FALSE':
+        return false;
+      default:
+        throw FormatException('Invalid boolean in $fieldName: $value.');
+    }
   }
 
   static DateTime? _optionalDate(Map<String, String> row, String fieldName) {

@@ -21,8 +21,8 @@ INR,₹,2
 ''';
 
   const accountsCsv = '''
-account_id,name,account_type,currency,opening_balance,opening_date,closing_date
-checking,Checking,Bank,USD,1000,2026-10-01,
+account_id,name,account_type,currency,opening_balance,opening_date,closing_date,uses_manual_valuations
+checking,Checking,Bank,USD,1000,2026-10-01,,FALSE
 ''';
 
   test('parses the current fixture tables together', () async {
@@ -62,7 +62,7 @@ checking,Checking,Bank,USD,1000,2026-10-01,
     );
 
     expect(currencies, hasLength(2));
-    expect(accounts, hasLength(3));
+    expect(accounts, hasLength(5));
     expect(categories, hasLength(14));
     expect(tags, hasLength(1));
     expect(transactions, hasLength(8));

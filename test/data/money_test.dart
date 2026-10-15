@@ -6,6 +6,11 @@ void main() {
   const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
   const inr = CurrencyDefinition(id: 'INR', symbol: '₹', decimalPlaces: 2);
 
+  test('accepts grouped monetary values', () {
+    final money = Money.fromMajorUnits(value: '2,861,301.00', currency: usd);
+    expect(money.minorUnits, 286130100);
+  });
+
   test('rounds major-unit input to currency minor units', () {
     final money = Money.fromMajorUnits(value: '12.345', currency: usd);
 

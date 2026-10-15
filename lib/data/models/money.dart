@@ -12,7 +12,7 @@ class Money {
     required String value,
     required CurrencyDefinition currency,
   }) {
-    final majorUnits = Decimal.parse(value.trim());
+    final majorUnits = Decimal.parse(value.trim().replaceAll(',', ''));
     final scale = Decimal.fromInt(_powerOfTen(currency.decimalPlaces));
     final minorUnits = (majorUnits * scale).round().toBigInt().toInt();
 

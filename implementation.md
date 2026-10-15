@@ -329,7 +329,9 @@ The first Analysis page and its daily-series calculation services are implemente
 - Initial columns are exactly: `valuation_id`, `date`, `account_id`, `value`.
 - The valuation currency is inferred from the referenced account.
 - Manual asset/liability valuation snapshots will be used for net-worth calculations.
-- The Assets & liabilities section lists only `asset` and `liability` accounts.
+- The Assets & liabilities section lists only accounts with `uses_manual_valuations=TRUE`.
+- `Accounts.account_type` values are `cash`, `liability`, or `asset`; `uses_manual_valuations=TRUE` is valid only for `asset` or `liability` accounts.
+- `uses_manual_valuations` validates Google Sheets boolean output (`TRUE`/`FALSE`, including normalized casing) and rejects other values.
 - Valuation dates use the user's local calendar timezone; stored liability values are positive and liability signs are applied during net-worth calculation.
 - The valuation form order is account, date, valuation.
 - Duplicate account/date dates and dates outside account opening/closing bounds are disabled; changing account clears an invalid selected date.
@@ -337,9 +339,11 @@ The first Analysis page and its daily-series calculation services are implemente
 - `DailyAccountBalances` remains limited to open `cash` and `credit` accounts.
 - `DailyNetWorth` combines ledger-derived balances with manual valuations for `asset` and `liability` accounts.
 - Future color coding/subtext for positive and negative account classes is planned; credit/liability merging remains deferred.
+- Transfer account-type pairs are allowed without validation restrictions; transfer interpretation will be designed when transfer analysis is implemented.
+- Daily valuation batch saves use all-or-nothing validation: blank, malformed, negative, duplicate, or out-of-range values prevent the entire batch from saving.
 
 The Assets & liabilities page, DailyManualValuations model/parser/repositories, manual valuation entry, valuation date constraints, and valuation-aware daily net-worth calculation are implemented.
-- The current Sheets/CSV schema contract includes `Currencies.decimal_places`, the reordered Transactions columns, `DailyExchangeRates.source_rate_date`, and `DailyManualValuations(valuation_id,date,account_id,value)`.
+- The current Sheets/CSV schema contract includes `Accounts.uses_manual_valuations`, no stored `Accounts.current_balance`, `Currencies.decimal_places`, the reordered Transactions columns, `DailyExchangeRates.source_rate_date`, and `DailyManualValuations(valuation_id,date,account_id,value)`.
 - Every production bug must receive a regression test.
 - Coverage is measured with [`tool/check_coverage.sh`](./tool/check_coverage.sh).
 - Current coverage thresholds are 80% application logic and 90% for financial logic files. Application-logic coverage excludes UI composition, visual theme code, OAuth UI, and low-level external HTTP adapters; those areas use widget/manual smoke tests.
@@ -384,6 +388,10 @@ The Assets & liabilities page, DailyManualValuations model/parser/repositories, 
 - Provide an explicit account-switch/sign-out action.
 - Use distinct UI states for restoring session, signing in, granting Sheets access, loading data, unauthorized account, and configuration errors.
 - Expired-token retry remains a follow-up integration task.
+
+## Future Apps Script backend option
+
+A possible future zero-cost architecture is an Apps Script backend between Flutter and Sheets. It could own Sheets authorization, reads/writes, daily catch-up, and manual rebuilds. Authentication, CORS, endpoint protection, Script Properties, and Apps Script quotas must be planned before implementation. The current direct OAuth/Sheets architecture remains active for now.
 - Separate a Google OAuth/Sheets API service from repositories; the service handles tokens, range reads, batch reads, row appends, and full-rebuild writes, while repositories map API data into domain models.
 - Use A1 ranges based on current tab names and headers, such as `Transactions!A:K`, `Accounts!A:H`, and daily date-column ranges; spreadsheet ID is the only spreadsheet-specific configuration value.
 - After authentication and startup catch-up, read all current runtime tables; support appending new transactions and the confirmed manual full rebuild, while editing and deletion remain deferred.
