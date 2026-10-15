@@ -162,10 +162,6 @@ class ModelParsers {
             value: requiredValue(row, 'opening_balance'),
             currency: currency,
           ),
-          currentBalance: Money.fromMajorUnits(
-            value: requiredValue(row, 'current_balance'),
-            currency: currency,
-          ),
           openingDate: parseDateOnly(
             requiredValue(row, 'opening_date'),
             fieldName: 'opening_date',

@@ -290,7 +290,7 @@ Transaction entry is implemented with local Chrome persistence, shared validatio
 - Detailed current-month spending, income, and category totals are deferred until their calculation and presentation are designed properly.
 - The first dashboard should focus on current net worth and account balances.
 - Current net worth should use the latest `DailyNetWorth` value.
-- Account cards should use `Accounts.current_balance`, representing the ledger through the latest transaction, and label it as a current ledger balance.
+- Account cards should calculate balances from `Accounts.opening_balance` plus all transactions and label them as current ledger balances.
 - Daily account snapshots are historical and may be one day stale; they should not replace current ledger balances on the first dashboard.
 - The dashboard design remains flexible and can be expanded later with period metrics, category breakdowns, charts, and comparisons.
 - If no daily net-worth row exists, show `Unavailable` rather than estimate it from account balances.
@@ -301,7 +301,7 @@ Transaction entry is implemented with local Chrome persistence, shared validatio
 - The first Analysis page focuses on net-worth trends and account-balance history from daily tables.
 - Net-worth trend defaults to all available history.
 - Account history is selectable one account at a time.
-- Account history uses daily values, never `Accounts.current_balance`.
+- Account history uses daily values, never current ledger calculations.
 - Account history shows native currency by default with a USD toggle using `balance_usd`.
 - Net-worth history uses the USD values in `DailyNetWorth`.
 - Missing daily rows are not inferred or interpolated; charts use available rows and show the missing dates.

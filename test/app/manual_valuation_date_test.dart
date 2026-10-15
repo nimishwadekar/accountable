@@ -12,9 +12,6 @@ void main() {
     openingBalance: Money.zero(
       const CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2),
     ),
-    currentBalance: Money.zero(
-      const CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2),
-    ),
     openingDate: DateTime.utc(2026, 1, 10),
     closingDate: DateTime.utc(2026, 1, 20),
   );
@@ -66,7 +63,6 @@ void main() {
       accountType: 'asset',
       currencyId: 'USD',
       openingBalance: Money.zero(usd),
-      currentBalance: Money.zero(usd),
       openingDate: DateTime.utc(2026, 1, 1),
       closingDate: null,
     );

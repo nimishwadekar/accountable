@@ -15,6 +15,10 @@ class OverviewPage extends StatelessWidget {
       data.dailyNetWorth,
       (value) => value.date,
     );
+    final balances = const AccountBalanceCalculator().calculate(
+      accounts: data.accounts,
+      transactions: data.transactions,
+    );
 
     return AppPageFrame(
       title: 'Overview',
@@ -51,6 +55,7 @@ class OverviewPage extends StatelessWidget {
                   if (index > 0) const Divider(height: 1),
                   _AccountRow(
                     account: data.accounts[index],
+                    balance: balances[data.accounts[index].id]!,
                     currencies: data.currenciesById,
                   ),
                 ],
@@ -83,6 +88,10 @@ class AccountsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final balances = const AccountBalanceCalculator().calculate(
+      accounts: data.accounts,
+      transactions: data.transactions,
+    );
     return AppPageFrame(
       title: 'Accounts',
       subtitle: 'Balances across your connected accounts.',
@@ -93,6 +102,7 @@ class AccountsPage extends StatelessWidget {
               if (index > 0) const Divider(height: 1),
               _AccountRow(
                 account: data.accounts[index],
+                balance: balances[data.accounts[index].id]!,
                 currencies: data.currenciesById,
               ),
             ],
@@ -413,9 +423,14 @@ class EmptyState extends StatelessWidget {
 }
 
 class _AccountRow extends StatelessWidget {
-  const _AccountRow({required this.account, required this.currencies});
+  const _AccountRow({
+    required this.account,
+    required this.balance,
+    required this.currencies,
+  });
 
   final Account account;
+  final Money balance;
   final Map<String, CurrencyDefinition> currencies;
 
   @override
@@ -436,7 +451,7 @@ class _AccountRow extends StatelessWidget {
       trailing: Text(
         currency == null
             ? '—'
-            : formatMoney(account.currentBalance, currencies),
+            : formatMoney(balance, currencies),
         style: Theme.of(context).textTheme.titleMedium
             ?.copyWith(fontWeight: FontWeight.w700),
       ),

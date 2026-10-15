@@ -18,7 +18,6 @@ void main() {
       accountType: 'asset',
       currencyId: 'USD',
       openingBalance: Money.zero(usd),
-      currentBalance: Money.zero(usd),
       openingDate: DateTime.utc(2026, 1, 1),
       closingDate: null,
     );

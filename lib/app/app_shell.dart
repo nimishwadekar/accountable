@@ -51,10 +51,12 @@ class AppShell extends StatefulWidget {
     super.key,
     required this.dataRepository,
     this.onRebuildDailyTables,
+    this.onReloadData,
   });
 
   final AppDataRepository dataRepository;
   final Future<void> Function()? onRebuildDailyTables;
+  final Future<void> Function()? onReloadData;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -184,6 +186,7 @@ class _AppShellState extends State<AppShell> {
       ),
       AppSection.settings => SettingsPage(
         onRebuildDailyTables: widget.onRebuildDailyTables,
+        onReloadData: widget.onReloadData ?? _reloadData,
       ),
     };
   }
@@ -198,6 +201,14 @@ class _AppShellState extends State<AppShell> {
     setState(() {
       _snapshotFuture = widget.dataRepository.reload();
     });
+  }
+
+  Future<void> _reloadData() async {
+    final future = widget.dataRepository.reload();
+    setState(() {
+      _snapshotFuture = future;
+    });
+    await future;
   }
 
   Future<void> _handleValuationAdded(DailyManualValuation valuation) async {

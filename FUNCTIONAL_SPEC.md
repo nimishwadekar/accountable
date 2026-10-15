@@ -76,7 +76,7 @@ DailyExchangeRates: rate_id, rate_date, currency, rate_to_usd, source_rate_date,
 DailyManualValuations: valuation_id, date, account_id, value
 ```
 
-`source_rate_date` records the actual Frankfurter date used when the requested sequential rate date fell on a weekend or holiday. Legacy local data without this column is read compatibly by treating `rate_date` as the source date.
+`source_rate_date` records the actual Frankfurter date used when the requested sequential rate date fell on a weekend or holiday. Legacy local data without this column is read compatibly by treating `rate_date` as the source date. Google Sheets serial-number dates are normalized to calendar dates before freshness checks and parsing.
 
 The runtime data snapshot contains:
 
@@ -171,7 +171,7 @@ The Overview page shows:
 1. Latest daily net worth.
 2. An `As of YYYY-MM-DD` subtitle for that net-worth value.
 3. `Unavailable` when no daily net-worth row exists; no fallback estimate is calculated.
-4. Current account balances from `Accounts.current_balance`.
+4. Current account balances calculated from `Accounts.opening_balance` plus all transactions.
 5. A label explaining that account values are current ledger balances through the latest transaction.
 
 The Overview page does not currently show current-month spending, income, category totals, charts, or recent transactions as headline content.
@@ -241,7 +241,7 @@ The first Analysis page contains:
 - Missing-data warnings above affected charts.
 - Interactive line charts using `fl_chart`.
 
-Analysis uses daily tables, never `Accounts.current_balance`, for historical charts.
+Analysis uses daily tables, never current ledger calculations, for historical charts.
 
 For closed accounts:
 
@@ -287,10 +287,10 @@ If no row exists, display `Unavailable`.
 
 ### Current account balance display
 
-The Overview account value is:
+The Overview account value is calculated as:
 
 ```text
-Accounts.current_balance
+Accounts.opening_balance + all transaction effects
 ```
 
 This is intentionally different from historical daily account snapshots. It reflects the ledger through the latest transaction.
@@ -304,7 +304,7 @@ DailyAccountBalances.balance       // native currency
 DailyAccountBalances.balance_usd   // USD toggle
 ```
 
-It does not recalculate historical values from current transactions or use `Accounts.current_balance`.
+It does not use current ledger calculations for historical values.
 
 ### Daily table inclusion rules
 

@@ -20,7 +20,6 @@ void main() {
         accountType: 'asset',
         currencyId: 'USD',
         openingBalance: Money.zero(currencies['USD']!),
-        currentBalance: Money.zero(currencies['USD']!),
         openingDate: DateTime.utc(2026, 1, 1),
         closingDate: null,
       ),
@@ -44,7 +43,6 @@ void main() {
       accountType: 'asset',
       currencyId: checking.currencyId,
       openingBalance: checking.openingBalance,
-      currentBalance: checking.currentBalance,
       openingDate: checking.openingDate,
       closingDate: checking.closingDate,
     );
@@ -111,7 +109,6 @@ void main() {
         accountType: 'cash',
         currencyId: 'USD',
         openingBalance: Money.zero(currencies['USD']!),
-        currentBalance: Money.zero(currencies['USD']!),
         openingDate: DateTime.utc(2026, 1, 1),
         closingDate: null,
       ),

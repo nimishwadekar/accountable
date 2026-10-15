@@ -41,7 +41,7 @@ void main() {
       const DataValidationIssue(
         table: 'Accounts',
         row: 2,
-        field: 'current_balance',
+        field: 'opening_balance',
         message: 'Current balance is missing.',
         technicalDetails: 'FormatException: Missing required field.',
       ),

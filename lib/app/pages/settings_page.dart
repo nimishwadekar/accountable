@@ -3,9 +3,14 @@ import 'package:flutter/material.dart';
 import '../theme/design_tokens.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, this.onRebuildDailyTables});
+  const SettingsPage({
+    super.key,
+    this.onRebuildDailyTables,
+    required this.onReloadData,
+  });
 
   final Future<void> Function()? onRebuildDailyTables;
+  final Future<void> Function() onReloadData;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -13,6 +18,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   bool _working = false;
+  bool _refreshing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +32,10 @@ class _SettingsPageState extends State<SettingsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
+              Text(
+                'Settings',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
               const SizedBox(height: AppSpacing.xl),
               Card(
                 child: Padding(
@@ -50,6 +59,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         icon: const Icon(Icons.refresh),
                         label: const Text('Rebuild daily tables'),
                       ),
+                      const SizedBox(height: AppSpacing.lg),
+                      FilledButton.tonalIcon(
+                        onPressed: _refreshing ? null : _refreshData,
+                        icon: const Icon(Icons.sync),
+                        label: const Text('Refresh data'),
+                      ),
                       if (!enabled) ...[
                         const SizedBox(height: AppSpacing.sm),
                         const Text(
@@ -70,6 +85,23 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _refreshData() async {
+    setState(() => _refreshing = true);
+    try {
+      await widget.onReloadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Data refreshed.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not refresh data: $error')));
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   Future<void> _confirmRebuild() async {
@@ -98,9 +130,8 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       await widget.onRebuildDailyTables!();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Daily tables rebuilt.')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Daily tables rebuilt.')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

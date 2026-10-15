@@ -7,7 +7,6 @@ class Account {
     required this.accountType,
     required this.currencyId,
     required this.openingBalance,
-    required this.currentBalance,
     required this.openingDate,
     required this.closingDate,
   });
@@ -17,7 +16,6 @@ class Account {
   final String accountType;
   final String currencyId;
   final Money openingBalance;
-  final Money currentBalance;
   final DateTime openingDate;
   final DateTime? closingDate;
 

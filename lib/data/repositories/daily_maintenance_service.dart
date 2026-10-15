@@ -417,11 +417,9 @@ class DailyMaintenanceService {
     final dates = <DateTime>{};
     for (final row in rows ?? const <List<String>>[]) {
       if (row.isEmpty) continue;
-      try {
-        dates.add(_dateOnly(parseDateOnly(row.first, fieldName: 'daily date')));
-      } on FormatException {
-        // The first row is the table header.
-      }
+      final value = row.first.trim();
+      if (value.endsWith('_date')) continue;
+      dates.add(_dateOnly(parseDateOnly(value, fieldName: 'daily date')));
     }
     return dates;
   }

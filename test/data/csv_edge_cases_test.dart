@@ -20,6 +20,13 @@ void main() {
     );
   });
 
+  test('parses Google Sheets serial dates', () {
+    expect(
+      parseDateOnly('46310', fieldName: 'date'),
+      DateTime.utc(2026, 10, 15),
+    );
+  });
+
   test('date and timestamp helpers reject malformed values', () {
     expect(
       () => parseDateOnly('2026-02-30', fieldName: 'date'),

@@ -1,5 +1,13 @@
 DateTime parseDateOnly(String value, {required String fieldName}) {
-  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value.trim());
+  final trimmed = value.trim();
+  final serial = double.tryParse(trimmed);
+  if (serial != null && !trimmed.contains('-')) {
+    final milliseconds = (serial * Duration.millisecondsPerDay).round();
+    return DateTime.utc(1899, 12, 30).add(
+      Duration(milliseconds: milliseconds),
+    );
+  }
+  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(trimmed);
   if (match == null) {
     throw FormatException('Invalid date in $fieldName: $value.');
   }

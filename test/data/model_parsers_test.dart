@@ -21,8 +21,8 @@ INR,₹,2
 ''';
 
   const accountsCsv = '''
-account_id,name,account_type,currency,opening_balance,current_balance,opening_date,closing_date
-checking,Checking,Bank,USD,1000,1200,2026-10-01,
+account_id,name,account_type,currency,opening_balance,opening_date,closing_date
+checking,Checking,Bank,USD,1000,2026-10-01,
 ''';
 
   test('parses the current fixture tables together', () async {
