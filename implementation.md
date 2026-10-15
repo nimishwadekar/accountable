@@ -278,7 +278,7 @@ The transaction list, responsive filters, grouped rows, read-only detail sheet, 
 - In local Chrome mode, persist the complete test dataset in browser storage while leaving bundled CSV fixtures unchanged.
 - Select existing tags only; add new tags in Sheets for now.
 
-Transaction entry is implemented with local Chrome persistence, shared validation, UUID transaction IDs, and asset fixtures kept read-only.
+Transaction entry is implemented with local Chrome persistence, shared validation, unique 12-character base62 transaction IDs, collision checks against existing transaction IDs, and asset fixtures kept read-only.
 
 - New transaction entries require both a tag and a non-empty description.
 - The description field appears at the top of the transaction form.

@@ -1,5 +1,6 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../data/data.dart';
 import '../theme/design_tokens.dart';
@@ -275,7 +276,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     }
 
     final transaction = Transaction(
-      id: const Uuid().v4(),
+      id: generateTransactionId(widget.data.transactionsById.keys),
       createdAt: DateTime.now().toUtc(),
       date: DateTime.utc(_date.year, _date.month, _date.day),
       type: widget.type,
@@ -312,6 +313,28 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-'
         '${date.day.toString().padLeft(2, '0')}';
   }
+}
+
+const _transactionIdAlphabet =
+    '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const _transactionIdLength = 12;
+
+String generateTransactionId(
+  Iterable<String> existingIds, {
+  Random? random,
+}) {
+  final existing = existingIds.toSet();
+  final generator = random ?? Random.secure();
+  String candidate;
+  do {
+    candidate = List.generate(
+      _transactionIdLength,
+      (_) => _transactionIdAlphabet[
+        generator.nextInt(_transactionIdAlphabet.length)
+      ],
+    ).join();
+  } while (existing.contains(candidate));
+  return candidate;
 }
 
 String transactionTypeLabel(TransactionType type) {
