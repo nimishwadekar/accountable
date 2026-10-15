@@ -187,7 +187,10 @@ class DailyMaintenanceService {
     if (unitsPerUsd == Decimal.zero) {
       throw StateError('Frankfurter returned a zero rate for $currencyId.');
     }
-    return (Decimal.one / unitsPerUsd).toDecimal();
+    return (Decimal.one / unitsPerUsd).toDecimal(
+      scaleOnInfinitePrecision: 18,
+      toBigInt: (value) => value.round(),
+    );
   }
 
   Future<void> _appendExchangeRates(List<ExchangeRate> rates) async {
@@ -299,8 +302,21 @@ class DailyMaintenanceService {
     final amount = balance.toMajorUnits(
       data.currenciesById[balance.currencyId]!,
     );
-    final converted = (amount * rate.rateToUsd).round();
-    return Money(minorUnits: converted.toBigInt().toInt(), currencyId: 'USD');
+    final usd = data.currenciesById['USD']!;
+    final minorUnits =
+        (amount * rate.rateToUsd * Decimal.fromInt(_powerOfTen(usd.decimalPlaces)))
+            .round()
+            .toBigInt()
+            .toInt();
+    return Money(minorUnits: minorUnits, currencyId: usd.id);
+  }
+
+  static int _powerOfTen(int exponent) {
+    var result = 1;
+    for (var index = 0; index < exponent; index++) {
+      result *= 10;
+    }
+    return result;
   }
 
   ExchangeRate rateFor(
