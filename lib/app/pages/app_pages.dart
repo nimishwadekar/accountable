@@ -11,20 +11,10 @@ class OverviewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final latestNetWorth = _latestByDate(data.dailyNetWorth, (value) => value.date);
-    final latestBalances = [
-      ...data.accounts.map(
-        (account) => data.dailyAccountBalances
-            .where((balance) => balance.accountId == account.id)
-            .fold<DailyAccountBalance?>(
-              null,
-              (latest, balance) =>
-                  latest == null || balance.date.isAfter(latest.date)
-                      ? balance
-                      : latest,
-            ),
-      ),
-    ];
+    final latestNetWorth = _latestByDate(
+      data.dailyNetWorth,
+      (value) => value.date,
+    );
 
     return AppPageFrame(
       title: 'Overview',
@@ -32,53 +22,25 @@ class OverviewPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final cardWidth = constraints.maxWidth < 700
-                  ? constraints.maxWidth
-                  : (constraints.maxWidth - AppSpacing.md * 2) / 3;
-              return Wrap(
-                spacing: AppSpacing.md,
-                runSpacing: AppSpacing.md,
-                children: [
-                  SizedBox(
-                    width: cardWidth,
-                    child: MetricCard(
-                      label: 'Net worth',
-                      value: latestNetWorth == null
-                          ? '—'
-                          :                           formatMoney(
-                              latestNetWorth.amount,
-                              data.currenciesById,
-                            ),
-                      detail: latestNetWorth == null
-                          ? 'No daily snapshot'
-                          : 'As of ${formatDate(latestNetWorth.date)}',
-                      accent: AppColors.teal,
-                    ),
-                  ),
-                  SizedBox(
-                    width: cardWidth,
-                    child: MetricCard(
-                      label: 'Accounts',
-                      value: data.accounts.length.toString(),
-                      detail: 'Across ${data.currencies.length} currencies',
-                    ),
-                  ),
-                  SizedBox(
-                    width: cardWidth,
-                    child: MetricCard(
-                      label: 'Transactions',
-                      value: data.transactions.length.toString(),
-                      detail: 'Loaded from local fixtures',
-                    ),
-                  ),
-                ],
-              );
-            },
+          MetricCard(
+            label: 'Net worth',
+            value: latestNetWorth == null
+                ? 'Unavailable'
+                : formatMoney(latestNetWorth.amount, data.currenciesById),
+            detail: latestNetWorth == null
+                ? 'No daily snapshot available'
+                : 'As of ${formatDate(latestNetWorth.date)}',
+            accent: AppColors.teal,
           ),
           const SizedBox(height: AppSpacing.xl),
-          Text('Accounts', style: Theme.of(context).textTheme.titleLarge),
+          Text('Current balances', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Current ledger balance through the latest transaction.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.mutedText,
+                ),
+          ),
           const SizedBox(height: AppSpacing.sm),
           Card(
             child: Column(
@@ -87,57 +49,28 @@ class OverviewPage extends StatelessWidget {
                   if (index > 0) const Divider(height: 1),
                   _AccountRow(
                     account: data.accounts[index],
-                    balance: latestBalances[index],
                     currencies: data.currenciesById,
                   ),
                 ],
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.xl),
-          Text(
-            'Recent transactions',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Card(
-            child: data.transactions.isEmpty
-                ? const EmptyState(message: 'No transactions yet.')
-                : Column(
-                    children: [
-                      for (final transaction
-                          in _recentTransactions(data.transactions))
-                        TransactionSummaryRow(
-                          transaction: transaction,
-                          currencies: data.currenciesById,
-                        ),
-                    ],
-                  ),
-          ),
         ],
       ),
     );
   }
 
-  static T? _latestByDate<T>(
-    Iterable<T> values,
-    DateTime Function(T) dateOf,
+  static DailyNetWorth? _latestByDate(
+    Iterable<DailyNetWorth> values,
+    DateTime Function(DailyNetWorth) dateOf,
   ) {
-    T? latest;
+    DailyNetWorth? latest;
     for (final value in values) {
-      if (latest == null || dateOf(value).isAfter(dateOf(latest as T))) {
+      if (latest == null || dateOf(value).isAfter(dateOf(latest))) {
         latest = value;
       }
     }
     return latest;
-  }
-
-  static List<Transaction> _recentTransactions(
-    List<Transaction> transactions,
-  ) {
-    final sorted = [...transactions]
-      ..sort((a, b) => b.date.compareTo(a.date));
-    return sorted.take(5).toList();
   }
 }
 
@@ -370,17 +303,14 @@ class _AccountRow extends StatelessWidget {
   const _AccountRow({
     required this.account,
     required this.currencies,
-    this.balance,
   });
 
   final Account account;
-  final DailyAccountBalance? balance;
   final Map<String, CurrencyDefinition> currencies;
 
   @override
   Widget build(BuildContext context) {
     final currency = currencies[account.currencyId];
-    final money = balance?.balance ?? account.currentBalance;
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
@@ -394,7 +324,7 @@ class _AccountRow extends StatelessWidget {
       title: Text(account.name),
       subtitle: Text(account.accountType),
       trailing: Text(
-        currency == null ? '—' : formatMoney(money, currencies),
+        currency == null ? '—' : formatMoney(account.currentBalance, currencies),
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700,
             ),

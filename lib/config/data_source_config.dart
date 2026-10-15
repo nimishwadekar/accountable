@@ -4,7 +4,7 @@ enum DataSourceMode {
 }
 
 class AppDataConfig {
-  const AppDataConfig({this.dataSourceMode = DataSourceMode.localAssets});
+  const AppDataConfig({required this.dataSourceMode});
 
   final DataSourceMode dataSourceMode;
 }

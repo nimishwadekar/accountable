@@ -1,5 +1,7 @@
 # Accountable implementation plan
 
+The behavioral source of truth is [`FUNCTIONAL_SPEC.md`](./FUNCTIONAL_SPEC.md). Update it whenever implemented or planned functionality changes.
+
 The app will open on a dashboard. The implementation will use layered architecture so the UI remains independent of CSV parsing, Google Sheets access, and future backend changes.
 
 ## Phase 1 — Define the application data model
@@ -156,10 +158,10 @@ Long-range chart views will use the stored daily tables. Current and detailed vi
 
 After the local-data version works:
 
-1. Add Firebase Google sign-in.
-2. Add one secure backend path for Sheets.
-3. Validate the Firebase user.
-4. Read and write Sheets only through the backend.
+1. Add direct Google sign-in for the web app.
+2. Load runtime configuration from the committed [`assets/config.json`](./assets/config.json) asset.
+3. Validate the Google account against the configured allowlist.
+4. Read and write Sheets through the Google Sheets API.
 5. Keep the same repository interfaces used by the local CSV implementation.
 
 The UI should not need to change when switching from local data to Sheets.
@@ -234,7 +236,7 @@ Step 1 is complete. Step 2 has started with the model and CSV parsing layer.
 - Use separate repository responsibilities coordinated by one combined immutable `AppDataSnapshot`.
 - Startup loading fails the complete snapshot if a required table is missing or malformed; errors include table, row, and field context when available.
 - Load all runtime tables once at startup. Refresh only after a user mutation or an explicit reload action.
-- Use a typed data-source configuration with local asset mode as the default and a future Google Sheets mode behind the same interfaces.
+- Use a typed JSON-backed data-source configuration with Google Sheets as the default and local asset mode selected by editing `assets/config.json`.
 - Treat bundled CSV assets as read-only fixtures. The initial asset repository is read-only; local persistence for mutations will be designed when transaction-entry work begins.
 - Exclude `TransactionTypes.csv` from runtime loading because transaction types and rules are defined in Dart. It will be deleted later.
 
@@ -281,3 +283,77 @@ Transaction entry is implemented with local Chrome persistence, shared validatio
 - New transaction entries require both a tag and a non-empty description.
 - The description field appears at the top of the transaction form.
 - Existing fixture rows may remain blank for these fields during migration; entry validation is stricter than legacy-data parsing.
+
+## Analysis planning decisions recorded
+
+- Spending is defined as expenses minus reimbursements; reimbursements are not a separate headline metric.
+- Detailed current-month spending, income, and category totals are deferred until their calculation and presentation are designed properly.
+- The first dashboard should focus on current net worth and account balances.
+- Current net worth should use the latest `DailyNetWorth` value.
+- Account cards should use `Accounts.current_balance`, representing the ledger through the latest transaction, and label it as a current ledger balance.
+- Daily account snapshots are historical and may be one day stale; they should not replace current ledger balances on the first dashboard.
+- The dashboard design remains flexible and can be expanded later with period metrics, category breakdowns, charts, and comparisons.
+- If no daily net-worth row exists, show `Unavailable` rather than estimate it from account balances.
+- Show an `As of YYYY-MM-DD` subtitle under the net-worth value.
+
+## Analysis planning decisions recorded
+
+- The first Analysis page focuses on net-worth trends and account-balance history from daily tables.
+- Net-worth trend defaults to all available history.
+- Account history is selectable one account at a time.
+- Account history uses daily values, never `Accounts.current_balance`.
+- Account history shows native currency by default with a USD toggle using `balance_usd`.
+- Net-worth history uses the USD values in `DailyNetWorth`.
+- Missing daily rows are not inferred or interpolated; charts use available rows and show the missing dates.
+- The Analysis page includes a date-range selector with All history as the default.
+- Initial fixed presets are 30 days, 90 days, year-to-date, and all history.
+- Analysis date ranges include both selected calendar-date boundaries.
+- Use `fl_chart` for interactive line charts; internal monetary calculations remain decimal/minor-unit based, with conversion to display values only at the chart boundary.
+- Missing-data warnings appear above the affected chart.
+
+The first Analysis page and its daily-series calculation services are implemented, including responsive account controls.
+
+- Closed accounts are charted only through their closing date, inclusive, and show a `Closed on YYYY-MM-DD` subtitle.
+- Chart x-axes use actual calendar-day positions with adaptive, sensible date intervals based on chart width and period span, avoiding repeated or overcrowded labels.
+
+## Google Sheets integration decisions recorded
+
+- Use direct Google OAuth and the Google Sheets API; do not use Firebase Authentication or Firebase services.
+- Google OAuth configuration gate, account restriction, Sheets API client, Sheets-backed repository reads, and transaction append support are implemented.
+- Daily catch-up and manual full rebuild are implemented through the Google Sheets startup gate and Settings action.
+- Do not use scheduled triggers for daily derived-table updates initially.
+- On app startup, after OAuth authorization, perform event-based daily catch-up through the previous completed day.
+- Query only the date columns of the daily tables using a Sheets API batch request; do not load entire daily sheets just to check freshness.
+- Do not use browser storage for daily synchronization state.
+- Do not add a `SyncState` table yet.
+- Treat the daily Sheets data as authoritative for determining the latest processed date.
+- Make catch-up idempotent with deterministic daily row IDs and checks against existing rows before inserting.
+- Restrict the Sheets integration to the user's specific Google account; other signed-in accounts must be rejected.
+- Use Flutter's `google_sign_in` package for browser OAuth rather than implementing Google Identity Services manually.
+- Keep the configured spreadsheet ID and OAuth settings in a checked-in non-secret Dart configuration file; no private credentials belong in the repository.
+- Request only the Google Sheets read/write OAuth scope; do not request Drive permissions.
+- Reject unauthorized accounts before any Sheets request and show a sign-out/retry action.
+- Complete OAuth, daily catch-up, and initial Sheets data loading before showing the main app, so the first displayed snapshot is internally consistent.
+- Use row-level Sheets operations rather than rewriting the entire Transactions sheet for future mutation support.
+- The first integration supports appending new transactions only; editing and deletion are deferred.
+- Include the user-invoked full rebuild action in Settings in the first Sheets integration; it is not part of daily startup catch-up.
+- The full rebuild requires explicit confirmation, then replaces all rows in the three derived daily tables with freshly calculated results.
+- Google Sheets mode will be the default data source.
+- Local CSV mode is selected from the committed [`assets/config.json`](./assets/config.json) asset; otherwise Sheets mode is used.
+- The release build will not expose a runtime data-source toggle and will default to Sheets.
+- Standardize Google OAuth Flutter web testing on `http://localhost:9000`; authorize this origin in the Google Cloud OAuth client.
+- Tests and local development can inject the asset repository directly; normal app runs follow the committed runtime config unless a repository is injected.
+- Attempt silent Google authentication on startup with a loading state; show interactive sign-in only when silent authentication fails.
+- Request Sheets read/write consent only when the required scope has not already been granted.
+- Separate a Google OAuth/Sheets API service from repositories; the service handles tokens, range reads, batch reads, row appends, and full-rebuild writes, while repositories map API data into domain models.
+- Use A1 ranges based on current tab names and headers, such as `Transactions!A:K`, `Accounts!A:H`, and daily date-column ranges; spreadsheet ID is the only spreadsheet-specific configuration value.
+- After authentication and startup catch-up, read all current runtime tables; support appending new transactions and the confirmed manual full rebuild, while editing and deletion remain deferred.
+- Run startup catch-up sequentially: catch up `DailyExchangeRates` first, then `DailyAccountBalances`, then `DailyNetWorth`.
+- If catch-up fails partway through, leave completed rows untouched and retry idempotently from each table's latest date on the next launch.
+- Catch up through yesterday using the user's local calendar date; store retrieval timestamps in UTC.
+- For missing Frankfurter dates, use the most recent prior available rate while still writing the rate row under the requested sequential date.
+- Include a confirmed Settings action for rebuilding daily tables; after completion, reload only the three rebuilt daily tables. Transaction refreshes remain a separate operation that pulls the Transactions table.
+- Initially, after appending a transaction, pull the full Transactions table again rather than updating only in memory; keep the repository boundary flexible for later optimization.
+- Startup should perform one silent OAuth attempt, validate the returned account locally, request interactive Sheets consent only when needed, and run catch-up only when daily tables are behind yesterday.
+- If daily tables are current through yesterday, skip catch-up writes and proceed to runtime-table loading.
+- Store the allowed Google email as a replaceable placeholder in the checked-in non-secret configuration file.

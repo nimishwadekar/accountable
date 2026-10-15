@@ -7,5 +7,5 @@ void main() {
 }
 
 class MyApp extends AccountableApp {
-  const MyApp({super.key, super.dataRepository});
+  const MyApp({super.key, super.dataRepository, super.configLoader});
 }

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../data/data.dart';
 import 'pages/app_pages.dart';
 import 'pages/transactions_page.dart';
+import 'pages/settings_page.dart';
+import '../features/analysis/analysis_page.dart';
 import 'theme/design_tokens.dart';
 
 enum AppSection {
@@ -40,9 +42,14 @@ extension AppSectionDetails on AppSection {
 }
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.dataRepository});
+  const AppShell({
+    super.key,
+    required this.dataRepository,
+    this.onRebuildDailyTables,
+  });
 
   final AppDataRepository dataRepository;
+  final Future<void> Function()? onRebuildDailyTables;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -164,15 +171,9 @@ class _AppShellState extends State<AppShell> {
           onTransactionAdded: _handleTransactionAdded,
         ),
       AppSection.accounts => AccountsPage(data: data),
-      AppSection.analysis => PlaceholderPage(
-          title: 'Analysis',
-          icon: AppSection.analysis.selectedIcon,
-          message: 'Charts and period comparisons are next.',
-        ),
-      AppSection.settings => PlaceholderPage(
-          title: 'Settings',
-          icon: AppSection.settings.selectedIcon,
-          message: 'Data-source and account settings will live here.',
+      AppSection.analysis => AnalysisPage(data: data),
+      AppSection.settings => SettingsPage(
+          onRebuildDailyTables: widget.onRebuildDailyTables,
         ),
     };
   }

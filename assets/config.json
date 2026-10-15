@@ -1,0 +1,8 @@
+{
+  "dataSource": "sheets",
+  "googleClientId": "458604899450-fs12vl9ht9f0c98o4fsi2ad06k298knc.apps.googleusercontent.com",
+  "spreadsheetId": "1p8AD6q4itvYAUech05QE-NHoKf9jrrUFGOfX_hr6Szc",
+  "allowedEmail": "wadekar.nimish@gmail.com",
+  "oauthOrigin": "http://localhost:9000",
+  "sheetsScope": "https://www.googleapis.com/auth/spreadsheets"
+}

@@ -29,22 +29,24 @@ void main() {
     );
   });
 
-  test('factory defaults to local asset data', () async {
-    final repository = createAppDataRepository();
+  test('factory creates local asset data when configured', () async {
+    final repository = createAppDataRepository(
+      config: const AppDataConfig(dataSourceMode: DataSourceMode.localAssets),
+    );
 
     final snapshot = await repository.load();
 
     expect(snapshot.currenciesById.keys, containsAll(<String>['USD', 'INR']));
   });
 
-  test('google sheets mode fails explicitly until implemented', () {
+  test('google sheets mode requires an API client', () {
     expect(
       () => createAppDataRepository(
         config: const AppDataConfig(
           dataSourceMode: DataSourceMode.googleSheets,
         ),
       ),
-      throwsUnsupportedError,
+      throwsStateError,
     );
   });
 
