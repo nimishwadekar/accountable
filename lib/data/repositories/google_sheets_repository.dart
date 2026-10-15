@@ -5,6 +5,8 @@ import '../csv/csv.dart';
 import '../models/models.dart';
 import '../sources/google_sheets_api.dart';
 import 'data_load_exception.dart';
+import 'data_validation_failure.dart';
+import 'table_dependencies.dart';
 import 'repositories.dart';
 
 abstract final class GoogleSheetsRanges {
@@ -14,6 +16,7 @@ abstract final class GoogleSheetsRanges {
   static const dailyAccountBalances = 'DailyAccountBalances!A:F';
   static const dailyExchangeRates = 'DailyExchangeRates!A:F';
   static const dailyNetWorth = 'DailyNetWorth!A:D';
+  static const dailyManualValuations = 'DailyManualValuations!A:D';
   static const tags = 'Tags!A:B';
   static const transactions = 'Transactions!A:K';
 }
@@ -37,6 +40,28 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
   }
 
   @override
+  @override
+  Future<AppDataSnapshot> addManualValuation(
+    DailyManualValuation valuation,
+  ) async {
+    final current = await load();
+    final account = current.accountsById[valuation.accountId];
+    final currency = account == null
+        ? null
+        : current.currenciesById[account.currencyId];
+    if (account == null || currency == null || !account.isValuationAccount) {
+      throw StateError('Invalid manual valuation account.');
+    }
+    await api.appendRow(GoogleSheetsRanges.dailyManualValuations, [
+      valuation.id,
+      _dateString(valuation.date),
+      valuation.accountId,
+      valuation.value.toMajorUnitsString(currency),
+    ]);
+    return reload();
+  }
+
+  @override
   Future<AppDataSnapshot> addTransaction(Transaction transaction) async {
     final current = await load();
     final accountCurrencies = {
@@ -57,40 +82,138 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
   Future<AppDataSnapshot> _loadFreshSnapshot() async {
     try {
       final tables = await _readRuntimeTables();
-      final currencies = ModelParsers.parseCurrencies(
-        _encode(tables[GoogleSheetsRanges.currencies]!),
-      );
+      final issues = <DataValidationIssue>[];
+      final tableHasErrors = <String, bool>{};
+      bool dependenciesAreValid(String table) {
+        final dependencies = tableDependencies[table] ?? const <String>[];
+        return dependencies.every((dependency) => tableHasErrors[dependency] == false);
+      }
+
+      void recordIssues(String table, List<DataValidationIssue> tableIssues) {
+        tableHasErrors[table] = tableIssues.isNotEmpty;
+        issues.addAll(tableIssues);
+      }
+
+      List<CurrencyDefinition> currencies = const [];
+      List<Account> accounts = const [];
+      List<Category> categories = const [];
+      List<Tag> tags = const [];
+      List<Transaction> transactions = const [];
+      List<ExchangeRate> exchangeRates = const [];
+      List<DailyAccountBalance> dailyAccountBalances = const [];
+      List<DailyNetWorth> dailyNetWorth = const [];
+      List<DailyManualValuation> dailyManualValuations = const [];
+
+      try {
+        final result = ModelParsers.parseCurrenciesWithIssues(
+          _encode(tables[GoogleSheetsRanges.currencies]!),
+        );
+        currencies = result.values;
+        recordIssues('Currencies', result.issues);
+      } catch (error) {
+        final issue = issueFromError('Currencies', error);
+        recordIssues('Currencies', [issue]);
+      }
       final currencyById = {
         for (final currency in currencies) currency.id: currency,
       };
-      final accounts = ModelParsers.parseAccounts(
-        _encode(tables[GoogleSheetsRanges.accounts]!),
-        currencyById,
-      );
+      if (dependenciesAreValid('Accounts')) {
+        try {
+          final result = ModelParsers.parseAccountsWithIssues(
+            _encode(tables[GoogleSheetsRanges.accounts]!),
+            currencyById,
+          );
+          accounts = result.values;
+          recordIssues('Accounts', result.issues);
+        } catch (error) {
+          recordIssues('Accounts', [issueFromError('Accounts', error)]);
+        }
+      }
       final accountById = {for (final account in accounts) account.id: account};
-      final categories = ModelParsers.parseCategories(
-        _encode(tables[GoogleSheetsRanges.categories]!),
-      );
-      final tags = ModelParsers.parseTags(
-        _encode(tables[GoogleSheetsRanges.tags]!),
-      );
-      final transactions = ModelParsers.parseTransactions(
-        _encode(tables[GoogleSheetsRanges.transactions]!),
-        accounts: accountById,
-        currencies: currencyById,
-      );
-      final exchangeRates = ModelParsers.parseExchangeRates(
-        _encode(tables[GoogleSheetsRanges.dailyExchangeRates]!),
-      );
-      final dailyAccountBalances = ModelParsers.parseDailyAccountBalances(
-        _encode(tables[GoogleSheetsRanges.dailyAccountBalances]!),
-        accounts: accountById,
-        currencies: currencyById,
-      );
-      final dailyNetWorth = ModelParsers.parseDailyNetWorth(
-        _encode(tables[GoogleSheetsRanges.dailyNetWorth]!),
-        currencyById,
-      );
+      try {
+        final result = ModelParsers.parseCategoriesWithIssues(
+          _encode(tables[GoogleSheetsRanges.categories]!),
+        );
+        categories = result.values;
+        recordIssues('Categories', result.issues);
+      } catch (error) {
+        recordIssues('Categories', [issueFromError('Categories', error)]);
+      }
+      try {
+        final result = ModelParsers.parseTagsWithIssues(
+          _encode(tables[GoogleSheetsRanges.tags]!),
+        );
+        tags = result.values;
+        recordIssues('Tags', result.issues);
+      } catch (error) {
+        recordIssues('Tags', [issueFromError('Tags', error)]);
+      }
+      if (dependenciesAreValid('Transactions')) {
+        try {
+          final result = ModelParsers.parseTransactionsWithIssues(
+            _encode(tables[GoogleSheetsRanges.transactions]!),
+            accounts: accountById,
+            currencies: currencyById,
+          );
+          transactions = result.values;
+          recordIssues('Transactions', result.issues);
+        } catch (error) {
+          recordIssues('Transactions', [issueFromError('Transactions', error)]);
+        }
+      }
+      try {
+        final result = ModelParsers.parseExchangeRatesWithIssues(
+          _encode(tables[GoogleSheetsRanges.dailyExchangeRates]!),
+        );
+        exchangeRates = result.values;
+        recordIssues('DailyExchangeRates', result.issues);
+      } catch (error) {
+        recordIssues('DailyExchangeRates', [issueFromError('DailyExchangeRates', error)]);
+      }
+      if (dependenciesAreValid('DailyAccountBalances')) {
+        try {
+          final result = ModelParsers.parseDailyAccountBalancesWithIssues(
+            _encode(tables[GoogleSheetsRanges.dailyAccountBalances]!),
+            accounts: accountById,
+            currencies: currencyById,
+          );
+          dailyAccountBalances = result.values;
+          recordIssues('DailyAccountBalances', result.issues);
+        } catch (error) {
+          recordIssues('DailyAccountBalances', [
+            issueFromError('DailyAccountBalances', error),
+          ]);
+        }
+      }
+      if (dependenciesAreValid('DailyNetWorth')) {
+        try {
+          final result = ModelParsers.parseDailyNetWorthWithIssues(
+            _encode(tables[GoogleSheetsRanges.dailyNetWorth]!),
+            currencyById,
+          );
+          dailyNetWorth = result.values;
+          recordIssues('DailyNetWorth', result.issues);
+        } catch (error) {
+          recordIssues('DailyNetWorth', [issueFromError('DailyNetWorth', error)]);
+        }
+      }
+      if (dependenciesAreValid('DailyManualValuations')) {
+        try {
+          final result =
+              ModelParsers.parseDailyManualValuationsWithIssues(
+            _encode(tables[GoogleSheetsRanges.dailyManualValuations]!),
+            accounts: accountById,
+            currencies: currencyById,
+          );
+          dailyManualValuations = result.values;
+          recordIssues('DailyManualValuations', result.issues);
+        } catch (error) {
+          recordIssues('DailyManualValuations', [
+            issueFromError('DailyManualValuations', error),
+          ]);
+        }
+      }
+      if (issues.isNotEmpty) throw DataValidationFailure(issues);
 
       return AppDataSnapshot(
         accounts: accounts,
@@ -101,7 +224,10 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
         exchangeRates: exchangeRates,
         dailyAccountBalances: dailyAccountBalances,
         dailyNetWorth: dailyNetWorth,
+        dailyManualValuations: dailyManualValuations,
       );
+    } on DataValidationFailure {
+      rethrow;
     } catch (error) {
       throw DataLoadException(
         tableName: 'Google Sheets',
@@ -119,6 +245,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       GoogleSheetsRanges.dailyAccountBalances,
       GoogleSheetsRanges.dailyExchangeRates,
       GoogleSheetsRanges.dailyNetWorth,
+      GoogleSheetsRanges.dailyManualValuations,
       GoogleSheetsRanges.tags,
       GoogleSheetsRanges.transactions,
     ];
@@ -143,6 +270,11 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
   }
 
   static String _encode(List<List<String>> rows) => csv.encode(rows);
+
+  static String _dateString(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-'
+      '${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')}';
 }
 
 const _columnCount = <String, int>{
@@ -152,6 +284,7 @@ const _columnCount = <String, int>{
   GoogleSheetsRanges.dailyAccountBalances: 6,
   GoogleSheetsRanges.dailyExchangeRates: 6,
   GoogleSheetsRanges.dailyNetWorth: 4,
+  GoogleSheetsRanges.dailyManualValuations: 4,
   GoogleSheetsRanges.tags: 2,
   GoogleSheetsRanges.transactions: 11,
 };

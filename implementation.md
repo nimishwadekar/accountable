@@ -320,10 +320,32 @@ The first Analysis page and its daily-series calculation services are implemente
 - Google Sheets API calls use deterministic fake clients in tests.
 - Rebuild and catch-up tests cover partial-write failures and retry behavior.
 - Daily maintenance tests verify that only currencies with open accounts receive rates and only open accounts receive daily balances.
-- The current Sheets/CSV schema contract includes `Currencies.decimal_places`, the reordered Transactions columns, and `DailyExchangeRates.source_rate_date`.
+
+## Daily valuation planning decisions recorded
+
+- Keep the existing `Accounts.account_type` column and expand its values to `cash`, `credit`, `asset`, and `liability`.
+- Infer balance source from `account_type` initially: `cash` and `credit` use transaction-derived balances; `asset` and `liability` use manual valuations.
+- Add a new `DailyManualValuations` table.
+- Initial columns are exactly: `valuation_id`, `date`, `account_id`, `value`.
+- The valuation currency is inferred from the referenced account.
+- Manual asset/liability valuation snapshots will be used for net-worth calculations.
+- The Assets & liabilities section lists only `asset` and `liability` accounts.
+- Valuation dates use the user's local calendar timezone; stored liability values are positive and liability signs are applied during net-worth calculation.
+- The valuation form order is account, date, valuation.
+- Duplicate account/date dates and dates outside account opening/closing bounds are disabled; changing account clears an invalid selected date.
+- If a valuation is missing for a date, carry forward the latest prior valuation and mark it stale.
+- `DailyAccountBalances` remains limited to open `cash` and `credit` accounts.
+- `DailyNetWorth` combines ledger-derived balances with manual valuations for `asset` and `liability` accounts.
+- Future color coding/subtext for positive and negative account classes is planned; credit/liability merging remains deferred.
+
+The Assets & liabilities page, DailyManualValuations model/parser/repositories, manual valuation entry, valuation date constraints, and valuation-aware daily net-worth calculation are implemented.
+- The current Sheets/CSV schema contract includes `Currencies.decimal_places`, the reordered Transactions columns, `DailyExchangeRates.source_rate_date`, and `DailyManualValuations(valuation_id,date,account_id,value)`.
 - Every production bug must receive a regression test.
 - Coverage is measured with [`tool/check_coverage.sh`](./tool/check_coverage.sh).
 - Current coverage thresholds are 80% application logic and 90% for financial logic files. Application-logic coverage excludes UI composition, visual theme code, OAuth UI, and low-level external HTTP adapters; those areas use widget/manual smoke tests.
+- Data validation errors are aggregated at the repository boundary and displayed in a full-screen grouped validation page with a Reload data action and expandable technical details.
+- Repeated errors are grouped by table/field/message and summarized with row numbers; valid rows are retained during collection while the app remains blocked until the dataset is fully valid.
+- Table parsing uses a dependency DAG; dependent tables are skipped when upstream validation fails, and future circular dependencies are detected and rejected.
 
 - Closed accounts are charted only through their closing date, inclusive, and show a `Closed on YYYY-MM-DD` subtitle.
 - Chart x-axes use actual calendar-day positions with adaptive, sensible date intervals based on chart width and period span, avoiding repeated or overcrowded labels.

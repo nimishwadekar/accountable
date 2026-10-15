@@ -20,4 +20,14 @@ class Account {
   final Money currentBalance;
   final DateTime openingDate;
   final DateTime? closingDate;
+
+  bool get isValuationAccount {
+    final normalized = accountType.trim().toLowerCase();
+    return normalized == 'asset' || normalized == 'liability';
+  }
+
+  bool get isLedgerAccount => !isValuationAccount;
+
+  bool get isLiability => accountType.trim().toLowerCase() == 'liability' ||
+      accountType.trim().toLowerCase() == 'credit';
 }

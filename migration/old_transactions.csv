@@ -1,0 +1,174 @@
+Timestamp,Purchase Date,Item,Category,Currency,Amount,Tag
+9/2/2026 10:53:57,8/29/2026,Mattress,Shopping,USD,223.11,Boston
+9/2/2026 10:56:27,9/2/2026,Breakfast - Paris Airport,Food & Drink,USD,17.13,Boston
+9/2/2026 12:23:04,9/2/2026,Beer,Food & Drink,USD,11.09,Boston
+9/2/2026 20:55:51,9/2/2026,Mint Mobile 1-Year,Bills,USD,207.1,Boston
+9/3/2026 12:28:17,9/3/2026,Dinner - Basil Rice,Food & Drink,USD,16.54,Boston
+9/3/2026 12:28:41,9/3/2026,Bedsheets,Shopping,USD,21.24,Boston
+9/3/2026 16:20:47,9/3/2026,Breakfast,Food & Drink,USD,11.5,Boston
+9/3/2026 20:14:58,9/3/2026,Lunch - Phin Coffee House,Food & Drink,USD,21.33,Boston
+9/3/2026 22:20:32,9/3/2026,Vape,Shopping,USD,10.63,Boston
+9/3/2026 22:20:54,9/3/2026,7-11,Food & Drink,USD,10.63,Boston
+9/3/2026 23:21:29,9/3/2026,Extension board,Shopping,USD,21.24,Boston
+9/4/2026 4:42:51,9/3/2026,Dollar Tree,Shopping,USD,2.66,Boston
+9/4/2026 4:43:06,9/3/2026,Star Market,Shopping,USD,30.77,Boston
+9/4/2026 4:43:34,9/3/2026,Dinner - Anna S Taqueria,Food & Drink,USD,16.53,Boston
+9/4/2026 4:44:12,9/3/2026,Visitor's Health Insurance - Sept 2026,Health,USD,72.5,Boston
+9/4/2026 4:44:35,9/3/2026,Rental Insurance - Sept 2026,Bills,USD,14.42,Boston
+9/4/2026 18:23:27,9/4/2026,7-11,Food & Drink,USD,5.65,Boston
+9/4/2026 20:04:10,9/4/2026,Lunch - Noodle Lab,Food & Drink,USD,14.63,Boston
+9/5/2026 1:15:17,9/4/2026,Mass ID Registration,Other,USD,25,Boston
+9/5/2026 1:15:32,9/4/2026,MBTA,Transport,USD,2.4,Boston
+9/5/2026 1:15:45,9/4/2026,Protein Shake,Food & Drink,USD,3.89,Boston
+9/5/2026 23:36:45,9/5/2026,Lunch - Hokkaido Ramen Santouka,Food & Drink,USD,21.46,Boston
+9/6/2026 21:00:12,9/6/2026,Breakfast,Food & Drink,USD,10,Boston
+9/6/2026 21:00:27,9/6/2026,Ramen,Groceries,USD,4.19,Boston
+9/6/2026 22:17:51,9/6/2026,Paint Samples,Shopping,USD,36.71,Boston
+9/7/2026 5:13:51,9/6/2026,Trader Joe's,Groceries,USD,35.06,Boston
+9/7/2026 5:14:36,9/6/2026,Riya DoorDash,Food & Drink,USD,19.6,Boston
+9/7/2026 5:14:58,9/6/2026,Dinner - Garlic and Lemons,Food & Drink,USD,12.27,Boston
+9/7/2026 5:15:14,9/6/2026,HeyTea,Food & Drink,USD,9.08,Boston
+9/7/2026 14:19:06,9/7/2026,Breakfast - Kupel's Bakery,Food & Drink,USD,6.36,Boston
+9/7/2026 18:10:34,9/7/2026,IKEA,Shopping,USD,143.89,Boston
+9/7/2026 21:54:01,9/7/2026,Lunch - Domino's,Food & Drink,USD,17.11,Boston
+9/7/2026 22:15:33,9/7/2026,Mochinut,Food & Drink,USD,7.49,Boston
+9/9/2026 16:57:27,9/8/2026,MBTA,Transport,USD,4.8,Boston
+9/9/2026 16:57:59,9/8/2026,Bar,Food & Drink,USD,26.38,Boston
+9/9/2026 21:43:49,9/9/2026,Vape,Shopping,USD,15.94,Boston
+9/9/2026 21:44:18,9/9/2026,MBTA,Transport,USD,2.4,Boston
+9/9/2026 22:56:16,9/9/2026,Trader Joe's,Groceries,USD,31.06,Boston
+9/10/2026 19:50:39,9/10/2026,MBTA,Transport,USD,2.4,Boston
+9/10/2026 21:02:19,9/10/2026,RMV Learner's Registration,Other,USD,30,Boston
+9/11/2026 1:35:45,9/10/2026,Dollar Tree,Shopping,USD,4.44,Boston
+9/11/2026 1:36:11,9/10/2026,Star Market,Groceries,USD,51.14,Boston
+9/11/2026 16:31:46,9/10/2026,Bar,Food & Drink,USD,44.84,Boston
+9/11/2026 17:20:29,9/11/2026,Live Music Bar,Entertainment,USD,18.6,Boston
+9/11/2026 23:53:35,9/11/2026,MBTA,Transport,USD,1.7,Boston
+9/11/2026 23:53:48,9/11/2026,Home Depot,Shopping,USD,62.58,Boston
+9/11/2026 23:54:06,9/11/2026,MBTA,Transport,USD,1.7,Boston
+9/12/2026 16:46:38,9/12/2026,O'Brien's Pub,Food & Drink,USD,18,Boston
+9/12/2026 16:46:50,9/12/2026,7-11,Food & Drink,USD,2.66,Boston
+9/12/2026 18:35:07,9/12/2026,Amazon,Shopping,USD,70.41,Boston
+9/12/2026 21:17:27,9/12/2026,Star Market,Groceries,USD,5,Boston
+9/12/2026 21:27:13,9/12/2026,Dollar Tree,Shopping,USD,3.45,Boston
+9/13/2026 3:47:46,9/12/2026,Dollar Tree,Shopping,USD,7.09,Boston
+9/13/2026 3:48:00,9/12/2026,Dunkin,Food & Drink,USD,3.8,Boston
+9/13/2026 20:59:12,9/13/2026,Trader Joe's,Groceries,USD,38.11,Boston
+9/13/2026 20:59:27,9/13/2026,MBTA,Transport,USD,1.7,Boston
+9/14/2026 2:36:44,9/13/2026,Hong Kong Supermarket,Groceries,USD,72.67,Boston
+9/14/2026 2:37:07,9/13/2026,Allston Market,Groceries,USD,68.25,Boston
+9/14/2026 5:54:20,9/13/2026,Amazon,Shopping,USD,35.27,Boston
+9/14/2026 8:23:03,9/14/2026,(Cancelled) Boston - Amherst,Transport,USD,21.58,Boston
+9/14/2026 19:22:38,9/14/2026,Movie - Akira,Entertainment,USD,19.75,Boston
+9/14/2026 21:20:29,9/14/2026,7-11,Food & Drink,USD,2.66,Boston
+9/14/2026 21:20:41,9/14/2026,MBTA,Transport,USD,2.4,Boston
+9/14/2026 22:38:13,9/14/2026,Walmart,Shopping,USD,27.41,Boston
+9/14/2026 23:12:00,9/14/2026,MBTA,Transport,USD,2.4,Boston
+9/15/2026 4:03:03,9/14/2026,MBTA,Transport,USD,3.4,Boston
+9/15/2026 5:09:00,9/14/2026,Amazon,Shopping,USD,3.12,Boston
+9/15/2026 18:16:09,9/15/2026,Lunch - Red Hat,Food & Drink,USD,1.07,Boston
+9/15/2026 22:24:10,9/15/2026,MBTA,Transport,USD,2.4,Boston
+9/16/2026 9:13:25,9/16/2026,Lunch - Red Hat,Food & Drink,USD,1.02,Boston
+9/16/2026 9:14:48,9/16/2026,Rent - Sept 2026,Housing,USD,1350,Boston
+9/16/2026 9:15:05,9/16/2026,Rent - August 2027,Housing,USD,1350,Boston
+9/16/2026 19:57:07,9/16/2026,HSBC Account Closure Post,Other,USD,26.75,Boston
+9/17/2026 0:39:54,9/16/2026,Lunch - Red Hat,Food & Drink,USD,4.28,Boston
+9/17/2026 1:01:43,9/16/2026,MBTA,Transport,USD,2.4,Boston
+9/17/2026 1:02:13,9/16/2026,Dollar Tree,Shopping,USD,9.39,Boston
+9/17/2026 16:06:23,9/17/2026,Health Insurance,Health,USD,344.5,Boston
+9/17/2026 22:20:24,9/17/2026,MBTA,Transport,USD,2.4,Boston
+9/18/2026 0:44:29,9/17/2026,Temu,Shopping,USD,25.82,Boston
+9/18/2026 1:25:44,9/17/2026,Trader Joe's,Groceries,USD,46.77,Boston
+9/18/2026 1:26:12,9/17/2026,MBTA,Transport,USD,1.7,Boston
+9/19/2026 6:46:51,9/18/2026,Star Market,Groceries,USD,8.29,Boston
+9/19/2026 6:47:14,9/18/2026,Allston Market,Groceries,USD,12.28,Boston
+9/19/2026 22:27:14,9/19/2026,Vape,Other,USD,21.25,Boston
+9/19/2026 23:14:40,9/19/2026,Lunch - Hokkaido Ramen,Food & Drink,USD,17.39,Boston
+9/19/2026 23:14:49,9/19/2026,MBTA - Bus,Transport,USD,1.7,Boston
+9/20/2026 0:40:00,9/19/2026,Home Depot,Shopping,USD,60.44,Boston
+9/20/2026 0:51:48,9/19/2026,MBTA - Bus,Transport,USD,1.7,Boston
+9/20/2026 20:18:30,9/20/2026,Domino's,Food & Drink,USD,22.3,Boston
+9/20/2026 20:33:45,9/20/2026,Walmart,Shopping,USD,41.43,Boston
+9/21/2026 3:52:01,9/20/2026,Chai,Food & Drink,USD,8.54,Boston
+9/21/2026 5:07:42,9/20/2026,Lunch - Red Hat,Food & Drink,USD,1.9,Boston
+9/21/2026 22:12:07,9/21/2026,MBTA - Bus,Transport,USD,1.7,Boston
+9/21/2026 23:26:30,9/21/2026,Duster Refills,Shopping,USD,10.61,Boston
+9/22/2026 0:31:33,9/21/2026,Dollar Tree,Shopping,USD,8.5,Boston
+9/22/2026 22:08:00,9/22/2026,MBTA - T,Transport,USD,2.4,Boston
+9/23/2026 4:34:10,9/22/2026,Doordash,Gifts,USD,26.89,Boston
+9/23/2026 22:11:54,9/23/2026,MBTA - T,Transport,USD,2.4,Boston
+9/23/2026 23:14:47,9/23/2026,Gong Cha,Food & Drink,USD,8.03,Boston
+9/24/2026 20:14:11,9/24/2026,Doordash,Food & Drink,USD,19.26,Boston
+9/25/2026 6:20:18,9/24/2026,Bar,Food & Drink,USD,19.26,Boston
+9/25/2026 6:20:49,9/24/2026,MBTA - Bus,Transport,USD,1.7,Boston
+9/25/2026 6:21:03,9/24/2026,7-11,Food & Drink,USD,8.79,Boston
+9/26/2026 3:42:07,9/25/2026,MBTA - Bus,Transport,USD,1.7,Boston
+9/26/2026 18:39:33,9/26/2026,MBTA - Bus,Transport,USD,1.7,Boston
+9/26/2026 19:31:41,9/26/2026,Trader Joe's,Groceries,USD,73.42,Boston
+9/27/2026 18:30:26,9/27/2026,Rent,Housing,USD,1350,Boston
+9/28/2026 2:02:40,9/27/2026,Lunch - Red Hat,Food & Drink,USD,0.48,Boston
+9/28/2026 2:36:19,9/27/2026,Doordash,Food & Drink,USD,21.8,Boston
+9/28/2026 16:42:00,9/28/2026,Amazon Prime,Shopping,USD,2.25,Boston
+9/28/2026 17:01:16,9/28/2026,MBTA - T,Transport,USD,2.4,Boston
+9/28/2026 20:56:37,9/28/2026,Amazon,Gifts,USD,9.55,Boston
+9/28/2026 21:36:55,9/28/2026,Stanley,Gifts,USD,22.99,Boston
+9/28/2026 22:43:39,9/28/2026,MBTA - T,Transport,USD,2.4,Boston
+9/29/2026 17:39:10,9/29/2026,MBTA - T,Transport,USD,2.4,Boston
+9/29/2026 22:41:04,9/29/2026,MBTA - T,Transport,USD,2.4,Boston
+9/29/2026 23:38:58,9/29/2026,Target,Groceries,USD,33.41,Boston
+9/30/2026 16:30:46,9/30/2026,Swype,Bills,USD,23.83,Boston
+9/30/2026 18:06:21,9/30/2026,MBTA - T,Transport,USD,2.4,Boston
+9/30/2026 18:07:02,9/30/2026,SFOP Tax Payment,Bills,USD,241,Boston
+9/30/2026 22:16:56,9/30/2026,MBTA - T,Transport,USD,2.4,Boston
+9/30/2026 23:50:01,9/30/2026,Amazon - Desk Chair,Shopping,USD,74.36,Boston
+10/1/2026 17:08:43,10/1/2026,MBTA - T,Transport,USD,2.4,Boston
+10/1/2026 17:20:48,10/1/2026,Couch,Shopping,USD,50,Boston
+10/1/2026 23:53:21,10/1/2026,MBTA - T,Transport,USD,2.4,Boston
+10/3/2026 1:11:32,10/2/2026,MBTA - T,Transport,USD,2.4,Boston
+10/3/2026 1:50:21,10/2/2026,7-11,Food & Drink,USD,4.27,Boston
+10/3/2026 8:11:03,10/2/2026,Desk Chair,Shopping,USD,74.36,Boston
+10/4/2026 2:48:19,10/3/2026,Star Market,Groceries,USD,15.42,Boston
+10/4/2026 3:14:30,10/3/2026,MBTA - T,Transport,USD,2.4,Boston
+10/4/2026 17:14:27,10/3/2026,Boba,Food & Drink,USD,16.11,Boston
+10/4/2026 17:14:59,10/4/2026,7-11,Food & Drink,USD,15.94,Boston
+10/4/2026 17:15:24,10/4/2026,Dinner - Inbound Pizza,Food & Drink,USD,18.73,Boston
+10/4/2026 22:07:49,10/4/2026,MBTA - T,Transport,USD,2.4,Boston
+10/5/2026 2:14:42,10/4/2026,Gong Cha,Food & Drink,USD,17.12,Boston
+10/5/2026 2:15:20,10/4/2026,Lunch - Potluck Cafe,Food & Drink,USD,19.21,Boston
+10/5/2026 2:15:38,10/4/2026,Asian Supermarket,Shopping,USD,41,Boston
+10/5/2026 6:23:01,10/4/2026,Marshall's,Shopping,USD,291.97,Boston
+10/5/2026 6:23:21,10/4/2026,MBTA - T,Transport,USD,2.4,Boston
+10/5/2026 6:24:08,10/4/2026,Dinner - The Q,Food & Drink,USD,71.91,Boston
+10/5/2026 6:24:35,10/4/2026,Lyft,Transport,USD,16.96,Boston
+10/5/2026 17:49:54,10/5/2026,Clear Flour Bakery,Food & Drink,USD,16.5,Boston
+10/5/2026 22:11:47,10/5/2026,MBTA - T,Transport,USD,2.4,Boston
+10/5/2026 22:50:20,10/5/2026,Gong Cha,Food & Drink,USD,8.03,Boston
+10/7/2026 1:23:15,10/6/2026,Lunch - Red Hat,Food & Drink,USD,1.28,Boston
+10/7/2026 1:28:09,10/6/2026,Amazon - Space Heater,Shopping,USD,36.11,Boston
+10/7/2026 18:26:36,10/7/2026,Dinner - RedWhite Ramen,Food & Drink,USD,26,Boston
+10/7/2026 22:10:48,10/7/2026,MBTA - T,Transport,USD,2.4,Boston
+10/8/2026 8:11:25,10/8/2026,Amazon - Desk and Mats,Shopping,USD,131.61,Boston
+10/8/2026 21:20:12,10/8/2026,MBTA - T,Transport,USD,2.4,Boston
+10/8/2026 21:29:19,10/8/2026,Amazon - Skincare,Gifts,USD,18.88,Boston
+10/8/2026 22:49:44,10/8/2026,Trader Joe's,Groceries,USD,39.63,Boston
+10/9/2026 2:11:36,10/8/2026,Armchair,Shopping,USD,11,Boston
+10/9/2026 2:57:47,10/8/2026,(Cr) Dinner - Mirchi Nation,Food & Drink,USD,28.87,Boston
+10/9/2026 8:57:42,10/8/2026,Wise,Exchange Fees,USD,3.51,Boston
+10/9/2026 8:59:24,10/8/2026,Credila Loan Prepayment,Other,USD,568.78,Boston
+10/10/2026 6:59:36,10/10/2026,Credila Loan Prepayment,Other,USD,600,Boston
+10/11/2026 3:26:06,10/10/2026,(Cr) Dinner - Hopewell Bar & Kitchen,Food & Drink,USD,36.76,Boston
+10/11/2026 23:10:02,10/11/2026,(Cr) Lunch - Red Hat,Food & Drink,USD,2.67,Boston
+10/12/2026 5:46:47,10/11/2026,(Cr) Dinner - Mirchi Nation,Food & Drink,USD,29.92,Boston
+10/13/2026 0:37:51,10/12/2026,MBTA - T,Transport,USD,2.4,Boston
+10/13/2026 2:41:43,10/12/2026,Dollar Tree,Shopping,USD,9.61,Boston
+10/13/2026 2:42:04,10/12/2026,Allston Market,Groceries,USD,15.28,Boston
+10/13/2026 2:42:16,10/12/2026,7-11,Groceries,USD,5.49,Boston
+10/13/2026 3:16:25,10/12/2026,[Bus] Boston - Amherst - Boston,Tourism,USD,45.07,Boston
+10/14/2026 1:31:07,10/13/2026,MBTA - T,Transport,USD,2.4,Boston
+10/14/2026 1:31:14,10/13/2026,(Cr) Lunch - Red Hat,Food & Drink,USD,3.2,Boston
+10/14/2026 4:51:18,10/13/2026,Heytea,Food & Drink,USD,9.08,Boston
+10/14/2026 16:58:45,10/14/2026,(Wise) ETH Tuition,Other,CHF,815.34,Boston
+10/14/2026 20:09:44,10/14/2026,Riya Meal,Food & Drink,USD,31,Boston
+10/15/2026 0:15:58,10/14/2026,MBTA - T,Transport,USD,2.4,Boston
+10/15/2026 0:33:48,10/14/2026,(Cr) Lunch - Red Hat,Food & Drink,USD,2.14,Boston
+10/15/2026 2:11:08,10/14/2026,Trader Joe's,Groceries,USD,15.42,Boston

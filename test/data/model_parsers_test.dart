@@ -72,6 +72,14 @@ checking,Checking,Bank,USD,1000,1200,2026-10-01,
     expect(dailyNetWorth, hasLength(3));
   });
 
+  test('accepts legacy exchange-rate rows without source rate dates', () {
+    final rates = ModelParsers.parseExchangeRates(
+      'rate_id,rate_date,currency,rate_to_usd,retrieved_at\n'
+      'r1,2026-10-10,USD,1,2026-10-10T00:00:00Z\n',
+    );
+    expect(rates.single.sourceRateDate, DateTime.utc(2026, 10, 10));
+  });
+
   test('parses currencies and amounts using minor units', () {
     final currencies = ModelParsers.parseCurrencies(currenciesCsv);
     final usd = currencies.firstWhere((currency) => currency.id == 'USD');

@@ -177,6 +177,7 @@ void main() {
         ],
         dailyAccountBalances: data.dailyAccountBalances,
         dailyNetWorth: data.dailyNetWorth,
+      dailyManualValuations: data.dailyManualValuations,
       );
       await DailyMaintenanceService(
         client: client,

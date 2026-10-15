@@ -1,0 +1,30 @@
+{
+  "categoryMappings": {
+    "Bills": "bills",
+    "Entertainment": "entertainment",
+    "Exchange Fees": "financial_fees",
+    "Food & Drink": "dining",
+    "Gifts": "gifts",
+    "Groceries": "groceries",
+    "Health": "health",
+    "Housing": "housing",
+    "Other": "other",
+    "Shopping": "shopping",
+    "Tourism": "travel",
+    "Transport": "transport"
+  },
+  "itemOverrides": {
+    "Bar": "nightlife",
+    "Beer": "nightlife",
+    "O'Brien's Pub": "nightlife",
+    "Dinner - Hopewell Bar & Kitchen": "nightlife",
+    "Live Music Bar": "nightlife",
+    "Amazon Prime": "bills",
+    "SFOP Tax Payment": "taxes",
+    "Credila Loan Prepayment": "REVIEW",
+    "(Wise) ETH Tuition": "education",
+    "Mass ID Registration": "government_fees",
+    "RMV Learner's Registration": "government_fees",
+    "HSBC Account Closure Post": "financial_fees"
+  }
+}

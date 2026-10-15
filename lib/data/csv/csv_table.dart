@@ -1,10 +1,12 @@
 import 'package:csv/csv.dart';
 
 class CsvTable {
-  CsvTable._(this.tableName, this.rows);
+  CsvTable._(this.tableName, this.headers, this.rows, this.rowNumbers);
 
   final String tableName;
+  final List<String> headers;
   final List<Map<String, String>> rows;
+  final List<int> rowNumbers;
 
   factory CsvTable.parse(String source, {required String tableName}) {
     final rawRows = csv.decode(source);
@@ -21,6 +23,7 @@ class CsvTable {
     }
 
     final rows = <Map<String, String>>[];
+    final rowNumbers = <int>[];
     for (var index = 1; index < rawRows.length; index++) {
       final values = rawRows[index].map((value) => value.toString().trim()).toList();
       if (values.every((value) => value.isEmpty)) {
@@ -37,9 +40,15 @@ class CsvTable {
         for (var column = 0; column < headers.length; column++)
           headers[column]: values[column],
       });
+      rowNumbers.add(index + 1);
     }
 
-    return CsvTable._(tableName, List.unmodifiable(rows));
+    return CsvTable._(
+      tableName,
+      List.unmodifiable(headers),
+      List.unmodifiable(rows),
+      List.unmodifiable(rowNumbers),
+    );
   }
 }
 

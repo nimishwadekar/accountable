@@ -3,6 +3,7 @@ export 'category.dart';
 export 'currency.dart';
 export 'daily_account_balance.dart';
 export 'daily_net_worth.dart';
+export 'daily_manual_valuation.dart';
 export 'exchange_rate.dart';
 export 'money.dart';
 export 'tag.dart';

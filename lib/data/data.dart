@@ -4,6 +4,8 @@ export 'models/models.dart';
 export 'repositories/app_data_repository_factory.dart';
 export 'repositories/asset_repositories.dart';
 export 'repositories/data_load_exception.dart';
+export 'repositories/data_validation_failure.dart';
+export 'repositories/table_dependencies.dart';
 export 'repositories/google_sheets_repository.dart';
 export 'repositories/daily_maintenance_service.dart';
 export 'repositories/repositories.dart';

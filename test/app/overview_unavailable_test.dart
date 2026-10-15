@@ -19,6 +19,7 @@ void main() {
       exchangeRates: data.exchangeRates,
       dailyAccountBalances: data.dailyAccountBalances,
       dailyNetWorth: const [],
+      dailyManualValuations: data.dailyManualValuations,
     );
 
     await tester.pumpWidget(

@@ -18,6 +18,8 @@ void main() {
       GoogleSheetsRanges.dailyExchangeRates:
           'test_sheets/DailyExchangeRates.csv',
       GoogleSheetsRanges.dailyNetWorth: 'test_sheets/DailyNetWorth.csv',
+      GoogleSheetsRanges.dailyManualValuations:
+          'test_sheets/DailyManualValuations.csv',
       GoogleSheetsRanges.tags: 'test_sheets/Tags.csv',
       GoogleSheetsRanges.transactions: 'test_sheets/Transactions.csv',
     }.entries) {
@@ -33,6 +35,7 @@ void main() {
     expect(snapshot.accounts, hasLength(3));
     expect(snapshot.transactions, hasLength(8));
     expect(snapshot.dailyNetWorth, hasLength(3));
+    expect(snapshot.dailyManualValuations, isEmpty);
   });
 
   test('appends a canonical transaction row', () async {

@@ -24,6 +24,7 @@ void main() {
       exchangeRates: data.exchangeRates,
       dailyAccountBalances: data.dailyAccountBalances,
       dailyNetWorth: data.dailyNetWorth,
+      dailyManualValuations: data.dailyManualValuations,
     );
 
     await tester.pumpWidget(

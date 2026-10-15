@@ -1,11 +1,139 @@
+import 'package:csv/csv.dart';
 import 'package:decimal/decimal.dart';
 
 import '../models/models.dart';
+import '../repositories/data_validation_failure.dart';
 import 'csv_table.dart';
+import 'model_parse_result.dart';
 import 'parse_helpers.dart';
 
 class ModelParsers {
   const ModelParsers._();
+
+  static ModelParseResult<T> _parseRows<T>(
+    String source, {
+    required String tableName,
+    required T Function(String rowSource) parseRow,
+  }) {
+    final table = CsvTable.parse(source, tableName: tableName);
+    final values = <T>[];
+    final issues = <DataValidationIssue>[];
+    for (var index = 0; index < table.rows.length; index++) {
+      try {
+        values.add(parseRow(csv.encode([
+          table.headers,
+          table.rows[index].values.toList(),
+        ])));
+      } catch (error) {
+        issues.add(
+          DataValidationIssue(
+            table: tableName,
+            row: table.rowNumbers[index],
+            message: _friendlyParseMessage(error),
+            technicalDetails: error.toString(),
+          ),
+        );
+      }
+    }
+    return ModelParseResult(values: values, issues: issues);
+  }
+
+  static String _friendlyParseMessage(Object error) {
+    final message = error.toString();
+    final separator = message.indexOf(': ');
+    return separator < 0 ? message : message.substring(separator + 2);
+  }
+
+  static ModelParseResult<CurrencyDefinition> parseCurrenciesWithIssues(
+    String source,
+  ) => _parseRows(
+    source,
+    tableName: 'Currencies',
+    parseRow: (row) => parseCurrencies(row).single,
+  );
+
+  static ModelParseResult<Account> parseAccountsWithIssues(
+    String source,
+    Map<String, CurrencyDefinition> currencies,
+  ) => _parseRows(
+    source,
+    tableName: 'Accounts',
+    parseRow: (row) => parseAccounts(row, currencies).single,
+  );
+
+  static ModelParseResult<Category> parseCategoriesWithIssues(String source) =>
+      _parseRows(
+        source,
+        tableName: 'Categories',
+        parseRow: (row) => parseCategories(row).single,
+      );
+
+  static ModelParseResult<Tag> parseTagsWithIssues(String source) => _parseRows(
+        source,
+        tableName: 'Tags',
+        parseRow: (row) => parseTags(row).single,
+      );
+
+  static ModelParseResult<Transaction> parseTransactionsWithIssues(
+    String source, {
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+  }) => _parseRows(
+        source,
+        tableName: 'Transactions',
+        parseRow: (row) => parseTransactions(
+          row,
+          accounts: accounts,
+          currencies: currencies,
+        ).single,
+      );
+
+  static ModelParseResult<ExchangeRate> parseExchangeRatesWithIssues(
+    String source,
+  ) => _parseRows(
+        source,
+        tableName: 'DailyExchangeRates',
+        parseRow: (row) => parseExchangeRates(row).single,
+      );
+
+  static ModelParseResult<DailyAccountBalance>
+      parseDailyAccountBalancesWithIssues(
+    String source, {
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+  }) => _parseRows(
+        source,
+        tableName: 'DailyAccountBalances',
+        parseRow: (row) => parseDailyAccountBalances(
+          row,
+          accounts: accounts,
+          currencies: currencies,
+        ).single,
+      );
+
+  static ModelParseResult<DailyNetWorth> parseDailyNetWorthWithIssues(
+    String source,
+    Map<String, CurrencyDefinition> currencies,
+  ) => _parseRows(
+        source,
+        tableName: 'DailyNetWorth',
+        parseRow: (row) => parseDailyNetWorth(row, currencies).single,
+      );
+
+  static ModelParseResult<DailyManualValuation>
+      parseDailyManualValuationsWithIssues(
+    String source, {
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+  }) => _parseRows(
+        source,
+        tableName: 'DailyManualValuations',
+        parseRow: (row) => parseDailyManualValuations(
+          row,
+          accounts: accounts,
+          currencies: currencies,
+        ).single,
+      );
 
   static List<CurrencyDefinition> parseCurrencies(String source) {
     final table = CsvTable.parse(source, tableName: 'Currencies');
@@ -58,10 +186,10 @@ class ModelParsers {
         final types = rawTypes == null
             ? <TransactionType>{}
             : rawTypes
-                .split(',')
-                .where((value) => value.trim().isNotEmpty)
-                .map(TransactionTypeWireValue.parse)
-                .toSet();
+                  .split(',')
+                  .where((value) => value.trim().isNotEmpty)
+                  .map(TransactionTypeWireValue.parse)
+                  .toSet();
         return Category(
           id: requiredValue(row, 'category_id'),
           name: requiredValue(row, 'category_name'),
@@ -117,10 +245,7 @@ class ModelParsers {
             requiredValue(row, 'created_at'),
             fieldName: 'created_at',
           ),
-          date: parseDateOnly(
-            requiredValue(row, 'date'),
-            fieldName: 'date',
-          ),
+          date: parseDateOnly(requiredValue(row, 'date'), fieldName: 'date'),
           type: TransactionTypeWireValue.parse(
             requiredValue(row, 'transaction_type'),
           ),
@@ -159,7 +284,8 @@ class ModelParsers {
           currencyId: requiredValue(row, 'currency'),
           rateToUsd: Decimal.parse(requiredValue(row, 'rate_to_usd')),
           sourceRateDate: parseDateOnly(
-            requiredValue(row, 'source_rate_date'),
+            optionalValue(row, 'source_rate_date') ??
+                requiredValue(row, 'rate_date'),
             fieldName: 'source_rate_date',
           ),
           retrievedAt: parseUtcTimestamp(
@@ -216,6 +342,41 @@ class ModelParsers {
     );
   }
 
+  static List<DailyManualValuation> parseDailyManualValuations(
+    String source, {
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+  }) {
+    final table = CsvTable.parse(source, tableName: 'DailyManualValuations');
+    return _uniqueById(
+      table.rows.map((row) {
+        final accountId = requiredValue(row, 'account_id');
+        final account = accounts[accountId];
+        if (account == null) {
+          throw FormatException(
+            'DailyManualValuations references unknown account: $accountId.',
+          );
+        }
+        if (!account.isValuationAccount) {
+          throw FormatException(
+            'DailyManualValuations references non-valuation account: $accountId.',
+          );
+        }
+        return DailyManualValuation(
+          id: requiredValue(row, 'valuation_id'),
+          date: parseDateOnly(requiredValue(row, 'date'), fieldName: 'date'),
+          accountId: accountId,
+          value: Money.fromMajorUnits(
+            value: requiredValue(row, 'value'),
+            currency: _currency(currencies, account.currencyId),
+          ),
+        );
+      }),
+      (valuation) => valuation.id,
+      table.tableName,
+    );
+  }
+
   static List<DailyNetWorth> parseDailyNetWorth(
     String source,
     Map<String, CurrencyDefinition> currencies,
@@ -264,7 +425,9 @@ class ModelParsers {
 
     final account = accounts[accountId];
     if (account == null) {
-      throw FormatException('Transaction references unknown account: $accountId.');
+      throw FormatException(
+        'Transaction references unknown account: $accountId.',
+      );
     }
     return Money.fromMajorUnits(
       value: rawAmount,

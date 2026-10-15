@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/data.dart';
 import 'pages/app_pages.dart';
+import 'pages/assets_liabilities_page.dart';
 import 'pages/transactions_page.dart';
 import 'pages/settings_page.dart';
 import '../features/analysis/analysis_page.dart';
@@ -12,33 +13,37 @@ enum AppSection {
   transactions,
   accounts,
   analysis,
+  assetsLiabilities,
   settings,
 }
 
 extension AppSectionDetails on AppSection {
   String get label => switch (this) {
-        AppSection.overview => 'Overview',
-        AppSection.transactions => 'Transactions',
-        AppSection.accounts => 'Accounts',
-        AppSection.analysis => 'Analysis',
-        AppSection.settings => 'Settings',
-      };
+    AppSection.overview => 'Overview',
+    AppSection.transactions => 'Transactions',
+    AppSection.accounts => 'Accounts',
+    AppSection.analysis => 'Analysis',
+    AppSection.assetsLiabilities => 'Assets & liabilities',
+    AppSection.settings => 'Settings',
+  };
 
   IconData get icon => switch (this) {
-        AppSection.overview => Icons.dashboard_outlined,
-        AppSection.transactions => Icons.receipt_long_outlined,
-        AppSection.accounts => Icons.account_balance_wallet_outlined,
-        AppSection.analysis => Icons.insights_outlined,
-        AppSection.settings => Icons.settings_outlined,
-      };
+    AppSection.overview => Icons.dashboard_outlined,
+    AppSection.transactions => Icons.receipt_long_outlined,
+    AppSection.accounts => Icons.account_balance_wallet_outlined,
+    AppSection.analysis => Icons.insights_outlined,
+    AppSection.assetsLiabilities => Icons.account_balance_outlined,
+    AppSection.settings => Icons.settings_outlined,
+  };
 
   IconData get selectedIcon => switch (this) {
-        AppSection.overview => Icons.dashboard,
-        AppSection.transactions => Icons.receipt_long,
-        AppSection.accounts => Icons.account_balance_wallet,
-        AppSection.analysis => Icons.insights,
-        AppSection.settings => Icons.settings,
-      };
+    AppSection.overview => Icons.dashboard,
+    AppSection.transactions => Icons.receipt_long,
+    AppSection.accounts => Icons.account_balance_wallet,
+    AppSection.analysis => Icons.insights,
+    AppSection.assetsLiabilities => Icons.account_balance,
+    AppSection.settings => Icons.settings,
+  };
 }
 
 class AppShell extends StatefulWidget {
@@ -112,9 +117,9 @@ class _AppShellState extends State<AppShell> {
               ? Text(
                   'Accountable',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: AppColors.navy,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    color: AppColors.navy,
+                    fontWeight: FontWeight.w800,
+                  ),
                 )
               : const Icon(Icons.account_balance_outlined),
         ),
@@ -150,10 +155,11 @@ class _AppShellState extends State<AppShell> {
       return const AppLoadingPage();
     }
     if (snapshot.hasError) {
-      return AppErrorPage(
-        error: snapshot.error!,
-        onReload: _reload,
-      );
+      final error = snapshot.error!;
+      if (error is DataValidationFailure) {
+        return DataValidationPage(failure: error, onReload: _reload);
+      }
+      return AppErrorPage(error: error, onReload: _reload);
     }
 
     final data = snapshot.data;
@@ -167,14 +173,18 @@ class _AppShellState extends State<AppShell> {
     return switch (_selectedSection) {
       AppSection.overview => OverviewPage(data: data),
       AppSection.transactions => TransactionsPage(
-          data: data,
-          onTransactionAdded: _handleTransactionAdded,
-        ),
+        data: data,
+        onTransactionAdded: _handleTransactionAdded,
+      ),
       AppSection.accounts => AccountsPage(data: data),
       AppSection.analysis => AnalysisPage(data: data),
+      AppSection.assetsLiabilities => AssetsLiabilitiesPage(
+        data: data,
+        onValuationAdded: _handleValuationAdded,
+      ),
       AppSection.settings => SettingsPage(
-          onRebuildDailyTables: widget.onRebuildDailyTables,
-        ),
+        onRebuildDailyTables: widget.onRebuildDailyTables,
+      ),
     };
   }
 
@@ -188,6 +198,14 @@ class _AppShellState extends State<AppShell> {
     setState(() {
       _snapshotFuture = widget.dataRepository.reload();
     });
+  }
+
+  Future<void> _handleValuationAdded(DailyManualValuation valuation) async {
+    final future = widget.dataRepository.addManualValuation(valuation);
+    setState(() {
+      _snapshotFuture = future;
+    });
+    await future;
   }
 
   Future<void> _handleTransactionAdded(Transaction transaction) async {

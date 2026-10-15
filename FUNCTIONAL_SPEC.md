@@ -36,6 +36,35 @@ Google Sheets will be the default production data source.
 - The spreadsheet ID, allowed-email value, client ID, OAuth origin, and scope live in checked-in, non-secret configuration.
 - Editing and deletion are deferred; appending transactions is supported first.
 
+## Daily manual valuations — planned
+
+Add a `DailyManualValuations` table for externally observed asset and liability balances:
+
+```text
+valuation_id,date,account_id,value
+```
+
+The account's currency is inferred from `Accounts.currency`. The account's `account_type` determines whether its balance is valuation-derived.
+
+For now:
+
+- `cash` and `credit` accounts use transaction-derived balances.
+- `asset` and `liability` accounts use `DailyManualValuations`.
+- The Assets & liabilities app section lists only `asset` and `liability` accounts.
+- Valuation dates use the user's local calendar timezone for every account.
+- The valuation form order is account, date, valuation.
+- The valuation is entered in the selected account's currency.
+- Stored liability values are positive; net-worth calculations apply the negative sign for `liability` accounts.
+- Duplicate account/date valuation entries are prevented.
+- Dates before an account's opening date and after its closing date are disabled.
+- Existing account/date valuation dates are disabled.
+- If account selection changes and the selected date becomes invalid or duplicated, the date is cleared.
+- If a valuation is missing on a date, carry forward the latest prior valuation and mark it stale.
+- `DailyAccountBalances` remains limited to open `cash` and `credit` accounts.
+- `DailyNetWorth` combines ledger-derived balances with manual valuations for `asset` and `liability` accounts.
+- Future UI work may color-code positive account classes (`cash`, `asset`) and negative account classes (`credit`, `liability`) and show explanatory subtext.
+- Whether `credit` and `liability` should eventually be merged remains deferred.
+
 ## Runtime table schemas
 
 Current column order is part of the Sheets/CSV contract:
@@ -44,9 +73,10 @@ Current column order is part of the Sheets/CSV contract:
 Currencies: currency_id, currency_symbol, decimal_places
 Transactions: transaction_id, date, description, category, transaction_type, source_amount, source_account_id, dest_amount, dest_account_id, tag, created_at
 DailyExchangeRates: rate_id, rate_date, currency, rate_to_usd, source_rate_date, retrieved_at
+DailyManualValuations: valuation_id, date, account_id, value
 ```
 
-`source_rate_date` records the actual Frankfurter date used when the requested sequential rate date fell on a weekend or holiday.
+`source_rate_date` records the actual Frankfurter date used when the requested sequential rate date fell on a weekend or holiday. Legacy local data without this column is read compatibly by treating `rate_date` as the source date.
 
 The runtime data snapshot contains:
 
@@ -58,6 +88,7 @@ The runtime data snapshot contains:
 - DailyExchangeRates
 - DailyAccountBalances
 - DailyNetWorth
+- DailyManualValuations
 
 `TransactionTypes.csv` is not runtime data. Transaction types and their validation rules are defined in Dart.
 
@@ -174,6 +205,18 @@ The Overview page does not currently show current-month spending, income, catego
 - Local mode persists the complete test dataset in browser storage.
 
 Specialized quick-entry forms may later reuse the same transaction builder and validation rules.
+
+### Assets & liabilities — implemented
+
+The Assets & liabilities page lists only `asset` and `liability` accounts and provides an Add valuation action.
+
+The form order is:
+
+1. Account
+2. Date
+3. Valuation
+
+The date picker disables dates before opening, after closing, or already used for that account. Liability values are entered as positive amounts and signed negatively only during net-worth calculation.
 
 ### Accounts — implemented
 
@@ -375,6 +418,30 @@ Catch-up is idempotent:
 - Detailed investment holdings and valuation.
 - Dark theme.
 - Lazy/selective loading optimization.
+
+## Data validation dependency graph
+
+Current parser dependencies form a directed acyclic graph:
+
+```text
+Currencies → Accounts → Transactions
+Currencies → DailyAccountBalances
+Currencies → DailyNetWorth
+Accounts + Currencies → DailyManualValuations
+```
+
+A dependent table is not parsed when any dependency has validation errors. Valid independent tables continue to be checked. Future dependency additions should use the cycle detector; circular dependencies are rejected rather than silently recursed.
+
+## Data validation failure behavior
+
+- Validation runs at the repository/data boundary for every initial load and refresh.
+- The app does not remain usable with validation errors.
+- A full-screen validation page replaces the current content immediately when a refresh fails.
+- Errors are grouped by table with concise messages and table/row/field locations.
+- Repeated identical errors are collapsed into one item with row numbers; after the first three rows, the UI reports how many additional rows share the error.
+- Valid rows are parsed and retained during validation collection, while the app remains blocked until all validation errors are resolved.
+- Technical parser/API details are available in an expandable section.
+- `Reload data` retries source loading and validation.
 
 ## Testing policy
 

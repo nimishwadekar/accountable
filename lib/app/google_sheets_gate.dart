@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../config/accountable_config.dart';
 import '../data/data.dart';
 import 'app_shell.dart';
+import 'pages/app_pages.dart';
 import 'google_sign_in_button.dart';
 import 'theme/design_tokens.dart';
 
@@ -22,6 +23,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   late final GoogleAuthService _authService;
   StreamSubscription<GoogleSignInAuthenticationEvent>? _eventsSubscription;
   String? _error;
+  DataValidationFailure? _dataFailure;
   bool _loading = true;
   bool _authorizing = false;
   bool _needsConsent = false;
@@ -56,6 +58,9 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
 
   @override
   Widget build(BuildContext context) {
+    if (_dataFailure != null) {
+      return DataValidationPage(failure: _dataFailure!, onReload: _retry);
+    }
     if (_repository != null) {
       return AppShell(
         dataRepository: _repository!,
@@ -273,6 +278,13 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         _loadingData = false;
         _needsConsent = true;
       });
+    } on DataValidationFailure catch (failure) {
+      if (!mounted) return;
+      setState(() {
+        _authorizing = false;
+        _loadingData = false;
+        _dataFailure = failure;
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -307,7 +319,14 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   void _retry() {
     setState(() {
       _error = null;
-      _loading = false;
+      _dataFailure = null;
+      _loading = _account == null;
     });
+    final account = _account;
+    if (account != null) {
+      _finishSignIn(account);
+    } else {
+      _initialize();
+    }
   }
 }

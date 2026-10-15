@@ -33,13 +33,15 @@ class OverviewPage extends StatelessWidget {
             accent: AppColors.teal,
           ),
           const SizedBox(height: AppSpacing.xl),
-          Text('Current balances', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Current balances',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: AppSpacing.xs),
           Text(
             'Current ledger balance through the latest transaction.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.mutedText,
-                ),
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: AppColors.mutedText),
           ),
           const SizedBox(height: AppSpacing.sm),
           Card(
@@ -131,6 +133,120 @@ class AppLoadingPage extends StatelessWidget {
   }
 }
 
+class DataValidationPage extends StatelessWidget {
+  const DataValidationPage({
+    super.key,
+    required this.failure,
+    required this.onReload,
+  });
+
+  final DataValidationFailure failure;
+  final VoidCallback onReload;
+
+  @override
+  Widget build(BuildContext context) {
+    final grouped = <String, List<DataValidationIssue>>{};
+    for (final issue in failure.issues) {
+      final key = '${issue.table}|${issue.field}|${issue.message}';
+      grouped.putIfAbsent(key, () => []).add(issue);
+    }
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'Data validation failed',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  const Text(
+                    'Accountable is unavailable until the source data is corrected.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  for (final entry in grouped.entries) ...[
+                    Text(
+                      entry.value.first.table,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Builder(
+                      builder: (context) {
+                        final issues = entry.value;
+                        final first = issues.first;
+                        final rows = issues
+                            .map((issue) => issue.row)
+                            .whereType<int>()
+                            .toList();
+                        return ListTile(
+                          dense: true,
+                          leading: Icon(
+                            Icons.error_outline,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          title: Text(first.message),
+                          subtitle: Text(
+                            _formatValidationLocation(
+                              first.table,
+                              first.field,
+                              rows,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.md),
+                  FilledButton.icon(
+                    onPressed: onReload,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Reload data'),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  ExpansionTile(
+                    title: const Text('Technical details'),
+                    children: [
+                      for (final issue in failure.issues)
+                        if (issue.technicalDetails case final details?)
+                          ListTile(dense: true, title: Text(details)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _formatValidationLocation(String table, String? field, List<int> rows) {
+  if (rows.isEmpty) {
+    final parts = <String>[table];
+    if (field case final fieldValue?) parts.add(fieldValue);
+    return parts.join(' · ');
+  }
+  final shown = rows.take(3).join(', ');
+  final remaining = rows.length - rows.take(3).length;
+  final suffix = remaining > 0 ? ' and $remaining other rows' : '';
+  final fieldSuffix = field == null ? '' : ' · $field';
+  return '$table · rows $shown$suffix$fieldSuffix';
+}
+
 class AppErrorPage extends StatelessWidget {
   const AppErrorPage({super.key, required this.error, required this.onReload});
 
@@ -208,9 +324,8 @@ class AppPageFrame extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   subtitle!,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: AppColors.mutedText,
-                      ),
+                  style: Theme.of(context).textTheme.bodyLarge
+                      ?.copyWith(color: AppColors.mutedText),
                 ),
               ],
               const SizedBox(height: AppSpacing.xl),
@@ -247,17 +362,16 @@ class MetricCard extends StatelessWidget {
           children: [
             Text(
               label,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: AppColors.mutedText,
-                  ),
+              style: Theme.of(context).textTheme.labelLarge
+                  ?.copyWith(color: AppColors.mutedText),
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
               value,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: accent ?? AppColors.navy,
-                    fontWeight: FontWeight.w800,
-                  ),
+                color: accent ?? AppColors.navy,
+                fontWeight: FontWeight.w800,
+              ),
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(detail, style: Theme.of(context).textTheme.bodySmall),
@@ -287,9 +401,8 @@ class EmptyState extends StatelessWidget {
             ],
             Text(
               message,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: AppColors.mutedText,
-                  ),
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: AppColors.mutedText),
               textAlign: TextAlign.center,
             ),
           ],
@@ -300,10 +413,7 @@ class EmptyState extends StatelessWidget {
 }
 
 class _AccountRow extends StatelessWidget {
-  const _AccountRow({
-    required this.account,
-    required this.currencies,
-  });
+  const _AccountRow({required this.account, required this.currencies});
 
   final Account account;
   final Map<String, CurrencyDefinition> currencies;
@@ -324,10 +434,11 @@ class _AccountRow extends StatelessWidget {
       title: Text(account.name),
       subtitle: Text(account.accountType),
       trailing: Text(
-        currency == null ? '—' : formatMoney(account.currentBalance, currencies),
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+        currency == null
+            ? '—'
+            : formatMoney(account.currentBalance, currencies),
+        style: Theme.of(context).textTheme.titleMedium
+            ?.copyWith(fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -361,9 +472,7 @@ class TransactionSummaryRow extends StatelessWidget {
             : transaction.description,
       ),
       subtitle: Text(formatDate(transaction.date)),
-      trailing: Text(
-        amount == null ? '—' : formatMoney(amount, currencies),
-      ),
+      trailing: Text(amount == null ? '—' : formatMoney(amount, currencies)),
     );
   }
 
@@ -376,4 +485,3 @@ class TransactionSummaryRow extends StatelessWidget {
     };
   }
 }
-

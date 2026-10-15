@@ -68,6 +68,7 @@ class DailyMaintenanceService {
         allBalances.where(
           (balance) => !_dateOnly(balance.date).isBefore(netWorthStart),
         ),
+        rates: rates,
       );
       for (final netWorth in netWorths) {
         await _appendNetWorth(netWorth);
@@ -95,7 +96,7 @@ class DailyMaintenanceService {
       endDate: endDate,
       rates: rates,
     );
-    final netWorths = _netWorthThrough(balances);
+    final netWorths = _netWorthThrough(balances, rates: rates);
 
     await client.replaceRange(GoogleSheetsRanges.dailyExchangeRates, [
       ['rate_id', 'rate_date', 'currency', 'rate_to_usd', 'source_rate_date', 'retrieved_at'],
@@ -229,7 +230,7 @@ class DailyMaintenanceService {
       }
       if (date.isBefore(startDate)) continue;
       final retrievedAt = DateTime.now().toUtc();
-      for (final account in _openAccountsOn(date)) {
+      for (final account in _openLedgerAccountsOn(date)) {
         final balance = balances[account.id]!;
         final usd = _toUsd(balance, rateFor(rates, account.currencyId, date));
         result.add(
@@ -247,11 +248,34 @@ class DailyMaintenanceService {
     return result;
   }
 
-  List<DailyNetWorth> _netWorthThrough(Iterable<DailyAccountBalance> balances) {
+  List<DailyNetWorth> _netWorthThrough(
+    Iterable<DailyAccountBalance> balances, {
+    required List<ExchangeRate> rates,
+  }) {
     final byDate = <DateTime, int>{};
     for (final balance in balances) {
       final amount = balance.balanceUsd.minorUnits;
       byDate[balance.date] = (byDate[balance.date] ?? 0) + amount;
+    }
+    for (final rate in rates) {
+      byDate.putIfAbsent(_dateOnly(rate.date), () => 0);
+    }
+    final dates = byDate.keys.toList()..sort();
+    for (final date in dates) {
+      for (final account in _openAccountsOn(date).where(
+        (account) => account.isValuationAccount,
+      )) {
+        final valuation = _latestValuation(account.id, date);
+        if (valuation == null) continue;
+        final usd = _toUsd(
+          valuation.value,
+          rateFor(rates, account.currencyId, date),
+        );
+        final signedAmount = account.isLiability
+            ? -usd.minorUnits
+            : usd.minorUnits;
+        byDate[date] = (byDate[date] ?? 0) + signedAmount;
+      }
     }
     return [
       for (final entry
@@ -333,6 +357,24 @@ class DailyMaintenanceService {
         'No exchange rate for $currencyId on ${_dateString(date)}.',
       ),
     );
+  }
+
+  Iterable<Account> _openLedgerAccountsOn(DateTime date) {
+    return _openAccountsOn(date).where((account) => account.isLedgerAccount);
+  }
+
+  DailyManualValuation? _latestValuation(String accountId, DateTime date) {
+    DailyManualValuation? latest;
+    for (final valuation in data.dailyManualValuationsById.values) {
+      if (valuation.accountId != accountId ||
+          _dateOnly(valuation.date).isAfter(date)) {
+        continue;
+      }
+      if (latest == null || valuation.date.isAfter(latest.date)) {
+        latest = valuation;
+      }
+    }
+    return latest;
   }
 
   Iterable<Account> _openAccountsOn(DateTime date) {

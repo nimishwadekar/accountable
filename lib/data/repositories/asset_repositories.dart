@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../sources/asset_reader.dart';
 import '../sources/local_dataset_store.dart';
 import 'data_load_exception.dart';
+import 'data_validation_failure.dart';
 import 'repositories.dart';
 
 abstract final class DataAssetPaths {
@@ -15,6 +16,7 @@ abstract final class DataAssetPaths {
   static const dailyAccountBalances = 'test_sheets/DailyAccountBalances.csv';
   static const dailyExchangeRates = 'test_sheets/DailyExchangeRates.csv';
   static const dailyNetWorth = 'test_sheets/DailyNetWorth.csv';
+  static const dailyManualValuations = 'test_sheets/DailyManualValuations.csv';
   static const tags = 'test_sheets/Tags.csv';
   static const transactions = 'test_sheets/Transactions.csv';
 }
@@ -144,6 +146,27 @@ class AssetDailyAccountBalanceRepository
   }
 }
 
+class AssetManualValuationRepository implements ManualValuationRepository {
+  const AssetManualValuationRepository(this.reader);
+
+  final AssetReader reader;
+
+  @override
+  Future<List<DailyManualValuation>> load({
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+  }) {
+    return _loadTable(
+      tableName: 'DailyManualValuations',
+      action: () async => ModelParsers.parseDailyManualValuations(
+        await reader.readString(DataAssetPaths.dailyManualValuations),
+        accounts: accounts,
+        currencies: currencies,
+      ),
+    );
+  }
+}
+
 class AssetDailyNetWorthRepository implements DailyNetWorthRepository {
   const AssetDailyNetWorthRepository(this.reader);
 
@@ -182,6 +205,35 @@ class AssetAppDataRepository implements AppDataRepository {
     final snapshot = await _loadFreshSnapshot();
     _cachedSnapshot = snapshot;
     return snapshot;
+  }
+
+  @override
+  @override
+  Future<AppDataSnapshot> addManualValuation(
+    DailyManualValuation valuation,
+  ) async {
+    final current = await load();
+    final tables = await _readDataset();
+    final account = current.accountsById[valuation.accountId];
+    final currency = account == null
+        ? null
+        : current.currenciesById[account.currencyId];
+    if (account == null || currency == null || !account.isValuationAccount) {
+      throw StateError('Invalid manual valuation account.');
+    }
+    tables[DataAssetPaths.dailyManualValuations] = _appendCsvRow(
+      tables[DataAssetPaths.dailyManualValuations]!,
+      {
+        'valuation_id': valuation.id,
+        'date': _dateString(valuation.date),
+        'account_id': valuation.accountId,
+        'value': valuation.value.toMajorUnitsString(currency),
+      },
+    );
+    if (store == null) throw StateError('This data source is read-only.');
+    await store!.write(tables);
+    _cachedSnapshot = null;
+    return reload();
   }
 
   @override
@@ -245,6 +297,11 @@ class AssetAppDataRepository implements AppDataRepository {
         tables[DataAssetPaths.dailyNetWorth]!,
         currencyById,
       );
+      final dailyManualValuationList = ModelParsers.parseDailyManualValuations(
+        tables[DataAssetPaths.dailyManualValuations]!,
+        accounts: accountById,
+        currencies: currencyById,
+      );
 
       return AppDataSnapshot(
         accounts: accountList,
@@ -255,28 +312,33 @@ class AssetAppDataRepository implements AppDataRepository {
         exchangeRates: exchangeRateList,
         dailyAccountBalances: dailyAccountBalanceList,
         dailyNetWorth: dailyNetWorthList,
+        dailyManualValuations: dailyManualValuationList,
       );
+    } on DataValidationFailure {
+      rethrow;
     } catch (error) {
-      throw DataLoadException(
-        tableName: 'local dataset',
-        message: error.toString(),
-        cause: error,
-      );
+      throw DataValidationFailure([issueFromError('Local dataset', error)]);
     }
   }
 
   Future<Map<String, String>> _readDataset() async {
     final stored = await store?.read();
     if (stored != null) {
+      final tables = Map.of(stored);
       for (final path in _runtimeAssetPaths) {
-        if (!stored.containsKey(path)) {
+        if (tables.containsKey(path)) continue;
+        try {
+          tables[path] = await reader.readString(path);
+        } catch (error) {
           throw DataLoadException(
-            tableName: 'local dataset',
-            message: 'Stored dataset is missing $path.',
+            tableName: _tableNameFromPath(path),
+            message: error.toString(),
+            cause: error,
           );
         }
       }
-      return Map.of(stored);
+      if (store != null) await store!.write(tables);
+      return tables;
     }
 
     final tables = <String, String>{};
@@ -318,9 +380,15 @@ const _runtimeAssetPaths = <String>[
   DataAssetPaths.dailyAccountBalances,
   DataAssetPaths.dailyExchangeRates,
   DataAssetPaths.dailyNetWorth,
+  DataAssetPaths.dailyManualValuations,
   DataAssetPaths.tags,
   DataAssetPaths.transactions,
 ];
+
+String _dateString(DateTime value) =>
+    '${value.year.toString().padLeft(4, '0')}-'
+    '${value.month.toString().padLeft(2, '0')}-'
+    '${value.day.toString().padLeft(2, '0')}';
 
 Future<T> _loadTable<T>({
   required String tableName,

@@ -10,6 +10,7 @@ class AppDataSnapshot {
     required List<ExchangeRate> exchangeRates,
     required List<DailyAccountBalance> dailyAccountBalances,
     required List<DailyNetWorth> dailyNetWorth,
+    required List<DailyManualValuation> dailyManualValuations,
   })  : accounts = List.unmodifiable(accounts),
         categories = List.unmodifiable(categories),
         currencies = List.unmodifiable(currencies),
@@ -18,6 +19,7 @@ class AppDataSnapshot {
         exchangeRates = List.unmodifiable(exchangeRates),
         dailyAccountBalances = List.unmodifiable(dailyAccountBalances),
         dailyNetWorth = List.unmodifiable(dailyNetWorth),
+        dailyManualValuations = List.unmodifiable(dailyManualValuations),
         accountsById = _indexById(accounts, (account) => account.id),
         categoriesById = _indexById(categories, (category) => category.id),
         currenciesById = _indexById(currencies, (currency) => currency.id),
@@ -34,6 +36,10 @@ class AppDataSnapshot {
         dailyNetWorthById = _indexById(
           dailyNetWorth,
           (netWorth) => netWorth.id,
+        ),
+        dailyManualValuationsById = _indexById(
+          dailyManualValuations,
+          (valuation) => valuation.id,
         );
 
   final List<Account> accounts;
@@ -44,6 +50,7 @@ class AppDataSnapshot {
   final List<ExchangeRate> exchangeRates;
   final List<DailyAccountBalance> dailyAccountBalances;
   final List<DailyNetWorth> dailyNetWorth;
+  final List<DailyManualValuation> dailyManualValuations;
 
   final Map<String, Account> accountsById;
   final Map<String, Category> categoriesById;
@@ -53,6 +60,7 @@ class AppDataSnapshot {
   final Map<String, ExchangeRate> exchangeRatesById;
   final Map<String, DailyAccountBalance> dailyAccountBalancesById;
   final Map<String, DailyNetWorth> dailyNetWorthById;
+  final Map<String, DailyManualValuation> dailyManualValuationsById;
 
   static Map<String, T> _indexById<T>(
     Iterable<T> values,

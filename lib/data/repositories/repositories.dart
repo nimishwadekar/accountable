@@ -43,10 +43,19 @@ abstract interface class DailyNetWorthRepository {
   });
 }
 
+abstract interface class ManualValuationRepository {
+  Future<List<DailyManualValuation>> load({
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+  });
+}
+
 abstract interface class AppDataRepository {
   Future<AppDataSnapshot> load();
 
   Future<AppDataSnapshot> reload();
 
   Future<AppDataSnapshot> addTransaction(Transaction transaction);
+
+  Future<AppDataSnapshot> addManualValuation(DailyManualValuation valuation);
 }
