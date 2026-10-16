@@ -177,11 +177,9 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       GoogleSignInAccount? account;
       if (attempt != null) {
         account = await attempt.timeout(
-          const Duration(seconds: 3),
+          const Duration(seconds: 5),
           onTimeout: () => null,
         );
-      } else {
-        await Future<void>.delayed(const Duration(seconds: 3));
       }
       if (!mounted || _account != null) return;
       setState(() {
@@ -245,12 +243,15 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
           _loadingData = true;
         });
       }
-      final accessToken = interactiveConsent
-          ? await _authService.authorizeSheetsInteractively(account)
-          : await _authService.authorizeSheets(account);
+      if (interactiveConsent) {
+        await _authService.authorizeSheetsInteractively(account);
+      } else {
+        await _authService.authorizeSheets(account);
+      }
       final api = GoogleSheetsApi(
         spreadsheetId: widget.config.spreadsheetId,
-        accessToken: accessToken,
+        accessTokenProvider: ({forceRefresh = false}) =>
+            _authService.authorizeSheets(account, forceRefresh: forceRefresh),
       );
       final repository = GoogleSheetsAppDataRepository(api);
       final initialData = await repository.load();

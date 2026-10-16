@@ -14,8 +14,10 @@ abstract interface class SheetsTableClient {
 }
 
 class GoogleSheetsApi implements SheetsTableClient {
-  GoogleSheetsApi({required this.spreadsheetId, required String accessToken})
-    : _client = BearerClient(accessToken) {
+  GoogleSheetsApi({
+    required this.spreadsheetId,
+    required SheetsAccessTokenProvider accessTokenProvider,
+  }) : _client = BearerClient(accessTokenProvider) {
     _sheetsApi = sheets.SheetsApi(_client);
   }
 

@@ -11,6 +11,8 @@ class GoogleAuthService {
   final AccountableConfig config;
   final GoogleSignIn _signIn = GoogleSignIn.instance;
   static Future<void>? _initialization;
+  String? _sheetsAccessToken;
+  String? _authorizedEmail;
 
   Stream<GoogleSignInAuthenticationEvent> get authenticationEvents =>
       _signIn.authenticationEvents;
@@ -42,15 +44,32 @@ class GoogleAuthService {
     return _signIn.authenticate();
   }
 
-  Future<String> authorizeSheets(GoogleSignInAccount account) async {
-    final authorization = await account.authorizationClient
-        .authorizationForScopes([config.sheetsScope]);
-    if (authorization == null) {
-      throw const GoogleAuthException(
-        'Sheets permission requires an interactive authorization action.',
-      );
+  Future<String> authorizeSheets(
+    GoogleSignInAccount account, {
+    bool forceRefresh = false,
+  }) async {
+    final authorizationClient = account.authorizationClient;
+    if (_authorizedEmail != account.email) {
+      _sheetsAccessToken = null;
+      _authorizedEmail = account.email;
     }
-    return authorization.accessToken;
+    if (!forceRefresh && _sheetsAccessToken != null) {
+      return _sheetsAccessToken!;
+    }
+    if (forceRefresh && _sheetsAccessToken != null) {
+      await authorizationClient.clearAuthorizationToken(
+        accessToken: _sheetsAccessToken!,
+      );
+      _sheetsAccessToken = null;
+    }
+    final authorization = await authorizationClient.authorizationForScopes([
+      config.sheetsScope,
+    ]);
+    if (authorization == null) {
+      throw const SheetsAuthorizationRequiredException();
+    }
+    _sheetsAccessToken = authorization.accessToken;
+    return _sheetsAccessToken!;
   }
 
   Future<String> authorizeSheetsInteractively(
@@ -59,7 +78,9 @@ class GoogleAuthService {
     final authorization = await account.authorizationClient.authorizeScopes([
       config.sheetsScope,
     ]);
-    return authorization.accessToken;
+    _authorizedEmail = account.email;
+    _sheetsAccessToken = authorization.accessToken;
+    return _sheetsAccessToken!;
   }
 
   void validateAllowedAccount(GoogleSignInAccount account) {
@@ -68,7 +89,11 @@ class GoogleAuthService {
     }
   }
 
-  Future<void> signOut() => _signIn.signOut();
+  Future<void> signOut() async {
+    _sheetsAccessToken = null;
+    _authorizedEmail = null;
+    await _signIn.signOut();
+  }
 }
 
 class GoogleAuthException implements Exception {
@@ -78,6 +103,11 @@ class GoogleAuthException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class SheetsAuthorizationRequiredException extends GoogleAuthException {
+  const SheetsAuthorizationRequiredException()
+    : super('Sheets authorization requires a one-time user action.');
 }
 
 class UnauthorizedGoogleAccountException implements Exception {
