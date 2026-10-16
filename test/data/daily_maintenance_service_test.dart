@@ -56,6 +56,51 @@ void main() {
     );
   });
 
+  test('idempotent catch-up skips rows whose IDs already exist', () async {
+    final data = await AssetAppDataRepository().load();
+    final client = _FakeSheetsClient({
+      'DailyExchangeRates!A:A': [
+        ['rate_id'],
+        ['2026-10-13-USD'],
+        ['2026-10-13-INR'],
+      ],
+      'DailyAccountBalances!A:A': [
+        ['balance_id'],
+        ['2026-10-13-chase_checking'],
+      ],
+      'DailyNetWorth!A:A': [
+        ['net_worth_id'],
+        ['2026-10-13-net'],
+      ],
+      'DailyExchangeRates!B:B': [
+        ['rate_date'],
+        ['2026-10-13'],
+      ],
+      'DailyAccountBalances!B:B': [
+        ['balance_date'],
+        ['2026-10-13'],
+      ],
+      'DailyNetWorth!B:B': [
+        ['net_worth_date'],
+        ['2026-10-13'],
+      ],
+    });
+    await DailyMaintenanceService(
+      client: client,
+      data: data,
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'rates': {'INR': 96.4},
+          }),
+          200,
+        ),
+      ),
+    ).catchUp(yesterday: DateTime.utc(2026, 10, 13));
+
+    expect(client.appendedRows, isEmpty);
+  });
+
   test('rebuild replaces all three derived tables', () async {
     final data = await AssetAppDataRepository().load();
     final client = _FakeSheetsClient({});
@@ -177,7 +222,7 @@ void main() {
         ],
         dailyAccountBalances: data.dailyAccountBalances,
         dailyNetWorth: data.dailyNetWorth,
-      dailyManualValuations: data.dailyManualValuations,
+        dailyManualValuations: data.dailyManualValuations,
       );
       await DailyMaintenanceService(
         client: client,
@@ -209,13 +254,28 @@ void main() {
 
 class _ResumableSheetsClient implements SheetsTableClient {
   final Map<String, List<List<String>>> tables = {
+    'DailyExchangeRates!A:A': [
+      ['rate_id'],
+      ['2026-10-12-USD'],
+      ['2026-10-12-INR'],
+    ],
     'DailyExchangeRates!B:B': [
       ['rate_date'],
       ['2026-10-12'],
     ],
+    'DailyAccountBalances!A:A': [
+      ['balance_id'],
+      ['2026-10-12-chase_checking'],
+      ['2026-10-12-sbi_nro'],
+      ['2026-10-12-chase_freedom_rise'],
+    ],
     'DailyAccountBalances!B:B': [
       ['balance_date'],
       ['2026-10-12'],
+    ],
+    'DailyNetWorth!A:A': [
+      ['net_worth_id'],
+      ['2026-10-12-net'],
     ],
     'DailyNetWorth!B:B': [
       ['net_worth_date'],

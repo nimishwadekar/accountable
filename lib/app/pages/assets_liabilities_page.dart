@@ -9,13 +9,17 @@ String manualValuationId(DateTime date, String accountId) =>
     '${_dateString(date)}-$accountId';
 
 DateTime defaultManualValuationDate(AppDataSnapshot data) {
-  final dates = data.dailyManualValuationsById.values
-      .map((valuation) => valuation.date)
-      .toList()
-    ..sort();
+  final dates =
+      data.dailyManualValuationsById.values
+          .map((valuation) => valuation.date)
+          .toList()
+        ..sort();
   final latest = dates.isEmpty ? DateTime.now() : dates.last;
-  return DateTime.utc(latest.year, latest.month, latest.day)
-      .add(const Duration(days: 1));
+  return DateTime.utc(
+    latest.year,
+    latest.month,
+    latest.day,
+  ).add(const Duration(days: 1));
 }
 
 List<Account> eligibleManualValuationAccounts(
@@ -174,7 +178,6 @@ class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
       return null;
     }
     final money = Money.fromMajorUnits(value: value, currency: currency);
-    if (money.minorUnits < 0) return null;
     return DailyManualValuation(
       id: manualValuationId(normalizedDate, account.id),
       date: normalizedDate,
@@ -285,8 +288,8 @@ class _ValuationFormState extends State<_ValuationForm> {
                     return 'Enter a valuation.';
                   }
                   final parsed = num.tryParse(value.trim());
-                  if (parsed == null || parsed < 0) {
-                    return 'Enter a non-negative valuation.';
+                  if (parsed == null) {
+                    return 'Enter a valid valuation.';
                   }
                   return null;
                 },
@@ -435,7 +438,8 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
       controller: controller,
       decoration: InputDecoration(
         labelText: account.name,
-        helperText: '${account.accountType} · ${currency?.id ?? account.currencyId}',
+        helperText:
+            '${account.accountType} · ${currency?.id ?? account.currencyId}',
         suffixText: currency?.id,
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -444,7 +448,7 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
           return 'Enter a valuation.';
         }
         final parsed = num.tryParse(value.trim());
-        return parsed == null || parsed < 0 ? 'Enter a non-negative value.' : null;
+        return parsed == null ? 'Enter a valid value.' : null;
       },
     );
   }
@@ -482,7 +486,6 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
     }
     Navigator.of(context).pop(valuations);
   }
-
 }
 
 class _AccountValuationRow extends StatelessWidget {
@@ -503,18 +506,31 @@ class _AccountValuationRow extends StatelessWidget {
               : current,
         );
     final currency = data.currenciesById[account.currencyId];
+    final valueColor = latest == null
+        ? null
+        : latest.value.minorUnits > 0
+        ? AppColors.success
+        : latest.value.minorUnits < 0
+        ? Theme.of(context).colorScheme.error
+        : null;
     return ListTile(
-      title: Text(account.name),
-      subtitle: Text(
-        latest == null
-            ? 'No valuation yet'
-            : 'As of ${formatDate(latest.date)}',
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.xs,
       ),
+      leading: CircleAvatar(
+        backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+        foregroundColor: AppColors.navy,
+        child: const Icon(Icons.account_balance_wallet_outlined),
+      ),
+      title: Text(account.name),
+      subtitle: Text(accountSubtitle(account, data.currenciesById)),
       trailing: Text(
         latest == null || currency == null
             ? '—'
-            : '${currency.symbol}${latest.value.toMajorUnits(currency).toStringAsFixed(currency.decimalPlaces)}',
-        style: Theme.of(context).textTheme.titleMedium,
+            : formatMoney(latest.value, data.currenciesById),
+        style: Theme.of(context).textTheme.titleMedium
+            ?.copyWith(color: valueColor, fontWeight: FontWeight.w700),
       ),
     );
   }

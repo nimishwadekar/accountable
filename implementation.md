@@ -332,7 +332,7 @@ The first Analysis page and its daily-series calculation services are implemente
 - The Assets & liabilities section lists only accounts with `uses_manual_valuations=TRUE`.
 - `Accounts.account_type` values are `cash`, `liability`, or `asset`; `uses_manual_valuations=TRUE` is valid only for `asset` or `liability` accounts.
 - `uses_manual_valuations` validates Google Sheets boolean output (`TRUE`/`FALSE`, including normalized casing) and rejects other values.
-- Valuation dates use the user's local calendar timezone; stored liability values are positive and liability signs are applied during net-worth calculation.
+- Valuation dates use the user's local calendar timezone; manual valuation values preserve their stored signs, including negative liability values.
 - The valuation form order is account, date, valuation.
 - Duplicate account/date dates and dates outside account opening/closing bounds are disabled; changing account clears an invalid selected date.
 - If a valuation is missing for a date, carry forward the latest prior valuation and mark it stale.
@@ -343,7 +343,10 @@ The first Analysis page and its daily-series calculation services are implemente
 - Daily valuation batch saves use all-or-nothing validation: blank, malformed, negative, duplicate, or out-of-range values prevent the entire batch from saving.
 
 The Assets & liabilities page, DailyManualValuations model/parser/repositories, manual valuation entry, valuation date constraints, and valuation-aware daily net-worth calculation are implemented.
+
+- Future account visibility metadata (`show_in_app`, `is_favorite`, `display_order`) is deferred until after migration work.
 - The current Sheets/CSV schema contract includes `Accounts.uses_manual_valuations`, no stored `Accounts.current_balance`, `Currencies.decimal_places`, the reordered Transactions columns, `DailyExchangeRates.source_rate_date`, and `DailyManualValuations(valuation_id,date,account_id,value)`.
+- The global daily/analysis history starts at the earliest transaction date; account opening dates do not define the global period. Manual valuations before that transaction cutoff are ignored.
 - Every production bug must receive a regression test.
 - Coverage is measured with [`tool/check_coverage.sh`](./tool/check_coverage.sh).
 - Current coverage thresholds are 80% application logic and 90% for financial logic files. Application-logic coverage excludes UI composition, visual theme code, OAuth UI, and low-level external HTTP adapters; those areas use widget/manual smoke tests.

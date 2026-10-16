@@ -23,6 +23,7 @@ class DailyMaintenanceService {
   Future<void> catchUp({required DateTime yesterday}) async {
     final endDate = _dateOnly(yesterday);
     final existingDates = await _readDailyDates();
+    final existingIds = await _readDailyIds();
     final fallbackStart = _earliestSourceDate ?? endDate;
     final rates = <ExchangeRate>[...data.exchangeRates];
 
@@ -38,7 +39,11 @@ class DailyMaintenanceService {
     ) {
       final dateRates = await _ratesForDate(date);
       rates.addAll(dateRates);
-      await _appendExchangeRates(dateRates);
+      for (final rate in dateRates) {
+        if (existingIds['rates']!.add(rate.id)) {
+          await _appendExchangeRates([rate]);
+        }
+      }
     }
 
     final balanceStart = _nextDate(
@@ -54,7 +59,9 @@ class DailyMaintenanceService {
             rates: rates,
           );
     for (final balance in newBalances) {
-      await _appendBalance(balance);
+      if (existingIds['balances']!.add(balance.id)) {
+        await _appendBalance(balance);
+      }
     }
 
     final netWorthStart = _nextDate(
@@ -71,7 +78,9 @@ class DailyMaintenanceService {
         rates: rates,
       );
       for (final netWorth in netWorths) {
-        await _appendNetWorth(netWorth);
+        if (existingIds['netWorth']!.add(netWorth.id)) {
+          await _appendNetWorth(netWorth);
+        }
       }
     }
   }
@@ -141,6 +150,19 @@ class DailyMaintenanceService {
           netWorth.retrievedAt.toUtc().toIso8601String(),
         ],
     ]);
+  }
+
+  Future<Map<String, Set<String>>> _readDailyIds() async {
+    final ranges = await client.batchReadRanges(const [
+      'DailyExchangeRates!A:A',
+      'DailyAccountBalances!A:A',
+      'DailyNetWorth!A:A',
+    ]);
+    return {
+      'rates': _ids(ranges['DailyExchangeRates!A:A']),
+      'balances': _ids(ranges['DailyAccountBalances!A:A']),
+      'netWorth': _ids(ranges['DailyNetWorth!A:A']),
+    };
   }
 
   Future<Map<String, Set<DateTime>>> _readDailyDates() async {
@@ -271,10 +293,7 @@ class DailyMaintenanceService {
           valuation.value,
           rateFor(rates, account.currencyId, date),
         );
-        final signedAmount = account.isLiability
-            ? -usd.minorUnits
-            : usd.minorUnits;
-        byDate[date] = (byDate[date] ?? 0) + signedAmount;
+        byDate[date] = (byDate[date] ?? 0) + usd.minorUnits;
       }
     }
     return [
@@ -364,10 +383,13 @@ class DailyMaintenanceService {
   }
 
   DailyManualValuation? _latestValuation(String accountId, DateTime date) {
+    final historyStart = _earliestSourceDate;
     DailyManualValuation? latest;
     for (final valuation in data.dailyManualValuationsById.values) {
+      final valuationDate = _dateOnly(valuation.date);
       if (valuation.accountId != accountId ||
-          _dateOnly(valuation.date).isAfter(date)) {
+          valuationDate.isAfter(date) ||
+          (historyStart != null && valuationDate.isBefore(historyStart))) {
         continue;
       }
       if (latest == null || valuation.date.isAfter(latest.date)) {
@@ -411,6 +433,13 @@ class DailyMaintenanceService {
     final latest = existing.reduce((a, b) => a.isAfter(b) ? a : b);
     final next = latest.add(const Duration(days: 1));
     return next.isAfter(end) ? null : next;
+  }
+
+  static Set<String> _ids(List<List<String>>? rows) {
+    return {
+      for (final row in rows ?? const <List<String>>[])
+        if (row.isNotEmpty && !row.first.endsWith('_id')) row.first.trim(),
+    };
   }
 
   static Set<DateTime> _dates(List<List<String>>? rows) {

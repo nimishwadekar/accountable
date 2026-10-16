@@ -11,8 +11,8 @@ import 'theme/design_tokens.dart';
 enum AppSection {
   overview,
   transactions,
-  accounts,
   analysis,
+  accounts,
   assetsLiabilities,
   settings,
 }
@@ -23,7 +23,7 @@ extension AppSectionDetails on AppSection {
     AppSection.transactions => 'Transactions',
     AppSection.accounts => 'Accounts',
     AppSection.analysis => 'Analysis',
-    AppSection.assetsLiabilities => 'Assets & liabilities',
+    AppSection.assetsLiabilities => 'Assets & Liabilities',
     AppSection.settings => 'Settings',
   };
 

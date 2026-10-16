@@ -48,7 +48,7 @@ const transactionTypeRules = <TransactionType, TransactionTypeRule>{
   TransactionType.income: TransactionTypeRule(
     sourceRequired: false,
     destinationRequired: true,
-    categoryRequired: false,
+    categoryRequired: true,
   ),
   TransactionType.reimbursement: TransactionTypeRule(
     sourceRequired: false,

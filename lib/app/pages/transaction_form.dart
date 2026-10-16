@@ -19,7 +19,7 @@ class TransactionTypeChooser extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Add transaction',
+              'Add Transaction',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: AppSpacing.md),
@@ -111,20 +111,21 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
           const SizedBox(height: AppSpacing.md),
           if (_sourceRequired) ...[
             _accountDropdown(
-              label: 'Source account',
+              label: 'Source Account',
               value: _sourceAccountId,
               onChanged: (value) => setState(() => _sourceAccountId = value),
             ),
             const SizedBox(height: AppSpacing.md),
             _amountField(
               controller: _sourceAmountController,
-              label: 'Source amount',
+              label: 'Source Amount',
+              accountId: _sourceAccountId,
             ),
             if (_destinationRequired) const SizedBox(height: AppSpacing.md),
           ],
           if (_destinationRequired) ...[
             _accountDropdown(
-              label: 'Destination account',
+              label: 'Destination Account',
               value: _destinationAccountId,
               onChanged: (value) =>
                   setState(() => _destinationAccountId = value),
@@ -132,7 +133,8 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
             const SizedBox(height: AppSpacing.md),
             _amountField(
               controller: _destinationAmountController,
-              label: 'Destination amount',
+              label: 'Destination Amount',
+              accountId: _destinationAccountId,
             ),
           ],
           if (_categoryRequired || _availableCategories.isNotEmpty) ...[
@@ -144,7 +146,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
           const SizedBox(height: AppSpacing.lg),
           FilledButton(
             onPressed: _submit,
-            child: const Text('Add transaction'),
+            child: const Text('Add Transaction'),
           ),
         ],
       ),
@@ -187,10 +189,40 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   Widget _amountField({
     required TextEditingController controller,
     required String label,
+    required String? accountId,
   }) {
+    final account = accountId == null
+        ? null
+        : widget.data.accountsById[accountId];
+    final currency = account == null
+        ? null
+        : widget.data.currenciesById[account.currencyId];
     return TextFormField(
       controller: controller,
-      decoration: InputDecoration(labelText: label),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: currency == null
+            ? null
+            : Container(
+                width: 64,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  border: const Border(
+                    right: BorderSide(color: AppColors.border),
+                  ),
+                ),
+                child: Text(
+                  currency.symbol,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 64,
+          maxWidth: 64,
+          minHeight: 56,
+        ),
+      ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       validator: (value) {
         if (value == null || value.trim().isEmpty) {
@@ -319,19 +351,17 @@ const _transactionIdAlphabet =
     '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const _transactionIdLength = 12;
 
-String generateTransactionId(
-  Iterable<String> existingIds, {
-  Random? random,
-}) {
+String generateTransactionId(Iterable<String> existingIds, {Random? random}) {
   final existing = existingIds.toSet();
   final generator = random ?? Random.secure();
   String candidate;
   do {
     candidate = List.generate(
       _transactionIdLength,
-      (_) => _transactionIdAlphabet[
-        generator.nextInt(_transactionIdAlphabet.length)
-      ],
+      (_) =>
+          _transactionIdAlphabet[generator.nextInt(
+            _transactionIdAlphabet.length,
+          )],
     ).join();
   } while (existing.contains(candidate));
   return candidate;

@@ -36,10 +36,10 @@ void main() {
     await tester.pump();
 
     expect(find.text('Analysis'), findsOneWidget);
-    expect(find.text('Net worth'), findsOneWidget);
-    expect(find.text('Account balance history'), findsOneWidget);
-    expect(find.text('All history'), findsOneWidget);
+    expect(find.text('Net Worth Trend'), findsOneWidget);
+    expect(find.text('Individual Account Valuation Trend'), findsOneWidget);
+    expect(find.text('All history'), findsNWidgets(2));
     expect(find.byType(LineChart), findsNWidgets(2));
-    expect(find.textContaining('Closed on 2026-10-11'), findsOneWidget);
+    expect(find.textContaining('Closed on 2026-10-11'), findsNothing);
   });
 }

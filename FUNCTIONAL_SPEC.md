@@ -57,7 +57,7 @@ For now:
 - The valuation form order is account, date, valuation.
 - The valuation is entered in the selected account's currency.
 - Daily valuation batch saves are all-or-nothing; blank, malformed, negative, duplicate, or out-of-range values prevent the entire batch from saving.
-- Stored liability values are positive; net-worth calculations apply the negative sign for `liability` accounts.
+- Manual valuation values are stored with their actual sign in Sheets; liability values are negative and displayed negative without additional sign inversion.
 - Duplicate account/date valuation entries are prevented.
 - Dates before an account's opening date and after its closing date are disabled.
 - Existing account/date valuation dates are disabled.
@@ -185,6 +185,16 @@ Existing legacy rows may have blank descriptions or tags while migration is pend
 
 The Overview page shows:
 
+- Amounts use currency symbols with a separating space and thousands separators.
+- Main positive amounts are green and main negative amounts are red.
+- Menu labels and screen titles use title capitalization.
+- Chart x-axis labels use `dd-MMM` dates; y-axis labels and tooltips use grouped amounts.
+- Chart limits are not labeled; positive/negative lines and tooltip foregrounds use green/red by value.
+- Positive main amounts are green; negative main amounts are red.
+- Current Account Balances excludes manual valuation accounts.
+- A Latest Assets & Liabilities Valuation section appears after current account balances with an as-of subtitle.
+- Individual valuation rows do not repeat the section-level as-of subtitle.
+
 1. Latest daily net worth.
 2. An `As of YYYY-MM-DD` subtitle for that net-worth value.
 3. `Unavailable` when no daily net-worth row exists; no fallback estimate is calculated.
@@ -247,6 +257,11 @@ Shows account rows with:
 ### Analysis — implemented
 
 The first Analysis page contains:
+
+- Manual valuation accounts use DailyManualValuations for individual history charts.
+- Graph ranges begin at the first transaction date and end yesterday, both inclusive.
+- Liability valuation signs are preserved from the source data.
+- Chart tooltips use a light theme-compatible background.
 
 - Net-worth history from `DailyNetWorth`.
 - Selectable account history from `DailyAccountBalances`.
@@ -323,7 +338,17 @@ DailyAccountBalances.balance_usd   // USD toggle
 
 It does not use current ledger calculations for historical values.
 
-### Daily table inclusion rules
+### Global history start date
+
+The global analysis and daily-table start date is the earliest `Transactions.date` currently present. This is the cutover date for the current dataset and expands backward automatically as older transactions are migrated.
+
+- `Accounts.opening_date` does not determine the global analysis or graph period.
+- Manual valuations dated before the earliest transaction date are ignored for daily net-worth construction.
+- Account opening/closing dates still determine whether an account is eligible on an individual daily date.
+- The current `opening_balance` is the account balance at the cutover/start of the current transaction history.
+- During initial cutover, account opening dates may be set to the global transaction cutoff date; migration can move them earlier as historical transactions are added.
+
+## Daily table inclusion rules
 
 - Add exchange rates only for currencies used by at least one account open on that date.
 - Add daily account balances only for accounts open on that date.
@@ -409,7 +434,8 @@ Normal production startup will be:
 Catch-up is idempotent:
 
 - Daily row IDs are deterministic.
-- Existing IDs are checked before insertion.
+- Existing IDs are checked before insertion, not only the latest date.
+- Concurrent startup connection/catch-up attempts are guarded so only one runs per app instance.
 - If a failure occurs partway through, completed rows remain and the next launch retries from each table's latest date.
 - UTC is used for retrieval timestamps; daily dates use the user's local calendar date.
 
@@ -448,6 +474,25 @@ Before implementation, the following must be designed and tested:
 - Apps Script execution and daily quotas.
 
 This is a future alternative and does not replace the current direct Google OAuth/Sheets implementation yet.
+
+## Future account visibility
+
+Keep all accounts available for calculations and historical analysis, but later add UI visibility metadata to `Accounts`:
+
+```text
+show_in_app,is_favorite,display_order
+```
+
+Planned behavior:
+
+- Dashboard shows favorites by default.
+- Forms show favorites first, with an expandable all-accounts option.
+- Accounts page shows favorites first and supports all accounts.
+- Analysis can select any account.
+- Daily calculations include all open accounts regardless of UI visibility.
+- Multiple Wise currency balances remain separate accounts and may later use provider/group metadata.
+
+This is deferred until after the current migration work.
 
 ## Deferred functionality
 

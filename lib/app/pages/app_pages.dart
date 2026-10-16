@@ -27,18 +27,21 @@ class OverviewPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           MetricCard(
-            label: 'Net worth',
+            label: 'Net Worth',
             value: latestNetWorth == null
                 ? 'Unavailable'
                 : formatMoney(latestNetWorth.amount, data.currenciesById),
             detail: latestNetWorth == null
                 ? 'No daily snapshot available'
                 : 'As of ${formatDate(latestNetWorth.date)}',
-            accent: AppColors.teal,
+            accent: latestNetWorth == null
+                ? AppColors.mutedText
+                : amountColor(context, latestNetWorth.amount.minorUnits) ??
+                      AppColors.teal,
           ),
           const SizedBox(height: AppSpacing.xl),
           Text(
-            'Current balances',
+            'Current Account Balances',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: AppSpacing.xs),
@@ -51,16 +54,72 @@ class OverviewPage extends StatelessWidget {
           Card(
             child: Column(
               children: [
-                for (var index = 0; index < data.accounts.length; index++) ...[
-                  if (index > 0) const Divider(height: 1),
+                for (final account in data.accounts.where(
+                  (account) => account.isLedgerAccount,
+                )) ...[
+                  if (account !=
+                      data.accounts.firstWhere((item) => item.isLedgerAccount))
+                    const Divider(height: 1),
                   _AccountRow(
-                    account: data.accounts[index],
-                    balance: balances[data.accounts[index].id]!,
+                    account: account,
+                    balance: balances[account.id]!,
                     currencies: data.currenciesById,
                   ),
                 ],
               ],
             ),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          Builder(
+            builder: (context) {
+              final valuationAccounts = data.accounts
+                  .where((account) => account.isValuationAccount)
+                  .toList();
+              final latestDate = data.dailyManualValuations.isEmpty
+                  ? null
+                  : data.dailyManualValuations
+                        .map((valuation) => valuation.date)
+                        .reduce((a, b) => a.isAfter(b) ? a : b);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Latest Assets & Liabilities Valuation',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    latestDate == null
+                        ? 'No valuation available'
+                        : 'As of ${formatDate(latestDate)}',
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(color: AppColors.mutedText),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Card(
+                    child: valuationAccounts.isEmpty
+                        ? const EmptyState(
+                            message: 'No asset or liability accounts yet.',
+                          )
+                        : Column(
+                            children: [
+                              for (
+                                var index = 0;
+                                index < valuationAccounts.length;
+                                index++
+                              ) ...[
+                                if (index > 0) const Divider(height: 1),
+                                _ManualValuationRow(
+                                  account: valuationAccounts[index],
+                                  data: data,
+                                ),
+                              ],
+                            ],
+                          ),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -98,11 +157,12 @@ class AccountsPage extends StatelessWidget {
       child: Card(
         child: Column(
           children: [
-            for (var index = 0; index < data.accounts.length; index++) ...[
-              if (index > 0) const Divider(height: 1),
+            for (final account in data.accounts.where(
+              (account) => account.isLedgerAccount,
+            )) ...[
               _AccountRow(
-                account: data.accounts[index],
-                balance: balances[data.accounts[index].id]!,
+                account: account,
+                balance: balances[account.id]!,
                 currencies: data.currenciesById,
               ),
             ],
@@ -426,6 +486,89 @@ class EmptyState extends StatelessWidget {
   }
 }
 
+class _ManualValuationRow extends StatelessWidget {
+  const _ManualValuationRow({required this.account, required this.data});
+
+  final Account account;
+  final AppDataSnapshot data;
+
+  @override
+  Widget build(BuildContext context) {
+    final latest = data.dailyManualValuations
+        .where((valuation) => valuation.accountId == account.id)
+        .fold<DailyManualValuation?>(
+          null,
+          (current, valuation) =>
+              current == null || valuation.date.isAfter(current.date)
+              ? valuation
+              : current,
+        );
+    final currency = data.currenciesById[account.currencyId];
+    final color = latest == null
+        ? null
+        : amountColor(context, latest.value.minorUnits);
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.xs,
+      ),
+      leading: CircleAvatar(
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+        foregroundColor: AppColors.navy,
+        child: Icon(
+          account.isLiability
+              ? Icons.account_balance_outlined
+              : Icons.trending_up,
+        ),
+      ),
+      title: Text(account.name),
+      subtitle: Text(accountSubtitle(account, data.currenciesById)),
+      trailing: Text(
+        latest == null || currency == null
+            ? '—'
+            : formatMoney(latest.value, data.currenciesById),
+        style: Theme.of(context).textTheme.titleMedium
+            ?.copyWith(color: color, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+String accountSubtitle(
+  Account account,
+  Map<String, CurrencyDefinition> currencies,
+) {
+  final currency = currencies[account.currencyId];
+  final currencyCode = currency?.id ?? account.currencyId;
+  final type = account.accountType.trim().toLowerCase();
+  if (type == 'cash') return currencyCode;
+  final displayType =
+      type == 'liability' && account.name.toLowerCase().contains('credit')
+      ? 'Credit'
+      : switch (type) {
+          'liability' => 'Liability',
+          'asset' => 'Asset',
+          _ => _titleCase(account.accountType),
+        };
+  return '$currencyCode · $displayType';
+}
+
+String _titleCase(String value) {
+  return value
+      .split(RegExp(r'[_\\s]+'))
+      .where((part) => part.isNotEmpty)
+      .map(
+        (part) => '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
+      )
+      .join(' ');
+}
+
+Color? amountColor(BuildContext context, int minorUnits) {
+  if (minorUnits > 0) return AppColors.success;
+  if (minorUnits < 0) return Theme.of(context).colorScheme.error;
+  return null;
+}
+
 class _AccountRow extends StatelessWidget {
   const _AccountRow({
     required this.account,
@@ -451,13 +594,13 @@ class _AccountRow extends StatelessWidget {
         child: const Icon(Icons.account_balance_wallet_outlined),
       ),
       title: Text(account.name),
-      subtitle: Text(account.accountType),
+      subtitle: Text(accountSubtitle(account, currencies)),
       trailing: Text(
-        currency == null
-            ? '—'
-            : formatMoney(balance, currencies),
-        style: Theme.of(context).textTheme.titleMedium
-            ?.copyWith(fontWeight: FontWeight.w700),
+        currency == null ? '—' : formatMoney(balance, currencies),
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: amountColor(context, balance.minorUnits),
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

@@ -31,6 +31,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   GoogleSignInAccount? _account;
   AppDataRepository? _repository;
   Future<void> Function()? _rebuildDailyTables;
+  bool _connectionInProgress = false;
 
   @override
   void initState() {
@@ -228,7 +229,8 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     GoogleSignInAccount account, {
     bool interactiveConsent = false,
   }) async {
-    if (!mounted || _repository != null) return;
+    if (!mounted || _repository != null || _connectionInProgress) return;
+    _connectionInProgress = true;
     setState(() {
       _account = account;
       _authorizing = true;
@@ -270,15 +272,18 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         _repository = repository;
         _authorizing = false;
         _loadingData = false;
+        _connectionInProgress = false;
       });
     } on GoogleAuthException {
       if (!mounted) return;
       setState(() {
         _authorizing = false;
         _loadingData = false;
+        _connectionInProgress = false;
         _needsConsent = true;
       });
     } on DataValidationFailure catch (failure) {
+      _connectionInProgress = false;
       if (!mounted) return;
       setState(() {
         _authorizing = false;
@@ -290,6 +295,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       setState(() {
         _authorizing = false;
         _loadingData = false;
+        _connectionInProgress = false;
         _error = error.toString();
       });
     }

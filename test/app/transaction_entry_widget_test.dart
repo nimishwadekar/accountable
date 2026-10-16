@@ -18,7 +18,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Add transaction'), findsOneWidget);
+    expect(find.text('Add Transaction'), findsOneWidget);
     expect(find.text('Expense'), findsOneWidget);
     expect(find.text('Income'), findsOneWidget);
     expect(find.text('Reimbursement'), findsOneWidget);
@@ -41,8 +41,8 @@ void main() {
 
     expect(find.text('Description'), findsOneWidget);
     expect(find.text('Tag'), findsOneWidget);
-    expect(find.text('Source account'), findsOneWidget);
-    expect(find.text('Source amount'), findsOneWidget);
+    expect(find.text('Source Account'), findsOneWidget);
+    expect(find.text('Source Amount'), findsOneWidget);
     expect(find.text('Tag (optional)'), findsNothing);
   });
 }

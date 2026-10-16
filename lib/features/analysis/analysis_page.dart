@@ -22,8 +22,10 @@ class AnalysisPage extends StatefulWidget {
 
 class _AnalysisPageState extends State<AnalysisPage> {
   late final AnalysisCalculator _calculator;
-  late AnalysisRangePreset _rangePreset;
-  late DateTimeRange? _range;
+  late AnalysisRangePreset _netWorthRangePreset;
+  late DateTimeRange? _netWorthRange;
+  late AnalysisRangePreset _accountRangePreset;
+  late DateTimeRange? _accountRange;
   String? _selectedAccountId;
   AccountChartUnit _accountChartUnit = AccountChartUnit.native;
 
@@ -31,8 +33,10 @@ class _AnalysisPageState extends State<AnalysisPage> {
   void initState() {
     super.initState();
     _calculator = AnalysisCalculator(widget.data);
-    _rangePreset = AnalysisRangePreset.allHistory;
-    _range = _calculator.allHistoryRange;
+    _netWorthRangePreset = AnalysisRangePreset.allHistory;
+    _netWorthRange = _calculator.allHistoryRange;
+    _accountRangePreset = AnalysisRangePreset.allHistory;
+    _accountRange = _calculator.allHistoryRange;
     _selectedAccountId = widget.data.accounts.isEmpty
         ? null
         : widget.data.accounts.first.id;
@@ -40,18 +44,20 @@ class _AnalysisPageState extends State<AnalysisPage> {
 
   @override
   Widget build(BuildContext context) {
-    final range = _range;
-    final netWorthSeries = range == null
+    final netWorthRange = _netWorthRange;
+    final accountRangeSelection = _accountRange;
+    final netWorthSeries = netWorthRange == null
         ? null
-        : _calculator.netWorthSeries(range);
+        : _calculator.netWorthSeries(netWorthRange);
     final selectedAccount = _selectedAccountId == null
         ? null
         : widget.data.accountsById[_selectedAccountId!];
-    final accountRange = range == null || _selectedAccountId == null
+    final accountRange =
+        accountRangeSelection == null || _selectedAccountId == null
         ? null
         : _calculator.accountRange(
             accountId: _selectedAccountId!,
-            requestedRange: range,
+            requestedRange: accountRangeSelection,
           );
     final accountSeries = accountRange == null || _selectedAccountId == null
         ? null
@@ -66,21 +72,26 @@ class _AnalysisPageState extends State<AnalysisPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildRangeSelector(),
-          const SizedBox(height: AppSpacing.lg),
-          if (range == null)
+          if (netWorthRange == null && accountRangeSelection == null)
             const EmptyState(message: 'No daily history is available yet.')
           else ...[
-            _buildNetWorthSection(netWorthSeries!),
-            const SizedBox(height: AppSpacing.xl),
-            _buildAccountSection(accountSeries, selectedAccount),
+            if (netWorthRange != null) _buildNetWorthSection(netWorthSeries!),
+            if (netWorthRange != null && accountRangeSelection != null)
+              const SizedBox(height: AppSpacing.xl),
+            if (accountRangeSelection != null)
+              _buildAccountSection(accountSeries, selectedAccount),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildRangeSelector() {
+  Widget _buildRangeSelector({
+    required String label,
+    required AnalysisRangePreset selectedPreset,
+    required DateTimeRange? range,
+    required ValueChanged<AnalysisRangePreset> onSelected,
+  }) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
@@ -89,16 +100,16 @@ class _AnalysisPageState extends State<AnalysisPage> {
           runSpacing: AppSpacing.sm,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Text('Period', style: Theme.of(context).textTheme.titleMedium),
+            Text(label, style: Theme.of(context).textTheme.titleMedium),
             for (final preset in AnalysisRangePreset.values)
               ChoiceChip(
                 label: Text(_presetLabel(preset)),
-                selected: _rangePreset == preset,
-                onSelected: (_) => _selectPreset(preset),
+                selected: selectedPreset == preset,
+                onSelected: (_) => onSelected(preset),
               ),
-            if (_range != null)
+            if (range != null)
               Text(
-                '${formatDate(_range!.start)} – ${formatDate(_range!.end)}',
+                '${formatDate(range.start)} – ${formatDate(range.end)}',
                 style: Theme.of(context).textTheme.bodySmall
                     ?.copyWith(color: AppColors.mutedText),
               ),
@@ -111,9 +122,15 @@ class _AnalysisPageState extends State<AnalysisPage> {
   Widget _buildNetWorthSection(DailySeries<DailyNetWorthPoint> series) {
     final usd = widget.data.currenciesById['USD'];
     return _AnalysisChartSection(
-      title: 'Net worth',
-      subtitle: 'Daily USD valuation',
+      title: 'Net Worth Trend',
+      subtitle: null,
       warning: _missingWarning(series.missingDates),
+      header: _buildRangeSelector(
+        label: 'Net Worth Period',
+        selectedPreset: _netWorthRangePreset,
+        range: _netWorthRange,
+        onSelected: (preset) => _selectPreset(preset, forAccount: false),
+      ),
       child: series.points.isEmpty
           ? const EmptyState(message: 'No net-worth values in this period.')
           : _LineChart(
@@ -143,62 +160,73 @@ class _AnalysisPageState extends State<AnalysisPage> {
     final useUsd = _accountChartUnit == AccountChartUnit.usd;
 
     return _AnalysisChartSection(
-      title: 'Account balance history',
-      subtitle: [
-        useUsd ? 'Daily USD valuation' : 'Daily ${currency?.id ?? ''} balance',
-        if (account?.closingDate != null)
-          'Closed on ${formatDate(account!.closingDate!)}',
-      ].join(' · '),
+      title: 'Individual Account Valuation Trend',
+      subtitle: null,
       warning: series == null ? null : _missingWarning(series.missingDates),
-      header: LayoutBuilder(
-        builder: (context, constraints) {
-          final accountDropdown = DropdownButtonFormField<String>(
-            initialValue: _selectedAccountId,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Account'),
-            items: [
-              for (final item in widget.data.accounts)
-                DropdownMenuItem<String>(
-                  value: item.id,
-                  child: Text(item.name),
-                ),
-            ],
-            onChanged: (value) {
-              if (value != null) setState(() => _selectedAccountId = value);
-            },
-          );
-          final unitToggle = SegmentedButton<AccountChartUnit>(
-            segments: const [
-              ButtonSegment(
-                value: AccountChartUnit.native,
-                label: Text('Native'),
-              ),
-              ButtonSegment(value: AccountChartUnit.usd, label: Text('USD')),
-            ],
-            selected: {_accountChartUnit},
-            onSelectionChanged: (selection) {
-              setState(() => _accountChartUnit = selection.first);
-            },
-          );
+      header: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildRangeSelector(
+            label: 'Account Period',
+            selectedPreset: _accountRangePreset,
+            range: _accountRange,
+            onSelected: (preset) => _selectPreset(preset, forAccount: true),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final accountDropdown = DropdownButtonFormField<String>(
+                initialValue: _selectedAccountId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Account'),
+                items: [
+                  for (final item in widget.data.accounts)
+                    DropdownMenuItem<String>(
+                      value: item.id,
+                      child: Text(item.name),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _selectedAccountId = value);
+                },
+              );
+              final unitToggle = SegmentedButton<AccountChartUnit>(
+                segments: [
+                  ButtonSegment(
+                    value: AccountChartUnit.native,
+                    label: Text(currency?.id ?? 'Native'),
+                  ),
+                  const ButtonSegment(
+                    value: AccountChartUnit.usd,
+                    label: Text('USD'),
+                  ),
+                ],
+                selected: {_accountChartUnit},
+                onSelectionChanged: (selection) {
+                  setState(() => _accountChartUnit = selection.first);
+                },
+              );
 
-          if (constraints.maxWidth < AppBreakpoints.compact) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                accountDropdown,
-                const SizedBox(height: AppSpacing.sm),
-                unitToggle,
-              ],
-            );
-          }
-          return Row(
-            children: [
-              Expanded(child: accountDropdown),
-              const SizedBox(width: AppSpacing.md),
-              unitToggle,
-            ],
-          );
-        },
+              if (constraints.maxWidth < AppBreakpoints.compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    accountDropdown,
+                    const SizedBox(height: AppSpacing.sm),
+                    unitToggle,
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: accountDropdown),
+                  const SizedBox(width: AppSpacing.md),
+                  unitToggle,
+                ],
+              );
+            },
+          ),
+        ],
       ),
       child: series == null || series.points.isEmpty
           ? const EmptyState(message: 'No account history is available.')
@@ -231,28 +259,43 @@ class _AnalysisPageState extends State<AnalysisPage> {
     return 'Missing daily data for $preview$suffix.';
   }
 
-  void _selectPreset(AnalysisRangePreset preset) {
+  void _selectPreset(AnalysisRangePreset preset, {required bool forAccount}) {
     final allHistory = _calculator.allHistoryRange;
     final today = DateTime.now();
     final todayOnly = DateTime.utc(today.year, today.month, today.day);
-    final range = switch (preset) {
+    final requested = switch (preset) {
       AnalysisRangePreset.thirtyDays => DateTimeRange(
         start: todayOnly.subtract(const Duration(days: 29)),
-        end: todayOnly,
+        end: todayOnly.subtract(const Duration(days: 1)),
       ),
       AnalysisRangePreset.ninetyDays => DateTimeRange(
         start: todayOnly.subtract(const Duration(days: 89)),
-        end: todayOnly,
+        end: todayOnly.subtract(const Duration(days: 1)),
       ),
       AnalysisRangePreset.yearToDate => DateTimeRange(
         start: DateTime.utc(today.year),
-        end: todayOnly,
+        end: todayOnly.subtract(const Duration(days: 1)),
       ),
       AnalysisRangePreset.allHistory => allHistory,
     };
+    final range = allHistory == null
+        ? null
+        : DateTimeRange(
+            start: requested!.start.isBefore(allHistory.start)
+                ? allHistory.start
+                : requested.start,
+            end: requested.end.isAfter(allHistory.end)
+                ? allHistory.end
+                : requested.end,
+          );
     setState(() {
-      _rangePreset = preset;
-      _range = range;
+      if (forAccount) {
+        _accountRangePreset = preset;
+        _accountRange = range;
+      } else {
+        _netWorthRangePreset = preset;
+        _netWorthRange = range;
+      }
     });
   }
 
@@ -276,7 +319,7 @@ class _AnalysisChartSection extends StatelessWidget {
   });
 
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final String? warning;
   final Widget? header;
   final Widget child;
@@ -287,12 +330,14 @@ class _AnalysisChartSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(title, style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          subtitle,
-          style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(color: AppColors.mutedText),
-        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            subtitle!,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: AppColors.mutedText),
+          ),
+        ],
         if (header != null) ...[const SizedBox(height: AppSpacing.md), header!],
         if (warning != null) ...[
           const SizedBox(height: AppSpacing.md),
@@ -388,6 +433,22 @@ class _LineChart extends StatelessWidget {
               minY: minimum - padding,
               maxY: maximum + padding,
               gridData: const FlGridData(show: true),
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipColor: (_) => Colors.white,
+                  tooltipBorder: const BorderSide(color: AppColors.border),
+                  getTooltipItems: (spots) => [
+                    for (final spot in spots)
+                      LineTooltipItem(
+                        '${currency?.symbol ?? ''} ${_formatChartValue(spot.y)}',
+                        TextStyle(
+                          color: _amountColor(spot.y),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               titlesData: FlTitlesData(
                 rightTitles: const AxisTitles(
                   sideTitles: SideTitles(showTitles: false),
@@ -399,12 +460,18 @@ class _LineChart extends StatelessWidget {
                   sideTitles: SideTitles(
                     showTitles: true,
                     reservedSize: 58,
-                    getTitlesWidget: (value, meta) => Text(
-                      currency == null
-                          ? value.toStringAsFixed(0)
-                          : '${currency!.symbol}${value.toStringAsFixed(0)}',
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
+                    getTitlesWidget: (value, meta) {
+                      if (value <= minimum - padding * 0.9 ||
+                          value >= maximum + padding * 0.9) {
+                        return const SizedBox.shrink();
+                      }
+                      return Text(
+                        currency == null
+                            ? _formatChartValue(value)
+                            : '${currency!.symbol} ${_formatChartValue(value)}',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      );
+                    },
                   ),
                 ),
                 bottomTitles: AxisTitles(
@@ -417,41 +484,99 @@ class _LineChart extends StatelessWidget {
                       if (dayOffset < 0 || dayOffset > spanDays) {
                         return const SizedBox.shrink();
                       }
-                      final date = firstDate.add(
-                        Duration(days: dayOffset),
-                      );
+                      final date = firstDate.add(Duration(days: dayOffset));
                       return Text(
-                        formatDate(date).substring(5),
+                        _formatShortDate(date),
                         style: Theme.of(context).textTheme.labelSmall,
                       );
                     },
                   ),
                 ),
               ),
-              lineBarsData: [
-                LineChartBarData(
-                  spots: [
-                    for (final point in points)
-                      FlSpot(
-                        point.date.difference(firstDate).inDays.toDouble(),
-                        point.value,
-                      ),
-                  ],
-                  color: color,
-                  barWidth: 3,
-                  isCurved: false,
-                  dotData: FlDotData(show: points.length <= 30),
-                  belowBarData: BarAreaData(
-                    show: true,
-                    color: color.withValues(alpha: 0.12),
-                  ),
-                ),
-              ],
+              lineBarsData: _lineBars(points, firstDate, color),
             ),
           ),
         );
       },
     );
+  }
+
+  List<LineChartBarData> _lineBars(
+    List<_ChartPoint> points,
+    DateTime firstDate,
+    Color fallbackColor,
+  ) {
+    if (points.length == 1) {
+      return [
+        LineChartBarData(
+          spots: [FlSpot(0, points.first.value)],
+          color: _amountColor(points.first.value),
+          barWidth: 3,
+          dotData: const FlDotData(show: true),
+        ),
+      ];
+    }
+    return [
+      for (var index = 0; index < points.length - 1; index++)
+        LineChartBarData(
+          spots: [
+            FlSpot(
+              points[index].date.difference(firstDate).inDays.toDouble(),
+              points[index].value,
+            ),
+            FlSpot(
+              points[index + 1].date.difference(firstDate).inDays.toDouble(),
+              points[index + 1].value,
+            ),
+          ],
+          color: _amountColor(
+            (points[index].value + points[index + 1].value) / 2,
+          ),
+          barWidth: 3,
+          isCurved: false,
+          dotData: const FlDotData(show: false),
+          belowBarData: BarAreaData(
+            show: false,
+            color: fallbackColor.withValues(alpha: 0.12),
+          ),
+        ),
+    ];
+  }
+
+  static Color _amountColor(double value) {
+    if (value > 0) return AppColors.success;
+    if (value < 0) return AppColors.danger;
+    return AppColors.navy;
+  }
+
+  static String _formatChartValue(double value) {
+    final fixed = value.toStringAsFixed(2);
+    final parts = fixed.split('.');
+    final sign = parts.first.startsWith('-') ? '-' : '';
+    final integer = sign.isEmpty ? parts.first : parts.first.substring(1);
+    final grouped = integer.replaceAllMapped(
+      RegExp(r'(?<=\d)(?=(\d{3})+(?!\d))'),
+      (_) => ',',
+    );
+    return '$sign$grouped.${parts[1]}';
+  }
+
+  static String _formatShortDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${date.day.toString().padLeft(2, '0')}-${months[date.month - 1]}';
   }
 
   static int _niceDayInterval(int spanDays, int maxLabels) {

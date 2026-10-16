@@ -241,7 +241,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
             if (_hasFilters)
               TextButton(
                 onPressed: _clearFilters,
-                child: const Text('Clear filters'),
+                child: const Text('Clear Filters'),
               ),
           ],
         ),
@@ -293,7 +293,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
       items: [
         const DropdownMenuItem<TransactionType?>(
           value: null,
-          child: Text('All types'),
+          child: Text('All Types'),
         ),
         for (final type in TransactionType.values)
           DropdownMenuItem<TransactionType?>(
@@ -313,7 +313,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
       items: [
         const DropdownMenuItem<String?>(
           value: null,
-          child: Text('All accounts'),
+          child: Text('All Accounts'),
         ),
         for (final account in widget.data.accounts)
           DropdownMenuItem<String?>(
@@ -333,7 +333,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
       items: [
         const DropdownMenuItem<String?>(
           value: null,
-          child: Text('All categories'),
+          child: Text('All Categories'),
         ),
         for (final category in widget.data.categories)
           DropdownMenuItem<String?>(
@@ -351,7 +351,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
       isExpanded: true,
       decoration: const InputDecoration(labelText: 'Tag'),
       items: [
-        const DropdownMenuItem<String?>(value: null, child: Text('All tags')),
+        const DropdownMenuItem<String?>(value: null, child: Text('All Tags')),
         for (final tag in widget.data.tags)
           DropdownMenuItem<String?>(value: tag.id, child: Text(tag.name)),
       ],
@@ -451,7 +451,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
   }
 
   String get _dateRangeLabel {
-    if (_dateRange == null) return 'All dates';
+    if (_dateRange == null) return 'All Dates';
     return '${formatDate(_dateRange!.start)} – ${formatDate(_dateRange!.end)}';
   }
 }
@@ -528,7 +528,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
                 onPressed: _apply,
                 child: const Text('Apply filters'),
               ),
-              TextButton(onPressed: _clear, child: const Text('Clear filters')),
+              TextButton(onPressed: _clear, child: const Text('Clear Filters')),
             ],
           ),
         ),
@@ -543,7 +543,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
       items: [
         const DropdownMenuItem<TransactionType?>(
           value: null,
-          child: Text('All types'),
+          child: Text('All Types'),
         ),
         for (final type in TransactionType.values)
           DropdownMenuItem<TransactionType?>(
@@ -562,7 +562,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
       items: [
         const DropdownMenuItem<String?>(
           value: null,
-          child: Text('All accounts'),
+          child: Text('All Accounts'),
         ),
         for (final account in widget.data.accounts)
           DropdownMenuItem<String?>(
@@ -581,7 +581,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
       items: [
         const DropdownMenuItem<String?>(
           value: null,
-          child: Text('All categories'),
+          child: Text('All Categories'),
         ),
         for (final category in widget.data.categories)
           DropdownMenuItem<String?>(
@@ -598,7 +598,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
       initialValue: _tagId,
       decoration: const InputDecoration(labelText: 'Tag'),
       items: [
-        const DropdownMenuItem<String?>(value: null, child: Text('All tags')),
+        const DropdownMenuItem<String?>(value: null, child: Text('All Tags')),
         for (final tag in widget.data.tags)
           DropdownMenuItem<String?>(value: tag.id, child: Text(tag.name)),
       ],
@@ -640,7 +640,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
   }
 
   String get _dateRangeLabel {
-    if (_dateRange == null) return 'All dates';
+    if (_dateRange == null) return 'All Dates';
     return '${formatDate(_dateRange!.start)} – ${formatDate(_dateRange!.end)}';
   }
 }
@@ -930,11 +930,11 @@ class EmptyTransactionsState extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
-            'No transactions match these filters.',
+            'No Transactions Match These Filters.',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: AppSpacing.xs),
-          const Text('Try clearing one or more filters.'),
+          const Text('Try Clearing One or More Filters.'),
         ],
       ),
     );
