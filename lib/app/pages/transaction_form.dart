@@ -68,7 +68,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   bool get _categoryRequired =>
       transactionTypeRules[widget.type]!.categoryRequired;
 
-  List<Category> get _availableCategories => widget.data.categories
+  List<Category> get _availableCategories => widget.data.entryFormCategories
       .where(
         (category) => category.allowedTransactionTypes.contains(widget.type),
       )
@@ -176,7 +176,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       decoration: InputDecoration(labelText: label),
       validator: (value) => value == null ? 'Select an account.' : null,
       items: [
-        for (final account in widget.data.accounts)
+        for (final account in widget.data.entryFormAccounts)
           DropdownMenuItem<String>(
             value: account.id,
             child: Text('${account.name} (${account.currencyId})'),
@@ -267,7 +267,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       decoration: const InputDecoration(labelText: 'Tag'),
       validator: (value) => value == null ? 'Select a tag.' : null,
       items: [
-        for (final tag in widget.data.tags)
+        for (final tag in widget.data.entryFormTags)
           DropdownMenuItem<String?>(value: tag.id, child: Text(tag.name)),
       ],
       onChanged: (value) => setState(() => _tagId = value),

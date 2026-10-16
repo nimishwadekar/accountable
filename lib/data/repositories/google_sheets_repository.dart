@@ -5,6 +5,7 @@ import '../csv/csv.dart';
 import '../models/models.dart';
 import '../sources/google_sheets_api.dart';
 import 'data_load_exception.dart';
+import 'display_preference_manager.dart';
 import 'data_validation_failure.dart';
 import 'table_dependencies.dart';
 import 'repositories.dart';
@@ -17,9 +18,18 @@ abstract final class GoogleSheetsRanges {
   static const dailyExchangeRates = 'DailyExchangeRates!A:F';
   static const dailyNetWorth = 'DailyNetWorth!A:D';
   static const dailyManualValuations = 'DailyManualValuations!A:D';
+  static const displayPreferences = 'DisplayPreferences!A:E';
   static const tags = 'Tags!A:B';
   static const transactions = 'Transactions!A:K';
 }
+
+const _displayPreferenceHeaders = <String>[
+  'entity_type',
+  'entity_id',
+  'display_order',
+  'show_in_app',
+  'show_in_entry_forms',
+];
 
 class GoogleSheetsAppDataRepository implements AppDataRepository {
   GoogleSheetsAppDataRepository(this.api);
@@ -40,7 +50,6 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
   }
 
   @override
-  @override
   Future<AppDataSnapshot> addManualValuation(
     DailyManualValuation valuation,
   ) async {
@@ -57,6 +66,28 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       _dateString(valuation.date),
       valuation.accountId,
       valuation.value.toMajorUnitsString(currency),
+    ]);
+    return reload();
+  }
+
+  @override
+  Future<AppDataSnapshot> saveDisplayPreferences(
+    List<DisplayPreference> preferences,
+  ) async {
+    final current = await load();
+    final normalized = synchronizeDisplayPreferences(
+      existing: preferences,
+      accountIds: current.accounts.map((item) => item.id).toSet(),
+      categoryIds: current.categories.map((item) => item.id).toSet(),
+      tagIds: current.tags.map((item) => item.id).toSet(),
+    );
+    if (normalized.missing.isNotEmpty) {
+      throw StateError('Display preferences must include every entity.');
+    }
+    await api.replaceRange(GoogleSheetsRanges.displayPreferences, [
+      _displayPreferenceHeaders,
+      for (final preference in normalized.preferences)
+        _displayPreferenceRow(preference),
     ]);
     return reload();
   }
@@ -86,7 +117,9 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       final tableHasErrors = <String, bool>{};
       bool dependenciesAreValid(String table) {
         final dependencies = tableDependencies[table] ?? const <String>[];
-        return dependencies.every((dependency) => tableHasErrors[dependency] == false);
+        return dependencies.every(
+          (dependency) => tableHasErrors[dependency] == false,
+        );
       }
 
       void recordIssues(String table, List<DataValidationIssue> tableIssues) {
@@ -103,6 +136,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       List<DailyAccountBalance> dailyAccountBalances = const [];
       List<DailyNetWorth> dailyNetWorth = const [];
       List<DailyManualValuation> dailyManualValuations = const [];
+      List<DisplayPreference> displayPreferences = const [];
 
       try {
         final result = ModelParsers.parseCurrenciesWithIssues(
@@ -148,6 +182,35 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       } catch (error) {
         recordIssues('Tags', [issueFromError('Tags', error)]);
       }
+      if (dependenciesAreValid('DisplayPreferences')) {
+        try {
+          final result = ModelParsers.parseDisplayPreferencesWithIssues(
+            _encode(tables[GoogleSheetsRanges.displayPreferences]!),
+          );
+          if (result.issues.isNotEmpty) {
+            recordIssues('DisplayPreferences', result.issues);
+          } else {
+            final synchronized = synchronizeDisplayPreferences(
+              existing: result.values,
+              accountIds: accountById.keys.toSet(),
+              categoryIds: categories.map((item) => item.id).toSet(),
+              tagIds: tags.map((item) => item.id).toSet(),
+            );
+            displayPreferences = synchronized.preferences;
+            for (final preference in synchronized.missing) {
+              await api.appendRow(
+                GoogleSheetsRanges.displayPreferences,
+                _displayPreferenceRow(preference),
+              );
+            }
+            recordIssues('DisplayPreferences', const []);
+          }
+        } catch (error) {
+          recordIssues('DisplayPreferences', [
+            issueFromError('DisplayPreferences', error),
+          ]);
+        }
+      }
       if (dependenciesAreValid('Transactions')) {
         try {
           final result = ModelParsers.parseTransactionsWithIssues(
@@ -168,7 +231,9 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
         exchangeRates = result.values;
         recordIssues('DailyExchangeRates', result.issues);
       } catch (error) {
-        recordIssues('DailyExchangeRates', [issueFromError('DailyExchangeRates', error)]);
+        recordIssues('DailyExchangeRates', [
+          issueFromError('DailyExchangeRates', error),
+        ]);
       }
       if (dependenciesAreValid('DailyAccountBalances')) {
         try {
@@ -194,13 +259,14 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
           dailyNetWorth = result.values;
           recordIssues('DailyNetWorth', result.issues);
         } catch (error) {
-          recordIssues('DailyNetWorth', [issueFromError('DailyNetWorth', error)]);
+          recordIssues('DailyNetWorth', [
+            issueFromError('DailyNetWorth', error),
+          ]);
         }
       }
       if (dependenciesAreValid('DailyManualValuations')) {
         try {
-          final result =
-              ModelParsers.parseDailyManualValuationsWithIssues(
+          final result = ModelParsers.parseDailyManualValuationsWithIssues(
             _encode(tables[GoogleSheetsRanges.dailyManualValuations]!),
             accounts: accountById,
             currencies: currencyById,
@@ -225,6 +291,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
         dailyAccountBalances: dailyAccountBalances,
         dailyNetWorth: dailyNetWorth,
         dailyManualValuations: dailyManualValuations,
+        displayPreferences: displayPreferences,
       );
     } on DataValidationFailure {
       rethrow;
@@ -246,6 +313,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       GoogleSheetsRanges.dailyExchangeRates,
       GoogleSheetsRanges.dailyNetWorth,
       GoogleSheetsRanges.dailyManualValuations,
+      GoogleSheetsRanges.displayPreferences,
       GoogleSheetsRanges.tags,
       GoogleSheetsRanges.transactions,
     ];
@@ -271,6 +339,14 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
 
   static String _encode(List<List<String>> rows) => csv.encode(rows);
 
+  static List<String> _displayPreferenceRow(DisplayPreference preference) => [
+    preference.entityType,
+    preference.entityId,
+    preference.displayOrder.toString(),
+    preference.showInApp.toString().toUpperCase(),
+    preference.showInEntryForms.toString().toUpperCase(),
+  ];
+
   static String _dateString(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-'
       '${value.month.toString().padLeft(2, '0')}-'
@@ -285,6 +361,7 @@ const _columnCount = <String, int>{
   GoogleSheetsRanges.dailyExchangeRates: 6,
   GoogleSheetsRanges.dailyNetWorth: 4,
   GoogleSheetsRanges.dailyManualValuations: 4,
+  GoogleSheetsRanges.displayPreferences: 5,
   GoogleSheetsRanges.tags: 2,
   GoogleSheetsRanges.transactions: 11,
 };

@@ -315,7 +315,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
           value: null,
           child: Text('All Accounts'),
         ),
-        for (final account in widget.data.accounts)
+        for (final account in widget.data.visibleAccounts)
           DropdownMenuItem<String?>(
             value: account.id,
             child: Text(account.name),
@@ -335,7 +335,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
           value: null,
           child: Text('All Categories'),
         ),
-        for (final category in widget.data.categories)
+        for (final category in widget.data.visibleCategories)
           DropdownMenuItem<String?>(
             value: category.id,
             child: Text(category.name),
@@ -352,7 +352,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
       decoration: const InputDecoration(labelText: 'Tag'),
       items: [
         const DropdownMenuItem<String?>(value: null, child: Text('All Tags')),
-        for (final tag in widget.data.tags)
+        for (final tag in widget.data.visibleTags)
           DropdownMenuItem<String?>(value: tag.id, child: Text(tag.name)),
       ],
       onChanged: (value) => setState(() => _tagId = value),
@@ -564,7 +564,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
           value: null,
           child: Text('All Accounts'),
         ),
-        for (final account in widget.data.accounts)
+        for (final account in widget.data.visibleAccounts)
           DropdownMenuItem<String?>(
             value: account.id,
             child: Text(account.name),
@@ -583,7 +583,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
           value: null,
           child: Text('All Categories'),
         ),
-        for (final category in widget.data.categories)
+        for (final category in widget.data.visibleCategories)
           DropdownMenuItem<String?>(
             value: category.id,
             child: Text(category.name),
@@ -599,7 +599,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
       decoration: const InputDecoration(labelText: 'Tag'),
       items: [
         const DropdownMenuItem<String?>(value: null, child: Text('All Tags')),
-        for (final tag in widget.data.tags)
+        for (final tag in widget.data.visibleTags)
           DropdownMenuItem<String?>(value: tag.id, child: Text(tag.name)),
       ],
       onChanged: (value) => setState(() => _tagId = value),

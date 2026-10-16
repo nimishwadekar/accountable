@@ -9,6 +9,7 @@ export 'repositories/data_validation_failure.dart';
 export 'repositories/table_dependencies.dart';
 export 'repositories/google_sheets_repository.dart';
 export 'repositories/daily_maintenance_service.dart';
+export 'repositories/display_preference_manager.dart';
 export 'repositories/repositories.dart';
 export 'sources/asset_reader.dart';
 export 'sources/bearer_client.dart';

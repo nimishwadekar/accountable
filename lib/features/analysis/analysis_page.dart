@@ -37,9 +37,9 @@ class _AnalysisPageState extends State<AnalysisPage> {
     _netWorthRange = _calculator.allHistoryRange;
     _accountRangePreset = AnalysisRangePreset.allHistory;
     _accountRange = _calculator.allHistoryRange;
-    _selectedAccountId = widget.data.accounts.isEmpty
+    _selectedAccountId = widget.data.visibleAccounts.isEmpty
         ? null
-        : widget.data.accounts.first.id;
+        : widget.data.visibleAccounts.first.id;
   }
 
   @override
@@ -181,7 +181,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Account'),
                 items: [
-                  for (final item in widget.data.accounts)
+                  for (final item in widget.data.visibleAccounts)
                     DropdownMenuItem<String>(
                       value: item.id,
                       child: Text(item.name),

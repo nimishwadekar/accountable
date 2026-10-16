@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../sources/asset_reader.dart';
 import '../sources/local_dataset_store.dart';
 import 'data_load_exception.dart';
+import 'display_preference_manager.dart';
 import 'data_validation_failure.dart';
 import 'repositories.dart';
 
@@ -17,6 +18,7 @@ abstract final class DataAssetPaths {
   static const dailyExchangeRates = 'test_sheets/DailyExchangeRates.csv';
   static const dailyNetWorth = 'test_sheets/DailyNetWorth.csv';
   static const dailyManualValuations = 'test_sheets/DailyManualValuations.csv';
+  static const displayPreferences = 'test_sheets/DisplayPreferences.csv';
   static const tags = 'test_sheets/Tags.csv';
   static const transactions = 'test_sheets/Transactions.csv';
 }
@@ -237,6 +239,30 @@ class AssetAppDataRepository implements AppDataRepository {
   }
 
   @override
+  Future<AppDataSnapshot> saveDisplayPreferences(
+    List<DisplayPreference> preferences,
+  ) async {
+    final current = await load();
+    final normalized = synchronizeDisplayPreferences(
+      existing: preferences,
+      accountIds: current.accounts.map((item) => item.id).toSet(),
+      categoryIds: current.categories.map((item) => item.id).toSet(),
+      tagIds: current.tags.map((item) => item.id).toSet(),
+    );
+    if (normalized.missing.isNotEmpty) {
+      throw StateError('Display preferences must include every entity.');
+    }
+    if (store == null) throw StateError('This data source is read-only.');
+    final tables = await _readDataset();
+    tables[DataAssetPaths.displayPreferences] = _displayPreferencesCsv(
+      normalized.preferences,
+    );
+    await store!.write(tables);
+    _cachedSnapshot = null;
+    return reload();
+  }
+
+  @override
   Future<AppDataSnapshot> addTransaction(Transaction transaction) async {
     final current = await load();
     final tables = await _readDataset();
@@ -280,6 +306,21 @@ class AssetAppDataRepository implements AppDataRepository {
         tables[DataAssetPaths.categories]!,
       );
       final tagList = ModelParsers.parseTags(tables[DataAssetPaths.tags]!);
+      final preferenceList = ModelParsers.parseDisplayPreferences(
+        tables[DataAssetPaths.displayPreferences]!,
+      );
+      final synchronizedPreferences = synchronizeDisplayPreferences(
+        existing: preferenceList,
+        accountIds: accountById.keys.toSet(),
+        categoryIds: categoryList.map((item) => item.id).toSet(),
+        tagIds: tagList.map((item) => item.id).toSet(),
+      );
+      if (synchronizedPreferences.missing.isNotEmpty && store != null) {
+        tables[DataAssetPaths.displayPreferences] = _displayPreferencesCsv(
+          synchronizedPreferences.preferences,
+        );
+        await store!.write(tables);
+      }
       final transactionList = ModelParsers.parseTransactions(
         tables[DataAssetPaths.transactions]!,
         accounts: accountById,
@@ -313,6 +354,7 @@ class AssetAppDataRepository implements AppDataRepository {
         dailyAccountBalances: dailyAccountBalanceList,
         dailyNetWorth: dailyNetWorthList,
         dailyManualValuations: dailyManualValuationList,
+        displayPreferences: synchronizedPreferences.preferences,
       );
     } on DataValidationFailure {
       rethrow;
@@ -369,6 +411,20 @@ class AssetAppDataRepository implements AppDataRepository {
       }
     }
     return true;
+  }
+
+  static String _displayPreferencesCsv(List<DisplayPreference> preferences) {
+    return csv.encode([
+      _runtimeHeaders[DataAssetPaths.displayPreferences]!,
+      for (final preference in preferences)
+        [
+          preference.entityType,
+          preference.entityId,
+          preference.displayOrder.toString(),
+          preference.showInApp.toString().toUpperCase(),
+          preference.showInEntryForms.toString().toUpperCase(),
+        ],
+    ]);
   }
 
   static String _appendCsvRow(String source, Map<String, String> row) {
@@ -436,6 +492,13 @@ const _runtimeHeaders = <String, List<String>>{
     'account_id',
     'value',
   ],
+  DataAssetPaths.displayPreferences: [
+    'entity_type',
+    'entity_id',
+    'display_order',
+    'show_in_app',
+    'show_in_entry_forms',
+  ],
   DataAssetPaths.tags: ['tag_id', 'tag_name'],
   DataAssetPaths.transactions: [
     'transaction_id',
@@ -460,6 +523,7 @@ const _runtimeAssetPaths = <String>[
   DataAssetPaths.dailyExchangeRates,
   DataAssetPaths.dailyNetWorth,
   DataAssetPaths.dailyManualValuations,
+  DataAssetPaths.displayPreferences,
   DataAssetPaths.tags,
   DataAssetPaths.transactions,
 ];

@@ -198,6 +198,8 @@ class _AppShellState extends State<AppShell> {
         onValuationAdded: _handleValuationAdded,
       ),
       AppSection.settings => SettingsPage(
+        data: data,
+        onSaveDisplayPreferences: _saveDisplayPreferences,
         onRebuildDailyTables: widget.onRebuildDailyTables,
         onReloadData: widget.onReloadData ?? _reloadData,
         textScale: widget.textScale,
@@ -228,6 +230,16 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _handleValuationAdded(DailyManualValuation valuation) async {
     final future = widget.dataRepository.addManualValuation(valuation);
+    setState(() {
+      _snapshotFuture = future;
+    });
+    await future;
+  }
+
+  Future<void> _saveDisplayPreferences(
+    List<DisplayPreference> preferences,
+  ) async {
+    final future = widget.dataRepository.saveDisplayPreferences(preferences);
     setState(() {
       _snapshotFuture = future;
     });

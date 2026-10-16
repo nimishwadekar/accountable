@@ -54,11 +54,11 @@ class OverviewPage extends StatelessWidget {
           Card(
             child: Column(
               children: [
-                for (final account in data.accounts.where(
+                for (final account in data.visibleAccounts.where(
                   (account) => account.isLedgerAccount,
                 )) ...[
                   if (account !=
-                      data.accounts.firstWhere((item) => item.isLedgerAccount))
+                      data.visibleAccounts.firstWhere((item) => item.isLedgerAccount))
                     const Divider(height: 1),
                   _AccountRow(
                     account: account,
@@ -72,7 +72,7 @@ class OverviewPage extends StatelessWidget {
           const SizedBox(height: AppSpacing.xl),
           Builder(
             builder: (context) {
-              final valuationAccounts = data.accounts
+              final valuationAccounts = data.visibleAccounts
                   .where((account) => account.isValuationAccount)
                   .toList();
               final latestDate = data.dailyManualValuations.isEmpty
@@ -157,7 +157,7 @@ class AccountsPage extends StatelessWidget {
       child: Card(
         child: Column(
           children: [
-            for (final account in data.accounts.where(
+            for (final account in data.visibleAccounts.where(
               (account) => account.isLedgerAccount,
             )) ...[
               _AccountRow(

@@ -75,6 +75,14 @@ class ModelParsers {
     parseRow: (row) => parseTags(row).single,
   );
 
+  static ModelParseResult<DisplayPreference> parseDisplayPreferencesWithIssues(
+    String source,
+  ) => _parseRows(
+    source,
+    tableName: 'DisplayPreferences',
+    parseRow: (row) => parseDisplayPreferences(row).single,
+  );
+
   static ModelParseResult<Transaction> parseTransactionsWithIssues(
     String source, {
     required Map<String, Account> accounts,
@@ -226,6 +234,36 @@ class ModelParsers {
       (tag) => tag.id,
       table.tableName,
     );
+  }
+
+  static List<DisplayPreference> parseDisplayPreferences(String source) {
+    final table = CsvTable.parse(source, tableName: 'DisplayPreferences');
+    return table.rows.map((row) {
+      final showInApp = _parseBoolean(
+        requiredValue(row, 'show_in_app'),
+        fieldName: 'show_in_app',
+      );
+      final showInEntryForms = _parseBoolean(
+        requiredValue(row, 'show_in_entry_forms'),
+        fieldName: 'show_in_entry_forms',
+      );
+      if (!showInApp && showInEntryForms) {
+        throw FormatException(
+          'show_in_entry_forms cannot be TRUE when show_in_app is FALSE.',
+        );
+      }
+      final entityType = requiredValue(row, 'entity_type');
+      if (!const {'account', 'category', 'tag'}.contains(entityType)) {
+        throw FormatException('Unsupported entity_type: $entityType.');
+      }
+      return DisplayPreference(
+        entityType: entityType,
+        entityId: requiredValue(row, 'entity_id'),
+        displayOrder: int.parse(requiredValue(row, 'display_order')),
+        showInApp: showInApp,
+        showInEntryForms: showInEntryForms,
+      );
+    }).toList();
   }
 
   static List<Transaction> parseTransactions(

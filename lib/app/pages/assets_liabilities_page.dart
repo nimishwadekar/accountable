@@ -26,7 +26,7 @@ List<Account> eligibleManualValuationAccounts(
   AppDataSnapshot data,
   DateTime date,
 ) {
-  return data.accounts.where((account) {
+  return data.visibleAccounts.where((account) {
     if (!account.isValuationAccount) return false;
     if (date.isBefore(account.openingDate)) return false;
     if (account.closingDate != null && date.isAfter(account.closingDate!)) {
@@ -83,7 +83,7 @@ class AssetsLiabilitiesPage extends StatefulWidget {
 class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
   bool _submitting = false;
 
-  List<Account> get _valuationAccounts => widget.data.accounts
+  List<Account> get _valuationAccounts => widget.data.visibleAccounts
       .where((account) => account.isValuationAccount)
       .toList();
 
@@ -209,7 +209,7 @@ class _ValuationFormState extends State<_ValuationForm> {
   DateTime? _date;
   String? _error;
 
-  List<Account> get _accounts => widget.data.accounts
+  List<Account> get _accounts => widget.data.visibleAccounts
       .where((account) => account.isValuationAccount)
       .toList();
 

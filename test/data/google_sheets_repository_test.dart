@@ -20,6 +20,8 @@ void main() {
       GoogleSheetsRanges.dailyNetWorth: 'test_sheets/DailyNetWorth.csv',
       GoogleSheetsRanges.dailyManualValuations:
           'test_sheets/DailyManualValuations.csv',
+      GoogleSheetsRanges.displayPreferences:
+          'test_sheets/DisplayPreferences.csv',
       GoogleSheetsRanges.tags: 'test_sheets/Tags.csv',
       GoogleSheetsRanges.transactions: 'test_sheets/Transactions.csv',
     }.entries) {
@@ -29,13 +31,16 @@ void main() {
       ];
     }
 
-    final repository = GoogleSheetsAppDataRepository(_FakeSheetsClient(tables));
+    final client = _FakeSheetsClient(tables);
+    final repository = GoogleSheetsAppDataRepository(client);
     final snapshot = await repository.load();
 
     expect(snapshot.accounts, hasLength(5));
     expect(snapshot.transactions, hasLength(8));
     expect(snapshot.dailyNetWorth, hasLength(3));
     expect(snapshot.dailyManualValuations, hasLength(2));
+    expect(snapshot.displayPreferences, hasLength(5 + 14 + 1));
+    expect(client.appendedRows, isNotEmpty);
   });
 
   test('appends a canonical transaction row', () async {
