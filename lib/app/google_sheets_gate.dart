@@ -19,15 +19,25 @@ class GoogleSheetsGate extends StatefulWidget {
   State<GoogleSheetsGate> createState() => _GoogleSheetsGateState();
 }
 
+enum _GateState {
+  configurationRequired,
+  restoringSignIn,
+  signedOut,
+  signingIn,
+  authorizingSheets,
+  awaitingSheetsConsent,
+  loadingData,
+  error,
+  ready,
+}
+
 class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   late final GoogleAuthService _authService;
   StreamSubscription<GoogleSignInAuthenticationEvent>? _eventsSubscription;
+  Completer<GoogleSignInAccount?>? _silentSignInCompleter;
   String? _error;
   DataValidationFailure? _dataFailure;
-  bool _loading = true;
-  bool _authorizing = false;
-  bool _needsConsent = false;
-  bool _loadingData = false;
+  _GateState _state = _GateState.restoringSignIn;
   GoogleSignInAccount? _account;
   AppDataRepository? _repository;
   Future<void> Function()? _rebuildDailyTables;
@@ -39,13 +49,31 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     _authService = GoogleAuthService(config: widget.config);
     _eventsSubscription = _authService.authenticationEvents.listen(
       (event) {
-        if (event is GoogleSignInAuthenticationEventSignIn) {
-          _finishSignIn(event.user);
+        if (event is! GoogleSignInAuthenticationEventSignIn) return;
+        final completer = _silentSignInCompleter;
+        if (completer != null && !completer.isCompleted) {
+          completer.complete(event.user);
+          return;
         }
+        unawaited(_finishSignIn(event.user));
       },
       onError: (Object error) {
+        final completer = _silentSignInCompleter;
+        if (completer != null && !completer.isCompleted) {
+          if (_isBenignAuthenticationError(error)) {
+            completer.complete(null);
+          } else {
+            completer.completeError(error);
+          }
+          return;
+        }
         if (_isBenignAuthenticationError(error)) return;
-        if (mounted) setState(() => _error = error.toString());
+        if (mounted) {
+          setState(() {
+            _state = _GateState.error;
+            _error = error.toString();
+          });
+        }
       },
     );
     _initialize();
@@ -117,22 +145,8 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
                     const SizedBox(height: AppSpacing.lg),
                     if (!configured)
                       const SizedBox.shrink()
-                    else if (_loading || _authorizing || _loadingData)
-                      Column(
-                        children: [
-                          const CircularProgressIndicator(),
-                          const SizedBox(height: AppSpacing.md),
-                          Text(_message, textAlign: TextAlign.center),
-                        ],
-                      )
-                    else if (_needsConsent)
-                      FilledButton.icon(
-                        onPressed: _grantSheetsAccess,
-                        icon: const Icon(Icons.lock_open_outlined),
-                        label: const Text('Grant Sheets access'),
-                      )
                     else
-                      buildGoogleSignInButton(onPressed: _signIn),
+                      _buildAction(context),
                     if (_error != null) ...[
                       const SizedBox(height: AppSpacing.sm),
                       TextButton(onPressed: _retry, child: const Text('Retry')),
@@ -154,51 +168,95 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     );
   }
 
+  Widget _buildAction(BuildContext context) {
+    return switch (_state) {
+      _GateState.restoringSignIn ||
+      _GateState.signingIn ||
+      _GateState.authorizingSheets ||
+      _GateState.loadingData => Column(
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: AppSpacing.md),
+          Text(_message, textAlign: TextAlign.center),
+        ],
+      ),
+      _GateState.awaitingSheetsConsent => FilledButton.icon(
+        onPressed: _grantSheetsAccess,
+        icon: const Icon(Icons.lock_open_outlined),
+        label: const Text('Grant Sheets access'),
+      ),
+      _GateState.configurationRequired ||
+      _GateState.signedOut ||
+      _GateState.error ||
+      _GateState.ready => buildGoogleSignInButton(onPressed: _signIn),
+    };
+  }
+
   String get _message {
     if (!widget.config.hasConfiguredGoogleSheets) {
       return 'Add the Google OAuth client ID, spreadsheet ID, and allowed email in assets/config.json.';
     }
-    if (_loading) return 'Restoring your Google session…';
-    if (_authorizing) return 'Signing in to Google…';
-    if (_loadingData) return 'Loading your financial data…';
-    if (_needsConsent) {
-      return 'Authorize Sheets access for your account to continue.';
-    }
-    return 'Sign in with your authorized Google account to continue.';
+    return switch (_state) {
+      _GateState.restoringSignIn => 'Restoring your Google session…',
+      _GateState.signingIn => 'Signing in to Google…',
+      _GateState.authorizingSheets => 'Checking Sheets access…',
+      _GateState.loadingData => 'Loading your financial data…',
+      _GateState.awaitingSheetsConsent =>
+        'Authorize Sheets access for your account to continue.',
+      _GateState.signedOut || _GateState.error || _GateState.ready =>
+        'Sign in with your authorized Google account to continue.',
+      _GateState.configurationRequired => 'Add the Google OAuth client ID, spreadsheet ID, and allowed email in assets/config.json.',
+    };
   }
 
   Future<void> _initialize() async {
     if (!widget.config.hasConfiguredGoogleSheets) {
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _state = _GateState.configurationRequired);
+      }
       return;
+    }
+    final completer = Completer<GoogleSignInAccount?>();
+    _silentSignInCompleter = completer;
+    if (mounted) {
+      setState(() {
+        _state = _GateState.restoringSignIn;
+        _error = null;
+      });
     }
     try {
       final attempt = await _authService.attemptSilentAuthentication();
-      GoogleSignInAccount? account;
-      if (attempt != null) {
-        account = await attempt.timeout(
-          const Duration(seconds: 5),
-          onTimeout: () => null,
-        );
-      }
+      final account = attempt == null
+          ? await completer.future.timeout(
+              const Duration(seconds: 5),
+              onTimeout: () => null,
+            )
+          : await attempt.timeout(
+              const Duration(seconds: 5),
+              onTimeout: () => null,
+            );
       if (!mounted || _account != null) return;
-      setState(() {
-        _loading = false;
-        _error = null;
-      });
-      if (account != null) await _finishSignIn(account);
+      if (account == null) {
+        setState(() => _state = _GateState.signedOut);
+      } else {
+        await _finishSignIn(account);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
+        _state = _GateState.error;
         _error = _isBenignAuthenticationError(error) ? null : error.toString();
       });
+    } finally {
+      if (identical(_silentSignInCompleter, completer)) {
+        _silentSignInCompleter = null;
+      }
     }
   }
 
   Future<void> _signIn() async {
     setState(() {
-      _authorizing = true;
+      _state = _GateState.signingIn;
       _error = null;
     });
     try {
@@ -207,7 +265,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _authorizing = false;
+        _state = _GateState.error;
         _error = _isBenignAuthenticationError(error) ? null : error.toString();
       });
     }
@@ -217,7 +275,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     final account = _account;
     if (account == null) return;
     setState(() {
-      _authorizing = true;
+      _state = _GateState.authorizingSheets;
       _error = null;
     });
     await _finishSignIn(account, interactiveConsent: true);
@@ -231,22 +289,18 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     _connectionInProgress = true;
     setState(() {
       _account = account;
-      _authorizing = true;
-      _needsConsent = false;
+      _state = _GateState.authorizingSheets;
       _error = null;
     });
     try {
       _authService.validateAllowedAccount(account);
-      if (mounted) {
-        setState(() {
-          _authorizing = false;
-          _loadingData = true;
-        });
-      }
       if (interactiveConsent) {
         await _authService.authorizeSheetsInteractively(account);
       } else {
         await _authService.authorizeSheets(account);
+      }
+      if (mounted) {
+        setState(() => _state = _GateState.loadingData);
       }
       final api = GoogleSheetsApi(
         spreadsheetId: widget.config.spreadsheetId,
@@ -271,32 +325,25 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       if (!mounted) return;
       setState(() {
         _repository = repository;
-        _authorizing = false;
-        _loadingData = false;
+        _state = _GateState.ready;
         _connectionInProgress = false;
       });
-    } on GoogleAuthException {
+    } on SheetsAuthorizationRequiredException {
+      _connectionInProgress = false;
       if (!mounted) return;
-      setState(() {
-        _authorizing = false;
-        _loadingData = false;
-        _connectionInProgress = false;
-        _needsConsent = true;
-      });
+      setState(() => _state = _GateState.awaitingSheetsConsent);
     } on DataValidationFailure catch (failure) {
       _connectionInProgress = false;
       if (!mounted) return;
       setState(() {
-        _authorizing = false;
-        _loadingData = false;
         _dataFailure = failure;
+        _state = _GateState.error;
       });
     } catch (error) {
+      _connectionInProgress = false;
       if (!mounted) return;
       setState(() {
-        _authorizing = false;
-        _loadingData = false;
-        _connectionInProgress = false;
+        _state = _GateState.error;
         _error = error.toString();
       });
     }
@@ -308,10 +355,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     setState(() {
       _account = null;
       _repository = null;
-      _needsConsent = false;
-      _loading = false;
-      _authorizing = false;
-      _loadingData = false;
+      _state = _GateState.signedOut;
       _error = null;
     });
   }
@@ -327,13 +371,15 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     setState(() {
       _error = null;
       _dataFailure = null;
-      _loading = _account == null;
+      _state = _account == null
+          ? _GateState.restoringSignIn
+          : _GateState.authorizingSheets;
     });
     final account = _account;
     if (account != null) {
-      _finishSignIn(account);
+      unawaited(_finishSignIn(account));
     } else {
-      _initialize();
+      unawaited(_initialize());
     }
   }
 }
