@@ -1,32 +1,32 @@
-# accountable
+# Accountable
 
-A new Flutter project.
+Accountable is a mobile-first Flutter web app backed by Google Sheets.
 
-## Getting Started
+## Configuration
 
-This project is a starting point for a Flutter application.
+The app reads runtime settings from the committed [`assets/config.json`](./assets/config.json) asset. Set `dataSource` to `"csv"` for local fixture mode or `"sheets"` for Google Sheets mode, then restart the app.
 
-The app reads its runtime settings from the committed [`assets/config.json`](./assets/config.json) asset. Update that file to switch between local CSV data and Google Sheets, then restart the app.
+`oauthOrigin` is the production GitHub Pages origin. `additionalOauthOrigins` keeps the local development origin available. Add both origins as authorized JavaScript origins for the Google OAuth client.
 
-```json
-{
-  "dataSource": "sheets",
-  "googleClientId": "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com",
-  "spreadsheetId": "YOUR_SPREADSHEET_ID",
-  "allowedEmail": "YOUR_EMAIL@example.com",
-  "oauthOrigin": "http://localhost:9000",
-  "sheetsScope": "https://www.googleapis.com/auth/spreadsheets"
-}
+The web client ID and spreadsheet ID are not secrets; OAuth access tokens are never stored in this file.
+
+## Local development
+
+```bash
+/Users/nwadekar/flutter/bin/flutter pub get
+/Users/nwadekar/flutter/bin/flutter run -d chrome --web-port 9000
 ```
 
-Set `dataSource` to `"csv"` for local fixture mode. The web client ID and spreadsheet ID are not secrets; OAuth access tokens are never stored in this file.
+## GitHub Pages deployment
 
-A few resources to get you started if this is your first Flutter project:
+A push to `main` runs [`.github/workflows/deploy-pages.yml`](./.github/workflows/deploy-pages.yml) and publishes the app at:
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+`https://nimishwadekar.github.io/accountable/`
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Before the first deployment:
+
+1. In the repository’s **Settings → Pages**, select **GitHub Actions** as the source.
+2. In Google Cloud OAuth client settings, add `https://nimishwadekar.github.io` and `http://localhost:9000` as authorized JavaScript origins.
+3. Confirm the Google OAuth client allows the deployed site to use the configured Sheets scope.
+
+The workflow builds with `/accountable/` as the Flutter web base path. The `oauthOrigin` value must contain only the origin, not `/accountable/`.

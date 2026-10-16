@@ -9,12 +9,16 @@ void main() {
       'googleClientId': 'client-id',
       'spreadsheetId': 'sheet-id',
       'allowedEmail': 'owner@example.com',
-      'oauthOrigin': 'http://localhost:9000',
+      'oauthOrigin': 'https://nimishwadekar.github.io',
+      'additionalOauthOrigins': ['http://localhost:9000'],
       'sheetsScope': 'https://www.googleapis.com/auth/spreadsheets',
     });
 
     expect(config.isCsvDataSource, isTrue);
     expect(config.spreadsheetId, 'sheet-id');
-    expect(config.oauthOrigin, 'http://localhost:9000');
+    expect(config.oauthOrigins, [
+      'https://nimishwadekar.github.io',
+      'http://localhost:9000',
+    ]);
   });
 }

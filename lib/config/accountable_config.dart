@@ -26,6 +26,7 @@ final class AccountableConfig {
     required this.allowedEmail,
     required this.oauthOrigin,
     required this.sheetsScope,
+    this.additionalOauthOrigins = const [],
   });
 
   final AccountableDataSource dataSource;
@@ -33,7 +34,10 @@ final class AccountableConfig {
   final String spreadsheetId;
   final String allowedEmail;
   final String oauthOrigin;
+  final List<String> additionalOauthOrigins;
   final String sheetsScope;
+
+  List<String> get oauthOrigins => [oauthOrigin, ...additionalOauthOrigins];
 
   bool get isCsvDataSource => dataSource == AccountableDataSource.csv;
 
@@ -67,6 +71,10 @@ final class AccountableConfig {
       spreadsheetId: _requireString(json, 'spreadsheetId'),
       allowedEmail: _requireString(json, 'allowedEmail'),
       oauthOrigin: _requireString(json, 'oauthOrigin'),
+      additionalOauthOrigins: _optionalStringList(
+        json,
+        'additionalOauthOrigins',
+      ),
       sheetsScope: _requireString(json, 'sheetsScope'),
     );
   }
@@ -77,6 +85,22 @@ final class AccountableConfig {
       return value;
     }
     throw FormatException('assets/config.json is missing "$key".');
+  }
+
+  static List<String> _optionalStringList(
+    Map<String, dynamic> json,
+    String key,
+  ) {
+    final value = json[key];
+    if (value == null) {
+      return const [];
+    }
+    if (value is! List || value.any((item) => item is! String)) {
+      throw FormatException(
+        'assets/config.json "$key" must be a list of strings.',
+      );
+    }
+    return value.cast<String>();
   }
 
   static bool _isConfiguredValue(String value) {

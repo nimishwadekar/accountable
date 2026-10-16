@@ -22,10 +22,10 @@ class GoogleAuthService {
   Future<void> _initializeOnce() async {
     if (kIsWeb) {
       final currentOrigin = Uri.base.origin;
-      if (currentOrigin != config.oauthOrigin) {
+      if (!config.oauthOrigins.contains(currentOrigin)) {
         throw GoogleAuthException(
-          'Current web origin $currentOrigin does not match the configured '
-          'OAuth origin ${config.oauthOrigin}.',
+          'OAuth origin $currentOrigin is not configured. Expected one of: '
+          '${config.oauthOrigins.join(', ')}.',
         );
       }
     }
