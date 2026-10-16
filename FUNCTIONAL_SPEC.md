@@ -503,6 +503,8 @@ This is deferred until after the current migration work.
 - Current-month spending and income cards.
 - Spending and income category breakdowns.
 - Period comparisons.
+- Optional transaction-form defaults managed alongside display preferences.
+- Transaction templates: create a template by filling selected form fields, then show only the remaining unfilled fields when using the template.
 - Budget groups, monthly limits, and account-transfer goals.
 - Loans, investments, non-forex units, investment rates, and loan-interest modeling.
 - Detailed investment holdings and valuation.
