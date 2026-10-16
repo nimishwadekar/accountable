@@ -27,6 +27,15 @@ extension AppSectionDetails on AppSection {
     AppSection.settings => 'Settings',
   };
 
+  String get compactLabel => switch (this) {
+    AppSection.overview => 'Overview',
+    AppSection.transactions => 'Transactions',
+    AppSection.accounts => 'Accounts',
+    AppSection.analysis => 'Analysis',
+    AppSection.assetsLiabilities => 'Assets',
+    AppSection.settings => 'Settings',
+  };
+
   IconData get icon => switch (this) {
     AppSection.overview => Icons.dashboard_outlined,
     AppSection.transactions => Icons.receipt_long_outlined,
@@ -52,11 +61,15 @@ class AppShell extends StatefulWidget {
     required this.dataRepository,
     this.onRebuildDailyTables,
     this.onReloadData,
+    this.textScale = 1,
+    this.onTextScaleChanged,
   });
 
   final AppDataRepository dataRepository;
   final Future<void> Function()? onRebuildDailyTables;
   final Future<void> Function()? onReloadData;
+  final double textScale;
+  final ValueChanged<double>? onTextScaleChanged;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -146,7 +159,7 @@ class _AppShellState extends State<AppShell> {
           NavigationDestination(
             icon: Icon(section.icon),
             selectedIcon: Icon(section.selectedIcon),
-            label: section.label,
+            label: section.compactLabel,
           ),
       ],
     );
@@ -187,6 +200,8 @@ class _AppShellState extends State<AppShell> {
       AppSection.settings => SettingsPage(
         onRebuildDailyTables: widget.onRebuildDailyTables,
         onReloadData: widget.onReloadData ?? _reloadData,
+        textScale: widget.textScale,
+        onTextScaleChanged: widget.onTextScaleChanged,
       ),
     };
   }

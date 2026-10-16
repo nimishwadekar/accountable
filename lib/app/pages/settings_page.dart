@@ -7,10 +7,14 @@ class SettingsPage extends StatefulWidget {
     super.key,
     this.onRebuildDailyTables,
     required this.onReloadData,
+    this.textScale = 1,
+    this.onTextScaleChanged,
   });
 
   final Future<void> Function()? onRebuildDailyTables;
   final Future<void> Function() onReloadData;
+  final double textScale;
+  final ValueChanged<double>? onTextScaleChanged;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -19,6 +23,8 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool _working = false;
   bool _refreshing = false;
+
+  double get _displayScale => widget.textScale.clamp(0.75, 1.0).toDouble();
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +43,31 @@ class _SettingsPageState extends State<SettingsPage> {
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: AppSpacing.xl),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Font size',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text('${(_displayScale * 100).round()}%'),
+                      Slider(
+                        min: 0.75,
+                        max: 1,
+                        divisions: 10,
+                        value: _displayScale,
+                        label: '${(_displayScale * 100).round()}%',
+                        onChanged: widget.onTextScaleChanged,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(AppSpacing.md),

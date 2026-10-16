@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/accountable_config.dart';
 import '../config/data_source_config.dart';
@@ -22,6 +23,36 @@ class _AccountableAppState extends State<AccountableApp> {
       widget.dataRepository == null
       ? (widget.configLoader ?? () => AccountableConfig.load())()
       : null;
+  double _textScale = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreTextScale();
+  }
+
+  Future<void> _restoreTextScale() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _textScale = preferences.getDouble('text_scale')?.clamp(0.75, 1.0) ?? 1;
+    });
+  }
+
+  Future<void> _setTextScale(double value) async {
+    final scale = value.clamp(0.75, 1.0).toDouble();
+    setState(() => _textScale = scale);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setDouble('text_scale', scale);
+  }
+
+  Widget _withTextScale(BuildContext context, Widget? child) {
+    final mediaQuery = MediaQuery.of(context);
+    return MediaQuery(
+      data: mediaQuery.copyWith(textScaler: TextScaler.linear(_textScale)),
+      child: child ?? const SizedBox.shrink(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +60,12 @@ class _AccountableAppState extends State<AccountableApp> {
       return MaterialApp(
         title: 'Accountable',
         theme: AppTheme.light(),
-        home: AppShell(dataRepository: widget.dataRepository!),
+        builder: (context, child) => _withTextScale(context, child),
+        home: AppShell(
+          dataRepository: widget.dataRepository!,
+          textScale: _textScale,
+          onTextScaleChanged: _setTextScale,
+        ),
       );
     }
 
@@ -39,6 +75,7 @@ class _AccountableAppState extends State<AccountableApp> {
         return MaterialApp(
           title: 'Accountable',
           theme: AppTheme.light(),
+          builder: (context, child) => _withTextScale(context, child),
           home: _buildHome(snapshot),
         );
       },
@@ -72,8 +109,14 @@ class _AccountableAppState extends State<AccountableApp> {
             dataSourceMode: DataSourceMode.localAssets,
           ),
         ),
+        textScale: _textScale,
+        onTextScaleChanged: _setTextScale,
       );
     }
-    return GoogleSheetsGate(config: config);
+    return GoogleSheetsGate(
+      config: config,
+      textScale: _textScale,
+      onTextScaleChanged: _setTextScale,
+    );
   }
 }

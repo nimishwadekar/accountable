@@ -11,9 +11,16 @@ import 'google_sign_in_button.dart';
 import 'theme/design_tokens.dart';
 
 class GoogleSheetsGate extends StatefulWidget {
-  const GoogleSheetsGate({super.key, required this.config});
+  const GoogleSheetsGate({
+    super.key,
+    required this.config,
+    this.textScale = 1,
+    this.onTextScaleChanged,
+  });
 
   final AccountableConfig config;
+  final double textScale;
+  final ValueChanged<double>? onTextScaleChanged;
 
   @override
   State<GoogleSheetsGate> createState() => _GoogleSheetsGateState();
@@ -94,6 +101,8 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       return AppShell(
         dataRepository: _repository!,
         onRebuildDailyTables: _rebuildDailyTables,
+        textScale: widget.textScale,
+        onTextScaleChanged: widget.onTextScaleChanged,
       );
     }
 

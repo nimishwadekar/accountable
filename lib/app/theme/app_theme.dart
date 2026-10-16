@@ -55,7 +55,11 @@ abstract final class AppTheme {
         backgroundColor: Colors.white,
         indicatorColor: colorScheme.secondaryContainer,
         labelTextStyle: WidgetStatePropertyAll(
-          TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.w600),
+          TextStyle(
+            color: colorScheme.onSurface,
+            fontWeight: FontWeight.w600,
+            fontSize: 10,
+          ),
         ),
       ),
       navigationRailTheme: NavigationRailThemeData(

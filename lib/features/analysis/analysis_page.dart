@@ -157,7 +157,8 @@ class _AnalysisPageState extends State<AnalysisPage> {
         ? null
         : widget.data.currenciesById[account.currencyId];
     final usd = widget.data.currenciesById['USD'];
-    final useUsd = _accountChartUnit == AccountChartUnit.usd;
+    final accountIsUsd = currency?.id == 'USD';
+    final useUsd = accountIsUsd || _accountChartUnit == AccountChartUnit.usd;
 
     return _AnalysisChartSection(
       title: 'Individual Account Valuation Trend',
@@ -191,20 +192,31 @@ class _AnalysisPageState extends State<AnalysisPage> {
                 },
               );
               final unitToggle = SegmentedButton<AccountChartUnit>(
-                segments: [
-                  ButtonSegment(
-                    value: AccountChartUnit.native,
-                    label: Text(currency?.id ?? 'Native'),
-                  ),
-                  const ButtonSegment(
-                    value: AccountChartUnit.usd,
-                    label: Text('USD'),
-                  ),
-                ],
-                selected: {_accountChartUnit},
-                onSelectionChanged: (selection) {
-                  setState(() => _accountChartUnit = selection.first);
+                segments: accountIsUsd
+                    ? const [
+                        ButtonSegment(
+                          value: AccountChartUnit.usd,
+                          label: Text('USD'),
+                        ),
+                      ]
+                    : [
+                        ButtonSegment(
+                          value: AccountChartUnit.native,
+                          label: Text(currency?.id ?? 'Native'),
+                        ),
+                        const ButtonSegment(
+                          value: AccountChartUnit.usd,
+                          label: Text('USD'),
+                        ),
+                      ],
+                selected: {
+                  accountIsUsd ? AccountChartUnit.usd : _accountChartUnit,
                 },
+                onSelectionChanged: accountIsUsd
+                    ? null
+                    : (selection) {
+                        setState(() => _accountChartUnit = selection.first);
+                      },
               );
 
               if (constraints.maxWidth < AppBreakpoints.compact) {
@@ -423,6 +435,16 @@ class _LineChart extends StatelessWidget {
         final maxLabels = (constraints.maxWidth / 88).floor().clamp(3, 8);
         final xInterval = _niceDayInterval(spanDays, maxLabels);
         final chartMaxX = spanDays == 0 ? 1.0 : spanDays.toDouble();
+        final axisStyle =
+            Theme.of(context).textTheme.labelSmall ?? const TextStyle();
+        final axisReservedSize = _axisReservedSize(
+          minimum: minimum - padding,
+          maximum: maximum + padding,
+          style: axisStyle,
+          currency: currency,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        );
 
         return SizedBox(
           height: 280,
@@ -459,7 +481,7 @@ class _LineChart extends StatelessWidget {
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 58,
+                    reservedSize: axisReservedSize,
                     getTitlesWidget: (value, meta) {
                       if (value <= minimum - padding * 0.9 ||
                           value >= maximum + padding * 0.9) {
@@ -499,6 +521,39 @@ class _LineChart extends StatelessWidget {
         );
       },
     );
+  }
+
+  double _axisReservedSize({
+    required double minimum,
+    required double maximum,
+    required TextStyle style,
+    required CurrencyDefinition? currency,
+    required TextDirection textDirection,
+    required TextScaler textScaler,
+  }) {
+    final labels = [
+      _axisLabel(minimum, currency),
+      _axisLabel(maximum, currency),
+      _axisLabel(0, currency),
+    ];
+    var width = 0.0;
+    for (final label in labels) {
+      final measuredStyle = style.copyWith(
+        fontSize: textScaler.scale(style.fontSize ?? 14),
+      );
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: measuredStyle),
+        textDirection: textDirection,
+        maxLines: 1,
+      )..layout();
+      if (painter.width > width) width = painter.width;
+    }
+    return width + 14;
+  }
+
+  String _axisLabel(double value, CurrencyDefinition? currency) {
+    final amount = _formatChartValue(value);
+    return currency == null ? amount : '${currency.symbol} $amount';
   }
 
   List<LineChartBarData> _lineBars(

@@ -691,14 +691,14 @@ class TransactionListRow extends StatelessWidget {
         : data.tagsById[transaction.tagId!];
 
     final detailParts = <String>[
+      if (category != null) category.name,
+      if (tag != null) tag.name,
       if (sourceAccount != null && destinationAccount != null)
         '${sourceAccount.name} → ${destinationAccount.name}'
       else if (sourceAccount != null)
         sourceAccount.name
       else if (destinationAccount != null)
         destinationAccount.name,
-      if (category != null) category.name,
-      if (tag != null) '#${tag.name}',
     ];
 
     return Card(
