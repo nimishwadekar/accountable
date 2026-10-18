@@ -17,7 +17,8 @@ class GoogleSheetsApi implements SheetsTableClient {
   GoogleSheetsApi({
     required this.spreadsheetId,
     required SheetsAccessTokenProvider accessTokenProvider,
-  }) : _client = BearerClient(accessTokenProvider) {
+    http.Client? client,
+  }) : _client = BearerClient(accessTokenProvider, innerClient: client) {
     _sheetsApi = sheets.SheetsApi(_client);
   }
 
@@ -58,7 +59,7 @@ class GoogleSheetsApi implements SheetsTableClient {
   @override
   Future<void> appendRow(String range, List<String> values) async {
     await _sheetsApi.spreadsheets.values.append(
-      sheets.ValueRange(values: [values]),
+      sheets.ValueRange(values: [_coerceValues(range, values)]),
       spreadsheetId,
       range,
       valueInputOption: 'RAW',
@@ -74,7 +75,9 @@ class GoogleSheetsApi implements SheetsTableClient {
       range,
     );
     await _sheetsApi.spreadsheets.values.update(
-      sheets.ValueRange(values: values),
+      sheets.ValueRange(
+        values: [for (final row in values) _coerceValues(range, row)],
+      ),
       spreadsheetId,
       range,
       valueInputOption: 'RAW',
@@ -82,6 +85,36 @@ class GoogleSheetsApi implements SheetsTableClient {
   }
 
   void close() => _client.close();
+
+  static List<Object?> _coerceValues(String range, List<String> values) {
+    final table = range.split('!').first;
+    final numericColumns = switch (table) {
+      'Accounts' => const {4},
+      'Currencies' => const {2},
+      'DailyAccountBalances' => const {3, 4},
+      'DailyExchangeRates' => const {3},
+      'DailyManualValuations' => const {3},
+      'DailyNetWorth' => const {2},
+      'DisplayPreferences' => const {2},
+      'Transactions' => const {5, 7},
+      _ => const <int>{},
+    };
+    final booleanColumns = table == 'DisplayPreferences'
+        ? const {3, 4}
+        : const <int>{};
+    return [
+      for (var index = 0; index < values.length; index++)
+        if (numericColumns.contains(index) &&
+            num.tryParse(values[index]) != null)
+          num.parse(values[index])
+        else if (booleanColumns.contains(index) &&
+            (values[index].toUpperCase() == 'TRUE' ||
+                values[index].toUpperCase() == 'FALSE'))
+          values[index].toUpperCase() == 'TRUE'
+        else
+          values[index],
+    ];
+  }
 
   static List<List<String>> _normalizeRows(List<List<Object?>>? rows) {
     return [

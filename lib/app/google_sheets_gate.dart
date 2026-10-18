@@ -328,7 +328,12 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       );
       await repository.reload();
       _rebuildDailyTables = () async {
-        await maintenance.rebuild();
+        final latestData = await repository.reload();
+        final latestMaintenance = DailyMaintenanceService(
+          client: api,
+          data: latestData,
+        );
+        await latestMaintenance.rebuild();
         await repository.reload();
       };
       if (!mounted) return;

@@ -11,6 +11,7 @@ export 'repositories/google_sheets_repository.dart';
 export 'repositories/daily_maintenance_service.dart';
 export 'repositories/display_preference_manager.dart';
 export 'repositories/repositories.dart';
+export 'sources/apps_script_table_client.dart';
 export 'sources/asset_reader.dart';
 export 'sources/bearer_client.dart';
 export 'sources/google_auth_service.dart';

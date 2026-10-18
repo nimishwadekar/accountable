@@ -5,6 +5,7 @@ import '../config/accountable_config.dart';
 import '../config/data_source_config.dart';
 import '../data/data.dart';
 import 'app_shell.dart';
+import 'apps_script_gate.dart';
 import 'google_sheets_gate.dart';
 import 'theme/app_theme.dart';
 
@@ -109,6 +110,13 @@ class _AccountableAppState extends State<AccountableApp> {
             dataSourceMode: DataSourceMode.localAssets,
           ),
         ),
+        textScale: _textScale,
+        onTextScaleChanged: _setTextScale,
+      );
+    }
+    if (config.isAppsScriptDataSource) {
+      return AppsScriptGate(
+        config: config,
         textScale: _textScale,
         onTextScaleChanged: _setTextScale,
       );

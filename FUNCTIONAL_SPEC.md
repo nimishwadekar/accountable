@@ -477,6 +477,20 @@ Before implementation, the following must be designed and tested:
 
 This is a future alternative and does not replace the current direct Google OAuth/Sheets implementation yet.
 
+### Apps Script proof-of-concept concessions
+
+The planned Apps Script proof of concept intentionally makes these temporary concessions:
+
+- `apps_script` becomes an additional data-source mode; direct `sheets` mode remains available as a fallback.
+- The script executes as the owner rather than as the accessing user.
+- The spreadsheet ID is stored in Apps Script project properties rather than supplied by the browser.
+- The first endpoint is read-only and exposes only a `loadSnapshot` operation.
+- Browser-to-Apps-Script CORS behavior is accepted as an unresolved feasibility risk during the proof of concept.
+- The Flutter app depends on a manually deployed Apps Script web-app URL during testing.
+- If the proof of concept succeeds, future writes would also be routed through Apps Script rather than directly through the Sheets API.
+
+These concessions are reversible: remove the `apps_script` data-source mode and endpoint configuration, delete the Apps Script project files/deployment, and restore `sheets` as the active data source. The underlying Sheets schemas and Flutter repository interfaces are intended to remain unchanged.
+
 ## Future account visibility
 
 Keep all accounts available for calculations and historical analysis, but later add UI visibility metadata to `Accounts`:
