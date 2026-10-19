@@ -201,26 +201,10 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       controller: controller,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: currency == null
-            ? null
-            : Container(
-                width: 64,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  border: const Border(
-                    right: BorderSide(color: AppColors.border),
-                  ),
-                ),
-                child: Text(
-                  currency.symbol,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-        prefixIconConstraints: const BoxConstraints(
-          minWidth: 64,
-          maxWidth: 64,
-          minHeight: 56,
+        prefixText: currency == null ? null : '${currency.symbol} ',
+        prefixStyle: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
         ),
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),

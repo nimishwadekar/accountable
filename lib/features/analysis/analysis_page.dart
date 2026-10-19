@@ -407,7 +407,7 @@ class _ChartPoint {
   final double value;
 }
 
-class _LineChart extends StatelessWidget {
+class _LineChart extends StatefulWidget {
   const _LineChart({
     required this.points,
     required this.color,
@@ -419,7 +419,17 @@ class _LineChart extends StatelessWidget {
   final CurrencyDefinition? currency;
 
   @override
+  State<_LineChart> createState() => _LineChartState();
+}
+
+class _LineChartState extends State<_LineChart> {
+  LineTouchResponse? _touchResponse;
+
+  @override
   Widget build(BuildContext context) {
+    final points = widget.points;
+    final color = widget.color;
+    final currency = widget.currency;
     final values = points.map((point) => point.value).toList();
     final minimum = values.reduce((a, b) => a < b ? a : b);
     final maximum = values.reduce((a, b) => a > b ? a : b);
@@ -434,7 +444,9 @@ class _LineChart extends StatelessWidget {
       builder: (context, constraints) {
         final maxLabels = (constraints.maxWidth / 88).floor().clamp(3, 8);
         final xInterval = _niceDayInterval(spanDays, maxLabels);
-        final chartMaxX = spanDays == 0 ? 1.0 : spanDays.toDouble();
+        final xMargin = spanDays == 0 ? 0.5 : spanDays * 0.05;
+        final chartMinX = -xMargin;
+        final chartMaxX = spanDays == 0 ? 0.5 : spanDays + xMargin;
         final axisStyle =
             Theme.of(context).textTheme.labelSmall ?? const TextStyle();
         final axisReservedSize = _axisReservedSize(
@@ -450,25 +462,47 @@ class _LineChart extends StatelessWidget {
           height: 280,
           child: LineChart(
             LineChartData(
-              minX: 0,
+              minX: chartMinX,
               maxX: chartMaxX,
               minY: minimum - padding,
               maxY: maximum + padding,
               gridData: const FlGridData(show: true),
               lineTouchData: LineTouchData(
+                touchCallback: (event, response) {
+                  final spots = response?.lineBarSpots;
+                  if (spots == null || spots.isEmpty) {
+                    if (_touchResponse != null) {
+                      setState(() => _touchResponse = null);
+                    }
+                    return;
+                  }
+                  setState(() => _touchResponse = response);
+                },
                 touchTooltipData: LineTouchTooltipData(
+                  tooltipMargin: 16,
+                  tooltipHorizontalAlignment: FLHorizontalAlignment.center,
+                  fitInsideHorizontally: true,
+                  fitInsideVertically: true,
                   getTooltipColor: (_) => Colors.white,
                   tooltipBorder: const BorderSide(color: AppColors.border),
-                  getTooltipItems: (spots) => [
-                    for (final spot in spots)
-                      LineTooltipItem(
-                        '${currency?.symbol ?? ''} ${_formatChartValue(spot.y)}',
-                        TextStyle(
-                          color: _amountColor(spot.y),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                  ],
+                  getTooltipItems: (spots) {
+                    final seen = <String>{};
+                    return [
+                      for (final spot in spots)
+                        if (seen.add(
+                          '${spot.x.toStringAsFixed(6)}:${spot.y.toStringAsFixed(6)}',
+                        ))
+                          LineTooltipItem(
+                            '${currency?.symbol ?? ''} ${_formatChartValue(spot.y)}',
+                            TextStyle(
+                              color: _amountColor(spot.y),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          )
+                        else
+                          null,
+                    ];
+                  },
                 ),
               ),
               titlesData: FlTitlesData(
@@ -490,7 +524,10 @@ class _LineChart extends StatelessWidget {
                       return Text(
                         currency == null
                             ? _formatChartValue(value)
-                            : '${currency!.symbol} ${_formatChartValue(value)}',
+                            : '${currency.symbol} ${_formatChartValue(value)}',
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.clip,
                         style: Theme.of(context).textTheme.labelSmall,
                       );
                     },
@@ -503,12 +540,16 @@ class _LineChart extends StatelessWidget {
                     reservedSize: 32,
                     getTitlesWidget: (value, meta) {
                       final dayOffset = value.round();
-                      if (dayOffset < 0 || dayOffset > spanDays) {
+                      if ((value - dayOffset).abs() > 0.001 ||
+                          dayOffset < 0 ||
+                          dayOffset > spanDays) {
                         return const SizedBox.shrink();
                       }
                       final date = firstDate.add(Duration(days: dayOffset));
                       return Text(
                         _formatShortDate(date),
+                        maxLines: 1,
+                        softWrap: false,
                         style: Theme.of(context).textTheme.labelSmall,
                       );
                     },
