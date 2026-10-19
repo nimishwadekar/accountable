@@ -94,7 +94,13 @@ void main() {
     final data = await AssetAppDataRepository().load();
     final range = AnalysisCalculator(data).allHistoryRange;
 
+    final today = DateTime.now();
+    final yesterday = DateTime.utc(
+      today.year,
+      today.month,
+      today.day,
+    ).subtract(const Duration(days: 1));
     expect(range?.start, DateTime.utc(2026, 10, 10));
-    expect(range?.end, DateTime.utc(2026, 10, 15));
+    expect(range?.end, yesterday);
   });
 }
