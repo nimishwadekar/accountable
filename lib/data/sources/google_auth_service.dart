@@ -44,6 +44,15 @@ class GoogleAuthService {
     return _signIn.authenticate();
   }
 
+  Future<String> idToken(GoogleSignInAccount account) async {
+    await initialize();
+    final token = account.authentication.idToken;
+    if (token == null || token.isEmpty) {
+      throw const GoogleAuthException('Google did not return an ID token.');
+    }
+    return token;
+  }
+
   Future<String> authorizeSheets(
     GoogleSignInAccount account, {
     bool forceRefresh = false,

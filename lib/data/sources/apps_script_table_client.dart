@@ -4,19 +4,32 @@ import 'package:http/http.dart' as http;
 
 import 'google_sheets_api.dart';
 
+typedef IdTokenProvider = Future<String> Function();
+
 class AppsScriptTableClient implements SheetsTableClient {
-  AppsScriptTableClient({required String endpoint, http.Client? client})
-    : endpoint = Uri.parse(endpoint),
-      _client = client ?? http.Client();
+  AppsScriptTableClient({
+    required String endpoint,
+    required this.idTokenProvider,
+    http.Client? client,
+  }) : endpoint = Uri.parse(endpoint),
+       _client = client ?? http.Client();
 
   final Uri endpoint;
+  final IdTokenProvider idTokenProvider;
   final http.Client _client;
 
   @override
   Future<Map<String, List<List<String>>>> batchReadRanges(
     List<String> ranges,
   ) async {
-    final response = await _client.get(_actionUri('loadSnapshot'));
+    final response = await _client.post(
+      endpoint,
+      headers: {'Content-Type': 'text/plain'},
+      body: jsonEncode({
+        'action': 'loadSnapshot',
+        'idToken': await idTokenProvider(),
+      }),
+    );
     _ensureSuccess(response);
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic> || decoded['ok'] != true) {
@@ -45,13 +58,14 @@ class AppsScriptTableClient implements SheetsTableClient {
         'Apps Script proof-of-concept mode is read-only for $range.',
       );
     }
-    final response = await _client.get(
-      _actionUri('appendDisplayPreference').replace(
-        queryParameters: {
-          ..._actionUri('appendDisplayPreference').queryParameters,
-          'row': jsonEncode(values),
-        },
-      ),
+    final response = await _client.post(
+      endpoint,
+      headers: {'Content-Type': 'text/plain'},
+      body: jsonEncode({
+        'action': 'appendDisplayPreference',
+        'idToken': await idTokenProvider(),
+        'row': values,
+      }),
     );
     _ensureSuccess(response);
     final decoded = jsonDecode(response.body);
@@ -64,12 +78,6 @@ class AppsScriptTableClient implements SheetsTableClient {
   Future<void> replaceRange(String range, List<List<String>> values) {
     throw UnsupportedError(
       'Apps Script proof-of-concept mode is read-only for $range.',
-    );
-  }
-
-  Uri _actionUri(String action) {
-    return endpoint.replace(
-      queryParameters: {...endpoint.queryParameters, 'action': action},
     );
   }
 
