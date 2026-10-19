@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -49,15 +50,18 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   AppDataRepository? _repository;
   Future<void> Function()? _rebuildDailyTables;
   bool _connectionInProgress = false;
+  final Stopwatch _startupStopwatch = Stopwatch()..start();
 
   @override
   void initState() {
     super.initState();
+    _logTiming('gate initialized');
     _authService = GoogleAuthService(config: widget.config);
     _eventsSubscription = _authService.authenticationEvents.listen(
       (event) {
         if (event is! GoogleSignInAuthenticationEventSignIn) return;
         final completer = _silentSignInCompleter;
+        _logTiming('Google sign-in event received');
         if (completer != null && !completer.isCompleted) {
           completer.complete(event.user);
           return;
@@ -201,6 +205,13 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     };
   }
 
+  void _logTiming(String message) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[Accountable startup] ${_startupStopwatch.elapsedMilliseconds}ms — $message',
+    );
+  }
+
   String get _message {
     if (!widget.config.hasConfiguredGoogleSheets) {
       return 'Add the Google OAuth client ID, spreadsheet ID, and allowed email in assets/config.json.';
@@ -219,6 +230,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   }
 
   Future<void> _initialize() async {
+    _logTiming('starting authentication initialization');
     if (!widget.config.hasConfiguredGoogleSheets) {
       if (mounted) {
         setState(() => _state = _GateState.configurationRequired);
@@ -235,6 +247,11 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     }
     try {
       final attempt = await _authService.attemptSilentAuthentication();
+      _logTiming(
+        attempt == null
+            ? 'silent authentication started asynchronously'
+            : 'silent authentication future returned',
+      );
       final account = attempt == null
           ? await completer.future.timeout(
               const Duration(seconds: 5),
@@ -246,8 +263,10 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
             );
       if (!mounted || _account != null) return;
       if (account == null) {
+        _logTiming('silent authentication did not restore an account');
         setState(() => _state = _GateState.signedOut);
       } else {
+        _logTiming('Google account restored');
         await _finishSignIn(account);
       }
     } catch (error) {
@@ -303,11 +322,17 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     });
     try {
       _authService.validateAllowedAccount(account);
+      _logTiming(
+        interactiveConsent
+            ? 'starting interactive Sheets authorization'
+            : 'starting silent Sheets authorization',
+      );
       if (interactiveConsent) {
         await _authService.authorizeSheetsInteractively(account);
       } else {
         await _authService.authorizeSheets(account);
       }
+      _logTiming('Sheets authorization completed');
       if (mounted) {
         setState(() => _state = _GateState.loadingData);
       }
@@ -317,16 +342,21 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
             _authService.authorizeSheets(account, forceRefresh: forceRefresh),
       );
       final repository = GoogleSheetsAppDataRepository(api);
+      _logTiming('loading initial Sheets snapshot');
       final initialData = await repository.load();
+      _logTiming('initial Sheets snapshot loaded');
       final maintenance = DailyMaintenanceService(
         client: api,
         data: initialData,
       );
       final today = DateTime.now();
+      _logTiming('starting daily catch-up');
       await maintenance.catchUp(
         yesterday: today.subtract(const Duration(days: 1)),
       );
+      _logTiming('daily catch-up completed; reloading snapshot');
       await repository.reload();
+      _logTiming('final Sheets snapshot loaded');
       _rebuildDailyTables = () async {
         final latestData = await repository.reload();
         final latestMaintenance = DailyMaintenanceService(
@@ -342,6 +372,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         _state = _GateState.ready;
         _connectionInProgress = false;
       });
+      _logTiming('app startup finished');
     } on SheetsAuthorizationRequiredException {
       _connectionInProgress = false;
       if (!mounted) return;

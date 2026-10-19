@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../config/accountable_config.dart';
+import 'gis_logging.dart';
+import 'sheets_authorization.dart';
 
 class GoogleAuthService {
   GoogleAuthService({required this.config});
@@ -11,8 +13,10 @@ class GoogleAuthService {
   final AccountableConfig config;
   final GoogleSignIn _signIn = GoogleSignIn.instance;
   static Future<void>? _initialization;
+  late final SheetsAuthorizationDelegate _sheetsAuthorization =
+      SheetsAuthorizationDelegate(config: config);
   String? _sheetsAccessToken;
-  String? _authorizedEmail;
+  GoogleSignInAccount? _sheetsAccount;
 
   Stream<GoogleSignInAuthenticationEvent> get authenticationEvents =>
       _signIn.authenticationEvents;
@@ -32,6 +36,7 @@ class GoogleAuthService {
       }
     }
     await _signIn.initialize(clientId: config.googleClientId);
+    suppressGisDebugLogs();
   }
 
   Future<Future<GoogleSignInAccount?>?> attemptSilentAuthentication() async {
@@ -57,39 +62,39 @@ class GoogleAuthService {
     GoogleSignInAccount account, {
     bool forceRefresh = false,
   }) async {
-    final authorizationClient = account.authorizationClient;
-    if (_authorizedEmail != account.email) {
+    if (_sheetsAccount?.email != account.email) {
       _sheetsAccessToken = null;
-      _authorizedEmail = account.email;
+      _sheetsAccount = account;
     }
     if (!forceRefresh && _sheetsAccessToken != null) {
       return _sheetsAccessToken!;
     }
-    if (forceRefresh && _sheetsAccessToken != null) {
-      await authorizationClient.clearAuthorizationToken(
-        accessToken: _sheetsAccessToken!,
+    try {
+      _sheetsAccessToken = await _sheetsAuthorization.authorize(
+        account,
+        interactive: false,
+        forceRefresh: forceRefresh,
       );
-      _sheetsAccessToken = null;
-    }
-    final authorization = await authorizationClient.authorizationForScopes([
-      config.sheetsScope,
-    ]);
-    if (authorization == null) {
+      return _sheetsAccessToken!;
+    } on SheetsAuthorizationInteractionRequiredException {
       throw const SheetsAuthorizationRequiredException();
     }
-    _sheetsAccessToken = authorization.accessToken;
-    return _sheetsAccessToken!;
   }
 
   Future<String> authorizeSheetsInteractively(
     GoogleSignInAccount account,
   ) async {
-    final authorization = await account.authorizationClient.authorizeScopes([
-      config.sheetsScope,
-    ]);
-    _authorizedEmail = account.email;
-    _sheetsAccessToken = authorization.accessToken;
-    return _sheetsAccessToken!;
+    try {
+      _sheetsAccessToken = await _sheetsAuthorization.authorize(
+        account,
+        interactive: true,
+        forceRefresh: true,
+      );
+      _sheetsAccount = account;
+      return _sheetsAccessToken!;
+    } on SheetsAuthorizationInteractionRequiredException {
+      throw const SheetsAuthorizationRequiredException();
+    }
   }
 
   void validateAllowedAccount(GoogleSignInAccount account) {
@@ -100,7 +105,7 @@ class GoogleAuthService {
 
   Future<void> signOut() async {
     _sheetsAccessToken = null;
-    _authorizedEmail = null;
+    _sheetsAccount = null;
     await _signIn.signOut();
   }
 }
