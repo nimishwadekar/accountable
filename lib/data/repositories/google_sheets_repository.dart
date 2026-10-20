@@ -22,6 +22,7 @@ abstract final class GoogleSheetsRanges {
   static const tags = 'Tags!A:B';
   static const transactions = 'Transactions!A:K';
   static const transactionTemplates = 'TransactionTemplates!A:M';
+  static const incomeAllocations = 'IncomeAllocations!A:L';
 }
 
 const _transactionTemplateHeaders = <String>[
@@ -106,6 +107,22 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       for (final preference in normalized.preferences)
         _displayPreferenceRow(preference),
     ]);
+    return reload();
+  }
+
+  @override
+  Future<AppDataSnapshot> addIncomeAllocation(
+    IncomeAllocation allocation,
+  ) async {
+    final current = await load();
+    final incomeAccount = current.accountsById[allocation.incomeAccountId];
+    if (incomeAccount == null || incomeAccount.currencyId != 'USD') {
+      throw StateError('Income allocation income account must use USD.');
+    }
+    await api.appendRow(
+      GoogleSheetsRanges.incomeAllocations,
+      _incomeAllocationRow(allocation, current.accountsById, current.currenciesById),
+    );
     return reload();
   }
 
@@ -215,6 +232,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       List<DailyManualValuation> dailyManualValuations = const [];
       List<DisplayPreference> displayPreferences = const [];
       List<TransactionTemplate> transactionTemplates = const [];
+      List<IncomeAllocation> incomeAllocations = const [];
 
       try {
         final result = ModelParsers.parseCurrenciesWithIssues(
@@ -286,6 +304,20 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
         } catch (error) {
           recordIssues('DisplayPreferences', [
             issueFromError('DisplayPreferences', error),
+          ]);
+        }
+      }
+      if (dependenciesAreValid('IncomeAllocations')) {
+        try {
+          incomeAllocations = ModelParsers.parseIncomeAllocations(
+            _encode(tables[GoogleSheetsRanges.incomeAllocations]!),
+            accounts: accountById,
+            currencies: currencyById,
+          );
+          recordIssues('IncomeAllocations', const []);
+        } catch (error) {
+          recordIssues('IncomeAllocations', [
+            issueFromError('IncomeAllocations', error),
           ]);
         }
       }
@@ -385,6 +417,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
         dailyManualValuations: dailyManualValuations,
         displayPreferences: displayPreferences,
         transactionTemplates: transactionTemplates,
+        incomeAllocations: incomeAllocations,
       );
     } on DataValidationFailure {
       rethrow;
@@ -408,6 +441,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       GoogleSheetsRanges.dailyManualValuations,
       GoogleSheetsRanges.displayPreferences,
       GoogleSheetsRanges.transactionTemplates,
+      GoogleSheetsRanges.incomeAllocations,
       GoogleSheetsRanges.tags,
       GoogleSheetsRanges.transactions,
     ];
@@ -432,6 +466,27 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
   }
 
   static String _encode(List<List<String>> rows) => csv.encode(rows);
+
+  static List<String> _incomeAllocationRow(
+    IncomeAllocation allocation,
+    Map<String, Account> accounts,
+    Map<String, CurrencyDefinition> currencies,
+  ) => [
+    allocation.id,
+    allocation.name,
+    allocation.incomeCategoryId,
+    allocation.incomeAccountId,
+    allocation.sourceAccountId,
+    allocation.destinationAccountId,
+    allocation.expectedAmountPerIncome.toMajorUnitsString(
+      currencies[accounts[allocation.incomeAccountId]!.currencyId]!,
+    ),
+    allocation.descriptionKeyword ?? '',
+    _dateString(allocation.startDate),
+    allocation.endDate == null ? '' : _dateString(allocation.endDate!),
+    allocation.createdAt.toUtc().toIso8601String(),
+    allocation.updatedAt.toUtc().toIso8601String(),
+  ];
 
   static List<String> _transactionTemplateRow(
     TransactionTemplate template, {
@@ -488,6 +543,7 @@ const _columnCount = <String, int>{
   GoogleSheetsRanges.dailyManualValuations: 4,
   GoogleSheetsRanges.displayPreferences: 5,
   GoogleSheetsRanges.transactionTemplates: 13,
+  GoogleSheetsRanges.incomeAllocations: 12,
   GoogleSheetsRanges.tags: 2,
   GoogleSheetsRanges.transactions: 11,
 };

@@ -25,6 +25,7 @@ void main() {
       GoogleSheetsRanges.tags: 'test_sheets/Tags.csv',
       GoogleSheetsRanges.transactionTemplates:
           'test_sheets/TransactionTemplates.csv',
+      GoogleSheetsRanges.incomeAllocations: 'test_sheets/IncomeAllocations.csv',
       GoogleSheetsRanges.transactions: 'test_sheets/Transactions.csv',
     }.entries) {
       tables[entry.key] = [

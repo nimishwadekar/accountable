@@ -224,7 +224,10 @@ class _AppShellState extends State<AppShell> {
         onTemplateAdded: _handleTemplateAdded,
       ),
       AppSection.accounts => AccountsPage(data: data),
-      AppSection.analysis => AnalysisPage(data: data),
+      AppSection.analysis => AnalysisPage(
+        data: data,
+        onIncomeAllocationAdded: _handleIncomeAllocationAdded,
+      ),
       AppSection.assetsLiabilities => AssetsLiabilitiesPage(
         data: data,
         onValuationAdded: _handleValuationAdded,
@@ -312,13 +315,17 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _updateTemplate(TransactionTemplate template) async {
     final future = widget.dataRepository.updateTransactionTemplate(template);
-    setState(() => _snapshotFuture = future);
+    setState(() {
+      _snapshotFuture = future;
+    });
     await future;
   }
 
   Future<void> _deleteTemplate(String templateId) async {
     final future = widget.dataRepository.deleteTransactionTemplate(templateId);
-    setState(() => _snapshotFuture = future);
+    setState(() {
+      _snapshotFuture = future;
+    });
     await future;
   }
 
@@ -326,6 +333,14 @@ class _AppShellState extends State<AppShell> {
     List<DisplayPreference> preferences,
   ) async {
     final future = widget.dataRepository.saveDisplayPreferences(preferences);
+    setState(() {
+      _snapshotFuture = future;
+    });
+    await future;
+  }
+
+  Future<void> _handleIncomeAllocationAdded(IncomeAllocation allocation) async {
+    final future = widget.dataRepository.addIncomeAllocation(allocation);
     setState(() {
       _snapshotFuture = future;
     });

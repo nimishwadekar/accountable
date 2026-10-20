@@ -8,15 +8,23 @@ import '../../app/pages/transaction_form_selectors.dart';
 import '../../data/data.dart';
 import 'analysis_calculator.dart';
 import 'category_analysis.dart';
+import 'income_allocation_analysis.dart';
+import 'income_allocation_dialog.dart';
 
 enum AnalysisRangePreset { thirtyDays, ninetyDays, yearToDate, allHistory }
 
 enum AccountChartUnit { native, usd }
 
 class AnalysisPage extends StatefulWidget {
-  const AnalysisPage({super.key, required this.data});
+  const AnalysisPage({
+    super.key,
+    required this.data,
+    this.onIncomeAllocationAdded,
+  });
 
   final AppDataSnapshot data;
+  final Future<void> Function(IncomeAllocation allocation)?
+  onIncomeAllocationAdded;
 
   @override
   State<AnalysisPage> createState() => _AnalysisPageState();
@@ -31,6 +39,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
   String? _selectedAccountId;
   AccountChartUnit _accountChartUnit = AccountChartUnit.native;
   late final CategoryAnalysisCalculator _categoryCalculator;
+  late final IncomeAllocationAnalyzer _allocationAnalyzer;
   late DateTime _categoryMonth;
   String? _categoryTagId;
 
@@ -39,6 +48,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
     super.initState();
     _calculator = AnalysisCalculator(widget.data);
     _categoryCalculator = CategoryAnalysisCalculator(widget.data);
+    _allocationAnalyzer = IncomeAllocationAnalyzer(widget.data);
     final months = _availableAnalysisMonths;
     _categoryMonth = months.isEmpty ? DateTime.now() : months.last;
     _netWorthRangePreset = AnalysisRangePreset.allHistory;
@@ -304,6 +314,39 @@ class _AnalysisPageState extends State<AnalysisPage> {
     );
   }
 
+  Future<void> _openIncomeAllocationForm() async {
+    final allocation = await showDialog<IncomeAllocation>(
+      context: context,
+      builder: (_) => IncomeAllocationDialog(data: widget.data),
+    );
+    if (!mounted || allocation == null) return;
+    try {
+      await widget.onIncomeAllocationAdded!(allocation);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Income allocation saved.')));
+    } catch (error, stackTrace) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Could Not Save Income Allocation'),
+          content: SingleChildScrollView(
+            child: SelectableText('$error\n\nTechnical details:\n$stackTrace'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   List<DateTime> get _availableAnalysisMonths {
     final today = DateTime.now();
     return [
@@ -388,7 +431,12 @@ class _AnalysisPageState extends State<AnalysisPage> {
         const SizedBox(height: AppSpacing.md),
         _buildCategoryWidget('Spending by Category', spending, usd),
         const SizedBox(height: AppSpacing.lg),
-        _buildCategoryWidget('Income by Category', income, usd),
+        _buildCategoryWidget(
+          'Income by Category',
+          income,
+          usd,
+          month: _categoryMonth,
+        ),
       ],
     );
   }
@@ -396,12 +444,25 @@ class _AnalysisPageState extends State<AnalysisPage> {
   Widget _buildCategoryWidget(
     String title,
     CategoryAnalysisResult result,
-    CurrencyDefinition? usd,
-  ) {
+    CurrencyDefinition? usd, {
+    DateTime? month,
+  }) {
     final total = result.totalPositive;
     return _AnalysisChartSection(
       title: title,
       subtitle: null,
+      header:
+          title == 'Income by Category' &&
+              widget.onIncomeAllocationAdded != null
+          ? Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _openIncomeAllocationForm,
+                icon: const Icon(Icons.add),
+                label: const Text('Add Income Allocation'),
+              ),
+            )
+          : null,
       child: result.positiveValues.isEmpty
           ? const EmptyState(message: 'No categorized values for this month.')
           : Column(
@@ -443,7 +504,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
                     ],
                   ),
                 ),
-                for (final value in result.positiveValues)
+                for (final value in result.positiveValues) ...[
                   ListTile(
                     dense: true,
                     leading: Icon(
@@ -479,6 +540,9 @@ class _AnalysisPageState extends State<AnalysisPage> {
                       ),
                     ),
                   ),
+                  if (month != null && value.categoryId != null)
+                    ..._buildAllocationRows(value.categoryId!, month),
+                ],
                 const Divider(height: AppSpacing.lg),
                 ListTile(
                   dense: true,
@@ -523,6 +587,28 @@ class _AnalysisPageState extends State<AnalysisPage> {
               ],
             ),
     );
+  }
+
+  List<Widget> _buildAllocationRows(String categoryId, DateTime month) {
+    final progress = _allocationAnalyzer.analyze(
+      month: month,
+      incomeCategoryId: categoryId,
+    );
+    return [
+      for (final item in progress)
+        Padding(
+          padding: const EdgeInsets.only(left: AppSpacing.lg),
+          child: ListTile(
+            dense: true,
+            leading: const Icon(Icons.subdirectory_arrow_right),
+            title: Text(item.allocation.name),
+            trailing: Text(
+              '${_formatCategoryAmount(item.actualUsdMinorUnits, widget.data.currenciesById['USD'])} / '
+              '${_formatCategoryAmount(item.expectedUsdMinorUnits, widget.data.currenciesById['USD'])}',
+            ),
+          ),
+        ),
+    ];
   }
 
   String _formatMonth(DateTime month) =>

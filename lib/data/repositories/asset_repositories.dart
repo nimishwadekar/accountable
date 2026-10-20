@@ -22,6 +22,7 @@ abstract final class DataAssetPaths {
   static const tags = 'test_sheets/Tags.csv';
   static const transactions = 'test_sheets/Transactions.csv';
   static const transactionTemplates = 'test_sheets/TransactionTemplates.csv';
+  static const incomeAllocations = 'test_sheets/IncomeAllocations.csv';
 }
 
 class AssetCurrencyRepository implements CurrencyRepository {
@@ -264,6 +265,11 @@ class AssetAppDataRepository implements AppDataRepository {
   }
 
   @override
+  @override
+  Future<AppDataSnapshot> addIncomeAllocation(IncomeAllocation allocation) =>
+      throw StateError('Income allocations are not implemented in local assets mode.');
+
+  @override
   Future<AppDataSnapshot> addTransactionTemplate(
     TransactionTemplate template,
   ) => throw StateError('Templates are not implemented in local assets mode.');
@@ -321,6 +327,11 @@ class AssetAppDataRepository implements AppDataRepository {
         tables[DataAssetPaths.categories]!,
       );
       final tagList = ModelParsers.parseTags(tables[DataAssetPaths.tags]!);
+      final allocationList = ModelParsers.parseIncomeAllocations(
+        tables[DataAssetPaths.incomeAllocations]!,
+        accounts: accountById,
+        currencies: currencyById,
+      );
       final templateList = ModelParsers.parseTransactionTemplates(
         tables[DataAssetPaths.transactionTemplates]!,
         accounts: accountById,
@@ -376,6 +387,7 @@ class AssetAppDataRepository implements AppDataRepository {
         dailyManualValuations: dailyManualValuationList,
         displayPreferences: synchronizedPreferences.preferences,
         transactionTemplates: templateList,
+        incomeAllocations: allocationList,
       );
     } on DataValidationFailure {
       rethrow;
@@ -521,6 +533,11 @@ const _runtimeHeaders = <String, List<String>>{
     'show_in_entry_forms',
   ],
   DataAssetPaths.tags: ['tag_id', 'tag_name'],
+  DataAssetPaths.incomeAllocations: [
+    'allocation_id', 'name', 'income_category_id', 'income_account_id',
+    'source_account_id', 'destination_account_id', 'expected_amount_per_income',
+    'description_keyword', 'start_date', 'end_date', 'created_at', 'updated_at',
+  ],
   DataAssetPaths.transactionTemplates: [
     'template_id',
     'name',
@@ -562,6 +579,7 @@ const _runtimeAssetPaths = <String>[
   DataAssetPaths.displayPreferences,
   DataAssetPaths.tags,
   DataAssetPaths.transactionTemplates,
+  DataAssetPaths.incomeAllocations,
   DataAssetPaths.transactions,
 ];
 

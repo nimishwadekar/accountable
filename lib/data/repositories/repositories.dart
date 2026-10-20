@@ -63,6 +63,7 @@ abstract interface class AppDataRepository {
     List<DisplayPreference> preferences,
   );
 
+  Future<AppDataSnapshot> addIncomeAllocation(IncomeAllocation allocation);
   Future<AppDataSnapshot> addTransactionTemplate(TransactionTemplate template);
   Future<AppDataSnapshot> updateTransactionTemplate(TransactionTemplate template);
   Future<AppDataSnapshot> deleteTransactionTemplate(String templateId);

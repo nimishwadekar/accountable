@@ -6,6 +6,7 @@ export 'daily_net_worth.dart';
 export 'daily_manual_valuation.dart';
 export 'display_preference.dart';
 export 'exchange_rate.dart';
+export 'income_allocation.dart';
 export 'money.dart';
 export 'tag.dart';
 export 'transaction.dart';

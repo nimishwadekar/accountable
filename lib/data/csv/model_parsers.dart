@@ -266,6 +266,49 @@ class ModelParsers {
     }).toList();
   }
 
+  static List<IncomeAllocation> parseIncomeAllocations(
+    String source, {
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+  }) {
+    final table = CsvTable.parse(source, tableName: 'IncomeAllocations');
+    return _uniqueById(
+      table.rows.map((row) {
+        final incomeAccountId = requiredValue(row, 'income_account_id');
+        final sourceAccountId = requiredValue(row, 'source_account_id');
+        final destinationAccountId = requiredValue(row, 'destination_account_id');
+        final incomeAccount = accounts[incomeAccountId];
+        final sourceAccount = accounts[sourceAccountId];
+        final destinationAccount = accounts[destinationAccountId];
+        if (incomeAccount == null || sourceAccount == null || destinationAccount == null) {
+          throw FormatException('Income allocation references an unknown account.');
+        }
+        if (incomeAccount.currencyId != 'USD') {
+          throw FormatException('Income allocation income account must use USD.');
+        }
+        return IncomeAllocation(
+          id: requiredValue(row, 'allocation_id'),
+          name: requiredValue(row, 'name'),
+          incomeCategoryId: requiredValue(row, 'income_category_id'),
+          incomeAccountId: incomeAccountId,
+          sourceAccountId: sourceAccountId,
+          destinationAccountId: destinationAccountId,
+          expectedAmountPerIncome: Money.fromMajorUnits(
+            value: requiredValue(row, 'expected_amount_per_income'),
+            currency: _currency(currencies, incomeAccount.currencyId),
+          ),
+          descriptionKeyword: optionalValue(row, 'description_keyword'),
+          startDate: parseDateOnly(requiredValue(row, 'start_date'), fieldName: 'start_date'),
+          endDate: _optionalDate(row, 'end_date'),
+          createdAt: parseUtcTimestamp(requiredValue(row, 'created_at'), fieldName: 'created_at'),
+          updatedAt: parseUtcTimestamp(requiredValue(row, 'updated_at'), fieldName: 'updated_at'),
+        );
+      }),
+      (allocation) => allocation.id,
+      table.tableName,
+    );
+  }
+
   static List<TransactionTemplate> parseTransactionTemplates(
     String source, {
     required Map<String, Account> accounts,
