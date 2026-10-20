@@ -270,7 +270,9 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
           const SizedBox(height: AppSpacing.lg),
           FilledButton(
             onPressed: _submit,
-            child: const Text('Add Transaction'),
+            child: Text(
+              widget.createTemplate ? 'Save Template' : 'Add Transaction',
+            ),
           ),
         ],
       ),

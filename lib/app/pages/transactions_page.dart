@@ -130,86 +130,50 @@ class _TransactionsPageState extends State<TransactionsPage> {
     );
   }
 
+  Future<T?> _showTransactionDialog<T>(Widget child) {
+    return showDialog<T>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 560,
+            maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openAddTransaction() async {
-    final isCompact = MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
-    final choice = isCompact
-        ? await showModalBottomSheet<AddTransactionChoice>(
-            context: context,
-            showDragHandle: true,
-            builder: (context) => TransactionTypeChooser(data: widget.data),
-          )
-        : await showDialog<AddTransactionChoice>(
-            context: context,
-            builder: (context) => TransactionTypeChooser(data: widget.data),
-          );
+    final choice = await _showTransactionDialog<AddTransactionChoice>(
+      TransactionTypeChooser(data: widget.data),
+    );
     if (!mounted || choice == null) return;
 
     AddTransactionChoice resolved = choice;
     if (choice.createTemplate) {
       resolved =
-          await (isCompact
-              ? showModalBottomSheet<AddTransactionChoice>(
-                  context: context,
-                  showDragHandle: true,
-                  builder: (context) =>
-                      const TransactionTypeChooser(createTemplate: true),
-                )
-              : showDialog<AddTransactionChoice>(
-                  context: context,
-                  builder: (context) =>
-                      const TransactionTypeChooser(createTemplate: true),
-                )) ??
+          await _showTransactionDialog<AddTransactionChoice>(
+            const TransactionTypeChooser(createTemplate: true),
+          ) ??
           choice;
     }
     if (!mounted || resolved.type == null) return;
-    final result = isCompact
-        ? await showModalBottomSheet<Object>(
-            context: context,
-            isScrollControlled: true,
-            showDragHandle: true,
-            builder: (context) => TransactionFormSheet(
-              type: resolved.type!,
-              data: widget.data,
-              template: resolved.template,
-              createTemplate: choice.createTemplate,
-            ),
-          )
-        : await showDialog<Object>(
-            context: context,
-            builder: (context) => Dialog(
-              child: SizedBox(
-                width: 560,
-                child: TransactionFormSheet(
-                  type: resolved.type!,
-                  data: widget.data,
-                  template: resolved.template,
-                  createTemplate: choice.createTemplate,
-                ),
-              ),
-            ),
-          );
+    final result = await _showTransactionDialog<Object>(
+      TransactionFormSheet(
+        type: resolved.type!,
+        data: widget.data,
+        template: resolved.template,
+        createTemplate: choice.createTemplate,
+      ),
+    );
     if (!mounted || result == null) return;
 
     if (result is Transaction && resolved.template != null) {
-      final reviewed = isCompact
-          ? await showModalBottomSheet<bool>(
-              context: context,
-              isScrollControlled: true,
-              showDragHandle: true,
-              builder: (context) => TransactionReviewSheet(
-                transaction: result,
-                data: widget.data,
-              ),
-            )
-          : await showDialog<bool>(
-              context: context,
-              builder: (context) => Dialog(
-                child: TransactionReviewSheet(
-                  transaction: result,
-                  data: widget.data,
-                ),
-              ),
-            );
+      final reviewed = await _showTransactionDialog<bool>(
+        TransactionReviewSheet(transaction: result, data: widget.data),
+      );
       if (reviewed != true) return;
     }
 
