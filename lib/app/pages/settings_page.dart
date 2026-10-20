@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
 import 'display_preferences_page.dart';
+import 'transaction_form.dart';
 import '../theme/design_tokens.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -9,6 +10,8 @@ class SettingsPage extends StatefulWidget {
     super.key,
     this.data,
     this.onSaveDisplayPreferences,
+    this.onUpdateTemplate,
+    this.onDeleteTemplate,
     this.onRebuildDailyTables,
     required this.onReloadData,
     this.textScale = 1,
@@ -18,6 +21,8 @@ class SettingsPage extends StatefulWidget {
   final AppDataSnapshot? data;
   final Future<void> Function(List<DisplayPreference> preferences)?
   onSaveDisplayPreferences;
+  final Future<void> Function(TransactionTemplate template)? onUpdateTemplate;
+  final Future<void> Function(String templateId)? onDeleteTemplate;
   final Future<void> Function()? onRebuildDailyTables;
   final Future<void> Function() onReloadData;
   final double textScale;
@@ -31,6 +36,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _working = false;
   bool _refreshing = false;
   bool _savingPreferences = false;
+  final Set<String> _deletedTemplateIds = {};
   late Map<String, List<DisplayPreference>> _preferencesByType;
 
   double get _displayScale => widget.textScale.clamp(0.75, 1.0).toDouble();
@@ -94,6 +100,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   widget.onSaveDisplayPreferences != null) ...[
                 const SizedBox(height: AppSpacing.md),
                 _buildDisplayPreferencesMenu(),
+              ],
+              if (widget.data?.transactionTemplates.isNotEmpty == true &&
+                  widget.onDeleteTemplate != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                _buildTemplatesMenu(),
               ],
               const SizedBox(height: AppSpacing.md),
               Card(
@@ -251,6 +262,88 @@ class _SettingsPageState extends State<SettingsPage> {
       rethrow;
     } finally {
       if (mounted) setState(() => _savingPreferences = false);
+    }
+  }
+
+  Widget _buildTemplatesMenu() {
+    return Card(
+      child: Column(
+        children: [
+          const ListTile(
+            title: Text('Manage Templates'),
+            subtitle: Text('Edit or delete transaction templates.'),
+          ),
+          for (final template in widget.data!.transactionTemplates.where(
+            (template) => !_deletedTemplateIds.contains(template.id),
+          ))
+            ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: Text(template.name),
+              subtitle: Text(transactionTypeLabel(template.type)),
+              trailing: Wrap(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    onPressed: () => _renameTemplate(template),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _deleteTemplate(template),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _renameTemplate(TransactionTemplate template) async {
+    final controller = TextEditingController(text: template.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename Template'),
+        content: TextField(controller: controller, autofocus: true),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || name == null || name.isEmpty) return;
+    await widget.onUpdateTemplate!(template.copyWith(name: name));
+  }
+
+  Future<void> _deleteTemplate(TransactionTemplate template) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Template?'),
+        content: Text('Delete ${template.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await widget.onDeleteTemplate!(template.id);
+    if (mounted) {
+      setState(() => _deletedTemplateIds.add(template.id));
     }
   }
 

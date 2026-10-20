@@ -17,6 +17,7 @@ class TransactionAccountSelector extends StatelessWidget {
     required this.accounts,
     required this.data,
     required this.onChanged,
+    this.requiredSelection = true,
   });
 
   final String label;
@@ -24,13 +25,15 @@ class TransactionAccountSelector extends StatelessWidget {
   final List<Account> accounts;
   final AppDataSnapshot data;
   final ValueChanged<String?> onChanged;
+  final bool requiredSelection;
 
   @override
   Widget build(BuildContext context) {
     final selected = value == null ? null : data.accountsById[value!];
     return FormField<String>(
       initialValue: value,
-      validator: (current) => current == null ? 'Select an account.' : null,
+      validator: (current) =>
+          requiredSelection && current == null ? 'Select an account.' : null,
       builder: (field) => _SelectorField(
         label: label,
         errorText: field.errorText,

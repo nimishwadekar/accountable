@@ -23,6 +23,8 @@ void main() {
       GoogleSheetsRanges.displayPreferences:
           'test_sheets/DisplayPreferences.csv',
       GoogleSheetsRanges.tags: 'test_sheets/Tags.csv',
+      GoogleSheetsRanges.transactionTemplates:
+          'test_sheets/TransactionTemplates.csv',
       GoogleSheetsRanges.transactions: 'test_sheets/Transactions.csv',
     }.entries) {
       tables[entry.key] = [

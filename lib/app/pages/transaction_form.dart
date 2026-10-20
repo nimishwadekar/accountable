@@ -6,29 +6,86 @@ import '../../data/data.dart';
 import '../theme/design_tokens.dart';
 import 'transaction_form_selectors.dart';
 
+class AddTransactionChoice {
+  const AddTransactionChoice({
+    this.type,
+    this.template,
+    this.createTemplate = false,
+  });
+
+  final TransactionType? type;
+  final TransactionTemplate? template;
+  final bool createTemplate;
+}
+
 class TransactionTypeChooser extends StatelessWidget {
-  const TransactionTypeChooser({super.key});
+  const TransactionTypeChooser({
+    super.key,
+    this.data,
+    this.createTemplate = false,
+  });
+
+  final AppDataSnapshot? data;
+  final bool createTemplate;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Theme.of(context).colorScheme.surface,
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Add Transaction',
-              style: Theme.of(context).textTheme.headlineSmall,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    createTemplate ? 'Create Template' : 'Add Transaction',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
             ),
+            if (!createTemplate &&
+                data?.transactionTemplates.isNotEmpty == true) ...[
+              const Text('Templates'),
+              for (final template in data!.transactionTemplates)
+                ListTile(
+                  leading: const Icon(Icons.description_outlined),
+                  title: Text(template.name),
+                  subtitle: Text(transactionTypeLabel(template.type)),
+                  onTap: () => Navigator.of(context).pop(
+                    AddTransactionChoice(
+                      type: template.type,
+                      template: template,
+                    ),
+                  ),
+                ),
+              const Divider(),
+            ],
+            if (!createTemplate)
+              ListTile(
+                leading: const Icon(Icons.note_add_outlined),
+                title: const Text('Create Template'),
+                onTap: () =>
+                    Navigator.of(context)
+                        .pop(const AddTransactionChoice(createTemplate: true)),
+              ),
             const SizedBox(height: AppSpacing.md),
+            Text(createTemplate ? 'Transaction Type' : 'Transaction Types'),
             for (final type in TransactionType.values)
               ListTile(
                 leading: Icon(_typeIcon(type)),
                 title: Text(transactionTypeLabel(type)),
-                onTap: () => Navigator.of(context).pop(type),
+                onTap: () =>
+                    Navigator.of(context).pop(AddTransactionChoice(type: type)),
               ),
           ],
         ),
@@ -42,10 +99,16 @@ class TransactionFormSheet extends StatefulWidget {
     super.key,
     required this.type,
     required this.data,
+    this.template,
+    this.createTemplate = false,
+    this.editTemplate = false,
   });
 
   final TransactionType type;
   final AppDataSnapshot data;
+  final TransactionTemplate? template;
+  final bool createTemplate;
+  final bool editTemplate;
 
   @override
   State<TransactionFormSheet> createState() => _TransactionFormSheetState();
@@ -56,8 +119,9 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   final _sourceAmountController = TextEditingController();
   final _destinationAmountController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _templateNameController = TextEditingController();
 
-  late DateTime _date = DateTime.now();
+  DateTime? _date;
   String? _sourceAccountId;
   String? _destinationAccountId;
   String? _categoryId;
@@ -68,6 +132,32 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       transactionTypeRules[widget.type]!.destinationRequired;
   bool get _categoryRequired =>
       transactionTypeRules[widget.type]!.categoryRequired;
+
+  @override
+  void initState() {
+    super.initState();
+    final template = widget.template;
+    _date = template?.date ?? (widget.createTemplate ? null : DateTime.now());
+    _descriptionController.text = template?.description ?? '';
+    _sourceAccountId = template?.sourceAccountId;
+    _destinationAccountId = template?.destinationAccountId;
+    _categoryId = template?.categoryId;
+    _tagId = template?.tagId;
+    if (template?.sourceAmount != null) {
+      _sourceAmountController.text = template!.sourceAmount!
+          .toMajorUnits(
+            widget.data.currenciesById[template.sourceAmount!.currencyId]!,
+          )
+          .toString();
+    }
+    if (template?.destinationAmount != null) {
+      _destinationAmountController.text = template!.destinationAmount!
+          .toMajorUnits(
+            widget.data.currenciesById[template.destinationAmount!.currencyId]!,
+          )
+          .toString();
+    }
+  }
 
   List<Category> get _availableCategories => widget.data.entryFormCategories
       .where(
@@ -80,6 +170,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     _sourceAmountController.dispose();
     _destinationAmountController.dispose();
     _descriptionController.dispose();
+    _templateNameController.dispose();
     super.dispose();
   }
 
@@ -91,33 +182,55 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            transactionTypeLabel(widget.type),
+            widget.createTemplate
+                ? 'Create Template'
+                : transactionTypeLabel(widget.type),
             style: Theme.of(context).textTheme.headlineSmall,
           ),
+          if (widget.createTemplate) ...[
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              controller: _templateNameController,
+              decoration: const InputDecoration(labelText: 'Template Name'),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Enter a template name.'
+                  : null,
+            ),
+          ],
           const SizedBox(height: AppSpacing.md),
-          TextFormField(
-            controller: _descriptionController,
-            decoration: const InputDecoration(labelText: 'Description'),
-            textCapitalization: TextCapitalization.words,
-            textInputAction: TextInputAction.next,
-            validator: (value) => value == null || value.trim().isEmpty
-                ? 'Enter a description.'
-                : null,
-          ),
+          if (widget.template == null || !widget.template!.hasDescription)
+            TextFormField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(labelText: 'Description'),
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
+              validator: (value) =>
+                  !widget.createTemplate &&
+                      (value == null || value.trim().isEmpty)
+                  ? 'Enter a description.'
+                  : null,
+            ),
           const SizedBox(height: AppSpacing.md),
-          OutlinedButton.icon(
-            onPressed: _selectDate,
-            icon: const Icon(Icons.calendar_today_outlined),
-            label: Text(_formatDate(_date)),
-          ),
+          if (widget.template == null || widget.template!.date == null)
+            OutlinedButton.icon(
+              onPressed: _selectDate,
+              icon: const Icon(Icons.calendar_today_outlined),
+              label: Text(_date == null ? 'Select date' : _formatDate(_date!)),
+            ),
           const SizedBox(height: AppSpacing.md),
-          if (_sourceRequired) ...[
+          if (_sourceRequired &&
+              (widget.template == null ||
+                  widget.template!.sourceAccountId == null)) ...[
             _accountDropdown(
               label: _destinationRequired ? 'Source Account' : 'Account',
               value: _sourceAccountId,
               onChanged: (value) => setState(() => _sourceAccountId = value),
             ),
             const SizedBox(height: AppSpacing.md),
+          ],
+          if (_sourceRequired &&
+              (widget.template == null ||
+                  widget.template!.sourceAmount == null)) ...[
             _amountField(
               controller: _sourceAmountController,
               label: _destinationRequired ? 'Source Amount' : 'Amount',
@@ -125,7 +238,9 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
             ),
             if (_destinationRequired) const SizedBox(height: AppSpacing.md),
           ],
-          if (_destinationRequired) ...[
+          if (_destinationRequired &&
+              (widget.template == null ||
+                  widget.template!.destinationAccountId == null)) ...[
             _accountDropdown(
               label: _sourceRequired ? 'Destination Account' : 'Account',
               value: _destinationAccountId,
@@ -133,18 +248,25 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
                   setState(() => _destinationAccountId = value),
             ),
             const SizedBox(height: AppSpacing.md),
+          ],
+          if (_destinationRequired &&
+              (widget.template == null ||
+                  widget.template!.destinationAmount == null))
             _amountField(
               controller: _destinationAmountController,
               label: _sourceRequired ? 'Destination Amount' : 'Amount',
               accountId: _destinationAccountId,
             ),
-          ],
-          if (_categoryRequired || _availableCategories.isNotEmpty) ...[
+          if ((widget.template == null ||
+                  widget.template!.categoryId == null) &&
+              (_categoryRequired || _availableCategories.isNotEmpty)) ...[
             const SizedBox(height: AppSpacing.md),
             _categoryDropdown(),
           ],
-          const SizedBox(height: AppSpacing.md),
-          _tagDropdown(),
+          if (widget.template == null || widget.template!.tagId == null) ...[
+            const SizedBox(height: AppSpacing.md),
+            _tagDropdown(),
+          ],
           const SizedBox(height: AppSpacing.lg),
           FilledButton(
             onPressed: _submit,
@@ -177,6 +299,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       value: value,
       accounts: widget.data.entryFormAccounts,
       data: widget.data,
+      requiredSelection: !widget.createTemplate,
       onChanged: onChanged,
     );
   }
@@ -204,6 +327,9 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       validator: (value) {
+        if (widget.createTemplate && (value == null || value.trim().isEmpty)) {
+          return null;
+        }
         if (value == null || value.trim().isEmpty) {
           return 'Enter an amount.';
         }
@@ -219,7 +345,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       label: _categoryRequired ? 'Category' : 'Category (optional)',
       value: _categoryId,
       categories: _availableCategories,
-      requiredSelection: _categoryRequired,
+      requiredSelection: _categoryRequired && !widget.createTemplate,
       onChanged: (value) => setState(() => _categoryId = value),
     );
   }
@@ -229,7 +355,8 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       initialValue: _tagId,
       isExpanded: true,
       decoration: const InputDecoration(labelText: 'Tag'),
-      validator: (value) => value == null ? 'Select a tag.' : null,
+      validator: (value) =>
+          !widget.createTemplate && value == null ? 'Select a tag.' : null,
       items: [
         for (final tag in widget.data.entryFormTags)
           DropdownMenuItem<String?>(value: tag.id, child: Text(tag.name)),
@@ -241,7 +368,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   Future<void> _selectDate() async {
     final selected = await showDatePicker(
       context: context,
-      initialDate: _date,
+      initialDate: _date ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
@@ -252,6 +379,11 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
 
+    if (!widget.createTemplate && _date == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Select a date.')));
+      return;
+    }
     final sourceAccount = _sourceAccountId == null
         ? null
         : widget.data.accountsById[_sourceAccountId!];
@@ -266,15 +398,39 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       _destinationAmountController.text,
       destinationAccount,
     );
-    if (sourceAmount == null && _sourceRequired ||
-        destinationAmount == null && _destinationRequired) {
+    if (!widget.createTemplate &&
+        (sourceAmount == null && _sourceRequired ||
+            destinationAmount == null && _destinationRequired)) {
+      return;
+    }
+    if (widget.createTemplate) {
+      final now = DateTime.now().toUtc();
+      Navigator.of(context).pop(
+        TransactionTemplate(
+          id: generateTransactionId(widget.data.transactionTemplatesById.keys),
+          name: _templateNameController.text.trim(),
+          type: widget.type,
+          date: _date,
+          description: _descriptionController.text.trim().isEmpty
+              ? null
+              : _descriptionController.text.trim(),
+          categoryId: _categoryId,
+          tagId: _tagId,
+          sourceAccountId: _sourceAccountId,
+          sourceAmount: sourceAmount,
+          destinationAccountId: _destinationAccountId,
+          destinationAmount: destinationAmount,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
       return;
     }
 
     final transaction = Transaction(
       id: generateTransactionId(widget.data.transactionsById.keys),
       createdAt: DateTime.now().toUtc(),
-      date: DateTime.utc(_date.year, _date.month, _date.day),
+      date: DateTime.utc(_date!.year, _date!.month, _date!.day),
       type: widget.type,
       sourceAmount: sourceAmount,
       sourceAccountId: _sourceAccountId,

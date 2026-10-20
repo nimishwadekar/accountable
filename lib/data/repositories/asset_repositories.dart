@@ -21,6 +21,7 @@ abstract final class DataAssetPaths {
   static const displayPreferences = 'test_sheets/DisplayPreferences.csv';
   static const tags = 'test_sheets/Tags.csv';
   static const transactions = 'test_sheets/Transactions.csv';
+  static const transactionTemplates = 'test_sheets/TransactionTemplates.csv';
 }
 
 class AssetCurrencyRepository implements CurrencyRepository {
@@ -263,6 +264,20 @@ class AssetAppDataRepository implements AppDataRepository {
   }
 
   @override
+  Future<AppDataSnapshot> addTransactionTemplate(
+    TransactionTemplate template,
+  ) => throw StateError('Templates are not implemented in local assets mode.');
+
+  @override
+  Future<AppDataSnapshot> updateTransactionTemplate(
+    TransactionTemplate template,
+  ) => throw StateError('Templates are not implemented in local assets mode.');
+
+  @override
+  Future<AppDataSnapshot> deleteTransactionTemplate(String templateId) =>
+      throw StateError('Templates are not implemented in local assets mode.');
+
+  @override
   Future<AppDataSnapshot> addTransaction(Transaction transaction) async {
     final current = await load();
     final tables = await _readDataset();
@@ -306,6 +321,11 @@ class AssetAppDataRepository implements AppDataRepository {
         tables[DataAssetPaths.categories]!,
       );
       final tagList = ModelParsers.parseTags(tables[DataAssetPaths.tags]!);
+      final templateList = ModelParsers.parseTransactionTemplates(
+        tables[DataAssetPaths.transactionTemplates]!,
+        accounts: accountById,
+        currencies: currencyById,
+      );
       final preferenceList = ModelParsers.parseDisplayPreferences(
         tables[DataAssetPaths.displayPreferences]!,
       );
@@ -355,6 +375,7 @@ class AssetAppDataRepository implements AppDataRepository {
         dailyNetWorth: dailyNetWorthList,
         dailyManualValuations: dailyManualValuationList,
         displayPreferences: synchronizedPreferences.preferences,
+        transactionTemplates: templateList,
       );
     } on DataValidationFailure {
       rethrow;
@@ -500,6 +521,21 @@ const _runtimeHeaders = <String, List<String>>{
     'show_in_entry_forms',
   ],
   DataAssetPaths.tags: ['tag_id', 'tag_name'],
+  DataAssetPaths.transactionTemplates: [
+    'template_id',
+    'name',
+    'transaction_type',
+    'date',
+    'description',
+    'category',
+    'tag',
+    'source_account_id',
+    'source_amount',
+    'dest_account_id',
+    'dest_amount',
+    'created_at',
+    'updated_at',
+  ],
   DataAssetPaths.transactions: [
     'transaction_id',
     'date',
@@ -525,6 +561,7 @@ const _runtimeAssetPaths = <String>[
   DataAssetPaths.dailyManualValuations,
   DataAssetPaths.displayPreferences,
   DataAssetPaths.tags,
+  DataAssetPaths.transactionTemplates,
   DataAssetPaths.transactions,
 ];
 

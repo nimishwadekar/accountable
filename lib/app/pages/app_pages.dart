@@ -60,6 +60,7 @@ class OverviewPage extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           Card(
+            clipBehavior: Clip.hardEdge,
             child: Column(
               children: [
                 for (final account in data.visibleAccounts.where(
@@ -107,6 +108,7 @@ class OverviewPage extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Card(
+                    clipBehavior: Clip.hardEdge,
                     child: valuationAccounts.isEmpty
                         ? const EmptyState(
                             message: 'No Asset or Liability accounts yet.',
@@ -225,6 +227,7 @@ class AccountsPage extends StatelessWidget {
       title: 'Accounts',
       subtitle: 'Balances across your connected accounts.',
       child: Card(
+        clipBehavior: Clip.hardEdge,
         child: Column(
           children: [
             for (final account in data.visibleAccounts.where(
@@ -577,28 +580,31 @@ class _ManualValuationRow extends StatelessWidget {
     final color = latest == null
         ? null
         : amountColor(context, latest.value.minorUnits);
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.xs,
-      ),
-      leading: CircleAvatar(
-        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-        foregroundColor: AppColors.navy,
-        child: Icon(
-          account.isLiability
-              ? Icons.account_balance_outlined
-              : Icons.trending_up,
+    return Container(
+      color: accountTypeColor(account).withValues(alpha: 0.06),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.xs,
         ),
-      ),
-      title: Text(account.name),
-      subtitle: Text(accountSubtitle(account, data.currenciesById)),
-      trailing: Text(
-        latest == null || currency == null
-            ? '—'
-            : formatMoney(latest.value, data.currenciesById),
-        style: Theme.of(context).textTheme.titleMedium
-            ?.copyWith(color: color, fontWeight: FontWeight.w700),
+        leading: CircleAvatar(
+          backgroundColor: accountTypeColor(account).withValues(alpha: 0.14),
+          foregroundColor: accountTypeColor(account),
+          child: Icon(
+            account.isLiability
+                ? Icons.account_balance_outlined
+                : Icons.trending_up,
+          ),
+        ),
+        title: Text(account.name),
+        subtitle: Text(accountSubtitle(account, data.currenciesById)),
+        trailing: Text(
+          latest == null || currency == null
+              ? '—'
+              : formatMoney(latest.value, data.currenciesById),
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(color: color, fontWeight: FontWeight.w700),
+        ),
       ),
     );
   }
@@ -633,6 +639,14 @@ String _titleCase(String value) {
       .join(' ');
 }
 
+Color accountTypeColor(Account account) {
+  if (account.isLiability) return AppColors.danger;
+  if (account.accountType.trim().toLowerCase() == 'asset') {
+    return AppColors.success;
+  }
+  return const Color(0xFF90CAF9);
+}
+
 Color? amountColor(BuildContext context, int minorUnits) {
   if (minorUnits > 0) return AppColors.success;
   if (minorUnits < 0) return Theme.of(context).colorScheme.error;
@@ -653,23 +667,26 @@ class _AccountRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currency = currencies[account.currencyId];
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.xs,
-      ),
-      leading: CircleAvatar(
-        backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-        foregroundColor: AppColors.navy,
-        child: const Icon(Icons.account_balance_wallet_outlined),
-      ),
-      title: Text(account.name),
-      subtitle: Text(accountSubtitle(account, currencies)),
-      trailing: Text(
-        currency == null ? '—' : formatMoney(balance, currencies),
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          color: amountColor(context, balance.minorUnits),
-          fontWeight: FontWeight.w700,
+    return Container(
+      color: accountTypeColor(account).withValues(alpha: 0.06),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.xs,
+        ),
+        leading: CircleAvatar(
+          backgroundColor: accountTypeColor(account).withValues(alpha: 0.14),
+          foregroundColor: accountTypeColor(account),
+          child: const Icon(Icons.account_balance_wallet_outlined),
+        ),
+        title: Text(account.name),
+        subtitle: Text(accountSubtitle(account, currencies)),
+        trailing: Text(
+          currency == null ? '—' : formatMoney(balance, currencies),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: amountColor(context, balance.minorUnits),
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );

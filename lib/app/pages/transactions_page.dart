@@ -4,6 +4,7 @@ import '../../data/data.dart';
 import '../formatters.dart';
 import '../theme/design_tokens.dart';
 import 'transaction_form.dart';
+import 'transaction_review_sheet.dart';
 
 bool isTransactionDateInRange(DateTime transactionDate, DateTimeRange range) {
   final date = _dateOnlyUtc(transactionDate);
@@ -21,10 +22,12 @@ class TransactionsPage extends StatefulWidget {
     super.key,
     required this.data,
     required this.onTransactionAdded,
+    required this.onTemplateAdded,
   });
 
   final AppDataSnapshot data;
   final Future<void> Function(Transaction transaction) onTransactionAdded;
+  final Future<void> Function(TransactionTemplate template) onTemplateAdded;
 
   @override
   State<TransactionsPage> createState() => _TransactionsPageState();
@@ -129,39 +132,96 @@ class _TransactionsPageState extends State<TransactionsPage> {
 
   Future<void> _openAddTransaction() async {
     final isCompact = MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
-    final type = isCompact
-        ? await showModalBottomSheet<TransactionType>(
+    final choice = isCompact
+        ? await showModalBottomSheet<AddTransactionChoice>(
             context: context,
             showDragHandle: true,
-            builder: (context) => const TransactionTypeChooser(),
+            builder: (context) => TransactionTypeChooser(data: widget.data),
           )
-        : await showDialog<TransactionType>(
+        : await showDialog<AddTransactionChoice>(
             context: context,
-            builder: (context) => const TransactionTypeChooser(),
+            builder: (context) => TransactionTypeChooser(data: widget.data),
           );
-    if (!mounted || type == null) return;
+    if (!mounted || choice == null) return;
 
-    final transaction = isCompact
-        ? await showModalBottomSheet<Transaction>(
+    AddTransactionChoice resolved = choice;
+    if (choice.createTemplate) {
+      resolved =
+          await (isCompact
+              ? showModalBottomSheet<AddTransactionChoice>(
+                  context: context,
+                  showDragHandle: true,
+                  builder: (context) =>
+                      const TransactionTypeChooser(createTemplate: true),
+                )
+              : showDialog<AddTransactionChoice>(
+                  context: context,
+                  builder: (context) =>
+                      const TransactionTypeChooser(createTemplate: true),
+                )) ??
+          choice;
+    }
+    if (!mounted || resolved.type == null) return;
+    final result = isCompact
+        ? await showModalBottomSheet<Object>(
             context: context,
             isScrollControlled: true,
             showDragHandle: true,
-            builder: (context) =>
-                TransactionFormSheet(type: type, data: widget.data),
+            builder: (context) => TransactionFormSheet(
+              type: resolved.type!,
+              data: widget.data,
+              template: resolved.template,
+              createTemplate: choice.createTemplate,
+            ),
           )
-        : await showDialog<Transaction>(
+        : await showDialog<Object>(
             context: context,
             builder: (context) => Dialog(
               child: SizedBox(
                 width: 560,
-                child: TransactionFormSheet(type: type, data: widget.data),
+                child: TransactionFormSheet(
+                  type: resolved.type!,
+                  data: widget.data,
+                  template: resolved.template,
+                  createTemplate: choice.createTemplate,
+                ),
               ),
             ),
           );
-    if (!mounted || transaction == null) return;
+    if (!mounted || result == null) return;
+
+    if (result is Transaction && resolved.template != null) {
+      final reviewed = isCompact
+          ? await showModalBottomSheet<bool>(
+              context: context,
+              isScrollControlled: true,
+              showDragHandle: true,
+              builder: (context) => TransactionReviewSheet(
+                transaction: result,
+                data: widget.data,
+              ),
+            )
+          : await showDialog<bool>(
+              context: context,
+              builder: (context) => Dialog(
+                child: TransactionReviewSheet(
+                  transaction: result,
+                  data: widget.data,
+                ),
+              ),
+            );
+      if (reviewed != true) return;
+    }
 
     try {
-      await widget.onTransactionAdded(transaction);
+      if (result is TransactionTemplate) {
+        await widget.onTemplateAdded(result);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Template saved.')));
+        return;
+      }
+      await widget.onTransactionAdded(result as Transaction);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Transaction added.')));
@@ -693,15 +753,20 @@ class TransactionListRow extends StatelessWidget {
     final detailParts = <String>[
       if (category != null) category.name,
       if (tag != null) tag.name,
-      if (sourceAccount != null && destinationAccount != null)
+      if (transaction.type != TransactionType.transfer &&
+          sourceAccount != null &&
+          destinationAccount != null)
         '${sourceAccount.name} → ${destinationAccount.name}'
-      else if (sourceAccount != null)
+      else if (transaction.type != TransactionType.transfer &&
+          sourceAccount != null)
         sourceAccount.name
-      else if (destinationAccount != null)
+      else if (transaction.type != TransactionType.transfer &&
+          destinationAccount != null)
         destinationAccount.name,
     ];
 
     return Card(
+      clipBehavior: Clip.hardEdge,
       child: ListTile(
         onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(
@@ -732,23 +797,60 @@ class TransactionListRow extends StatelessWidget {
     );
   }
 
+  Widget _transferLine({
+    required String accountName,
+    required String amount,
+    required Color color,
+    required TextStyle? style,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            accountName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Text(amount, style: style?.copyWith(color: color)),
+      ],
+    );
+  }
+
   Widget _buildAmount(BuildContext context) {
     if (transaction.type == TransactionType.transfer &&
         transaction.sourceAmount != null &&
         transaction.destinationAmount != null) {
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            '-${formatMoney(transaction.sourceAmount!, data.currenciesById)}',
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
-          Text(
-            '+${formatMoney(transaction.destinationAmount!, data.currenciesById)}',
-            style: const TextStyle(color: AppColors.success),
-          ),
-        ],
+      final source = transaction.sourceAccountId == null
+          ? null
+          : data.accountsById[transaction.sourceAccountId!];
+      final destination = transaction.destinationAccountId == null
+          ? null
+          : data.accountsById[transaction.destinationAccountId!];
+      final amountStyle = Theme.of(context).textTheme.titleMedium
+          ?.copyWith(fontWeight: FontWeight.w700);
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 300),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _transferLine(
+              accountName: source?.name ?? 'Source',
+              amount:
+                  '-${formatMoney(transaction.sourceAmount!, data.currenciesById)}',
+              color: Theme.of(context).colorScheme.error,
+              style: amountStyle,
+            ),
+            _transferLine(
+              accountName: destination?.name ?? 'Destination',
+              amount:
+                  '+${formatMoney(transaction.destinationAmount!, data.currenciesById)}',
+              color: AppColors.success,
+              style: amountStyle,
+            ),
+          ],
+        ),
       );
     }
 
@@ -758,7 +860,7 @@ class TransactionListRow extends StatelessWidget {
     final prefix = isExpense ? '-' : '+';
     return Text(
       '$prefix${formatMoney(amount, data.currenciesById)}',
-      style: TextStyle(
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
         color: isExpense
             ? Theme.of(context).colorScheme.error
             : AppColors.success,

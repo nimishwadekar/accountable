@@ -12,6 +12,7 @@ class AppDataSnapshot {
     required List<DailyNetWorth> dailyNetWorth,
     required List<DailyManualValuation> dailyManualValuations,
     List<DisplayPreference> displayPreferences = const [],
+    List<TransactionTemplate> transactionTemplates = const [],
   }) : accounts = List.unmodifiable(accounts),
        categories = List.unmodifiable(categories),
        currencies = List.unmodifiable(currencies),
@@ -44,7 +45,12 @@ class AppDataSnapshot {
          for (final preference in displayPreferences)
            _preferenceKey(preference.entityType, preference.entityId):
                preference,
-       };
+       },
+       transactionTemplates = List.unmodifiable(transactionTemplates),
+       transactionTemplatesById = _indexById(
+         transactionTemplates,
+         (template) => template.id,
+       );
 
   final List<Account> accounts;
   final List<Category> categories;
@@ -56,6 +62,7 @@ class AppDataSnapshot {
   final List<DailyNetWorth> dailyNetWorth;
   final List<DailyManualValuation> dailyManualValuations;
   final List<DisplayPreference> displayPreferences;
+  final List<TransactionTemplate> transactionTemplates;
 
   final Map<String, Account> accountsById;
   final Map<String, Category> categoriesById;
@@ -67,6 +74,7 @@ class AppDataSnapshot {
   final Map<String, DailyNetWorth> dailyNetWorthById;
   final Map<String, DailyManualValuation> dailyManualValuationsById;
   final Map<String, DisplayPreference> displayPreferencesByKey;
+  final Map<String, TransactionTemplate> transactionTemplatesById;
 
   DisplayPreference? displayPreferenceFor(String entityType, String entityId) =>
       displayPreferencesByKey[_preferenceKey(entityType, entityId)];

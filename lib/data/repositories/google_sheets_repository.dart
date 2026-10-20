@@ -21,7 +21,24 @@ abstract final class GoogleSheetsRanges {
   static const displayPreferences = 'DisplayPreferences!A:E';
   static const tags = 'Tags!A:B';
   static const transactions = 'Transactions!A:K';
+  static const transactionTemplates = 'TransactionTemplates!A:M';
 }
+
+const _transactionTemplateHeaders = <String>[
+  'template_id',
+  'name',
+  'transaction_type',
+  'date',
+  'description',
+  'category',
+  'tag',
+  'source_account_id',
+  'source_amount',
+  'dest_account_id',
+  'dest_amount',
+  'created_at',
+  'updated_at',
+];
 
 const _displayPreferenceHeaders = <String>[
   'entity_type',
@@ -93,6 +110,66 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
   }
 
   @override
+  Future<AppDataSnapshot> addTransactionTemplate(
+    TransactionTemplate template,
+  ) async {
+    final current = await load();
+    if (current.transactionTemplates.any(
+      (item) => item.name.trim().toLowerCase() == template.name.trim().toLowerCase(),
+    )) {
+      throw StateError('A template with this name already exists.');
+    }
+    await api.appendRow(
+      GoogleSheetsRanges.transactionTemplates,
+      _transactionTemplateRow(
+        template,
+        accounts: (await load()).accountsById,
+        currencies: (await load()).currenciesById,
+      ),
+    );
+    return reload();
+  }
+
+  @override
+  Future<AppDataSnapshot> updateTransactionTemplate(
+    TransactionTemplate template,
+  ) async {
+    final current = await load();
+    final templates = [
+      for (final item in current.transactionTemplates)
+        item.id == template.id ? template : item,
+    ];
+    await api.replaceRange(GoogleSheetsRanges.transactionTemplates, [
+      _transactionTemplateHeaders,
+      for (final item in templates)
+        _transactionTemplateRow(
+          item,
+          accounts: current.accountsById,
+          currencies: current.currenciesById,
+        ),
+    ]);
+    return reload();
+  }
+
+  @override
+  Future<AppDataSnapshot> deleteTransactionTemplate(String templateId) async {
+    final current = await load();
+    final templates = current.transactionTemplates
+        .where((item) => item.id != templateId)
+        .toList();
+    await api.replaceRange(GoogleSheetsRanges.transactionTemplates, [
+      _transactionTemplateHeaders,
+      for (final item in templates)
+        _transactionTemplateRow(
+          item,
+          accounts: current.accountsById,
+          currencies: current.currenciesById,
+        ),
+    ]);
+    return reload();
+  }
+
+  @override
   Future<AppDataSnapshot> addTransaction(Transaction transaction) async {
     final current = await load();
     final accountCurrencies = {
@@ -137,6 +214,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       List<DailyNetWorth> dailyNetWorth = const [];
       List<DailyManualValuation> dailyManualValuations = const [];
       List<DisplayPreference> displayPreferences = const [];
+      List<TransactionTemplate> transactionTemplates = const [];
 
       try {
         final result = ModelParsers.parseCurrenciesWithIssues(
@@ -208,6 +286,20 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
         } catch (error) {
           recordIssues('DisplayPreferences', [
             issueFromError('DisplayPreferences', error),
+          ]);
+        }
+      }
+      if (dependenciesAreValid('TransactionTemplates')) {
+        try {
+          transactionTemplates = ModelParsers.parseTransactionTemplates(
+            _encode(tables[GoogleSheetsRanges.transactionTemplates]!),
+            accounts: accountById,
+            currencies: currencyById,
+          );
+          recordIssues('TransactionTemplates', const []);
+        } catch (error) {
+          recordIssues('TransactionTemplates', [
+            issueFromError('TransactionTemplates', error),
           ]);
         }
       }
@@ -292,6 +384,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
         dailyNetWorth: dailyNetWorth,
         dailyManualValuations: dailyManualValuations,
         displayPreferences: displayPreferences,
+        transactionTemplates: transactionTemplates,
       );
     } on DataValidationFailure {
       rethrow;
@@ -314,6 +407,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       GoogleSheetsRanges.dailyNetWorth,
       GoogleSheetsRanges.dailyManualValuations,
       GoogleSheetsRanges.displayPreferences,
+      GoogleSheetsRanges.transactionTemplates,
       GoogleSheetsRanges.tags,
       GoogleSheetsRanges.transactions,
     ];
@@ -339,6 +433,37 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
 
   static String _encode(List<List<String>> rows) => csv.encode(rows);
 
+  static List<String> _transactionTemplateRow(
+    TransactionTemplate template, {
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+  }) {
+    String amountFor(Money? amount, String? accountId) {
+      if (amount == null || accountId == null) return '';
+      final account = accounts[accountId];
+      if (account == null) {
+        throw StateError('Unknown template account: $accountId.');
+      }
+      return amount.toMajorUnitsString(currencies[account.currencyId]!);
+    }
+
+    return [
+      template.id,
+      template.name,
+      template.type.wireValue,
+      template.date == null ? '' : _dateString(template.date!),
+      template.description ?? '',
+      template.categoryId ?? '',
+      template.tagId ?? '',
+      template.sourceAccountId ?? '',
+      amountFor(template.sourceAmount, template.sourceAccountId),
+      template.destinationAccountId ?? '',
+      amountFor(template.destinationAmount, template.destinationAccountId),
+      template.createdAt.toUtc().toIso8601String(),
+      template.updatedAt.toUtc().toIso8601String(),
+    ];
+  }
+
   static List<String> _displayPreferenceRow(DisplayPreference preference) => [
     preference.entityType,
     preference.entityId,
@@ -362,6 +487,7 @@ const _columnCount = <String, int>{
   GoogleSheetsRanges.dailyNetWorth: 4,
   GoogleSheetsRanges.dailyManualValuations: 4,
   GoogleSheetsRanges.displayPreferences: 5,
+  GoogleSheetsRanges.transactionTemplates: 13,
   GoogleSheetsRanges.tags: 2,
   GoogleSheetsRanges.transactions: 11,
 };

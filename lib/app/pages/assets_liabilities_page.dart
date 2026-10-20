@@ -114,6 +114,7 @@ class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
             const EmptyState(message: 'No Asset or Liability accounts yet.')
           else
             Card(
+              clipBehavior: Clip.hardEdge,
               child: Column(
                 children: [
                   for (
@@ -534,24 +535,27 @@ class _AccountValuationRow extends StatelessWidget {
         : latest.value.minorUnits < 0
         ? Theme.of(context).colorScheme.error
         : null;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.xs,
-      ),
-      leading: CircleAvatar(
-        backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-        foregroundColor: AppColors.navy,
-        child: const Icon(Icons.account_balance_wallet_outlined),
-      ),
-      title: Text(account.name),
-      subtitle: Text(accountSubtitle(account, data.currenciesById)),
-      trailing: Text(
-        latest == null || currency == null
-            ? '—'
-            : formatMoney(latest.value, data.currenciesById),
-        style: Theme.of(context).textTheme.titleMedium
-            ?.copyWith(color: valueColor, fontWeight: FontWeight.w700),
+    return Container(
+      color: accountTypeColor(account).withValues(alpha: 0.06),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.xs,
+        ),
+        leading: CircleAvatar(
+          backgroundColor: accountTypeColor(account).withValues(alpha: 0.14),
+          foregroundColor: accountTypeColor(account),
+          child: const Icon(Icons.account_balance_wallet_outlined),
+        ),
+        title: Text(account.name),
+        subtitle: Text(accountSubtitle(account, data.currenciesById)),
+        trailing: Text(
+          latest == null || currency == null
+              ? '—'
+              : formatMoney(latest.value, data.currenciesById),
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(color: valueColor, fontWeight: FontWeight.w700),
+        ),
       ),
     );
   }

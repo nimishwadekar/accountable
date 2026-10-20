@@ -266,6 +266,58 @@ class ModelParsers {
     }).toList();
   }
 
+  static List<TransactionTemplate> parseTransactionTemplates(
+    String source, {
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+  }) {
+    final table = CsvTable.parse(source, tableName: 'TransactionTemplates');
+    return _uniqueById(
+      table.rows.map((row) {
+        Money? amount(String field, String? accountId) {
+          final raw = optionalValue(row, field);
+          if (raw == null || accountId == null) return null;
+          final account = accounts[accountId];
+          if (account == null) {
+            throw FormatException('Template references unknown account: $accountId.');
+          }
+          return Money.fromMajorUnits(
+            value: raw,
+            currency: _currency(currencies, account.currencyId),
+          );
+        }
+        final sourceAccountId = optionalValue(row, 'source_account_id');
+        final destinationAccountId = optionalValue(row, 'dest_account_id');
+        final createdAt = parseUtcTimestamp(
+          requiredValue(row, 'created_at'),
+          fieldName: 'created_at',
+        );
+        return TransactionTemplate(
+          id: requiredValue(row, 'template_id'),
+          name: requiredValue(row, 'name'),
+          type: TransactionTypeWireValue.parse(
+            requiredValue(row, 'transaction_type'),
+          ),
+          date: _optionalDate(row, 'date'),
+          description: optionalValue(row, 'description'),
+          categoryId: optionalValue(row, 'category'),
+          tagId: optionalValue(row, 'tag'),
+          sourceAccountId: sourceAccountId,
+          sourceAmount: amount('source_amount', sourceAccountId),
+          destinationAccountId: destinationAccountId,
+          destinationAmount: amount('dest_amount', destinationAccountId),
+          createdAt: createdAt,
+          updatedAt: parseUtcTimestamp(
+            requiredValue(row, 'updated_at'),
+            fieldName: 'updated_at',
+          ),
+        );
+      }),
+      (template) => template.id,
+      table.tableName,
+    );
+  }
+
   static List<Transaction> parseTransactions(
     String source, {
     required Map<String, Account> accounts,

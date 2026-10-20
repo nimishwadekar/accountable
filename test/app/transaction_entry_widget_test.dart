@@ -20,6 +20,7 @@ void main() {
     );
 
     expect(find.text('Add Transaction'), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
     expect(find.text('Expense'), findsOneWidget);
     expect(find.text('Income'), findsOneWidget);
     expect(find.text('Reimbursement'), findsOneWidget);
@@ -83,6 +84,24 @@ void main() {
       Icons.eco,
     );
     expect(categoryColor(dining), isNot(equals(categoryColor(personalCare))));
+  });
+
+  testWidgets('template type chooser has its own title and close action', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: const Scaffold(
+          body: TransactionTypeChooser(createTemplate: true),
+        ),
+      ),
+    );
+
+    expect(find.text('Create Template'), findsOneWidget);
+    expect(find.text('Add Transaction'), findsNothing);
+    expect(find.text('Transaction Type'), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
   });
 
   testWidgets('expense form places description first and requires tag', (

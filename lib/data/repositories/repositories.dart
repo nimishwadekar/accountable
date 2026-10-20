@@ -62,4 +62,8 @@ abstract interface class AppDataRepository {
   Future<AppDataSnapshot> saveDisplayPreferences(
     List<DisplayPreference> preferences,
   );
+
+  Future<AppDataSnapshot> addTransactionTemplate(TransactionTemplate template);
+  Future<AppDataSnapshot> updateTransactionTemplate(TransactionTemplate template);
+  Future<AppDataSnapshot> deleteTransactionTemplate(String templateId);
 }

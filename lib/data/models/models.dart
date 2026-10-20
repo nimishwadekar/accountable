@@ -9,3 +9,4 @@ export 'exchange_rate.dart';
 export 'money.dart';
 export 'tag.dart';
 export 'transaction.dart';
+export 'transaction_template.dart';

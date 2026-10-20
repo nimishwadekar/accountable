@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/data.dart';
@@ -5,6 +7,7 @@ import 'pages/app_pages.dart';
 import 'pages/assets_liabilities_page.dart';
 import 'pages/transactions_page.dart';
 import 'pages/settings_page.dart';
+import 'navigation_history.dart';
 import '../features/analysis/analysis_page.dart';
 import 'theme/design_tokens.dart';
 
@@ -77,12 +80,36 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   late Future<AppDataSnapshot> _snapshotFuture;
+  late final NavigationHistory _navigationHistory;
+  StreamSubscription<String>? _navigationSubscription;
   AppSection _selectedSection = AppSection.overview;
 
   @override
   void initState() {
     super.initState();
+    _navigationHistory = NavigationHistory();
+    _selectedSection = _sectionFromPath(_navigationHistory.currentPath);
+    // Mark the authenticated app entry so Back cannot return to pre-auth UI.
+    _navigationHistory.replace(
+      _navigationHistory.authenticatedPath(_navigationHistory.currentPath),
+    );
+    _navigationSubscription = _navigationHistory.changes.listen((path) {
+      if (!mounted) return;
+      if (!_navigationHistory.isAuthenticatedPath(path)) {
+        setState(() => _selectedSection = AppSection.overview);
+        _navigationHistory.push(_pathForSection(AppSection.overview));
+        return;
+      }
+      setState(() => _selectedSection = _sectionFromPath(path));
+    });
     _snapshotFuture = widget.dataRepository.load();
+  }
+
+  @override
+  void dispose() {
+    _navigationSubscription?.cancel();
+    _navigationHistory.dispose();
+    super.dispose();
   }
 
   @override
@@ -97,11 +124,15 @@ class _AppShellState extends State<AppShell> {
           children: [
             if (!isCompact) _buildNavigationRail(extended: isExtended),
             Expanded(
-              child: FutureBuilder<AppDataSnapshot>(
-                future: _snapshotFuture,
-                builder: (context, snapshot) {
-                  return _buildContent(snapshot);
-                },
+              child: RefreshIndicator.adaptive(
+                onRefresh: _reloadData,
+                notificationPredicate: (_) => true,
+                child: FutureBuilder<AppDataSnapshot>(
+                  future: _snapshotFuture,
+                  builder: (context, snapshot) {
+                    return _buildContent(snapshot);
+                  },
+                ),
               ),
             ),
           ],
@@ -190,6 +221,7 @@ class _AppShellState extends State<AppShell> {
       AppSection.transactions => TransactionsPage(
         data: data,
         onTransactionAdded: _handleTransactionAdded,
+        onTemplateAdded: _handleTemplateAdded,
       ),
       AppSection.accounts => AccountsPage(data: data),
       AppSection.analysis => AnalysisPage(data: data),
@@ -200,6 +232,8 @@ class _AppShellState extends State<AppShell> {
       AppSection.settings => SettingsPage(
         data: data,
         onSaveDisplayPreferences: _saveDisplayPreferences,
+        onUpdateTemplate: _updateTemplate,
+        onDeleteTemplate: _deleteTemplate,
         onRebuildDailyTables: widget.onRebuildDailyTables,
         onReloadData: widget.onReloadData ?? _reloadData,
         textScale: widget.textScale,
@@ -209,9 +243,49 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _selectSection(int index) {
-    setState(() {
-      _selectedSection = AppSection.values[index];
-    });
+    final section = AppSection.values[index];
+    setState(() => _selectedSection = section);
+    _navigationHistory.push(
+      _navigationHistory.authenticatedPath(_pathForSection(section)),
+    );
+  }
+
+  AppSection _sectionFromPath(String path) {
+    final segments = Uri.parse(path).pathSegments;
+    final segment = segments.isEmpty ? null : segments.last;
+    return switch (segment) {
+      'transactions' => AppSection.transactions,
+      'analysis' => AppSection.analysis,
+      'accounts' => AppSection.accounts,
+      'assets-liabilities' => AppSection.assetsLiabilities,
+      'settings' => AppSection.settings,
+      _ => AppSection.overview,
+    };
+  }
+
+  String _pathForSection(AppSection section) {
+    final currentPath = _navigationHistory.currentPath;
+    final segments = Uri.parse(currentPath).pathSegments;
+    final knownSection = const {
+      'transactions',
+      'analysis',
+      'accounts',
+      'assets-liabilities',
+      'settings',
+    }.contains(segments.isEmpty ? null : segments.last);
+    final baseSegments = knownSection && segments.isNotEmpty
+        ? segments.sublist(0, segments.length - 1)
+        : segments;
+    final base = baseSegments.isEmpty ? '' : '/${baseSegments.join('/')}';
+    final suffix = switch (section) {
+      AppSection.overview => '',
+      AppSection.transactions => '/transactions',
+      AppSection.analysis => '/analysis',
+      AppSection.accounts => '/accounts',
+      AppSection.assetsLiabilities => '/assets-liabilities',
+      AppSection.settings => '/settings',
+    };
+    return base.isEmpty ? (suffix.isEmpty ? '/' : suffix) : '$base$suffix';
   }
 
   void _reload() {
@@ -236,10 +310,30 @@ class _AppShellState extends State<AppShell> {
     await future;
   }
 
+  Future<void> _updateTemplate(TransactionTemplate template) async {
+    final future = widget.dataRepository.updateTransactionTemplate(template);
+    setState(() => _snapshotFuture = future);
+    await future;
+  }
+
+  Future<void> _deleteTemplate(String templateId) async {
+    final future = widget.dataRepository.deleteTransactionTemplate(templateId);
+    setState(() => _snapshotFuture = future);
+    await future;
+  }
+
   Future<void> _saveDisplayPreferences(
     List<DisplayPreference> preferences,
   ) async {
     final future = widget.dataRepository.saveDisplayPreferences(preferences);
+    setState(() {
+      _snapshotFuture = future;
+    });
+    await future;
+  }
+
+  Future<void> _handleTemplateAdded(TransactionTemplate template) async {
+    final future = widget.dataRepository.addTransactionTemplate(template);
     setState(() {
       _snapshotFuture = future;
     });
