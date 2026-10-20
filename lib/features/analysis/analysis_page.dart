@@ -205,17 +205,11 @@ class _AnalysisPageState extends State<AnalysisPage> {
           const SizedBox(height: AppSpacing.md),
           LayoutBuilder(
             builder: (context, constraints) {
-              final accountDropdown = DropdownButtonFormField<String>(
-                initialValue: _selectedAccountId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Account'),
-                items: [
-                  for (final item in widget.data.visibleAccounts)
-                    DropdownMenuItem<String>(
-                      value: item.id,
-                      child: Text(item.name),
-                    ),
-                ],
+              final accountDropdown = TransactionAccountSelector(
+                label: 'Account',
+                value: _selectedAccountId,
+                accounts: widget.data.visibleAccounts,
+                data: widget.data,
                 onChanged: (value) {
                   if (value != null) setState(() => _selectedAccountId = value);
                 },
@@ -597,14 +591,95 @@ class _AnalysisPageState extends State<AnalysisPage> {
     return [
       for (final item in progress)
         Padding(
-          padding: const EdgeInsets.only(left: AppSpacing.lg),
-          child: ListTile(
-            dense: true,
-            leading: const Icon(Icons.subdirectory_arrow_right),
-            title: Text(item.allocation.name),
-            trailing: Text(
-              '${_formatCategoryAmount(item.actualUsdMinorUnits, widget.data.currenciesById['USD'])} / '
-              '${_formatCategoryAmount(item.expectedUsdMinorUnits, widget.data.currenciesById['USD'])}',
+          padding: const EdgeInsets.only(
+            left: AppSpacing.xl,
+            top: AppSpacing.xs,
+            bottom: AppSpacing.xs,
+          ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(AppRadii.control),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.subdirectory_arrow_right,
+                  size: 20,
+                  color: item.missingRateDates.isEmpty
+                      ? AppColors.teal
+                      : AppColors.warning,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.allocation.name,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadii.pill),
+                        child: LinearProgressIndicator(
+                          minHeight: 5,
+                          value: item.expectedUsdMinorUnits <= 0
+                              ? 0
+                              : (item.actualUsdMinorUnits /
+                                        item.expectedUsdMinorUnits)
+                                    .clamp(0.0, 1.0),
+                          backgroundColor: AppColors.border,
+                          valueColor: AlwaysStoppedAnimation(
+                            item.actualUsdMinorUnits >=
+                                    item.expectedUsdMinorUnits
+                                ? AppColors.success
+                                : AppColors.teal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${_formatCategoryAmount(item.actualUsdMinorUnits, widget.data.currenciesById['USD'])} / '
+                      '${_formatCategoryAmount(item.expectedUsdMinorUnits, widget.data.currenciesById['USD'])}',
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    if (item.percentage != null)
+                      Text(
+                        '${item.percentage!.toStringAsFixed(0)}%',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: item.percentage! >= 100
+                              ? AppColors.success
+                              : AppColors.mutedText,
+                        ),
+                      ),
+                  ],
+                ),
+                if (item.missingRateDates.isNotEmpty)
+                  Tooltip(
+                    message:
+                        'Exchange rate unavailable for ${item.missingRateDates.map(formatDate).join(', ')}',
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: AppSpacing.sm),
+                      child: Icon(
+                        Icons.warning_amber_rounded,
+                        color: AppColors.warning,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),

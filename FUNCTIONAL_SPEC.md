@@ -166,6 +166,10 @@ Existing legacy rows may have blank descriptions or tags while migration is pend
 - Each account has one currency; selecting an account determines the currency for that side.
 - Cross-currency transfers store separately entered source and destination amounts.
 - A transfer-specific exchange-rate field is not required initially.
+- Transfers may include source and destination fees. Each fee creates a separate `Financial Fees` expense transaction.
+- Same-currency transfers use one amount field; source fees reduce the transfer amount and destination fees remain separate expenses.
+- Cross-currency transfers keep the entered destination amount; a source fee reduces only the transfer's source amount.
+- Transfer plus fee transactions are written atomically as one batch.
 
 ### Monetary arithmetic
 

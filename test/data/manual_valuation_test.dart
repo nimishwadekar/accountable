@@ -131,7 +131,7 @@ void main() {
   });
 }
 
-class _MaintenanceClient implements SheetsTableClient {
+class _MaintenanceClient extends SheetsTableClient {
   final Map<String, List<List<String>>> tables = {
     'DailyExchangeRates!B:B': const [
       ['rate_date'],

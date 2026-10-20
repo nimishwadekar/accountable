@@ -77,7 +77,7 @@ void main() {
   });
 }
 
-class _FakeSheetsClient implements SheetsTableClient {
+class _FakeSheetsClient extends SheetsTableClient {
   _FakeSheetsClient(this.tables);
 
   final Map<String, List<List<String>>> tables;

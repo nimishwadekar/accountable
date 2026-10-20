@@ -22,11 +22,13 @@ class TransactionsPage extends StatefulWidget {
     super.key,
     required this.data,
     required this.onTransactionAdded,
+    required this.onTransactionsAdded,
     required this.onTemplateAdded,
   });
 
   final AppDataSnapshot data;
   final Future<void> Function(Transaction transaction) onTransactionAdded;
+  final Future<void> Function(List<Transaction> transactions) onTransactionsAdded;
   final Future<void> Function(TransactionTemplate template) onTemplateAdded;
 
   @override
@@ -178,6 +180,14 @@ class _TransactionsPageState extends State<TransactionsPage> {
     }
 
     try {
+      if (result is List<Transaction>) {
+        await widget.onTransactionsAdded(result);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Transfer added.')),
+        );
+        return;
+      }
       if (result is TransactionTemplate) {
         await widget.onTemplateAdded(result);
         if (!mounted) return;

@@ -284,21 +284,27 @@ class AssetAppDataRepository implements AppDataRepository {
       throw StateError('Templates are not implemented in local assets mode.');
 
   @override
-  Future<AppDataSnapshot> addTransaction(Transaction transaction) async {
+  Future<AppDataSnapshot> addTransaction(Transaction transaction) =>
+      addTransactions([transaction]);
+
+  @override
+  Future<AppDataSnapshot> addTransactions(List<Transaction> transactions) async {
     final current = await load();
     final tables = await _readDataset();
     final accountCurrencies = {
       for (final account in current.accounts) account.id: account.currencyId,
     };
-    final row = transactionToRow(
-      transaction,
-      current.currenciesById,
-      accountCurrencies,
-    );
-    tables[DataAssetPaths.transactions] = _appendCsvRow(
-      tables[DataAssetPaths.transactions]!,
-      row,
-    );
+    for (final transaction in transactions) {
+      final row = transactionToRow(
+        transaction,
+        current.currenciesById,
+        accountCurrencies,
+      );
+      tables[DataAssetPaths.transactions] = _appendCsvRow(
+        tables[DataAssetPaths.transactions]!,
+        row,
+      );
+    }
     if (store == null) {
       throw StateError('This data source is read-only.');
     }

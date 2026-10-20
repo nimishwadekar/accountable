@@ -118,7 +118,11 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   final _formKey = GlobalKey<FormState>();
   final _sourceAmountController = TextEditingController();
   final _destinationAmountController = TextEditingController();
+  final _sourceFeeController = TextEditingController();
+  final _destinationFeeController = TextEditingController();
   final _descriptionController = TextEditingController();
+  bool _sourceFeeEnabled = false;
+  bool _destinationFeeEnabled = false;
   final _templateNameController = TextEditingController();
 
   DateTime? _date;
@@ -159,6 +163,16 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     }
   }
 
+  bool get _transferSameCurrency {
+    if (widget.type != TransactionType.transfer ||
+        _sourceAccountId == null ||
+        _destinationAccountId == null) {
+      return false;
+    }
+    return widget.data.accountsById[_sourceAccountId!]!.currencyId ==
+        widget.data.accountsById[_destinationAccountId!]!.currencyId;
+  }
+
   List<Category> get _availableCategories => widget.data.entryFormCategories
       .where(
         (category) => category.allowedTransactionTypes.contains(widget.type),
@@ -169,6 +183,8 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   void dispose() {
     _sourceAmountController.dispose();
     _destinationAmountController.dispose();
+    _sourceFeeController.dispose();
+    _destinationFeeController.dispose();
     _descriptionController.dispose();
     _templateNameController.dispose();
     super.dispose();
@@ -238,6 +254,22 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
             ),
             if (_destinationRequired) const SizedBox(height: AppSpacing.md),
           ],
+          if (widget.type == TransactionType.transfer) ...[
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _sourceFeeEnabled,
+              title: const Text('Source Account Fee'),
+              onChanged: (value) =>
+                  setState(() => _sourceFeeEnabled = value ?? false),
+            ),
+            if (_sourceFeeEnabled)
+              _amountField(
+                controller: _sourceFeeController,
+                label: 'Source Fee',
+                accountId: _sourceAccountId,
+              ),
+            const SizedBox(height: AppSpacing.md),
+          ],
           if (_destinationRequired &&
               (widget.template == null ||
                   widget.template!.destinationAccountId == null)) ...[
@@ -250,6 +282,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
             const SizedBox(height: AppSpacing.md),
           ],
           if (_destinationRequired &&
+              !_transferSameCurrency &&
               (widget.template == null ||
                   widget.template!.destinationAmount == null))
             _amountField(
@@ -257,6 +290,22 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
               label: _sourceRequired ? 'Destination Amount' : 'Amount',
               accountId: _destinationAccountId,
             ),
+          if (widget.type == TransactionType.transfer) ...[
+            const SizedBox(height: AppSpacing.md),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _destinationFeeEnabled,
+              title: const Text('Destination Account Fee'),
+              onChanged: (value) =>
+                  setState(() => _destinationFeeEnabled = value ?? false),
+            ),
+            if (_destinationFeeEnabled)
+              _amountField(
+                controller: _destinationFeeController,
+                label: 'Destination Fee',
+                accountId: _destinationAccountId,
+              ),
+          ],
           if ((widget.template == null ||
                   widget.template!.categoryId == null) &&
               (_categoryRequired || _availableCategories.isNotEmpty)) ...[
@@ -396,13 +445,16 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       _sourceAmountController.text,
       sourceAccount,
     );
-    final destinationAmount = _parseAmount(
+    var transferDestinationAmount = _parseAmount(
       _destinationAmountController.text,
       destinationAccount,
     );
+    if (_transferSameCurrency && sourceAmount != null) {
+      transferDestinationAmount = sourceAmount;
+    }
     if (!widget.createTemplate &&
         (sourceAmount == null && _sourceRequired ||
-            destinationAmount == null && _destinationRequired)) {
+            transferDestinationAmount == null && _destinationRequired)) {
       return;
     }
     if (widget.createTemplate) {
@@ -421,11 +473,116 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
           sourceAccountId: _sourceAccountId,
           sourceAmount: sourceAmount,
           destinationAccountId: _destinationAccountId,
-          destinationAmount: destinationAmount,
+          destinationAmount: transferDestinationAmount,
           createdAt: now,
           updatedAt: now,
         ),
       );
+      return;
+    }
+
+    if (widget.type == TransactionType.transfer) {
+      final feeCategory = widget.data.categoriesById['financial_fees'];
+      if ((_sourceFeeEnabled || _destinationFeeEnabled) &&
+          (feeCategory == null ||
+              !feeCategory.allowedTransactionTypes.contains(
+                TransactionType.expense,
+              ))) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Financial Fees category is required.')),
+        );
+        return;
+      }
+      final sourceFee = _sourceFeeEnabled
+          ? _parseAmount(_sourceFeeController.text, sourceAccount)
+          : null;
+      final destinationFee = _destinationFeeEnabled
+          ? _parseAmount(_destinationFeeController.text, destinationAccount)
+          : null;
+      if ((_sourceFeeEnabled && sourceFee == null) ||
+          (_destinationFeeEnabled && destinationFee == null)) {
+        return;
+      }
+      if (sourceFee != null &&
+          sourceAmount != null &&
+          sourceFee.minorUnits >= sourceAmount.minorUnits) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Source fee must be less than the transfer amount.'),
+          ),
+        );
+        return;
+      }
+      if (destinationFee != null &&
+          transferDestinationAmount != null &&
+          destinationFee.minorUnits >= transferDestinationAmount.minorUnits) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Destination fee must be less than the transfer amount.',
+            ),
+          ),
+        );
+        return;
+      }
+      final transferSourceAmount = sourceFee == null || sourceAmount == null
+          ? sourceAmount
+          : sourceAmount - sourceFee;
+      final generated = <Transaction>[];
+      final feeDescription =
+          'Transfer Fee - ${_descriptionController.text.trim()}';
+      for (final entry in [
+        (sourceFee, _sourceAccountId),
+        (destinationFee, _destinationAccountId),
+      ]) {
+        if (entry.$1 == null || entry.$2 == null) continue;
+        generated.add(
+          Transaction(
+            id: generateTransactionId({
+              ...widget.data.transactionsById.keys,
+              ...generated.map((item) => item.id),
+            }),
+            createdAt: DateTime.now().toUtc(),
+            date: DateTime.utc(_date!.year, _date!.month, _date!.day),
+            type: TransactionType.expense,
+            sourceAmount: entry.$1,
+            sourceAccountId: entry.$2,
+            destinationAmount: null,
+            destinationAccountId: null,
+            categoryId: 'financial_fees',
+            tagId: _tagId,
+            description: feeDescription,
+          ),
+        );
+      }
+      generated.insert(
+        sourceFee == null ? 0 : 1,
+        Transaction(
+          id: generateTransactionId({
+            ...widget.data.transactionsById.keys,
+            ...generated.map((item) => item.id),
+          }),
+          createdAt: DateTime.now().toUtc(),
+          date: DateTime.utc(_date!.year, _date!.month, _date!.day),
+          type: TransactionType.transfer,
+          sourceAmount: transferSourceAmount,
+          sourceAccountId: _sourceAccountId,
+          destinationAmount: transferDestinationAmount,
+          destinationAccountId: _destinationAccountId,
+          categoryId: _categoryId,
+          tagId: _tagId,
+          description: _descriptionController.text.trim(),
+        ),
+      );
+      final errors = generated
+          .expand((item) => item.validateForEntry())
+          .toList();
+      if (errors.isNotEmpty) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(errors.join(' '))));
+        return;
+      }
+      Navigator.of(context).pop(generated);
       return;
     }
 
@@ -436,7 +593,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       type: widget.type,
       sourceAmount: sourceAmount,
       sourceAccountId: _sourceAccountId,
-      destinationAmount: destinationAmount,
+      destinationAmount: transferDestinationAmount,
       destinationAccountId: _destinationAccountId,
       categoryId: _categoryId,
       tagId: _tagId,

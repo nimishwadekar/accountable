@@ -39,7 +39,19 @@ class TransactionAccountSelector extends StatelessWidget {
         errorText: field.errorText,
         child: selected == null
             ? const Text('Select account')
-            : _AccountSummary(account: selected, data: data),
+            : DecoratedBox(
+                decoration: BoxDecoration(
+                  color: _accountTypeColor(selected).withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(AppRadii.control),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xs,
+                  ),
+                  child: _AccountSummary(account: selected, data: data),
+                ),
+              ),
         onTap: () async {
           final selectedId = await showModalBottomSheet<String>(
             context: context,
@@ -227,6 +239,12 @@ class _AccountPicker extends StatelessWidget {
               const SizedBox(height: AppSpacing.sm),
               for (final account in accounts)
                 Card(
+                  margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                  clipBehavior: Clip.hardEdge,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadii.control),
+                    side: const BorderSide(color: AppColors.border),
+                  ),
                   color: account.id == selectedId
                       ? Theme.of(context).colorScheme.secondaryContainer
                       : _accountTypeColor(account).withValues(alpha: 0.06),

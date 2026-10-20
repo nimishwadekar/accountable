@@ -56,6 +56,7 @@ abstract interface class AppDataRepository {
   Future<AppDataSnapshot> reload();
 
   Future<AppDataSnapshot> addTransaction(Transaction transaction);
+  Future<AppDataSnapshot> addTransactions(List<Transaction> transactions);
 
   Future<AppDataSnapshot> addManualValuation(DailyManualValuation valuation);
 

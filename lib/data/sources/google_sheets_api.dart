@@ -3,12 +3,18 @@ import 'package:http/http.dart' as http;
 
 import 'bearer_client.dart';
 
-abstract interface class SheetsTableClient {
+abstract class SheetsTableClient {
   Future<List<List<String>>> readRange(String range);
 
   Future<Map<String, List<List<String>>>> batchReadRanges(List<String> ranges);
 
   Future<void> appendRow(String range, List<String> values);
+
+  Future<void> appendRows(String range, List<List<String>> values) async {
+    for (final row in values) {
+      await appendRow(range, row);
+    }
+  }
 
   Future<void> replaceRange(String range, List<List<String>> values);
 }
@@ -57,9 +63,16 @@ class GoogleSheetsApi implements SheetsTableClient {
   }
 
   @override
-  Future<void> appendRow(String range, List<String> values) async {
+  Future<void> appendRow(String range, List<String> values) {
+    return appendRows(range, [values]);
+  }
+
+  @override
+  Future<void> appendRows(String range, List<List<String>> values) async {
     await _sheetsApi.spreadsheets.values.append(
-      sheets.ValueRange(values: [_coerceValues(range, values)]),
+      sheets.ValueRange(
+        values: [for (final row in values) _coerceValues(range, row)],
+      ),
       spreadsheetId,
       range,
       valueInputOption: 'RAW',

@@ -187,19 +187,31 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
   }
 
   @override
-  Future<AppDataSnapshot> addTransaction(Transaction transaction) async {
+  Future<AppDataSnapshot> addTransaction(Transaction transaction) =>
+      addTransactions([transaction]);
+
+  @override
+  Future<AppDataSnapshot> addTransactions(List<Transaction> transactions) async {
     final current = await load();
     final accountCurrencies = {
       for (final account in current.accounts) account.id: account.currencyId,
     };
-    final row = transactionToRow(
-      transaction,
-      current.currenciesById,
-      accountCurrencies,
-    );
-    await api.appendRow(
+    await api.appendRows(
       GoogleSheetsRanges.transactions,
-      _transactionHeaders.map((header) => row[header] ?? '').toList(),
+      [
+        for (final transaction in transactions)
+          _transactionHeaders
+              .map(
+                (header) =>
+                    transactionToRow(
+                      transaction,
+                      current.currenciesById,
+                      accountCurrencies,
+                    )[header] ??
+                    '',
+              )
+              .toList(),
+      ],
     );
     return reload();
   }

@@ -221,6 +221,7 @@ class _AppShellState extends State<AppShell> {
       AppSection.transactions => TransactionsPage(
         data: data,
         onTransactionAdded: _handleTransactionAdded,
+        onTransactionsAdded: _handleTransactionsAdded,
         onTemplateAdded: _handleTemplateAdded,
       ),
       AppSection.accounts => AccountsPage(data: data),
@@ -349,6 +350,14 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _handleTemplateAdded(TransactionTemplate template) async {
     final future = widget.dataRepository.addTransactionTemplate(template);
+    setState(() {
+      _snapshotFuture = future;
+    });
+    await future;
+  }
+
+  Future<void> _handleTransactionsAdded(List<Transaction> transactions) async {
+    final future = widget.dataRepository.addTransactions(transactions);
     setState(() {
       _snapshotFuture = future;
     });

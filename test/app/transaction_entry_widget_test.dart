@@ -117,6 +117,7 @@ void main() {
         ),
       ),
     );
+    await tester.pump();
 
     expect(find.text('Description'), findsOneWidget);
     expect(find.text('Tag'), findsOneWidget);

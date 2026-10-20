@@ -75,6 +75,13 @@ class AppsScriptTableClient implements SheetsTableClient {
   }
 
   @override
+  Future<void> appendRows(String range, List<List<String>> values) {
+    throw UnsupportedError(
+      'Apps Script proof-of-concept mode is read-only for $range.',
+    );
+  }
+
+  @override
   Future<void> replaceRange(String range, List<List<String>> values) {
     throw UnsupportedError(
       'Apps Script proof-of-concept mode is read-only for $range.',

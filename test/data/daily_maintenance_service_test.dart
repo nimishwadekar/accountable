@@ -252,7 +252,7 @@ void main() {
   );
 }
 
-class _ResumableSheetsClient implements SheetsTableClient {
+class _ResumableSheetsClient extends SheetsTableClient {
   final Map<String, List<List<String>>> tables = {
     'DailyExchangeRates!A:A': [
       ['rate_id'],
@@ -321,7 +321,7 @@ class _ResumableSheetsClient implements SheetsTableClient {
   }
 }
 
-class _FakeSheetsClient implements SheetsTableClient {
+class _FakeSheetsClient extends SheetsTableClient {
   _FakeSheetsClient(this.tables);
 
   final Map<String, List<List<String>>> tables;
