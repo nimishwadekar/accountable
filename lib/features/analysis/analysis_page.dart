@@ -505,9 +505,17 @@ class _AnalysisPageState extends State<AnalysisPage> {
                       _categoryIcon(value.categoryId),
                       color: _categoryColor(value.categoryId),
                     ),
-                    title: Text(_categoryName(value.categoryId)),
+                    title: Text(
+                      _categoryName(value.categoryId),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     trailing: SizedBox(
-                      width: 180,
+                      width:
+                          MediaQuery.sizeOf(context).width <
+                              AppBreakpoints.compact
+                          ? 150
+                          : 180,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
@@ -553,7 +561,11 @@ class _AnalysisPageState extends State<AnalysisPage> {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         SizedBox(
-                          width: 110,
+                          width:
+                              MediaQuery.sizeOf(context).width <
+                                  AppBreakpoints.compact
+                              ? 85
+                              : 110,
                           child: Text(
                             _formatCategoryAmount(total, usd),
                             textAlign: TextAlign.right,
@@ -622,6 +634,8 @@ class _AnalysisPageState extends State<AnalysisPage> {
                     children: [
                       Text(
                         item.allocation.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       const SizedBox(height: AppSpacing.xs),
