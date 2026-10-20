@@ -8,6 +8,12 @@ import '../theme/design_tokens.dart';
 String manualValuationId(DateTime date, String accountId) =>
     '${_dateString(date)}-$accountId';
 
+String _displayAccountType(Account account) {
+  final type = account.isLiability ? 'liability' : account.accountType.trim();
+  if (type.isEmpty) return type;
+  return '${type[0].toUpperCase()}${type.substring(1).toLowerCase()}';
+}
+
 DateTime defaultManualValuationDate(AppDataSnapshot data) {
   final dates =
       data.dailyManualValuationsById.values
@@ -90,7 +96,7 @@ class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
   @override
   Widget build(BuildContext context) {
     return AppPageFrame(
-      title: 'Assets & liabilities',
+      title: 'Assets & Liabilities',
       subtitle: 'Track manually observed values for loans and investments.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,7 +111,7 @@ class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
           ),
           const SizedBox(height: AppSpacing.md),
           if (_valuationAccounts.isEmpty)
-            const EmptyState(message: 'No asset or liability accounts yet.')
+            const EmptyState(message: 'No Asset or Liability accounts yet.')
           else
             Card(
               child: Column(
@@ -177,7 +183,10 @@ class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
     )) {
       return null;
     }
-    final money = Money.fromMajorUnits(value: value, currency: currency);
+    final enteredValue = account.isLiability && !value.trim().startsWith('-')
+        ? '-${value.trim()}'
+        : value.trim();
+    final money = Money.fromMajorUnits(value: enteredValue, currency: currency);
     return DailyManualValuation(
       id: manualValuationId(normalizedDate, account.id),
       date: normalizedDate,
@@ -278,6 +287,10 @@ class _ValuationFormState extends State<_ValuationForm> {
                 controller: _valueController,
                 decoration: InputDecoration(
                   labelText: 'Valuation',
+                  filled: true,
+                  fillColor: account?.isLiability == true
+                      ? AppColors.danger.withValues(alpha: 0.06)
+                      : AppColors.success.withValues(alpha: 0.06),
                   suffixText: currency?.id,
                 ),
                 keyboardType: const TextInputType.numberWithOptions(
@@ -395,7 +408,7 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Add daily valuations',
+                'Add Daily Valuations',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: AppSpacing.xs),
@@ -419,7 +432,7 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
               if (accounts.isNotEmpty)
                 FilledButton(
                   onPressed: _submit,
-                  child: const Text('Save valuations'),
+                  child: const Text('Save Valuations'),
                 ),
             ],
           ),
@@ -438,8 +451,12 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
       controller: controller,
       decoration: InputDecoration(
         labelText: account.name,
+        filled: true,
+        fillColor: account.isLiability
+            ? AppColors.danger.withValues(alpha: 0.06)
+            : AppColors.success.withValues(alpha: 0.06),
         helperText:
-            '${account.accountType} · ${currency?.id ?? account.currencyId}',
+            '${_displayAccountType(account)} · ${currency?.id ?? account.currencyId}',
         suffixText: currency?.id,
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -471,8 +488,12 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
     final valuations = <DailyManualValuation>[];
     for (final account in _eligibleAccounts) {
       final currency = widget.data.currenciesById[account.currencyId]!;
+      final rawValue = _controllers[account.id]!.text.trim();
+      final enteredValue = account.isLiability && !rawValue.startsWith('-')
+          ? '-$rawValue'
+          : rawValue;
       final value = Money.fromMajorUnits(
-        value: _controllers[account.id]!.text.trim(),
+        value: enteredValue,
         currency: currency,
       );
       valuations.add(

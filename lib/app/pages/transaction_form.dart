@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
 import '../theme/design_tokens.dart';
+import 'transaction_form_selectors.dart';
 
 class TransactionTypeChooser extends StatelessWidget {
   const TransactionTypeChooser({super.key});
@@ -97,6 +98,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
           TextFormField(
             controller: _descriptionController,
             decoration: const InputDecoration(labelText: 'Description'),
+            textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
             validator: (value) => value == null || value.trim().isEmpty
                 ? 'Enter a description.'
@@ -111,21 +113,21 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
           const SizedBox(height: AppSpacing.md),
           if (_sourceRequired) ...[
             _accountDropdown(
-              label: 'Source Account',
+              label: _destinationRequired ? 'Source Account' : 'Account',
               value: _sourceAccountId,
               onChanged: (value) => setState(() => _sourceAccountId = value),
             ),
             const SizedBox(height: AppSpacing.md),
             _amountField(
               controller: _sourceAmountController,
-              label: 'Source Amount',
+              label: _destinationRequired ? 'Source Amount' : 'Amount',
               accountId: _sourceAccountId,
             ),
             if (_destinationRequired) const SizedBox(height: AppSpacing.md),
           ],
           if (_destinationRequired) ...[
             _accountDropdown(
-              label: 'Destination Account',
+              label: _sourceRequired ? 'Destination Account' : 'Account',
               value: _destinationAccountId,
               onChanged: (value) =>
                   setState(() => _destinationAccountId = value),
@@ -133,7 +135,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
             const SizedBox(height: AppSpacing.md),
             _amountField(
               controller: _destinationAmountController,
-              label: 'Destination Amount',
+              label: _sourceRequired ? 'Destination Amount' : 'Amount',
               accountId: _destinationAccountId,
             ),
           ],
@@ -170,18 +172,11 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     required String? value,
     required ValueChanged<String?> onChanged,
   }) {
-    return DropdownButtonFormField<String>(
-      initialValue: value,
-      isExpanded: true,
-      decoration: InputDecoration(labelText: label),
-      validator: (value) => value == null ? 'Select an account.' : null,
-      items: [
-        for (final account in widget.data.entryFormAccounts)
-          DropdownMenuItem<String>(
-            value: account.id,
-            child: Text('${account.name} (${account.currencyId})'),
-          ),
-      ],
+    return TransactionAccountSelector(
+      label: label,
+      value: value,
+      accounts: widget.data.entryFormAccounts,
+      data: widget.data,
       onChanged: onChanged,
     );
   }
@@ -220,26 +215,11 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   }
 
   Widget _categoryDropdown() {
-    return DropdownButtonFormField<String?>(
-      initialValue: _categoryId,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: _categoryRequired ? 'Category' : 'Category (optional)',
-      ),
-      validator: (value) =>
-          _categoryRequired && value == null ? 'Select a category.' : null,
-      items: [
-        if (!_categoryRequired)
-          const DropdownMenuItem<String?>(
-            value: null,
-            child: Text('No category'),
-          ),
-        for (final category in _availableCategories)
-          DropdownMenuItem<String?>(
-            value: category.id,
-            child: Text(category.name),
-          ),
-      ],
+    return TransactionCategorySelector(
+      label: _categoryRequired ? 'Category' : 'Category (optional)',
+      value: _categoryId,
+      categories: _availableCategories,
+      requiredSelection: _categoryRequired,
       onChanged: (value) => setState(() => _categoryId = value),
     );
   }

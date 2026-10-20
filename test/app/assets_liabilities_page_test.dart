@@ -51,8 +51,8 @@ void main() {
     await tester.tap(find.text('Add valuation'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('Add daily valuations'), findsOneWidget);
+    expect(find.text('Add Daily Valuations'), findsOneWidget);
     expect(find.text('Brokerage'), findsWidgets);
-    expect(find.text('Save valuations'), findsOneWidget);
+    expect(find.text('Save Valuations'), findsOneWidget);
   });
 }

@@ -19,6 +19,10 @@ class OverviewPage extends StatelessWidget {
       accounts: data.accounts,
       transactions: data.transactions,
     );
+    final netWorthChange = _netWorthChangeOver30Days(
+      data.dailyNetWorth,
+      latestNetWorth,
+    );
 
     return AppPageFrame(
       title: 'Overview',
@@ -33,7 +37,11 @@ class OverviewPage extends StatelessWidget {
                 : formatMoney(latestNetWorth.amount, data.currenciesById),
             detail: latestNetWorth == null
                 ? 'No daily snapshot available'
-                : 'As of ${formatDate(latestNetWorth.date)}',
+                : _netWorthDetail(
+                    latestNetWorth: latestNetWorth,
+                    change: netWorthChange,
+                    currencies: data.currenciesById,
+                  ),
             accent: latestNetWorth == null
                 ? AppColors.mutedText
                 : amountColor(context, latestNetWorth.amount.minorUnits) ??
@@ -58,7 +66,9 @@ class OverviewPage extends StatelessWidget {
                   (account) => account.isLedgerAccount,
                 )) ...[
                   if (account !=
-                      data.visibleAccounts.firstWhere((item) => item.isLedgerAccount))
+                      data.visibleAccounts.firstWhere(
+                        (item) => item.isLedgerAccount,
+                      ))
                     const Divider(height: 1),
                   _AccountRow(
                     account: account,
@@ -99,7 +109,7 @@ class OverviewPage extends StatelessWidget {
                   Card(
                     child: valuationAccounts.isEmpty
                         ? const EmptyState(
-                            message: 'No asset or liability accounts yet.',
+                            message: 'No Asset or Liability accounts yet.',
                           )
                         : Column(
                             children: [
@@ -126,6 +136,56 @@ class OverviewPage extends StatelessWidget {
     );
   }
 
+  static String _netWorthDetail({
+    required DailyNetWorth latestNetWorth,
+    required _NetWorthChange? change,
+    required Map<String, CurrencyDefinition> currencies,
+  }) {
+    final asOf = 'As of ${formatDate(latestNetWorth.date)}';
+    if (change == null) return asOf;
+    final sign = change.amountMinorUnits >= 0 ? '+' : '';
+    final amount = formatMoney(
+      Money(
+        minorUnits: change.amountMinorUnits,
+        currencyId: latestNetWorth.amount.currencyId,
+      ),
+      currencies,
+    );
+    final percentage = change.baselineMinorUnits == 0
+        ? 'n/a'
+        : '${(change.amountMinorUnits / change.baselineMinorUnits.abs() * 100).toStringAsFixed(1)}%';
+    return '$sign$amount · $sign$percentage over 30 days · $asOf';
+  }
+
+  static _NetWorthChange? _netWorthChangeOver30Days(
+    Iterable<DailyNetWorth> values,
+    DailyNetWorth? latest,
+  ) {
+    if (latest == null) return null;
+    final target = DateTime.utc(
+      latest.date.year,
+      latest.date.month,
+      latest.date.day,
+    ).subtract(const Duration(days: 30));
+    DailyNetWorth? baseline;
+    for (final value in values) {
+      final date = DateTime.utc(
+        value.date.year,
+        value.date.month,
+        value.date.day,
+      );
+      if (!date.isAfter(target) &&
+          (baseline == null || date.isAfter(baseline.date))) {
+        baseline = value;
+      }
+    }
+    if (baseline == null) return null;
+    return _NetWorthChange(
+      amountMinorUnits: latest.amount.minorUnits - baseline.amount.minorUnits,
+      baselineMinorUnits: baseline.amount.minorUnits,
+    );
+  }
+
   static DailyNetWorth? _latestByDate(
     Iterable<DailyNetWorth> values,
     DateTime Function(DailyNetWorth) dateOf,
@@ -138,6 +198,16 @@ class OverviewPage extends StatelessWidget {
     }
     return latest;
   }
+}
+
+class _NetWorthChange {
+  const _NetWorthChange({
+    required this.amountMinorUnits,
+    required this.baselineMinorUnits,
+  });
+
+  final int amountMinorUnits;
+  final int baselineMinorUnits;
 }
 
 class AccountsPage extends StatelessWidget {

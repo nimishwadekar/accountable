@@ -145,6 +145,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
               ],
               color: AppColors.teal,
               currency: usd,
+              axisLabel: 'Value (${usd?.id ?? 'USD'})',
             ),
     );
   }
@@ -247,19 +248,40 @@ class _AnalysisPageState extends State<AnalysisPage> {
                 for (final point in series.points)
                   _ChartPoint(
                     date: point.date,
-                    value: useUsd
-                        ? (usd == null
-                              ? 0
-                              : point.usdAmount.toMajorUnits(usd).toDouble())
-                        : (currency == null
-                              ? 0
-                              : point.nativeAmount
-                                    .toMajorUnits(currency)
-                                    .toDouble()),
+                    value: account?.isLiability == true
+                        ? (useUsd
+                                  ? (usd == null
+                                        ? 0.0
+                                        : point.usdAmount
+                                              .toMajorUnits(usd)
+                                              .toDouble())
+                                  : (currency == null
+                                        ? 0.0
+                                        : point.nativeAmount
+                                              .toMajorUnits(currency)
+                                              .toDouble()))
+                              .abs()
+                        : (useUsd
+                              ? (usd == null
+                                    ? 0
+                                    : point.usdAmount
+                                          .toMajorUnits(usd)
+                                          .toDouble())
+                              : (currency == null
+                                    ? 0
+                                    : point.nativeAmount
+                                          .toMajorUnits(currency)
+                                          .toDouble())),
                   ),
               ],
-              color: AppColors.navy,
+              color: account?.isLiability == true
+                  ? AppColors.danger
+                  : AppColors.navy,
               currency: useUsd ? usd : currency,
+              isLiability: account?.isLiability == true,
+              axisLabel: account?.isLiability == true
+                  ? 'Debt Value (${(useUsd ? usd : currency)?.id ?? 'USD'})'
+                  : 'Value (${(useUsd ? usd : currency)?.id ?? 'USD'})',
             ),
     );
   }
@@ -412,11 +434,15 @@ class _LineChart extends StatefulWidget {
     required this.points,
     required this.color,
     required this.currency,
+    required this.axisLabel,
+    this.isLiability = false,
   });
 
   final List<_ChartPoint> points;
   final Color color;
   final CurrencyDefinition? currency;
+  final String axisLabel;
+  final bool isLiability;
 
   @override
   State<_LineChart> createState() => _LineChartState();
@@ -460,104 +486,129 @@ class _LineChartState extends State<_LineChart> {
 
         return SizedBox(
           height: 280,
-          child: LineChart(
-            LineChartData(
-              minX: chartMinX,
-              maxX: chartMaxX,
-              minY: minimum - padding,
-              maxY: maximum + padding,
-              gridData: const FlGridData(show: true),
-              lineTouchData: LineTouchData(
-                touchCallback: (event, response) {
-                  final spots = response?.lineBarSpots;
-                  if (spots == null || spots.isEmpty) {
-                    if (_touchResponse != null) {
-                      setState(() => _touchResponse = null);
-                    }
-                    return;
-                  }
-                  setState(() => _touchResponse = response);
-                },
-                touchTooltipData: LineTouchTooltipData(
-                  tooltipMargin: 16,
-                  tooltipHorizontalAlignment: FLHorizontalAlignment.center,
-                  fitInsideHorizontally: true,
-                  fitInsideVertically: true,
-                  getTooltipColor: (_) => Colors.white,
-                  tooltipBorder: const BorderSide(color: AppColors.border),
-                  getTooltipItems: (spots) {
-                    final seen = <String>{};
-                    return [
-                      for (final spot in spots)
-                        if (seen.add(
-                          '${spot.x.toStringAsFixed(6)}:${spot.y.toStringAsFixed(6)}',
-                        ))
-                          LineTooltipItem(
-                            '${currency?.symbol ?? ''} ${_formatChartValue(spot.y)}',
-                            TextStyle(
-                              color: _amountColor(spot.y),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          )
-                        else
-                          null,
-                    ];
-                  },
-                ),
-              ),
-              titlesData: FlTitlesData(
-                rightTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
-                topTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: axisReservedSize,
-                    getTitlesWidget: (value, meta) {
-                      if (value <= minimum - padding * 0.9 ||
-                          value >= maximum + padding * 0.9) {
-                        return const SizedBox.shrink();
-                      }
-                      return Text(
-                        currency == null
-                            ? _formatChartValue(value)
-                            : '${currency.symbol} ${_formatChartValue(value)}',
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.clip,
-                        style: Theme.of(context).textTheme.labelSmall,
-                      );
-                    },
-                  ),
-                ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    interval: xInterval.toDouble(),
-                    reservedSize: 32,
-                    getTitlesWidget: (value, meta) {
-                      final dayOffset = value.round();
-                      if ((value - dayOffset).abs() > 0.001 ||
-                          dayOffset < 0 ||
-                          dayOffset > spanDays) {
-                        return const SizedBox.shrink();
-                      }
-                      final date = firstDate.add(Duration(days: dayOffset));
-                      return Text(
-                        _formatShortDate(date),
-                        maxLines: 1,
-                        softWrap: false,
-                        style: Theme.of(context).textTheme.labelSmall,
-                      );
-                    },
+          child: Column(
+            children: [
+              SizedBox(
+                height: 20,
+                child: Align(
+                  alignment: Alignment.center,
+                  child: Text(
+                    widget.axisLabel,
+                    style: Theme.of(context).textTheme.labelMedium,
                   ),
                 ),
               ),
-              lineBarsData: _lineBars(points, firstDate, color),
-            ),
+              Expanded(
+                child: LineChart(
+                  LineChartData(
+                    minX: chartMinX,
+                    maxX: chartMaxX,
+                    minY: minimum - padding,
+                    maxY: maximum + padding,
+                    gridData: const FlGridData(show: true),
+                    lineTouchData: LineTouchData(
+                      touchCallback: (event, response) {
+                        final spots = response?.lineBarSpots;
+                        if (spots == null || spots.isEmpty) {
+                          if (_touchResponse != null) {
+                            setState(() => _touchResponse = null);
+                          }
+                          return;
+                        }
+                        setState(() => _touchResponse = response);
+                      },
+                      touchTooltipData: LineTouchTooltipData(
+                        tooltipMargin: 16,
+                        tooltipHorizontalAlignment:
+                            FLHorizontalAlignment.center,
+                        fitInsideHorizontally: true,
+                        fitInsideVertically: true,
+                        getTooltipColor: (_) => Colors.white,
+                        tooltipBorder: const BorderSide(
+                          color: AppColors.border,
+                        ),
+                        getTooltipItems: (spots) {
+                          final seen = <String>{};
+                          return [
+                            for (final spot in spots)
+                              if (seen.add(
+                                '${spot.x.toStringAsFixed(6)}:${spot.y.toStringAsFixed(6)}',
+                              ))
+                                LineTooltipItem(
+                                  '${currency?.symbol ?? ''} ${_formatChartValue(spot.y)}',
+                                  TextStyle(
+                                    color: _pointColor(spot.y),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                )
+                              else
+                                null,
+                          ];
+                        },
+                      ),
+                    ),
+                    titlesData: FlTitlesData(
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      leftTitles: AxisTitles(
+                        axisNameWidget: null,
+                        axisNameSize: 0,
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: axisReservedSize,
+                          getTitlesWidget: (value, meta) {
+                            if (value <= minimum - padding * 0.9 ||
+                                value >= maximum + padding * 0.9) {
+                              return const SizedBox.shrink();
+                            }
+                            return Text(
+                              currency == null
+                                  ? _formatChartValue(value)
+                                  : '${currency.symbol} ${_formatChartValue(value)}',
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.clip,
+                              style: Theme.of(context).textTheme.labelSmall,
+                            );
+                          },
+                        ),
+                      ),
+                      bottomTitles: AxisTitles(
+                        axisNameWidget: null,
+                        axisNameSize: 0,
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: xInterval.toDouble(),
+                          reservedSize: 32,
+                          getTitlesWidget: (value, meta) {
+                            final dayOffset = value.round();
+                            if ((value - dayOffset).abs() > 0.001 ||
+                                dayOffset < 0 ||
+                                dayOffset > spanDays) {
+                              return const SizedBox.shrink();
+                            }
+                            final date = firstDate.add(
+                              Duration(days: dayOffset),
+                            );
+                            return Text(
+                              _formatShortDate(date),
+                              maxLines: 1,
+                              softWrap: false,
+                              style: Theme.of(context).textTheme.labelSmall,
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    lineBarsData: _lineBars(points, firstDate, color),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -606,7 +657,7 @@ class _LineChartState extends State<_LineChart> {
       return [
         LineChartBarData(
           spots: [FlSpot(0, points.first.value)],
-          color: _amountColor(points.first.value),
+          color: _pointColor(points.first.value),
           barWidth: 3,
           dotData: const FlDotData(show: true),
         ),
@@ -625,7 +676,7 @@ class _LineChartState extends State<_LineChart> {
               points[index + 1].value,
             ),
           ],
-          color: _amountColor(
+          color: _pointColor(
             (points[index].value + points[index + 1].value) / 2,
           ),
           barWidth: 3,
@@ -637,6 +688,11 @@ class _LineChartState extends State<_LineChart> {
           ),
         ),
     ];
+  }
+
+  Color _pointColor(double value) {
+    if (widget.isLiability) return AppColors.danger;
+    return _amountColor(value);
   }
 
   static Color _amountColor(double value) {

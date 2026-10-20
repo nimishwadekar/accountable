@@ -768,6 +768,8 @@ class TransactionListRow extends StatelessWidget {
   }
 
   Color _backgroundColor(BuildContext context) {
+    final categoryColor = _categoryColor;
+    if (categoryColor != null) return categoryColor.withValues(alpha: 0.14);
     return switch (transaction.type) {
       TransactionType.expense => Theme.of(context).colorScheme.errorContainer,
       TransactionType.income => Theme.of(
@@ -782,27 +784,115 @@ class TransactionListRow extends StatelessWidget {
     };
   }
 
-  Color _foregroundColor(BuildContext context) {
+  Color _foregroundColor(BuildContext context) =>
+      _categoryColor ??
+      switch (transaction.type) {
+        TransactionType.expense => Theme.of(
+          context,
+        ).colorScheme.onErrorContainer,
+        TransactionType.income => Theme.of(
+          context,
+        ).colorScheme.onSecondaryContainer,
+        TransactionType.reimbursement => Theme.of(
+          context,
+        ).colorScheme.onTertiaryContainer,
+        TransactionType.transfer => Theme.of(
+          context,
+        ).colorScheme.onSurfaceVariant,
+      };
+
+  Color? get _categoryColor {
+    final category = transaction.categoryId == null
+        ? null
+        : data.categoriesById[transaction.categoryId!];
+    if (category == null) return null;
+    final categoryText = '${category.id} ${category.name}'.toLowerCase();
+    if (_containsAny(categoryText, ['dining', 'restaurant', 'food', 'meal'])) {
+      return const Color(0xFFE76F51);
+    }
+    if (_containsAny(categoryText, ['shopping', 'groceries', 'clothing'])) {
+      return const Color(0xFF7B61FF);
+    }
+    if (_containsAny(categoryText, ['personal', 'beauty'])) {
+      return const Color(0xFFE07A5F);
+    }
+    if (_containsAny(categoryText, ['transport', 'travel', 'fuel', 'car'])) {
+      return const Color(0xFF2A9D8F);
+    }
+    if (_containsAny(categoryText, ['health', 'medical', 'dental'])) {
+      return const Color(0xFFD1495B);
+    }
+    if (_containsAny(categoryText, ['housing', 'rent', 'home'])) {
+      return const Color(0xFF457B9D);
+    }
+    if (_containsAny(categoryText, ['utilities', 'internet', 'phone'])) {
+      return const Color(0xFFF4A261);
+    }
+    if (_containsAny(categoryText, ['entertainment', 'leisure', 'hobby'])) {
+      return const Color(0xFF6A4C93);
+    }
+    if (_containsAny(categoryText, ['education', 'school', 'course'])) {
+      return const Color(0xFF277DA1);
+    }
+    if (_containsAny(categoryText, ['tax', 'government', 'fee'])) {
+      return const Color(0xFF606C38);
+    }
+    return AppColors.teal;
+  }
+
+  IconData get _icon {
+    final category = transaction.categoryId == null
+        ? null
+        : data.categoriesById[transaction.categoryId!];
+    if (category != null) {
+      final categoryText = '${category.id} ${category.name}'.toLowerCase();
+      if (_containsAny(categoryText, [
+        'dining',
+        'restaurant',
+        'food',
+        'meal',
+      ])) {
+        return Icons.restaurant;
+      }
+      if (_containsAny(categoryText, ['shopping', 'groceries', 'clothing'])) {
+        return Icons.shopping_bag;
+      }
+      if (_containsAny(categoryText, ['personal', 'beauty'])) {
+        return Icons.spa;
+      }
+      if (_containsAny(categoryText, ['transport', 'travel', 'fuel', 'car'])) {
+        return Icons.directions_car;
+      }
+      if (_containsAny(categoryText, ['health', 'medical', 'dental'])) {
+        return Icons.health_and_safety;
+      }
+      if (_containsAny(categoryText, ['housing', 'rent', 'home'])) {
+        return Icons.home;
+      }
+      if (_containsAny(categoryText, ['utilities', 'internet', 'phone'])) {
+        return Icons.receipt_long;
+      }
+      if (_containsAny(categoryText, ['entertainment', 'leisure', 'hobby'])) {
+        return Icons.movie;
+      }
+      if (_containsAny(categoryText, ['education', 'school', 'course'])) {
+        return Icons.school;
+      }
+      if (_containsAny(categoryText, ['tax', 'government', 'fee'])) {
+        return Icons.account_balance;
+      }
+      return Icons.category_outlined;
+    }
     return switch (transaction.type) {
-      TransactionType.expense => Theme.of(context).colorScheme.onErrorContainer,
-      TransactionType.income => Theme.of(
-        context,
-      ).colorScheme.onSecondaryContainer,
-      TransactionType.reimbursement => Theme.of(
-        context,
-      ).colorScheme.onTertiaryContainer,
-      TransactionType.transfer => Theme.of(
-        context,
-      ).colorScheme.onSurfaceVariant,
+      TransactionType.expense => Icons.arrow_upward,
+      TransactionType.income => Icons.arrow_downward,
+      TransactionType.reimbursement => Icons.replay,
+      TransactionType.transfer => Icons.swap_horiz,
     };
   }
 
-  IconData get _icon => switch (transaction.type) {
-    TransactionType.expense => Icons.arrow_upward,
-    TransactionType.income => Icons.arrow_downward,
-    TransactionType.reimbursement => Icons.replay,
-    TransactionType.transfer => Icons.swap_horiz,
-  };
+  static bool _containsAny(String value, List<String> terms) =>
+      terms.any(value.contains);
 }
 
 class TransactionDetailsSheet extends StatelessWidget {
