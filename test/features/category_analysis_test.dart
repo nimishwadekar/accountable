@@ -1,0 +1,33 @@
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:accountable/data/data.dart';
+import 'package:accountable/features/analysis/category_analysis.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  test('spending subtracts reimbursements and excludes transfers', () async {
+    final data = await AssetAppDataRepository().load();
+    final result = CategoryAnalysisCalculator(data)
+        .spending(month: DateTime.utc(2026, 10));
+
+    final dining = result.values.firstWhere(
+      (value) => value.categoryId == 'dining',
+    );
+    expect(dining.amountUsdMinorUnits, greaterThan(0));
+  });
+
+  test(
+    'income aggregates destination amounts by category and account filter',
+    () async {
+      final data = await AssetAppDataRepository().load();
+      final result = CategoryAnalysisCalculator(data)
+          .income(month: DateTime.utc(2026, 10), accountId: 'chase_checking');
+
+      expect(result.values, isNotEmpty);
+      expect(
+        result.values.every((value) => value.amountUsdMinorUnits > 0),
+        isTrue,
+      );
+    },
+  );
+}

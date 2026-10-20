@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import '../../app/formatters.dart';
 import '../../app/pages/app_pages.dart';
 import '../../app/theme/design_tokens.dart';
+import '../../app/pages/transaction_form_selectors.dart';
 import '../../data/data.dart';
 import 'analysis_calculator.dart';
+import 'category_analysis.dart';
 
 enum AnalysisRangePreset { thirtyDays, ninetyDays, yearToDate, allHistory }
 
@@ -28,11 +30,17 @@ class _AnalysisPageState extends State<AnalysisPage> {
   late DateTimeRange? _accountRange;
   String? _selectedAccountId;
   AccountChartUnit _accountChartUnit = AccountChartUnit.native;
+  late final CategoryAnalysisCalculator _categoryCalculator;
+  late DateTime _categoryMonth;
+  String? _categoryAccountId;
 
   @override
   void initState() {
     super.initState();
     _calculator = AnalysisCalculator(widget.data);
+    _categoryCalculator = CategoryAnalysisCalculator(widget.data);
+    final months = _availableAnalysisMonths;
+    _categoryMonth = months.isEmpty ? DateTime.now() : months.last;
     _netWorthRangePreset = AnalysisRangePreset.allHistory;
     _netWorthRange = _calculator.allHistoryRange;
     _accountRangePreset = AnalysisRangePreset.allHistory;
@@ -65,6 +73,14 @@ class _AnalysisPageState extends State<AnalysisPage> {
             accountId: _selectedAccountId!,
             range: accountRange,
           );
+    final spending = _categoryCalculator.spending(
+      month: _categoryMonth,
+      accountId: _categoryAccountId,
+    );
+    final income = _categoryCalculator.income(
+      month: _categoryMonth,
+      accountId: _categoryAccountId,
+    );
 
     return AppPageFrame(
       title: 'Analysis',
@@ -81,6 +97,8 @@ class _AnalysisPageState extends State<AnalysisPage> {
             if (accountRangeSelection != null)
               _buildAccountSection(accountSeries, selectedAccount),
           ],
+          const SizedBox(height: AppSpacing.xl),
+          _buildCategoryAnalysis(spending: spending, income: income),
         ],
       ),
     );
@@ -283,6 +301,267 @@ class _AnalysisPageState extends State<AnalysisPage> {
                   ? 'Debt Value (${(useUsd ? usd : currency)?.id ?? 'USD'})'
                   : 'Value (${(useUsd ? usd : currency)?.id ?? 'USD'})',
             ),
+    );
+  }
+
+  List<DateTime> get _availableAnalysisMonths {
+    final today = DateTime.now();
+    return [
+      for (var offset = 11; offset >= 0; offset--)
+        DateTime.utc(today.year, today.month - offset),
+    ];
+  }
+
+  Widget _buildCategoryAnalysis({
+    required CategoryAnalysisResult spending,
+    required CategoryAnalysisResult income,
+  }) {
+    final months = _availableAnalysisMonths;
+    final usd = widget.data.currenciesById['USD'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Categorical Analysis',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final narrow = constraints.maxWidth < 520;
+                return Wrap(
+                  spacing: AppSpacing.md,
+                  runSpacing: AppSpacing.md,
+                  children: [
+                    SizedBox(
+                      width: narrow ? constraints.maxWidth : 190,
+                      child: DropdownButtonFormField<DateTime>(
+                        isExpanded: true,
+                        initialValue: months.contains(_categoryMonth)
+                            ? _categoryMonth
+                            : null,
+                        decoration: const InputDecoration(labelText: 'Month'),
+                        items: [
+                          for (final month in months)
+                            DropdownMenuItem(
+                              value: month,
+                              child: Text(_formatMonth(month)),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => _categoryMonth = value);
+                          }
+                        },
+                      ),
+                    ),
+                    SizedBox(
+                      width: narrow ? constraints.maxWidth : 240,
+                      child: DropdownButtonFormField<String?>(
+                        isExpanded: true,
+                        initialValue: _categoryAccountId,
+                        decoration: const InputDecoration(labelText: 'Account'),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('All Accounts'),
+                          ),
+                          for (final account in widget.data.entryFormAccounts)
+                            DropdownMenuItem(
+                              value: account.id,
+                              child: Text(account.name),
+                            ),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => _categoryAccountId = value),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _buildCategoryWidget('Spending by Category', spending, usd),
+        const SizedBox(height: AppSpacing.lg),
+        _buildCategoryWidget('Income by Category', income, usd),
+      ],
+    );
+  }
+
+  Widget _buildCategoryWidget(
+    String title,
+    CategoryAnalysisResult result,
+    CurrencyDefinition? usd,
+  ) {
+    final total = result.totalPositive;
+    return _AnalysisChartSection(
+      title: title,
+      subtitle: null,
+      child: result.positiveValues.isEmpty
+          ? const EmptyState(message: 'No categorized values for this month.')
+          : Column(
+              children: [
+                SizedBox(
+                  height: 220,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      PieChart(
+                        PieChartData(
+                          centerSpaceRadius: 48,
+                          sectionsSpace: 2,
+                          sections: [
+                            for (final value in result.positiveValues)
+                              PieChartSectionData(
+                                value: value.amountUsdMinorUnits.toDouble(),
+                                color: _categoryColor(value.categoryId),
+                                title: '',
+                                radius: 72,
+                              ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Total',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                          Text(
+                            _formatCategoryAmount(total, usd),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                for (final value in result.positiveValues)
+                  ListTile(
+                    dense: true,
+                    leading: Icon(
+                      _categoryIcon(value.categoryId),
+                      color: _categoryColor(value.categoryId),
+                    ),
+                    title: Text(_categoryName(value.categoryId)),
+                    trailing: SizedBox(
+                      width: 180,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          SizedBox(
+                            width: 110,
+                            child: Text(
+                              _formatCategoryAmount(
+                                value.amountUsdMinorUnits,
+                                usd,
+                              ),
+                              textAlign: TextAlign.right,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(
+                            width: 58,
+                            child: Text(
+                              '${(value.amountUsdMinorUnits / total * 100).toStringAsFixed(1)}%',
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const Divider(height: AppSpacing.lg),
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const SizedBox(width: 40),
+                  title: Text(
+                    'Total:',
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  trailing: SizedBox(
+                    width: 180,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        SizedBox(
+                          width: 110,
+                          child: Text(
+                            _formatCategoryAmount(total, usd),
+                            textAlign: TextAlign.right,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        const SizedBox(width: 58),
+                      ],
+                    ),
+                  ),
+                ),
+                if (result.negativeAdjustment < 0)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Net reimbursement adjustment: '
+                      '${_formatCategoryAmount(result.negativeAdjustment, usd)}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  String _formatMonth(DateTime month) =>
+      '${_monthName(month.month)} ${month.year}';
+
+  String _monthName(int month) => const [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ][month - 1];
+
+  String _categoryName(String? id) => id == null
+      ? 'Uncategorized'
+      : widget.data.categoriesById[id]?.name ?? 'Uncategorized';
+
+  IconData _categoryIcon(String? id) {
+    final category = id == null ? null : widget.data.categoriesById[id];
+    return category == null ? Icons.category_outlined : categoryIcon(category);
+  }
+
+  Color _categoryColor(String? id) {
+    final category = id == null ? null : widget.data.categoriesById[id];
+    return category == null ? AppColors.mutedText : categoryColor(category);
+  }
+
+  String _formatCategoryAmount(int minorUnits, CurrencyDefinition? usd) {
+    if (usd == null) return '—';
+    return formatMoney(
+      Money(minorUnits: minorUnits, currencyId: usd.id),
+      widget.data.currenciesById,
     );
   }
 
