@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
 import '../config/accountable_config.dart';
 import '../data/data.dart';
@@ -41,12 +40,12 @@ enum _GateState {
 
 class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   late final GoogleAuthService _authService;
-  StreamSubscription<GoogleSignInAuthenticationEvent>? _eventsSubscription;
-  Completer<GoogleSignInAccount?>? _silentSignInCompleter;
+  StreamSubscription<AccountableGoogleAccount>? _eventsSubscription;
+  Completer<AccountableGoogleAccount?>? _silentSignInCompleter;
   String? _error;
   DataValidationFailure? _dataFailure;
   _GateState _state = _GateState.restoringSignIn;
-  GoogleSignInAccount? _account;
+  AccountableGoogleAccount? _account;
   AppDataRepository? _repository;
   Future<void> Function()? _rebuildDailyTables;
   bool _connectionInProgress = false;
@@ -59,14 +58,13 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     _authService = GoogleAuthService(config: widget.config);
     _eventsSubscription = _authService.authenticationEvents.listen(
       (event) {
-        if (event is! GoogleSignInAuthenticationEventSignIn) return;
         final completer = _silentSignInCompleter;
         _logTiming('Google sign-in event received');
         if (completer != null && !completer.isCompleted) {
-          completer.complete(event.user);
+          completer.complete(event);
           return;
         }
-        unawaited(_finishSignIn(event.user));
+        unawaited(_finishSignIn(event));
       },
       onError: (Object error) {
         final completer = _silentSignInCompleter;
@@ -237,7 +235,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       }
       return;
     }
-    final completer = Completer<GoogleSignInAccount?>();
+    final completer = Completer<AccountableGoogleAccount?>();
     _silentSignInCompleter = completer;
     if (mounted) {
       setState(() {
@@ -310,7 +308,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   }
 
   Future<void> _finishSignIn(
-    GoogleSignInAccount account, {
+    AccountableGoogleAccount account, {
     bool interactiveConsent = false,
   }) async {
     if (!mounted || _repository != null || _connectionInProgress) return;
@@ -405,12 +403,9 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     });
   }
 
-  bool _isBenignAuthenticationError(Object error) {
-    if (error is! GoogleSignInException) return false;
-    return error.code == GoogleSignInExceptionCode.canceled ||
-        error.code == GoogleSignInExceptionCode.interrupted ||
-        error.code == GoogleSignInExceptionCode.uiUnavailable;
-  }
+  bool _isBenignAuthenticationError(Object error) =>
+      error is GoogleAuthException &&
+      error.message == 'Google sign-in was canceled.';
 
   void _retry() {
     setState(() {

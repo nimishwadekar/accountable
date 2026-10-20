@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:google_identity_services_web/oauth2.dart' as oauth2;
-import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../config/accountable_config.dart';
+import 'accountable_google_account.dart';
 
 class SheetsAuthorizationDelegate {
   SheetsAuthorizationDelegate({required this.config});
@@ -14,7 +14,7 @@ class SheetsAuthorizationDelegate {
   Completer<String>? _pending;
 
   Future<String> authorize(
-    GoogleSignInAccount account, {
+    AccountableGoogleAccount account, {
     required bool interactive,
     required bool forceRefresh,
   }) async {
@@ -65,7 +65,7 @@ class SheetsAuthorizationDelegate {
     pending.completeError(SheetsAuthorizationInteractionRequiredException());
   }
 
-  Future<void> clear(GoogleSignInAccount account, String accessToken) async {}
+  Future<void> clear(AccountableGoogleAccount account, String accessToken) async {}
 }
 
 class SheetsAuthorizationInteractionRequiredException implements Exception {

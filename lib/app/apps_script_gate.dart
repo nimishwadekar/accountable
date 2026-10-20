@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
 import '../config/accountable_config.dart';
 import '../data/data.dart';
@@ -27,9 +26,9 @@ class AppsScriptGate extends StatefulWidget {
 
 class _AppsScriptGateState extends State<AppsScriptGate> {
   late final GoogleAuthService _authService;
-  StreamSubscription<GoogleSignInAuthenticationEvent>? _eventsSubscription;
-  Completer<GoogleSignInAccount?>? _silentSignIn;
-  GoogleSignInAccount? _account;
+  StreamSubscription<AccountableGoogleAccount>? _eventsSubscription;
+  Completer<AccountableGoogleAccount?>? _silentSignIn;
+  AccountableGoogleAccount? _account;
   AppDataRepository? _repository;
   String? _error;
   bool _loading = true;
@@ -39,12 +38,11 @@ class _AppsScriptGateState extends State<AppsScriptGate> {
     super.initState();
     _authService = GoogleAuthService(config: widget.config);
     _eventsSubscription = _authService.authenticationEvents.listen((event) {
-      if (event is! GoogleSignInAuthenticationEventSignIn) return;
       final completer = _silentSignIn;
       if (completer != null && !completer.isCompleted) {
-        completer.complete(event.user);
+        completer.complete(event);
       } else {
-        unawaited(_connect(event.user));
+        unawaited(_connect(event));
       }
     });
     unawaited(_restoreSignIn());
@@ -111,7 +109,7 @@ class _AppsScriptGateState extends State<AppsScriptGate> {
       }
       return;
     }
-    final completer = Completer<GoogleSignInAccount?>();
+    final completer = Completer<AccountableGoogleAccount?>();
     _silentSignIn = completer;
     try {
       final attempt = await _authService.attemptSilentAuthentication();
@@ -138,7 +136,7 @@ class _AppsScriptGateState extends State<AppsScriptGate> {
     }
   }
 
-  Future<void> _connect(GoogleSignInAccount account) async {
+  Future<void> _connect(AccountableGoogleAccount account) async {
     if (_repository != null) return;
     try {
       _authService.validateAllowedAccount(account);

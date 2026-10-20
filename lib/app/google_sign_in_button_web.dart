@@ -1,6 +1,9 @@
-import 'package:flutter/widgets.dart';
-import 'package:google_sign_in_web/web_only.dart' as google_sign_in_web;
+import 'package:flutter/material.dart';
 
 Widget buildGoogleSignInButton({required VoidCallback onPressed}) {
-  return google_sign_in_web.renderButton();
+  return FilledButton.icon(
+    onPressed: onPressed,
+    icon: const Icon(Icons.login),
+    label: const Text('Sign in with Google'),
+  );
 }
