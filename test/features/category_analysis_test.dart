@@ -17,11 +17,11 @@ void main() {
   });
 
   test(
-    'income aggregates destination amounts by category and account filter',
+    'income aggregates destination amounts by category and tag filter',
     () async {
       final data = await AssetAppDataRepository().load();
       final result = CategoryAnalysisCalculator(data)
-          .income(month: DateTime.utc(2026, 10), accountId: 'chase_checking');
+          .income(month: DateTime.utc(2026, 10), tagId: null);
 
       expect(result.values, isNotEmpty);
       expect(

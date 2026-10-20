@@ -32,7 +32,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
   AccountChartUnit _accountChartUnit = AccountChartUnit.native;
   late final CategoryAnalysisCalculator _categoryCalculator;
   late DateTime _categoryMonth;
-  String? _categoryAccountId;
+  String? _categoryTagId;
 
   @override
   void initState() {
@@ -75,11 +75,11 @@ class _AnalysisPageState extends State<AnalysisPage> {
           );
     final spending = _categoryCalculator.spending(
       month: _categoryMonth,
-      accountId: _categoryAccountId,
+      tagId: _categoryTagId,
     );
     final income = _categoryCalculator.income(
       month: _categoryMonth,
-      accountId: _categoryAccountId,
+      tagId: _categoryTagId,
     );
 
     return AppPageFrame(
@@ -362,21 +362,21 @@ class _AnalysisPageState extends State<AnalysisPage> {
                       width: narrow ? constraints.maxWidth : 240,
                       child: DropdownButtonFormField<String?>(
                         isExpanded: true,
-                        initialValue: _categoryAccountId,
-                        decoration: const InputDecoration(labelText: 'Account'),
+                        initialValue: _categoryTagId,
+                        decoration: const InputDecoration(labelText: 'Tag'),
                         items: [
                           const DropdownMenuItem<String?>(
                             value: null,
-                            child: Text('All Accounts'),
+                            child: Text('All Tags'),
                           ),
-                          for (final account in widget.data.entryFormAccounts)
+                          for (final tag in widget.data.entryFormTags)
                             DropdownMenuItem(
-                              value: account.id,
-                              child: Text(account.name),
+                              value: tag.id,
+                              child: Text(tag.name),
                             ),
                         ],
                         onChanged: (value) =>
-                            setState(() => _categoryAccountId = value),
+                            setState(() => _categoryTagId = value),
                       ),
                     ),
                   ],

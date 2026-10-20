@@ -34,10 +34,7 @@ class CategoryAnalysisCalculator {
 
   final AppDataSnapshot data;
 
-  CategoryAnalysisResult spending({
-    required DateTime month,
-    String? accountId,
-  }) {
+  CategoryAnalysisResult spending({required DateTime month, String? tagId}) {
     final totals = <String?, int>{};
     for (final transaction in data.transactions) {
       if (!_inMonth(transaction.date, month)) continue;
@@ -49,7 +46,7 @@ class CategoryAnalysisCalculator {
       final selectedAccount = usesSource
           ? transaction.sourceAccountId
           : transaction.destinationAccountId;
-      if (accountId != null && selectedAccount != accountId) continue;
+      if (tagId != null && transaction.tagId != tagId) continue;
       final amount = usesSource
           ? transaction.sourceAmount
           : transaction.destinationAmount;
@@ -65,7 +62,7 @@ class CategoryAnalysisCalculator {
     return CategoryAnalysisResult(values: _values(totals));
   }
 
-  CategoryAnalysisResult income({required DateTime month, String? accountId}) {
+  CategoryAnalysisResult income({required DateTime month, String? tagId}) {
     final totals = <String?, int>{};
     for (final transaction in data.transactions) {
       if (transaction.type != TransactionType.income ||
@@ -73,7 +70,7 @@ class CategoryAnalysisCalculator {
         continue;
       }
       final selectedAccount = transaction.destinationAccountId;
-      if (accountId != null && selectedAccount != accountId) continue;
+      if (tagId != null && transaction.tagId != tagId) continue;
       final amount = transaction.destinationAmount;
       final account = selectedAccount == null
           ? null
