@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
@@ -114,6 +116,15 @@ class LineChartWidget extends StatefulWidget {
 class _LineChartWidgetState extends State<LineChartWidget> {
   LineTouchResponse? _touchResponse;
 
+  static double _distanceToSpot(Offset touch, Offset spot) {
+    final dx = touch.dx - spot.dx;
+    final dy = touch.dy - spot.dy;
+    return math.sqrt(dx * dx + dy * dy);
+  }
+
+  static double _horizontalDistance(Offset touch, Offset spot) =>
+      (touch.dx - spot.dx).abs();
+
   @override
   Widget build(BuildContext context) {
     final points = widget.points;
@@ -138,6 +149,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         final chartMaxX = spanDays == 0 ? 0.5 : spanDays + xMargin;
         final axisStyle =
             Theme.of(context).textTheme.labelSmall ?? const TextStyle();
+        final selectedSpot = _touchResponse?.lineBarSpots?.first;
         final axisReservedSize = _axisReservedSize(
           minimum: minimum - padding,
           maximum: maximum + padding,
@@ -169,8 +181,24 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                     minY: minimum - padding,
                     maxY: maximum + padding,
                     gridData: const FlGridData(show: true),
+                    showingTooltipIndicators: selectedSpot == null
+                        ? const []
+                        : [
+                            ShowingTooltipIndicators([selectedSpot]),
+                          ],
                     lineTouchData: LineTouchData(
+                      touchSpotThreshold: _touchResponse == null ? 10 : 100000,
+                      distanceCalculator: _touchResponse == null
+                          ? _distanceToSpot
+                          : _horizontalDistance,
+                      handleBuiltInTouches: false,
                       touchCallback: (event, response) {
+                        if (event is FlPointerExitEvent) {
+                          if (_touchResponse != null) {
+                            setState(() => _touchResponse = null);
+                          }
+                          return;
+                        }
                         final spots = response?.lineBarSpots;
                         if (spots == null || spots.isEmpty) {
                           if (_touchResponse != null) {
@@ -178,7 +206,19 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                           }
                           return;
                         }
-                        setState(() => _touchResponse = response);
+                        final startsNewGesture =
+                            event is FlPanDownEvent || event is FlTapDownEvent;
+                        if (_touchResponse != null &&
+                            startsNewGesture &&
+                            spots.first.distance > 24) {
+                          setState(() => _touchResponse = null);
+                          return;
+                        }
+                        setState(
+                          () => _touchResponse = response!.copyWith(
+                            lineBarSpots: [spots.first],
+                          ),
+                        );
                       },
                       touchTooltipData: LineTouchTooltipData(
                         tooltipMargin: 16,
@@ -191,16 +231,22 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                           color: AppColors.border,
                         ),
                         getTooltipItems: (spots) {
-                          final seen = <String>{};
+                          final selected = _touchResponse?.lineBarSpots?.first;
+                          final selectedIndex = selected == null
+                              ? 0
+                              : spots.indexWhere(
+                                  (spot) =>
+                                      spot.x == selected.x &&
+                                      spot.y == selected.y,
+                                );
                           return [
-                            for (final spot in spots)
-                              if (seen.add(
-                                '${spot.x.toStringAsFixed(6)}:${spot.y.toStringAsFixed(6)}',
-                              ))
+                            for (var index = 0; index < spots.length; index++)
+                              if (index ==
+                                  (selectedIndex < 0 ? 0 : selectedIndex))
                                 LineTooltipItem(
-                                  '${currency?.symbol ?? ''} ${_formatChartValue(spot.y)}',
+                                  '${currency?.symbol ?? ''} ${_formatChartValue(spots[index].y)}',
                                   TextStyle(
-                                    color: _pointColor(spot.y),
+                                    color: _pointColor(spots[index].y),
                                     fontWeight: FontWeight.w700,
                                   ),
                                 )
@@ -267,7 +313,12 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                         ),
                       ),
                     ),
-                    lineBarsData: _lineBars(points, firstDate, color),
+                    lineBarsData: _lineBars(
+                      points,
+                      firstDate,
+                      color,
+                      selectedSpot: selectedSpot,
+                    ),
                   ),
                 ),
               ),
@@ -314,8 +365,9 @@ class _LineChartWidgetState extends State<LineChartWidget> {
   List<LineChartBarData> _lineBars(
     List<ChartPoint> points,
     DateTime firstDate,
-    Color fallbackColor,
-  ) {
+    Color fallbackColor, {
+    TouchLineBarSpot? selectedSpot,
+  }) {
     if (points.length == 1) {
       return [
         LineChartBarData(
@@ -323,6 +375,9 @@ class _LineChartWidgetState extends State<LineChartWidget> {
           color: _pointColor(points.first.value),
           barWidth: 3,
           dotData: const FlDotData(show: true),
+          showingIndicators: selectedSpot?.barIndex == 0
+              ? [selectedSpot!.spotIndex]
+              : const [],
         ),
       ];
     }
@@ -345,6 +400,9 @@ class _LineChartWidgetState extends State<LineChartWidget> {
           barWidth: 3,
           isCurved: false,
           dotData: const FlDotData(show: false),
+          showingIndicators: selectedSpot?.barIndex == index
+              ? [selectedSpot!.spotIndex]
+              : const [],
           belowBarData: BarAreaData(
             show: false,
             color: fallbackColor.withValues(alpha: 0.12),

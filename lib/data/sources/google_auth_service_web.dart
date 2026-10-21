@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:google_identity_services_web/google_identity_services_web.dart'
+    as gis_loader;
 import 'package:google_identity_services_web/id.dart' as gis;
 import 'package:google_identity_services_web/oauth2.dart' as oauth2;
 
@@ -14,6 +16,7 @@ class GoogleAuthService {
 
   final AccountableConfig config;
   static Future<void>? _initialization;
+  static Future<void>? _webSdkInitialization;
   final StreamController<AccountableGoogleAccount> _events =
       StreamController.broadcast();
   oauth2.TokenClient? _tokenClient;
@@ -24,11 +27,38 @@ class GoogleAuthService {
 
   Stream<AccountableGoogleAccount> get authenticationEvents => _events.stream;
 
-  Future<void> initialize() {
-    return _initialization ??= _initializeOnce();
+  Future<void> initialize() async {
+    final existing = _initialization;
+    if (existing != null) return existing;
+    final initialization = _initializeOnce();
+    _initialization = initialization;
+    try {
+      await initialization;
+    } catch (_) {
+      if (identical(_initialization, initialization)) {
+        _initialization = null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _loadWebSdk() async {
+    final existing = _webSdkInitialization;
+    if (existing != null) return existing;
+    final loading = gis_loader.loadWebSdk();
+    _webSdkInitialization = loading;
+    try {
+      await loading;
+    } catch (_) {
+      if (identical(_webSdkInitialization, loading)) {
+        _webSdkInitialization = null;
+      }
+      rethrow;
+    }
   }
 
   Future<void> _initializeOnce() async {
+    await _loadWebSdk();
     final currentOrigin = Uri.base.origin;
     if (!config.oauthOrigins.contains(currentOrigin)) {
       throw GoogleAuthException(
@@ -180,4 +210,3 @@ class GoogleAuthService {
     _pendingAuthentication = null;
   }
 }
-
