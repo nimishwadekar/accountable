@@ -1,10 +1,11 @@
- import 'dart:async';
+import 'dart:async';
 
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../config/accountable_config.dart';
 import 'accountable_google_account.dart';
 import 'sheets_authorization.dart';
+import 'google_auth_errors.dart';
 
 class GoogleAuthService {
   GoogleAuthService({required this.config});
@@ -105,23 +106,4 @@ class GoogleAuthService {
       nativeAccount: account,
     );
   }
-}
-
-class GoogleAuthException implements Exception {
-  const GoogleAuthException(this.message);
-  final String message;
-  @override
-  String toString() => message;
-}
-
-class SheetsAuthorizationRequiredException extends GoogleAuthException {
-  const SheetsAuthorizationRequiredException()
-    : super('Sheets authorization requires a one-time user action.');
-}
-
-class UnauthorizedGoogleAccountException implements Exception {
-  const UnauthorizedGoogleAccountException(this.email);
-  final String email;
-  @override
-  String toString() => 'Google account $email is not authorized.';
 }

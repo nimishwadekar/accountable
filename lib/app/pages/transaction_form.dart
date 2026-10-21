@@ -1,10 +1,11 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
 import '../theme/design_tokens.dart';
 import 'transaction_form_selectors.dart';
+import 'transaction_builder.dart';
+
+export 'transaction_builder.dart';
 
 class AddTransactionChoice {
   const AddTransactionChoice({
@@ -482,17 +483,6 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     }
 
     if (widget.type == TransactionType.transfer) {
-      final feeCategory = widget.data.categoriesById['financial_fees'];
-      if ((_sourceFeeEnabled || _destinationFeeEnabled) &&
-          (feeCategory == null ||
-              !feeCategory.allowedTransactionTypes.contains(
-                TransactionType.expense,
-              ))) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Financial Fees category is required.')),
-        );
-        return;
-      }
       final sourceFee = _sourceFeeEnabled
           ? _parseAmount(_sourceFeeController.text, sourceAccount)
           : null;
@@ -503,79 +493,30 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
           (_destinationFeeEnabled && destinationFee == null)) {
         return;
       }
-      if (sourceFee != null &&
-          sourceAmount != null &&
-          sourceFee.minorUnits >= sourceAmount.minorUnits) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Source fee must be less than the transfer amount.'),
-          ),
-        );
-        return;
-      }
-      final transferAmounts = calculateTransferAmounts(
-        sameCurrency: _transferSameCurrency,
+      final result = buildTransferTransactions(
+        existingIds: widget.data.transactionsById.keys,
+        date: _date!,
+        description: _descriptionController.text,
+        sourceAccountId: _sourceAccountId,
         sourceAmount: sourceAmount,
+        destinationAccountId: _destinationAccountId,
         destinationAmount: transferDestinationAmount,
         sourceFee: sourceFee,
+        destinationFee: destinationFee,
+        sameCurrency: _transferSameCurrency,
+        categoryId: _categoryId,
+        tagId: _tagId,
+        hasFinancialFeesCategory: widget.data.categoriesById['financial_fees']
+            ?.allowedTransactionTypes
+            .contains(TransactionType.expense) ==
+            true,
       );
-      final transferSourceAmount = transferAmounts.source;
-      transferDestinationAmount = transferAmounts.destination;
-      final generated = <Transaction>[];
-      final feeDescription =
-          'Transfer Fee - ${_descriptionController.text.trim()}';
-      for (final entry in [
-        (sourceFee, _sourceAccountId),
-        (destinationFee, _destinationAccountId),
-      ]) {
-        if (entry.$1 == null || entry.$2 == null) continue;
-        generated.add(
-          Transaction(
-            id: generateTransactionId({
-              ...widget.data.transactionsById.keys,
-              ...generated.map((item) => item.id),
-            }),
-            createdAt: DateTime.now().toUtc(),
-            date: DateTime.utc(_date!.year, _date!.month, _date!.day),
-            type: TransactionType.expense,
-            sourceAmount: entry.$1,
-            sourceAccountId: entry.$2,
-            destinationAmount: null,
-            destinationAccountId: null,
-            categoryId: 'financial_fees',
-            tagId: _tagId,
-            description: feeDescription,
-          ),
-        );
-      }
-      generated.insert(
-        sourceFee == null ? 0 : 1,
-        Transaction(
-          id: generateTransactionId({
-            ...widget.data.transactionsById.keys,
-            ...generated.map((item) => item.id),
-          }),
-          createdAt: DateTime.now().toUtc(),
-          date: DateTime.utc(_date!.year, _date!.month, _date!.day),
-          type: TransactionType.transfer,
-          sourceAmount: transferSourceAmount,
-          sourceAccountId: _sourceAccountId,
-          destinationAmount: transferDestinationAmount,
-          destinationAccountId: _destinationAccountId,
-          categoryId: _categoryId,
-          tagId: _tagId,
-          description: _descriptionController.text.trim(),
-        ),
-      );
-      final errors = generated
-          .expand((item) => item.validateForEntry())
-          .toList();
-      if (errors.isNotEmpty) {
+      if (!result.isValid) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(errors.join(' '))));
+            .showSnackBar(SnackBar(content: Text(result.error!)));
         return;
       }
-      Navigator.of(context).pop(generated);
+      Navigator.of(context).pop(result.transactions);
       return;
     }
 
@@ -617,41 +558,6 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-'
         '${date.day.toString().padLeft(2, '0')}';
   }
-}
-
-({Money? source, Money? destination}) calculateTransferAmounts({
-  required bool sameCurrency,
-  required Money? sourceAmount,
-  required Money? destinationAmount,
-  required Money? sourceFee,
-}) {
-  final transferSourceAmount = sourceFee == null || sourceAmount == null
-      ? sourceAmount
-      : sourceAmount - sourceFee;
-  return (
-    source: transferSourceAmount,
-    destination: sameCurrency ? transferSourceAmount : destinationAmount,
-  );
-}
-
-const _transactionIdAlphabet =
-    '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-const _transactionIdLength = 12;
-
-String generateTransactionId(Iterable<String> existingIds, {Random? random}) {
-  final existing = existingIds.toSet();
-  final generator = random ?? Random.secure();
-  String candidate;
-  do {
-    candidate = List.generate(
-      _transactionIdLength,
-      (_) =>
-          _transactionIdAlphabet[generator.nextInt(
-            _transactionIdAlphabet.length,
-          )],
-    ).join();
-  } while (existing.contains(candidate));
-  return candidate;
 }
 
 String transactionTypeLabel(TransactionType type) {

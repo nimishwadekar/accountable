@@ -18,5 +18,6 @@ export 'sources/accountable_google_account.dart';
 export 'sources/asset_reader.dart';
 export 'sources/bearer_client.dart';
 export 'sources/google_auth_service.dart';
+export 'sources/google_auth_errors.dart';
 export 'sources/google_sheets_api.dart';
 export 'sources/local_dataset_store.dart';
