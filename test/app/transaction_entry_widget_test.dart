@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:accountable/app/pages/transaction_form.dart';
-import 'package:accountable/app/pages/transaction_form_selectors.dart';
+import 'package:accountable/app/pages/category_visuals.dart';
 import 'package:accountable/app/theme/app_theme.dart';
 import 'package:accountable/data/data.dart';
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../app/formatters.dart';
 import '../../app/pages/app_pages.dart';
 import '../../app/theme/design_tokens.dart';
+import '../../app/pages/category_visuals.dart';
 import '../../app/pages/transaction_form_selectors.dart';
 import '../../data/data.dart';
 import 'analysis_calculator.dart';
@@ -507,8 +508,8 @@ class _AnalysisPageState extends State<AnalysisPage> {
                     ),
                     title: Text(
                       _categoryName(value.categoryId),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                      softWrap: true,
                     ),
                     trailing: SizedBox(
                       width:
@@ -517,24 +518,25 @@ class _AnalysisPageState extends State<AnalysisPage> {
                           ? 150
                           : 180,
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          SizedBox(
-                            width: 110,
+                          Expanded(
                             child: Text(
                               _formatCategoryAmount(
                                 value.amountUsdMinorUnits,
                                 usd,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               textAlign: TextAlign.right,
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                           ),
-                          const SizedBox(width: AppSpacing.sm),
+                          const SizedBox(width: AppSpacing.xs),
                           SizedBox(
-                            width: 58,
+                            width: 52,
                             child: Text(
                               '${(value.amountUsdMinorUnits / total * 100).toStringAsFixed(1)}%',
+                              maxLines: 1,
                               textAlign: TextAlign.right,
                             ),
                           ),
@@ -556,25 +558,25 @@ class _AnalysisPageState extends State<AnalysisPage> {
                         ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   trailing: SizedBox(
-                    width: 180,
+                    width:
+                        MediaQuery.sizeOf(context).width <
+                            AppBreakpoints.compact
+                        ? 145
+                        : 180,
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        SizedBox(
-                          width:
-                              MediaQuery.sizeOf(context).width <
-                                  AppBreakpoints.compact
-                              ? 85
-                              : 110,
+                        Expanded(
                           child: Text(
                             _formatCategoryAmount(total, usd),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.right,
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                         ),
-                        const SizedBox(width: AppSpacing.sm),
-                        const SizedBox(width: 58),
+                        const SizedBox(width: AppSpacing.xs),
+                        const SizedBox(width: 52),
                       ],
                     ),
                   ),

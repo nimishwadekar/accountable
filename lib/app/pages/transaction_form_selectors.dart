@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
 import '../theme/design_tokens.dart';
+import 'category_visuals.dart';
 
 class CategoryChoice {
   const CategoryChoice(this.id);
@@ -387,101 +388,3 @@ class _CategoryTile extends StatelessWidget {
   }
 }
 
-IconData categoryIcon(Category category) {
-  final text = '${category.id} ${category.name}'.toLowerCase();
-  if (_categoryContains(text, ['dining', 'restaurant', 'food', 'meal'])) {
-    return Icons.restaurant;
-  }
-  if (_categoryContains(text, ['groceries'])) {
-    return Icons.eco;
-  }
-  if (_categoryContains(text, ['shopping', 'clothing'])) {
-    return Icons.shopping_bag;
-  }
-  if (_categoryContains(text, ['personal', 'beauty'])) return Icons.spa;
-  if (_categoryContains(text, ['nightlife', 'bar', 'drinks', 'alcohol'])) {
-    return Icons.wine_bar;
-  }
-  if (_categoryContains(text, ['gifts', 'gift'])) {
-    return Icons.card_giftcard;
-  }
-  if (_categoryContains(text, ['travel'])) {
-    return Icons.directions_car;
-  }
-  if (_categoryContains(text, ['transport', 'fuel', 'car'])) {
-    return Icons.train;
-  }
-  if (_categoryContains(text, ['health', 'medical', 'dental'])) {
-    return Icons.health_and_safety;
-  }
-  if (_categoryContains(text, ['housing', 'rent', 'home'])) return Icons.home;
-  if (_categoryContains(text, ['bills', 'bill'])) {
-    return Icons.note_alt;
-  }
-  if (_categoryContains(text, ['utilities', 'internet', 'phone'])) {
-    return Icons.receipt_long;
-  }
-  if (_categoryContains(text, ['entertainment', 'leisure', 'hobby'])) {
-    return Icons.movie;
-  }
-  if (_categoryContains(text, ['education', 'school', 'course'])) {
-    return Icons.school;
-  }
-  if (_categoryContains(text, ['tax', 'government', 'fee'])) {
-    return Icons.account_balance;
-  }
-  return Icons.category_outlined;
-}
-
-Color categoryColor(Category category) {
-  final text = '${category.id} ${category.name}'.toLowerCase();
-  if (_categoryContains(text, ['dining', 'restaurant', 'food', 'meal'])) {
-    return const Color(0xFFE76F51);
-  }
-  if (_categoryContains(text, ['groceries'])) {
-    return const Color(0xFF4CAF50);
-  }
-  if (_categoryContains(text, ['shopping', 'clothing'])) {
-    return const Color(0xFF7B61FF);
-  }
-  if (_categoryContains(text, ['personal', 'beauty'])) {
-    return const Color(0xFFE07A5F);
-  }
-  if (_categoryContains(text, ['nightlife', 'bar', 'drinks', 'alcohol'])) {
-    return const Color(0xFF9B5DE5);
-  }
-  if (_categoryContains(text, ['gifts', 'gift'])) {
-    return const Color(0xFFE63946);
-  }
-  if (_categoryContains(text, ['travel'])) {
-    return const Color(0xFF2A9D8F);
-  }
-  if (_categoryContains(text, ['transport', 'fuel', 'car'])) {
-    return const Color(0xFF277DA1);
-  }
-  if (_categoryContains(text, ['health', 'medical', 'dental'])) {
-    return const Color(0xFFD1495B);
-  }
-  if (_categoryContains(text, ['housing', 'rent', 'home'])) {
-    return const Color(0xFF457B9D);
-  }
-  if (_categoryContains(text, ['bills', 'bill'])) {
-    return const Color(0xFF8D99AE);
-  }
-  if (_categoryContains(text, ['utilities', 'internet', 'phone'])) {
-    return const Color(0xFFF4A261);
-  }
-  if (_categoryContains(text, ['entertainment', 'leisure', 'hobby'])) {
-    return const Color(0xFF6A4C93);
-  }
-  if (_categoryContains(text, ['education', 'school', 'course'])) {
-    return const Color(0xFF277DA1);
-  }
-  if (_categoryContains(text, ['tax', 'government', 'fee'])) {
-    return const Color(0xFF606C38);
-  }
-  return AppColors.teal;
-}
-
-bool _categoryContains(String text, List<String> terms) =>
-    terms.any(text.contains);

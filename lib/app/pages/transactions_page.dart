@@ -5,6 +5,7 @@ import '../formatters.dart';
 import '../theme/design_tokens.dart';
 import 'transaction_form.dart';
 import 'transaction_review_sheet.dart';
+import 'category_visuals.dart';
 
 bool isTransactionDateInRange(DateTime transactionDate, DateTimeRange range) {
   final date = _dateOnlyUtc(transactionDate);
@@ -28,7 +29,8 @@ class TransactionsPage extends StatefulWidget {
 
   final AppDataSnapshot data;
   final Future<void> Function(Transaction transaction) onTransactionAdded;
-  final Future<void> Function(List<Transaction> transactions) onTransactionsAdded;
+  final Future<void> Function(List<Transaction> transactions)
+  onTransactionsAdded;
   final Future<void> Function(TransactionTemplate template) onTemplateAdded;
 
   @override
@@ -183,9 +185,8 @@ class _TransactionsPageState extends State<TransactionsPage> {
       if (result is List<Transaction>) {
         await widget.onTransactionsAdded(result);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Transfer added.')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Transfer added.')));
         return;
       }
       if (result is TransactionTemplate) {
@@ -881,84 +882,14 @@ class TransactionListRow extends StatelessWidget {
     final category = transaction.categoryId == null
         ? null
         : data.categoriesById[transaction.categoryId!];
-    if (category == null) return null;
-    final categoryText = '${category.id} ${category.name}'.toLowerCase();
-    if (_containsAny(categoryText, ['dining', 'restaurant', 'food', 'meal'])) {
-      return const Color(0xFFE76F51);
-    }
-    if (_containsAny(categoryText, ['shopping', 'groceries', 'clothing'])) {
-      return const Color(0xFF7B61FF);
-    }
-    if (_containsAny(categoryText, ['personal', 'beauty'])) {
-      return const Color(0xFFE07A5F);
-    }
-    if (_containsAny(categoryText, ['transport', 'travel', 'fuel', 'car'])) {
-      return const Color(0xFF2A9D8F);
-    }
-    if (_containsAny(categoryText, ['health', 'medical', 'dental'])) {
-      return const Color(0xFFD1495B);
-    }
-    if (_containsAny(categoryText, ['housing', 'rent', 'home'])) {
-      return const Color(0xFF457B9D);
-    }
-    if (_containsAny(categoryText, ['utilities', 'internet', 'phone'])) {
-      return const Color(0xFFF4A261);
-    }
-    if (_containsAny(categoryText, ['entertainment', 'leisure', 'hobby'])) {
-      return const Color(0xFF6A4C93);
-    }
-    if (_containsAny(categoryText, ['education', 'school', 'course'])) {
-      return const Color(0xFF277DA1);
-    }
-    if (_containsAny(categoryText, ['tax', 'government', 'fee'])) {
-      return const Color(0xFF606C38);
-    }
-    return AppColors.teal;
+    return category == null ? null : categoryColor(category);
   }
 
   IconData get _icon {
     final category = transaction.categoryId == null
         ? null
         : data.categoriesById[transaction.categoryId!];
-    if (category != null) {
-      final categoryText = '${category.id} ${category.name}'.toLowerCase();
-      if (_containsAny(categoryText, [
-        'dining',
-        'restaurant',
-        'food',
-        'meal',
-      ])) {
-        return Icons.restaurant;
-      }
-      if (_containsAny(categoryText, ['shopping', 'groceries', 'clothing'])) {
-        return Icons.shopping_bag;
-      }
-      if (_containsAny(categoryText, ['personal', 'beauty'])) {
-        return Icons.spa;
-      }
-      if (_containsAny(categoryText, ['transport', 'travel', 'fuel', 'car'])) {
-        return Icons.directions_car;
-      }
-      if (_containsAny(categoryText, ['health', 'medical', 'dental'])) {
-        return Icons.health_and_safety;
-      }
-      if (_containsAny(categoryText, ['housing', 'rent', 'home'])) {
-        return Icons.home;
-      }
-      if (_containsAny(categoryText, ['utilities', 'internet', 'phone'])) {
-        return Icons.receipt_long;
-      }
-      if (_containsAny(categoryText, ['entertainment', 'leisure', 'hobby'])) {
-        return Icons.movie;
-      }
-      if (_containsAny(categoryText, ['education', 'school', 'course'])) {
-        return Icons.school;
-      }
-      if (_containsAny(categoryText, ['tax', 'government', 'fee'])) {
-        return Icons.account_balance;
-      }
-      return Icons.category_outlined;
-    }
+    if (category != null) return categoryIcon(category);
     return switch (transaction.type) {
       TransactionType.expense => Icons.arrow_upward,
       TransactionType.income => Icons.arrow_downward,
@@ -966,9 +897,6 @@ class TransactionListRow extends StatelessWidget {
       TransactionType.transfer => Icons.swap_horiz,
     };
   }
-
-  static bool _containsAny(String value, List<String> terms) =>
-      terms.any(value.contains);
 }
 
 class TransactionDetailsSheet extends StatelessWidget {
