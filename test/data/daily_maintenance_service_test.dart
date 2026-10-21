@@ -51,7 +51,7 @@ void main() {
       isTrue,
     );
     expect(
-      client.appendedRows.any((row) => row.any((value) => value == 'sbi_nro')),
+      client.appendedRows.any((row) => row.first == '2026-10-13-sbi_nro'),
       isFalse,
     );
   });
@@ -61,16 +61,37 @@ void main() {
     final client = _FakeSheetsClient({
       'DailyExchangeRates!A:A': [
         ['rate_id'],
-        ['2026-10-13-USD'],
-        ['2026-10-13-INR'],
+        for (final date in [
+          '2026-10-10',
+          '2026-10-11',
+          '2026-10-12',
+          '2026-10-13',
+        ]) ...[
+          ['$date-USD'],
+          ['$date-INR'],
+        ],
       ],
       'DailyAccountBalances!A:A': [
         ['balance_id'],
-        ['2026-10-13-chase_checking'],
+        for (final date in ['2026-10-10', '2026-10-11']) ...[
+          ['$date-chase_checking'],
+          ['$date-sbi_nro'],
+          ['$date-chase_freedom_rise'],
+        ],
+        for (final date in ['2026-10-12', '2026-10-13']) ...[
+          ['$date-chase_checking'],
+          ['$date-chase_freedom_rise'],
+        ],
       ],
       'DailyNetWorth!A:A': [
         ['net_worth_id'],
-        ['2026-10-13-net'],
+        for (final date in [
+          '2026-10-10',
+          '2026-10-11',
+          '2026-10-12',
+          '2026-10-13',
+        ])
+          ['$date-net'],
       ],
       'DailyExchangeRates!B:B': [
         ['rate_date'],
@@ -256,8 +277,10 @@ class _ResumableSheetsClient extends SheetsTableClient {
   final Map<String, List<List<String>>> tables = {
     'DailyExchangeRates!A:A': [
       ['rate_id'],
-      ['2026-10-12-USD'],
-      ['2026-10-12-INR'],
+      for (final date in ['2026-10-10', '2026-10-11', '2026-10-12']) ...[
+        ['$date-USD'],
+        ['$date-INR'],
+      ],
     ],
     'DailyExchangeRates!B:B': [
       ['rate_date'],
@@ -265,8 +288,12 @@ class _ResumableSheetsClient extends SheetsTableClient {
     ],
     'DailyAccountBalances!A:A': [
       ['balance_id'],
+      for (final date in ['2026-10-10', '2026-10-11']) ...[
+        ['$date-chase_checking'],
+        ['$date-sbi_nro'],
+        ['$date-chase_freedom_rise'],
+      ],
       ['2026-10-12-chase_checking'],
-      ['2026-10-12-sbi_nro'],
       ['2026-10-12-chase_freedom_rise'],
     ],
     'DailyAccountBalances!B:B': [
@@ -275,6 +302,8 @@ class _ResumableSheetsClient extends SheetsTableClient {
     ],
     'DailyNetWorth!A:A': [
       ['net_worth_id'],
+      ['2026-10-10-net'],
+      ['2026-10-11-net'],
       ['2026-10-12-net'],
     ],
     'DailyNetWorth!B:B': [
@@ -301,7 +330,16 @@ class _ResumableSheetsClient extends SheetsTableClient {
       'DailyNetWorth!A:D' => 'DailyNetWorth!B:B',
       _ => null,
     };
-    if (dateRange != null) tables[dateRange]!.add([values[1]]);
+    if (dateRange != null) {
+      tables[dateRange]!.add([values[1]]);
+    }
+    final idRange = switch (range) {
+      'DailyExchangeRates!A:F' => 'DailyExchangeRates!A:A',
+      'DailyAccountBalances!A:F' => 'DailyAccountBalances!A:A',
+      'DailyNetWorth!A:D' => 'DailyNetWorth!A:A',
+      _ => null,
+    };
+    if (idRange != null) tables[idRange]!.add([values.first]);
   }
 
   @override

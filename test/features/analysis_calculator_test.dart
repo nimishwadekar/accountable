@@ -90,6 +90,39 @@ void main() {
     },
   );
 
+  test(
+    'manual USD values are unavailable when exchange rates are missing',
+    () async {
+      final source = await AssetAppDataRepository().load();
+      final data = AppDataSnapshot(
+        accounts: source.accounts,
+        categories: source.categories,
+        currencies: source.currencies,
+        tags: source.tags,
+        transactions: source.transactions,
+        exchangeRates: const [],
+        dailyAccountBalances: source.dailyAccountBalances,
+        dailyNetWorth: source.dailyNetWorth,
+        dailyManualValuations: source.dailyManualValuations,
+      );
+      final series = AnalysisCalculator(data).accountBalanceSeries(
+        accountId: 'hdfc-credila-loan',
+        range: DateTimeRange(
+          start: DateTime.utc(2026, 10, 10),
+          end: DateTime.utc(2026, 10, 14),
+        ),
+      );
+
+      expect(
+        series.points,
+        everyElement(
+          predicate<AccountBalancePoint>((point) => point.usdAmount == null),
+        ),
+      );
+      expect(series.unavailableDates, hasLength(5));
+    },
+  );
+
   test('all history uses the earliest and latest daily dates', () async {
     final data = await AssetAppDataRepository().load();
     final range = AnalysisCalculator(data).allHistoryRange;

@@ -7,6 +7,45 @@ import 'package:http/testing.dart';
 import 'package:accountable/data/data.dart';
 
 void main() {
+  test('updates before clearing stale trailing rows', () async {
+    final requests = <String>[];
+    final client = MockClient((request) async {
+      requests.add(request.method);
+      if (request.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'range': 'Transactions!A1:K3',
+            'majorDimension': 'ROWS',
+            'values': [
+              ['header'],
+              ['old-row-1'],
+              ['old-row-2'],
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }
+      return http.Response(
+        '{}',
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final api = GoogleSheetsApi(
+      spreadsheetId: 'spreadsheet-id',
+      accessTokenProvider: ({forceRefresh = false}) async => 'token',
+      client: client,
+    );
+
+    await api.replaceRange('Transactions!A:K', [
+      ['header'],
+      ['new-row'],
+    ]);
+
+    expect(requests, ['GET', 'PUT', 'POST']);
+  });
+
   test('writes numeric sheet values as numbers, not text', () async {
     Object? requestBody;
     final client = MockClient((request) async {

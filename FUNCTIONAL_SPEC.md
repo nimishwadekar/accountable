@@ -36,9 +36,9 @@ Google Sheets will be the default production data source.
 - The spreadsheet ID, allowed-email value, client ID, OAuth origin, and scope live in checked-in, non-secret configuration.
 - Editing and deletion are deferred; appending transactions is supported first.
 
-## Daily manual valuations — planned
+## Daily manual valuations — implemented
 
-Add a `DailyManualValuations` table for externally observed asset and liability balances:
+The `DailyManualValuations` table stores externally observed asset and liability balances:
 
 ```text
 valuation_id,date,account_id,value
@@ -48,7 +48,7 @@ The account's currency is inferred from `Accounts.currency`. The account's `acco
 
 For now:
 
-- `cash` and `credit` accounts use transaction-derived balances.
+- `cash` accounts use transaction-derived balances.
 - `asset` and `liability` accounts use `DailyManualValuations`.
 - The Assets & liabilities app section lists only accounts with `uses_manual_valuations=TRUE`.
 - `Accounts.account_type` values are `cash`, `liability`, or `asset`; `uses_manual_valuations=TRUE` is valid only for `asset` or `liability` accounts.
@@ -62,8 +62,8 @@ For now:
 - Dates before an account's opening date and after its closing date are disabled.
 - Existing account/date valuation dates are disabled.
 - If account selection changes and the selected date becomes invalid or duplicated, the date is cleared.
-- If a valuation is missing on a date, carry forward the latest prior valuation and mark it stale.
-- `DailyAccountBalances` remains limited to open `cash` and `credit` accounts.
+- If a valuation is missing on a date, analysis carries forward the latest prior valuation; an explicit stale indicator remains future work.
+- `DailyAccountBalances` remains limited to open `cash` accounts.
 - `DailyNetWorth` combines ledger-derived balances with manual valuations for `asset` and `liability` accounts.
 - Future UI work may color-code positive account classes (`cash`, `asset`) and negative account classes (`liability`) and show explanatory subtext.
 - Transfer account-type pairs are allowed without validation restrictions; transfer interpretation will be designed when transfer analysis is implemented.
@@ -93,6 +93,7 @@ DailyExchangeRates: rate_id, rate_date, currency, rate_to_usd, source_rate_date,
 DailyManualValuations: valuation_id, date, account_id, value
 DisplayPreferences: entity_type, entity_id, display_order, show_in_app, show_in_entry_forms
 TransactionTemplates: template_id, name, transaction_type, date, description, category, tag, source_account_id, source_amount, dest_account_id, dest_amount, created_at, updated_at
+IncomeAllocations: allocation_id, name, income_category_id, income_account_id, source_account_id, destination_account_id, expected_amount_per_income, description_keyword, start_date, end_date, created_at, updated_at
 ```
 
 `source_rate_date` records the actual Frankfurter date used when the requested sequential rate date fell on a weekend or holiday. Legacy local data without this column is read compatibly by treating `rate_date` as the source date. Google Sheets serial-number dates are normalized to calendar dates before freshness checks and parsing.
@@ -110,6 +111,7 @@ The runtime data snapshot contains:
 - DailyManualValuations
 - DisplayPreferences
 - TransactionTemplates
+- IncomeAllocations
 
 `TransactionTypes.csv` is not runtime data. Transaction types and their validation rules are defined in Dart.
 
@@ -131,7 +133,7 @@ The rules are extensible so future transaction types can define their own requir
 | Type | Source account and amount | Destination account and amount | Category |
 |---|---|---|---|
 | Expense | Required | Empty | Required |
-| Income | Empty | Required | Optional |
+| Income | Empty | Required | Required |
 | Reimbursement | Empty | Required | Required |
 | Transfer | Required | Required | Empty |
 
@@ -457,45 +459,9 @@ Catch-up is idempotent:
 - After rebuilding, only those three daily tables are reloaded.
 - Transaction refresh is a separate full-table pull.
 
-## Future Apps Script backend option
+## Deferred backend alternatives
 
-A future no-cost alternative to direct browser Sheets access may be an Apps Script backend:
-
-```text
-Flutter web app → Apps Script web endpoint → Google Sheets
-```
-
-Potential responsibilities:
-
-- Server-side Sheets reads and writes.
-- Transaction append operations.
-- Daily catch-up.
-- Manual daily-table rebuild.
-- Google authorization stored on the Apps Script side.
-
-Before implementation, the following must be designed and tested:
-
-- Endpoint authentication and single-user authorization.
-- CORS behavior for Flutter web.
-- Script Properties for spreadsheet configuration.
-- Abuse protection if the endpoint is publicly reachable.
-- Apps Script execution and daily quotas.
-
-This is a future alternative and does not replace the current direct Google OAuth/Sheets implementation yet.
-
-### Apps Script proof-of-concept concessions
-
-The planned Apps Script proof of concept intentionally makes these temporary concessions:
-
-- `apps_script` becomes an additional data-source mode; direct `sheets` mode remains available as a fallback.
-- The script executes as the owner rather than as the accessing user.
-- The spreadsheet ID is stored in Apps Script project properties rather than supplied by the browser.
-- The first endpoint is read-only and exposes only a `loadSnapshot` operation.
-- Browser-to-Apps-Script CORS behavior is accepted as an unresolved feasibility risk during the proof of concept.
-- The Flutter app depends on a manually deployed Apps Script web-app URL during testing.
-- If the proof of concept succeeds, future writes would also be routed through Apps Script rather than directly through the Sheets API.
-
-These concessions are reversible: remove the `apps_script` data-source mode and endpoint configuration, delete the Apps Script project files/deployment, and restore `sheets` as the active data source. The underlying Sheets schemas and Flutter repository interfaces are intended to remain unchanged.
+The current implementation supports local CSV fixtures and direct Google Sheets access only. A future backend alternative may be evaluated separately, but it is intentionally not part of this codebase or runtime configuration. Any future alternative must preserve the repository interfaces and be designed with explicit authentication, authorization, CORS, abuse protection, and quota behavior before implementation.
 
 ## Future account visibility
 
@@ -515,6 +481,31 @@ Planned behavior:
 - Multiple Wise currency balances remain separate accounts and may later use provider/group metadata.
 
 This is deferred until after the current migration work.
+
+## Planned: modifiable base currency
+
+The base currency will become a user-configurable Settings option. Source-of-truth data remains in original currencies:
+
+- `Transactions` amounts remain in their account currencies.
+- `Accounts` opening balances remain in their account currencies.
+- `DailyManualValuations` remain in their account currencies.
+
+Changing the base currency will require:
+
+1. Add an `AppSettings` table with one `base_currency_id` value.
+2. Load the setting into `AppDataSnapshot` and expose it in Settings.
+3. Validate the selected ID against `Currencies`.
+4. Generalize USD-specific derived fields such as `balance_usd` and `rate_to_usd` to base-currency-neutral fields.
+5. Update parsers, serializers, daily maintenance, analysis, charts, income allocation displays, fixtures, and documentation.
+6. Rebuild `DailyExchangeRates`, `DailyAccountBalances`, and `DailyNetWorth` from source-of-truth data after a base-currency change.
+7. Generate rates using the configured base currency, including a rate of 1 for the base currency itself.
+8. Stage and safely replace all derived tables so a failed rebuild cannot leave mixed base currencies.
+9. Record the active base currency and rebuild timestamp with derived data.
+10. Add migration and regression tests for changing between supported currencies, missing historical rates, failed rebuilds, and repeated changes.
+
+`IncomeAllocations.expected_amount_per_income` currently assumes USD and must be migrated to an explicit currency or explicitly defined as using the active base currency before this feature is implemented.
+
+Historical exchange-rate provider revisions or unavailable dates may cause rebuilt derived values to differ from prior materialized values.
 
 ## Deferred functionality
 

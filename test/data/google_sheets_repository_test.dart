@@ -8,31 +8,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('maps Sheets table ranges into the domain snapshot', () async {
-    final tables = <String, List<List<String>>>{};
-    for (final entry in <String, String>{
-      GoogleSheetsRanges.accounts: 'test_sheets/Accounts.csv',
-      GoogleSheetsRanges.categories: 'test_sheets/Categories.csv',
-      GoogleSheetsRanges.currencies: 'test_sheets/Currencies.csv',
-      GoogleSheetsRanges.dailyAccountBalances:
-          'test_sheets/DailyAccountBalances.csv',
-      GoogleSheetsRanges.dailyExchangeRates:
-          'test_sheets/DailyExchangeRates.csv',
-      GoogleSheetsRanges.dailyNetWorth: 'test_sheets/DailyNetWorth.csv',
-      GoogleSheetsRanges.dailyManualValuations:
-          'test_sheets/DailyManualValuations.csv',
-      GoogleSheetsRanges.displayPreferences:
-          'test_sheets/DisplayPreferences.csv',
-      GoogleSheetsRanges.tags: 'test_sheets/Tags.csv',
-      GoogleSheetsRanges.transactionTemplates:
-          'test_sheets/TransactionTemplates.csv',
-      GoogleSheetsRanges.incomeAllocations: 'test_sheets/IncomeAllocations.csv',
-      GoogleSheetsRanges.transactions: 'test_sheets/Transactions.csv',
-    }.entries) {
-      tables[entry.key] = [
-        for (final row in csv.decode(await rootBundle.loadString(entry.value)))
-          [for (final value in row) value.toString()],
-      ];
-    }
+    final tables = await _fixtureTables();
 
     final client = _FakeSheetsClient(tables);
     final repository = GoogleSheetsAppDataRepository(client);
@@ -44,6 +20,147 @@ void main() {
     expect(snapshot.dailyManualValuations, hasLength(2));
     expect(snapshot.displayPreferences, hasLength(5 + 14 + 1));
     expect(client.appendedRows, isNotEmpty);
+    await expectLater(
+      repository.deleteTransactionTemplate('missing-template'),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.updateTransactionTemplate(
+        TransactionTemplate(
+          id: 'missing-template',
+          name: 'Missing',
+          type: TransactionType.expense,
+          createdAt: DateTime.utc(2026, 10, 20),
+          updatedAt: DateTime.utc(2026, 10, 20),
+        ),
+      ),
+      throwsStateError,
+    );
+  });
+
+  test('validates template rename, update, and delete operations', () async {
+    final tables = await _fixtureTables();
+    tables[GoogleSheetsRanges.transactionTemplates]!.add([
+      'template-1',
+      'Existing',
+      'expense',
+      '',
+      'Coffee',
+      'dining',
+      'boston',
+      'chase_checking',
+      '4.50',
+      '',
+      '',
+      '2026-10-20T00:00:00Z',
+      '2026-10-20T00:00:00Z',
+    ]);
+    tables[GoogleSheetsRanges.transactionTemplates]!.add([
+      'template-2',
+      'Other',
+      'expense',
+      '',
+      'Lunch',
+      'dining',
+      'boston',
+      'chase_checking',
+      '5.00',
+      '',
+      '',
+      '2026-10-20T00:00:00Z',
+      '2026-10-20T00:00:00Z',
+    ]);
+    final repository = GoogleSheetsAppDataRepository(_FakeSheetsClient(tables));
+    await repository.load();
+    final now = DateTime.utc(2026, 10, 20);
+
+    await expectLater(
+      repository.addTransactionTemplate(
+        TransactionTemplate(
+          id: 'template-3',
+          name: 'Existing',
+          type: TransactionType.expense,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.addTransactionTemplate(
+        TransactionTemplate(
+          id: 'template-3',
+          name: ' ',
+          type: TransactionType.expense,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.updateTransactionTemplate(
+        TransactionTemplate(
+          id: 'template-1',
+          name: '',
+          type: TransactionType.expense,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.updateTransactionTemplate(
+        TransactionTemplate(
+          id: 'template-1',
+          name: 'Other',
+          type: TransactionType.expense,
+          createdAt: DateTime.utc(2026, 10, 20),
+          updatedAt: DateTime.utc(2026, 10, 20),
+        ),
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.updateTransactionTemplate(
+        TransactionTemplate(
+          id: 'template-1',
+          name: 'Renamed',
+          type: TransactionType.expense,
+          createdAt: DateTime.utc(2026, 10, 20),
+          updatedAt: DateTime.utc(2026, 10, 20),
+        ),
+      ),
+      completes,
+    );
+    await expectLater(
+      repository.deleteTransactionTemplate('template-2'),
+      completes,
+    );
+    await expectLater(
+      repository.addTransactionTemplate(
+        TransactionTemplate(
+          id: 'template-3',
+          name: 'New template',
+          type: TransactionType.expense,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ),
+      completes,
+    );
+    await expectLater(
+      repository.addManualValuation(
+        DailyManualValuation(
+          id: 'new-valuation',
+          date: DateTime.utc(2026, 10, 15),
+          accountId: 'fidelity-401k-2065',
+          value: const Money(minorUnits: 100, currencyId: 'USD'),
+        ),
+      ),
+      completes,
+    );
   });
 
   test('appends a canonical transaction row', () async {
@@ -75,6 +192,33 @@ void main() {
     expect(row['description'], 'Sheets test');
     expect(client.appendedRows, isEmpty);
   });
+}
+
+Future<Map<String, List<List<String>>>> _fixtureTables() async {
+  final tables = <String, List<List<String>>>{};
+  for (final entry in <String, String>{
+    GoogleSheetsRanges.accounts: 'test_sheets/Accounts.csv',
+    GoogleSheetsRanges.categories: 'test_sheets/Categories.csv',
+    GoogleSheetsRanges.currencies: 'test_sheets/Currencies.csv',
+    GoogleSheetsRanges.dailyAccountBalances:
+        'test_sheets/DailyAccountBalances.csv',
+    GoogleSheetsRanges.dailyExchangeRates: 'test_sheets/DailyExchangeRates.csv',
+    GoogleSheetsRanges.dailyNetWorth: 'test_sheets/DailyNetWorth.csv',
+    GoogleSheetsRanges.dailyManualValuations:
+        'test_sheets/DailyManualValuations.csv',
+    GoogleSheetsRanges.displayPreferences: 'test_sheets/DisplayPreferences.csv',
+    GoogleSheetsRanges.tags: 'test_sheets/Tags.csv',
+    GoogleSheetsRanges.transactionTemplates:
+        'test_sheets/TransactionTemplates.csv',
+    GoogleSheetsRanges.incomeAllocations: 'test_sheets/IncomeAllocations.csv',
+    GoogleSheetsRanges.transactions: 'test_sheets/Transactions.csv',
+  }.entries) {
+    tables[entry.key] = [
+      for (final row in csv.decode(await rootBundle.loadString(entry.value)))
+        [for (final value in row) value.toString()],
+    ];
+  }
+  return tables;
 }
 
 class _FakeSheetsClient extends SheetsTableClient {

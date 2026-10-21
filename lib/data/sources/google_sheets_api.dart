@@ -2,6 +2,7 @@ import 'package:googleapis/sheets/v4.dart' as sheets;
 import 'package:http/http.dart' as http;
 
 import 'bearer_client.dart';
+import '../table_schema.dart';
 
 abstract class SheetsTableClient {
   Future<List<List<String>>> readRange(String range);
@@ -17,6 +18,12 @@ abstract class SheetsTableClient {
   }
 
   Future<void> replaceRange(String range, List<List<String>> values);
+
+  Future<void> replaceRanges(Map<String, List<List<String>>> ranges) async {
+    for (final entry in ranges.entries) {
+      await replaceRange(entry.key, entry.value);
+    }
+  }
 }
 
 class GoogleSheetsApi implements SheetsTableClient {
@@ -82,10 +89,11 @@ class GoogleSheetsApi implements SheetsTableClient {
 
   @override
   Future<void> replaceRange(String range, List<List<String>> values) async {
-    await _sheetsApi.spreadsheets.values.clear(
-      sheets.ClearValuesRequest(),
+    final existing = await _sheetsApi.spreadsheets.values.get(
       spreadsheetId,
       range,
+      valueRenderOption: 'UNFORMATTED_VALUE',
+      dateTimeRenderOption: 'FORMATTED_STRING',
     );
     await _sheetsApi.spreadsheets.values.update(
       sheets.ValueRange(
@@ -95,26 +103,74 @@ class GoogleSheetsApi implements SheetsTableClient {
       range,
       valueInputOption: 'RAW',
     );
+
+    final existingRowCount = existing.values?.length ?? 0;
+    if (existingRowCount > values.length) {
+      final trailingRange = _trailingRange(
+        range,
+        firstRow: values.length + 1,
+        lastRow: existingRowCount,
+      );
+      if (trailingRange != null) {
+        await _sheetsApi.spreadsheets.values.clear(
+          sheets.ClearValuesRequest(),
+          spreadsheetId,
+          trailingRange,
+        );
+      }
+    }
+  }
+
+  @override
+  Future<void> replaceRanges(Map<String, List<List<String>>> ranges) async {
+    if (ranges.isEmpty) return;
+    final rangeNames = ranges.keys.toList();
+    final existing = await batchReadRanges(rangeNames);
+    final updates = <sheets.ValueRange>[];
+    for (final entry in ranges.entries) {
+      final schema = RuntimeTableSchemas.byRange(entry.key);
+      final rows = [
+        for (final row in entry.value)
+          _coerceValues(entry.key, [
+            ...row,
+            for (var index = row.length; index < schema.columnCount; index++)
+              '',
+          ]),
+      ];
+      final existingRowCount = existing[entry.key]?.length ?? 0;
+      while (rows.length < existingRowCount) {
+        rows.add(List<Object?>.filled(schema.columnCount, ''));
+      }
+      updates.add(sheets.ValueRange(range: entry.key, values: rows));
+    }
+    await _sheetsApi.spreadsheets.values.batchUpdate(
+      sheets.BatchUpdateValuesRequest(valueInputOption: 'RAW', data: updates),
+      spreadsheetId,
+    );
+  }
+
+  static String? _trailingRange(
+    String range, {
+    required int firstRow,
+    required int lastRow,
+  }) {
+    final separator = range.indexOf('!');
+    if (separator < 0) return null;
+    final sheet = range.substring(0, separator);
+    final columns = range.substring(separator + 1).split(':');
+    if (columns.length != 2) return null;
+    final startColumn = columns.first.replaceAll(RegExp(r'\d'), '');
+    final endColumn = columns.last.replaceAll(RegExp(r'\d'), '');
+    if (startColumn.isEmpty || endColumn.isEmpty) return null;
+    return '$sheet!$startColumn$firstRow:$endColumn$lastRow';
   }
 
   void close() => _client.close();
 
   static List<Object?> _coerceValues(String range, List<String> values) {
-    final table = range.split('!').first;
-    final numericColumns = switch (table) {
-      'Accounts' => const {4},
-      'Currencies' => const {2},
-      'DailyAccountBalances' => const {3, 4},
-      'DailyExchangeRates' => const {3},
-      'DailyManualValuations' => const {3},
-      'DailyNetWorth' => const {2},
-      'DisplayPreferences' => const {2},
-      'Transactions' => const {5, 7},
-      _ => const <int>{},
-    };
-    final booleanColumns = table == 'DisplayPreferences'
-        ? const {3, 4}
-        : const <int>{};
+    final schema = RuntimeTableSchemas.byName(range.split('!').first);
+    final numericColumns = schema.numericColumns;
+    final booleanColumns = schema.booleanColumns;
     return [
       for (var index = 0; index < values.length; index++)
         if (numericColumns.contains(index) &&

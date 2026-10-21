@@ -22,7 +22,7 @@ INR,₹,2
 
   const accountsCsv = '''
 account_id,name,account_type,currency,opening_balance,opening_date,closing_date,uses_manual_valuations
-checking,Checking,Bank,USD,1000,2026-10-01,,FALSE
+checking,Checking,cash,USD,1000,2026-10-01,,FALSE
 ''';
 
   test('parses the current fixture tables together', () async {
@@ -78,6 +78,25 @@ checking,Checking,Bank,USD,1000,2026-10-01,,FALSE
       'r1,2026-10-10,USD,1,2026-10-10T00:00:00Z\n',
     );
     expect(rates.single.sourceRateDate, DateTime.utc(2026, 10, 10));
+  });
+
+  test('rejects unsupported account types', () {
+    expect(
+      () => ModelParsers.parseAccounts(
+        accountsCsv.replaceFirst(
+          'checking,Checking,cash',
+          'checking,Checking,bank',
+        ),
+        {
+          'USD': const CurrencyDefinition(
+            id: 'USD',
+            symbol: r'$',
+            decimalPlaces: 2,
+          ),
+        },
+      ),
+      throwsFormatException,
+    );
   });
 
   test('parses currencies and amounts using minor units', () {
@@ -153,6 +172,68 @@ expense-1,2026-10-10,Lunch,groceries,expense,40,checking,,,,2026-10-09 11:03:04
     expect(
       parseUtcTimestamp('2026-10-12 02:18:28', fieldName: 'timestamp'),
       DateTime.utc(2026, 10, 12, 2, 18, 28),
+    );
+  });
+
+  test('rejects transactions outside account lifetimes', () {
+    final currencies = {
+      for (final currency in ModelParsers.parseCurrencies(currenciesCsv))
+        currency.id: currency,
+    };
+    final accounts = {
+      for (final account in ModelParsers.parseAccounts(
+        accountsCsv.replaceFirst(
+          '2026-10-01,,FALSE',
+          '2026-10-01,2026-10-01,FALSE',
+        ),
+        currencies,
+      ))
+        account.id: account,
+    };
+    const source = '''
+transaction_id,date,description,category,transaction_type,source_amount,source_account_id,dest_amount,dest_account_id,tag,created_at
+expense-1,2026-10-02,Invalid,food,expense,40,checking,,,,2026-10-01T11:03:04Z
+''';
+
+    expect(
+      () => ModelParsers.parseTransactions(
+        source,
+        accounts: accounts,
+        currencies: currencies,
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('rejects unknown references and incompatible categories', () {
+    final currencies = {
+      for (final currency in ModelParsers.parseCurrencies(currenciesCsv))
+        currency.id: currency,
+    };
+    final accounts = {
+      for (final account in ModelParsers.parseAccounts(accountsCsv, currencies))
+        account.id: account,
+    };
+    const source = '''
+transaction_id,date,description,category,transaction_type,source_amount,source_account_id,dest_amount,dest_account_id,tag,created_at
+expense-1,2026-10-10,Invalid,salary,expense,40,checking,,,missing-tag,2026-10-09T11:03:04Z
+''';
+
+    expect(
+      () => ModelParsers.parseTransactions(
+        source,
+        accounts: accounts,
+        currencies: currencies,
+        categories: {
+          'salary': const Category(
+            id: 'salary',
+            name: 'Salary',
+            allowedTransactionTypes: {TransactionType.income},
+          ),
+        },
+        tags: const {},
+      ),
+      throwsFormatException,
     );
   });
 

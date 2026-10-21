@@ -188,12 +188,47 @@ class _AnalysisPageState extends State<AnalysisPage> {
         : widget.data.currenciesById[account.currencyId];
     final usd = widget.data.currenciesById['USD'];
     final accountIsUsd = currency?.id == 'USD';
-    final useUsd = accountIsUsd || _accountChartUnit == AccountChartUnit.usd;
+    final useUsd =
+        usd != null &&
+        (accountIsUsd || _accountChartUnit == AccountChartUnit.usd);
+    final chartPoints = series == null
+        ? const <_ChartPoint>[]
+        : [
+            for (final point in series.points)
+              if (!useUsd || point.usdAmount != null)
+                _ChartPoint(
+                  date: point.date,
+                  value: account?.isLiability == true
+                      ? (useUsd
+                                ? point.usdAmount
+                                          ?.toMajorUnits(usd)
+                                          .toDouble() ??
+                                      0
+                                : (currency == null
+                                      ? 0.0
+                                      : point.nativeAmount
+                                            .toMajorUnits(currency)
+                                            .toDouble()))
+                            .abs()
+                      : (useUsd
+                            ? point.usdAmount?.toMajorUnits(usd).toDouble() ?? 0
+                            : (currency == null
+                                  ? 0
+                                  : point.nativeAmount
+                                        .toMajorUnits(currency)
+                                        .toDouble())),
+                ),
+          ];
 
     return _AnalysisChartSection(
       title: 'Individual Account Valuation Trend',
       subtitle: null,
-      warning: series == null ? null : _missingWarning(series.missingDates),
+      warning: series == null
+          ? null
+          : _missingWarning([
+              ...series.missingDates,
+              ...series.unavailableDates,
+            ], includesUnavailableValues: series.unavailableDates.isNotEmpty),
       header: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -264,39 +299,10 @@ class _AnalysisPageState extends State<AnalysisPage> {
           ),
         ],
       ),
-      child: series == null || series.points.isEmpty
+      child: chartPoints.isEmpty
           ? const EmptyState(message: 'No account history is available.')
           : _LineChart(
-              points: [
-                for (final point in series.points)
-                  _ChartPoint(
-                    date: point.date,
-                    value: account?.isLiability == true
-                        ? (useUsd
-                                  ? (usd == null
-                                        ? 0.0
-                                        : point.usdAmount
-                                              .toMajorUnits(usd)
-                                              .toDouble())
-                                  : (currency == null
-                                        ? 0.0
-                                        : point.nativeAmount
-                                              .toMajorUnits(currency)
-                                              .toDouble()))
-                              .abs()
-                        : (useUsd
-                              ? (usd == null
-                                    ? 0
-                                    : point.usdAmount
-                                          .toMajorUnits(usd)
-                                          .toDouble())
-                              : (currency == null
-                                    ? 0
-                                    : point.nativeAmount
-                                          .toMajorUnits(currency)
-                                          .toDouble())),
-                  ),
-              ],
+              points: chartPoints,
               color: account?.isLiability == true
                   ? AppColors.danger
                   : AppColors.navy,
@@ -458,142 +464,145 @@ class _AnalysisPageState extends State<AnalysisPage> {
               ),
             )
           : null,
-      child: result.positiveValues.isEmpty
-          ? const EmptyState(message: 'No categorized values for this month.')
-          : Column(
-              children: [
-                SizedBox(
-                  height: 220,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      PieChart(
-                        PieChartData(
-                          centerSpaceRadius: 48,
-                          sectionsSpace: 2,
-                          sections: [
-                            for (final value in result.positiveValues)
-                              PieChartSectionData(
-                                value: value.amountUsdMinorUnits.toDouble(),
-                                color: _categoryColor(value.categoryId),
-                                title: '',
-                                radius: 72,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final trailingWidth = (constraints.maxWidth * 0.42)
+              .clamp(112.0, 180.0)
+              .toDouble();
+          return result.positiveValues.isEmpty
+              ? const EmptyState(
+                  message: 'No categorized values for this month.',
+                )
+              : Column(
+                  children: [
+                    SizedBox(
+                      height: 220,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          PieChart(
+                            PieChartData(
+                              centerSpaceRadius: 48,
+                              sectionsSpace: 2,
+                              sections: [
+                                for (final value in result.positiveValues)
+                                  PieChartSectionData(
+                                    value: value.amountUsdMinorUnits.toDouble(),
+                                    color: _categoryColor(value.categoryId),
+                                    title: '',
+                                    radius: 72,
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Total',
+                                style: Theme.of(context).textTheme.labelSmall,
                               ),
+                              Text(
+                                _formatCategoryAmount(total, usd),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    for (final value in result.positiveValues) ...[
+                      ListTile(
+                        dense: true,
+                        leading: Icon(
+                          _categoryIcon(value.categoryId),
+                          color: _categoryColor(value.categoryId),
+                        ),
+                        title: Text(
+                          _categoryName(value.categoryId),
+                          maxLines: 2,
+                          softWrap: true,
+                        ),
+                        trailing: SizedBox(
+                          width: trailingWidth,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _formatCategoryAmount(
+                                    value.amountUsdMinorUnits,
+                                    usd,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.right,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.xs),
+                              SizedBox(
+                                width: 52,
+                                child: Text(
+                                  '${(value.amountUsdMinorUnits / total * 100).toStringAsFixed(1)}%',
+                                  maxLines: 1,
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (month != null && value.categoryId != null)
+                        ..._buildAllocationRows(value.categoryId!, month),
+                    ],
+                    const Divider(height: AppSpacing.lg),
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const SizedBox(width: 40),
+                      title: Text(
+                        'Total:',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      trailing: SizedBox(
+                        width: trailingWidth,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _formatCategoryAmount(total, usd),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.right,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.xs),
+                            const SizedBox(width: 52),
                           ],
                         ),
                       ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Total',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                          Text(
-                            _formatCategoryAmount(total, usd),
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                for (final value in result.positiveValues) ...[
-                  ListTile(
-                    dense: true,
-                    leading: Icon(
-                      _categoryIcon(value.categoryId),
-                      color: _categoryColor(value.categoryId),
                     ),
-                    title: Text(
-                      _categoryName(value.categoryId),
-                      maxLines: 2,
-                      softWrap: true,
-                    ),
-                    trailing: SizedBox(
-                      width:
-                          MediaQuery.sizeOf(context).width <
-                              AppBreakpoints.compact
-                          ? 150
-                          : 180,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _formatCategoryAmount(
-                                value.amountUsdMinorUnits,
-                                usd,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.right,
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.xs),
-                          SizedBox(
-                            width: 52,
-                            child: Text(
-                              '${(value.amountUsdMinorUnits / total * 100).toStringAsFixed(1)}%',
-                              maxLines: 1,
-                              textAlign: TextAlign.right,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (month != null && value.categoryId != null)
-                    ..._buildAllocationRows(value.categoryId!, month),
-                ],
-                const Divider(height: AppSpacing.lg),
-                ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: const SizedBox(width: 40),
-                  title: Text(
-                    'Total:',
-                    style: Theme.of(context).textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  trailing: SizedBox(
-                    width:
-                        MediaQuery.sizeOf(context).width <
-                            AppBreakpoints.compact
-                        ? 145
-                        : 180,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _formatCategoryAmount(total, usd),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.right,
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                    if (result.negativeAdjustment < 0)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Net reimbursement adjustment: '
+                          '${_formatCategoryAmount(result.negativeAdjustment, usd)}',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
                           ),
                         ),
-                        const SizedBox(width: AppSpacing.xs),
-                        const SizedBox(width: 52),
-                      ],
-                    ),
-                  ),
-                ),
-                if (result.negativeAdjustment < 0)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Net reimbursement adjustment: '
-                      '${_formatCategoryAmount(result.negativeAdjustment, usd)}',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
                       ),
-                    ),
-                  ),
-              ],
-            ),
+                  ],
+                );
+        },
+      ),
     );
   }
 
@@ -742,11 +751,17 @@ class _AnalysisPageState extends State<AnalysisPage> {
     );
   }
 
-  String? _missingWarning(List<DateTime> dates) {
+  String? _missingWarning(
+    List<DateTime> dates, {
+    bool includesUnavailableValues = false,
+  }) {
     if (dates.isEmpty) return null;
     final preview = dates.take(3).map(formatDate).join(', ');
     final suffix = dates.length > 3 ? ' and ${dates.length - 3} more' : '';
-    return 'Missing daily data for $preview$suffix.';
+    final subject = includesUnavailableValues
+        ? 'daily data or exchange rates'
+        : 'daily data';
+    return 'Missing $subject for $preview$suffix.';
   }
 
   void _selectPreset(AnalysisRangePreset preset, {required bool forAccount}) {

@@ -20,14 +20,19 @@ class AccountBalancePoint {
 
   final DateTime date;
   final Money nativeAmount;
-  final Money usdAmount;
+  final Money? usdAmount;
 }
 
 class DailySeries<T> {
-  const DailySeries({required this.points, required this.missingDates});
+  const DailySeries({
+    required this.points,
+    required this.missingDates,
+    this.unavailableDates = const [],
+  });
 
   final List<T> points;
   final List<DateTime> missingDates;
+  final List<DateTime> unavailableDates;
 }
 
 class AnalysisCalculator {
@@ -143,6 +148,7 @@ class AnalysisCalculator {
     final currency = data.currenciesById[account.currencyId]!;
     final usd = data.currenciesById['USD']!;
     final points = <AccountBalancePoint>[];
+    final unavailableDates = <DateTime>[];
     for (final date in dates) {
       DailyManualValuation? latest;
       for (final valuation in valuations) {
@@ -151,8 +157,9 @@ class AnalysisCalculator {
       final value = latest?.value ?? Money.zero(currency);
       final rate = _latestRate(account.currencyId, date);
       final usdValue = rate == null
-          ? Money.zero(usd)
+          ? null
           : _convertToUsd(value, currency, rate, usd);
+      if (usdValue == null) unavailableDates.add(date);
       points.add(
         AccountBalancePoint(
           date: date,
@@ -164,6 +171,7 @@ class AnalysisCalculator {
     return DailySeries(
       points: List.unmodifiable(points),
       missingDates: const [],
+      unavailableDates: List.unmodifiable(unavailableDates),
     );
   }
 

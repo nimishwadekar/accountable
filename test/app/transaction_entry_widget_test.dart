@@ -25,6 +25,34 @@ void main() {
     expect(find.text('Income'), findsOneWidget);
     expect(find.text('Reimbursement'), findsOneWidget);
     expect(find.text('Transfer'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  test('same-currency source fees reduce the transferred amount', () {
+    const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
+    final amounts = calculateTransferAmounts(
+      sameCurrency: true,
+      sourceAmount: Money.fromMajorUnits(value: '100', currency: usd),
+      destinationAmount: Money.fromMajorUnits(value: '100', currency: usd),
+      sourceFee: Money.fromMajorUnits(value: '3', currency: usd),
+    );
+
+    expect(amounts.source?.minorUnits, 9700);
+    expect(amounts.destination?.minorUnits, 9700);
+  });
+
+  test('cross-currency source fees only reduce the source amount', () {
+    const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
+    const inr = CurrencyDefinition(id: 'INR', symbol: '₹', decimalPlaces: 2);
+    final amounts = calculateTransferAmounts(
+      sameCurrency: false,
+      sourceAmount: Money.fromMajorUnits(value: '100', currency: usd),
+      destinationAmount: Money.fromMajorUnits(value: '8300', currency: inr),
+      sourceFee: Money.fromMajorUnits(value: '3', currency: usd),
+    );
+
+    expect(amounts.source?.minorUnits, 9700);
+    expect(amounts.destination?.minorUnits, 830000);
   });
 
   test('category icon mapping uses category semantics', () {
@@ -102,6 +130,50 @@ void main() {
     expect(find.text('Add Transaction'), findsNothing);
     expect(find.text('Transaction Type'), findsOneWidget);
     expect(find.byIcon(Icons.close), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('transfer templates do not show fee controls', (tester) async {
+    const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
+    final account = Account(
+      id: 'checking',
+      name: 'Checking',
+      accountType: 'cash',
+      currencyId: usd.id,
+      openingBalance: Money.zero(usd),
+      openingDate: DateTime.utc(2026, 1, 1),
+      closingDate: null,
+      usesManualValuations: false,
+    );
+    final data = AppDataSnapshot(
+      accounts: [account],
+      categories: const [],
+      currencies: [usd],
+      tags: const [],
+      transactions: const [],
+      exchangeRates: const [],
+      dailyAccountBalances: const [],
+      dailyNetWorth: const [],
+      dailyManualValuations: const [],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: TransactionFormSheet(
+            type: TransactionType.transfer,
+            data: data,
+            createTemplate: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Source Account Fee'), findsNothing);
+    expect(find.text('Destination Account Fee'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('expense form places description first and requires tag', (
@@ -126,5 +198,6 @@ void main() {
     expect(find.text('Source Account'), findsNothing);
     expect(find.text('Source Amount'), findsNothing);
     expect(find.text('Tag (optional)'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }

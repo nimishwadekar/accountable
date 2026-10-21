@@ -21,4 +21,29 @@ void main() {
       'http://localhost:9000',
     ]);
   });
+
+  test('supports Sheets configuration and rejects invalid values', () {
+    final config = AccountableConfig.fromJson({
+      'dataSource': 'sheets',
+      'googleClientId': 'client-id',
+      'spreadsheetId': 'sheet-id',
+      'allowedEmail': 'owner@example.com',
+      'oauthOrigin': 'https://example.com',
+      'sheetsScope': 'scope',
+    });
+
+    expect(config.isGoogleSheetsDataSource, isTrue);
+    expect(config.hasConfiguredGoogleSheets, isTrue);
+    expect(
+      () => AccountableConfig.fromJson({'dataSource': 'unknown'}),
+      throwsFormatException,
+    );
+    expect(
+      () => AccountableConfig.fromJson({
+        'dataSource': 'csv',
+        'additionalOauthOrigins': [1],
+      }),
+      throwsFormatException,
+    );
+  });
 }

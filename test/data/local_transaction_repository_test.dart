@@ -21,7 +21,7 @@ void main() {
       destinationAmount: null,
       destinationAccountId: null,
       categoryId: 'dining',
-      tagId: null,
+      tagId: 'boston',
       description: 'Test entry',
     );
 
@@ -52,7 +52,7 @@ void main() {
       destinationAmount: null,
       destinationAccountId: null,
       categoryId: 'dining',
-      tagId: null,
+      tagId: 'boston',
       description: 'Read-only',
     );
 

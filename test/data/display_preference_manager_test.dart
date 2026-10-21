@@ -82,4 +82,24 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('copies individual display preference fields', () {
+    const preference = DisplayPreference(
+      entityType: 'tag',
+      entityId: 'home',
+      displayOrder: 3000,
+      showInApp: true,
+      showInEntryForms: true,
+    );
+    final copy = preference.copyWith(
+      displayOrder: 3001,
+      showInApp: false,
+    );
+
+    expect(copy.entityType, 'tag');
+    expect(copy.entityId, 'home');
+    expect(copy.displayOrder, 3001);
+    expect(copy.showInApp, isFalse);
+    expect(copy.showInEntryForms, isTrue);
+  });
 }

@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:accountable/data/data.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   const currency = CurrencyDefinition(
     id: 'USD',
     symbol: r'$',
@@ -55,16 +57,15 @@ void main() {
       ).validate(),
       isNotEmpty,
     );
-    expect(
-      build(
-        type: TransactionType.income,
-        sourceAmount: amount,
-        sourceAccountId: 'checking',
-        destinationAmount: amount,
-        destinationAccountId: 'checking',
-      ).validate(),
-      isNotEmpty,
+    final invalidIncome = build(
+      type: TransactionType.income,
+      sourceAmount: amount,
+      sourceAccountId: 'checking',
+      destinationAmount: amount,
+      destinationAccountId: 'checking',
     );
+    expect(invalidIncome.validate(), isNotEmpty);
+    expect(invalidIncome.validate(), contains('income requires a category.'));
     expect(
       build(
         type: TransactionType.transfer,
@@ -91,6 +92,29 @@ void main() {
       transaction.validateForEntry(),
       contains('A description is required.'),
     );
+  });
+
+  test('write validation checks references and duplicate IDs', () async {
+    final data = await AssetAppDataRepository().load();
+    final transaction = build(
+      type: TransactionType.expense,
+      sourceAmount: amount,
+      sourceAccountId: 'chase_checking',
+      categoryId: 'salary',
+      tagId: 'missing-tag',
+    );
+
+    final errors = validateTransactionsForWrite([
+      transaction,
+      transaction,
+    ], data);
+
+    expect(
+      errors,
+      contains('Category salary is not allowed for expense transactions.'),
+    );
+    expect(errors, contains('Unknown tag: missing-tag.'));
+    expect(errors, contains('Duplicate transaction ID: test.'));
   });
 
   test(

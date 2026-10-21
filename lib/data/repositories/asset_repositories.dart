@@ -5,24 +5,33 @@ import '../csv/csv.dart';
 import '../models/models.dart';
 import '../sources/asset_reader.dart';
 import '../sources/local_dataset_store.dart';
+import '../table_schema.dart';
 import 'data_load_exception.dart';
 import 'display_preference_manager.dart';
 import 'data_validation_failure.dart';
+import 'transaction_write_validator.dart';
+import 'manual_valuation_write_validator.dart';
 import 'repositories.dart';
 
 abstract final class DataAssetPaths {
-  static const accounts = 'test_sheets/Accounts.csv';
-  static const categories = 'test_sheets/Categories.csv';
-  static const currencies = 'test_sheets/Currencies.csv';
-  static const dailyAccountBalances = 'test_sheets/DailyAccountBalances.csv';
-  static const dailyExchangeRates = 'test_sheets/DailyExchangeRates.csv';
-  static const dailyNetWorth = 'test_sheets/DailyNetWorth.csv';
-  static const dailyManualValuations = 'test_sheets/DailyManualValuations.csv';
-  static const displayPreferences = 'test_sheets/DisplayPreferences.csv';
-  static const tags = 'test_sheets/Tags.csv';
-  static const transactions = 'test_sheets/Transactions.csv';
-  static const transactionTemplates = 'test_sheets/TransactionTemplates.csv';
-  static const incomeAllocations = 'test_sheets/IncomeAllocations.csv';
+  static final accounts = RuntimeTableSchemas.accounts.assetPath;
+  static final categories = RuntimeTableSchemas.categories.assetPath;
+  static final currencies = RuntimeTableSchemas.currencies.assetPath;
+  static final dailyAccountBalances =
+      RuntimeTableSchemas.dailyAccountBalances.assetPath;
+  static final dailyExchangeRates =
+      RuntimeTableSchemas.dailyExchangeRates.assetPath;
+  static final dailyNetWorth = RuntimeTableSchemas.dailyNetWorth.assetPath;
+  static final dailyManualValuations =
+      RuntimeTableSchemas.dailyManualValuations.assetPath;
+  static final displayPreferences =
+      RuntimeTableSchemas.displayPreferences.assetPath;
+  static final tags = RuntimeTableSchemas.tags.assetPath;
+  static final transactions = RuntimeTableSchemas.transactions.assetPath;
+  static final transactionTemplates =
+      RuntimeTableSchemas.transactionTemplates.assetPath;
+  static final incomeAllocations =
+      RuntimeTableSchemas.incomeAllocations.assetPath;
 }
 
 class AssetCurrencyRepository implements CurrencyRepository {
@@ -212,29 +221,35 @@ class AssetAppDataRepository implements AppDataRepository {
   }
 
   @override
-  @override
   Future<AppDataSnapshot> addManualValuation(
     DailyManualValuation valuation,
+  ) => addManualValuations([valuation]);
+
+  @override
+  Future<AppDataSnapshot> addManualValuations(
+    List<DailyManualValuation> valuations,
   ) async {
     final current = await load();
-    final tables = await _readDataset();
-    final account = current.accountsById[valuation.accountId];
-    final currency = account == null
-        ? null
-        : current.currenciesById[account.currencyId];
-    if (account == null || currency == null || !account.isValuationAccount) {
-      throw StateError('Invalid manual valuation account.');
+    final validationErrors = validateManualValuationsForWrite(valuations, current);
+    if (validationErrors.isNotEmpty) {
+      throw StateError(validationErrors.join(' '));
     }
-    tables[DataAssetPaths.dailyManualValuations] = _appendCsvRow(
-      tables[DataAssetPaths.dailyManualValuations]!,
-      {
-        'valuation_id': valuation.id,
-        'date': _dateString(valuation.date),
-        'account_id': valuation.accountId,
-        'value': valuation.value.toMajorUnitsString(currency),
-      },
-    );
     if (store == null) throw StateError('This data source is read-only.');
+    final tables = await _readDataset();
+    var table = tables[DataAssetPaths.dailyManualValuations]!;
+    for (final valuation in valuations) {
+      final currency = current.currenciesById[valuation.value.currencyId]!;
+      table = _appendCsvRow(
+        table,
+        {
+          'valuation_id': valuation.id,
+          'date': _dateString(valuation.date),
+          'account_id': valuation.accountId,
+          'value': valuation.value.toMajorUnitsString(currency),
+        },
+      );
+    }
+    tables[DataAssetPaths.dailyManualValuations] = table;
     await store!.write(tables);
     _cachedSnapshot = null;
     return reload();
@@ -290,6 +305,10 @@ class AssetAppDataRepository implements AppDataRepository {
   @override
   Future<AppDataSnapshot> addTransactions(List<Transaction> transactions) async {
     final current = await load();
+    final validationErrors = validateTransactionsForWrite(transactions, current);
+    if (validationErrors.isNotEmpty) {
+      throw StateError(validationErrors.join(' '));
+    }
     final tables = await _readDataset();
     final accountCurrencies = {
       for (final account in current.accounts) account.id: account.currencyId,
@@ -362,6 +381,10 @@ class AssetAppDataRepository implements AppDataRepository {
         tables[DataAssetPaths.transactions]!,
         accounts: accountById,
         currencies: currencyById,
+        categories: {
+          for (final category in categoryList) category.id: category,
+        },
+        tags: {for (final tag in tagList) tag.id: tag},
       );
       final exchangeRateList = ModelParsers.parseExchangeRates(
         tables[DataAssetPaths.dailyExchangeRates]!,
@@ -482,112 +505,13 @@ String _tableNameFromPath(String path) {
       : fileName;
 }
 
-const _runtimeHeaders = <String, List<String>>{
-  DataAssetPaths.currencies: [
-    'currency_id',
-    'currency_symbol',
-    'decimal_places',
-  ],
-  DataAssetPaths.accounts: [
-    'account_id',
-    'name',
-    'account_type',
-    'currency',
-    'opening_balance',
-    'opening_date',
-    'closing_date',
-    'uses_manual_valuations',
-  ],
-  DataAssetPaths.categories: [
-    'category_id',
-    'category_name',
-    'allowed_transaction_types',
-  ],
-  DataAssetPaths.dailyAccountBalances: [
-    'balance_id',
-    'balance_date',
-    'account_id',
-    'balance',
-    'balance_usd',
-    'retrieved_at',
-  ],
-  DataAssetPaths.dailyExchangeRates: [
-    'rate_id',
-    'rate_date',
-    'currency',
-    'rate_to_usd',
-    'source_rate_date',
-    'retrieved_at',
-  ],
-  DataAssetPaths.dailyNetWorth: [
-    'net_worth_id',
-    'net_worth_date',
-    'amount',
-    'retrieved_at',
-  ],
-  DataAssetPaths.dailyManualValuations: [
-    'valuation_id',
-    'date',
-    'account_id',
-    'value',
-  ],
-  DataAssetPaths.displayPreferences: [
-    'entity_type',
-    'entity_id',
-    'display_order',
-    'show_in_app',
-    'show_in_entry_forms',
-  ],
-  DataAssetPaths.tags: ['tag_id', 'tag_name'],
-  DataAssetPaths.incomeAllocations: [
-    'allocation_id', 'name', 'income_category_id', 'income_account_id',
-    'source_account_id', 'destination_account_id', 'expected_amount_per_income',
-    'description_keyword', 'start_date', 'end_date', 'created_at', 'updated_at',
-  ],
-  DataAssetPaths.transactionTemplates: [
-    'template_id',
-    'name',
-    'transaction_type',
-    'date',
-    'description',
-    'category',
-    'tag',
-    'source_account_id',
-    'source_amount',
-    'dest_account_id',
-    'dest_amount',
-    'created_at',
-    'updated_at',
-  ],
-  DataAssetPaths.transactions: [
-    'transaction_id',
-    'date',
-    'description',
-    'category',
-    'transaction_type',
-    'source_amount',
-    'source_account_id',
-    'dest_amount',
-    'dest_account_id',
-    'tag',
-    'created_at',
-  ],
-};
+final _runtimeHeaders = Map.unmodifiable({
+  for (final schema in RuntimeTableSchemas.all) schema.assetPath: schema.headers,
+});
 
-const _runtimeAssetPaths = <String>[
-  DataAssetPaths.currencies,
-  DataAssetPaths.accounts,
-  DataAssetPaths.categories,
-  DataAssetPaths.dailyAccountBalances,
-  DataAssetPaths.dailyExchangeRates,
-  DataAssetPaths.dailyNetWorth,
-  DataAssetPaths.dailyManualValuations,
-  DataAssetPaths.displayPreferences,
-  DataAssetPaths.tags,
-  DataAssetPaths.transactionTemplates,
-  DataAssetPaths.incomeAllocations,
-  DataAssetPaths.transactions,
-];
+final _runtimeAssetPaths = List.unmodifiable([
+  for (final schema in RuntimeTableSchemas.all) schema.assetPath,
+]);
 
 String _dateString(DateTime value) =>
     '${value.year.toString().padLeft(4, '0')}-'

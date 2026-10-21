@@ -87,6 +87,8 @@ class ModelParsers {
     String source, {
     required Map<String, Account> accounts,
     required Map<String, CurrencyDefinition> currencies,
+    Map<String, Category>? categories,
+    Map<String, Tag>? tags,
   }) => _parseRows(
     source,
     tableName: 'Transactions',
@@ -94,6 +96,8 @@ class ModelParsers {
       row,
       accounts: accounts,
       currencies: currencies,
+      categories: categories,
+      tags: tags,
     ).single,
   );
 
@@ -163,18 +167,30 @@ class ModelParsers {
         final currencyId = requiredValue(row, 'currency');
         final currency = _currency(currencies, currencyId);
         final accountType = requiredValue(row, 'account_type');
+        final accountTypeKind = AccountType.parse(accountType);
         final usesManualValuations = _parseBoolean(
           requiredValue(row, 'uses_manual_valuations'),
           fieldName: 'uses_manual_valuations',
         );
         if (usesManualValuations &&
-            accountType.trim().toLowerCase() == 'cash') {
-          throw FormatException('Cash accounts cannot use manual valuations.');
+            accountTypeKind != AccountType.asset &&
+            accountTypeKind != AccountType.liability) {
+          throw FormatException(
+            'Only asset and liability accounts can use manual valuations.',
+          );
         }
         final openingBalance = Money.fromMajorUnits(
           value: requiredValue(row, 'opening_balance'),
           currency: currency,
         );
+        final openingDate = parseDateOnly(
+          requiredValue(row, 'opening_date'),
+          fieldName: 'opening_date',
+        );
+        final closingDate = _optionalDate(row, 'closing_date');
+        if (closingDate != null && closingDate.isBefore(openingDate)) {
+          throw FormatException('closing_date cannot be before opening_date.');
+        }
         if (usesManualValuations && openingBalance.minorUnits != 0) {
           throw FormatException(
             'Manual valuation accounts must have opening_balance 0.',
@@ -186,11 +202,8 @@ class ModelParsers {
           accountType: accountType,
           currencyId: currencyId,
           openingBalance: openingBalance,
-          openingDate: parseDateOnly(
-            requiredValue(row, 'opening_date'),
-            fieldName: 'opening_date',
-          ),
-          closingDate: _optionalDate(row, 'closing_date'),
+          openingDate: openingDate,
+          closingDate: closingDate,
           usesManualValuations: usesManualValuations,
         );
       }),
@@ -365,6 +378,8 @@ class ModelParsers {
     String source, {
     required Map<String, Account> accounts,
     required Map<String, CurrencyDefinition> currencies,
+    Map<String, Category>? categories,
+    Map<String, Tag>? tags,
   }) {
     final table = CsvTable.parse(source, tableName: 'Transactions');
     return _uniqueById(
@@ -404,6 +419,34 @@ class ModelParsers {
           description: optionalValue(row, 'description') ?? '',
         );
         final validationErrors = transaction.validate();
+        if (categories != null && transaction.categoryId != null) {
+          final category = categories[transaction.categoryId];
+          if (category == null) {
+            validationErrors.add(
+              'Unknown category: ${transaction.categoryId}.',
+            );
+          } else if (!category.allowedTransactionTypes.contains(
+            transaction.type,
+          )) {
+            validationErrors.add(
+              'Category ${transaction.categoryId} is not allowed for '
+              '${transaction.type.wireValue} transactions.',
+            );
+          }
+        }
+        for (final accountId in [
+          transaction.sourceAccountId,
+          transaction.destinationAccountId,
+        ]) {
+          if (accountId == null) continue;
+          final account = accounts[accountId];
+          if (account == null) continue;
+          if (!_accountIsActiveOn(account, transaction.date)) {
+            validationErrors.add(
+              'Transaction date is outside account $accountId lifetime.',
+            );
+          }
+        }
         if (validationErrors.isNotEmpty) {
           throw FormatException(
             'Invalid transaction ${transaction.id}: '
@@ -494,8 +537,7 @@ class ModelParsers {
     required Map<String, CurrencyDefinition> currencies,
   }) {
     final table = CsvTable.parse(source, tableName: 'DailyManualValuations');
-    return _uniqueById(
-      table.rows.map((row) {
+    final valuations = table.rows.map((row) {
         final accountId = requiredValue(row, 'account_id');
         final account = accounts[accountId];
         if (account == null) {
@@ -517,7 +559,19 @@ class ModelParsers {
             currency: _currency(currencies, account.currencyId),
           ),
         );
-      }),
+      }).toList();
+    final accountDates = <String>{};
+    for (final valuation in valuations) {
+      final key = '${valuation.accountId}:${_dateString(valuation.date)}';
+      if (!accountDates.add(key)) {
+        throw FormatException(
+          'Duplicate valuation for ${valuation.accountId} on '
+          '${_dateString(valuation.date)}.',
+        );
+      }
+    }
+    return _uniqueById(
+      valuations,
       (valuation) => valuation.id,
       table.tableName,
     );
@@ -579,6 +633,29 @@ class ModelParsers {
       value: rawAmount,
       currency: _currency(currencies, account.currencyId),
     );
+  }
+
+  static String _dateString(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-'
+      '${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')}';
+
+  static bool _accountIsActiveOn(Account account, DateTime date) {
+    final transactionDate = DateTime.utc(date.year, date.month, date.day);
+    final openingDate = DateTime.utc(
+      account.openingDate.year,
+      account.openingDate.month,
+      account.openingDate.day,
+    );
+    final closingDate = account.closingDate == null
+        ? null
+        : DateTime.utc(
+            account.closingDate!.year,
+            account.closingDate!.month,
+            account.closingDate!.day,
+          );
+    return !transactionDate.isBefore(openingDate) &&
+        (closingDate == null || !transactionDate.isAfter(closingDate));
   }
 
   static bool _parseBoolean(String value, {required String fieldName}) {

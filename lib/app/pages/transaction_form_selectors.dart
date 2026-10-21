@@ -181,16 +181,16 @@ class _AccountSummary extends StatelessWidget {
 }
 
 Color _accountTypeColor(Account account) {
-  final type = account.accountType.trim().toLowerCase();
-  if (account.isLiability || type == 'credit') return AppColors.danger;
-  if (type == 'asset') return AppColors.success;
+  final type = account.accountTypeKind;
+  if (account.isLiability) return AppColors.danger;
+  if (type == AccountType.asset) return AppColors.success;
   return const Color(0xFF90CAF9);
 }
 
 String _accountTypeLabel(Account account) {
-  final type = account.accountType.trim().toLowerCase();
-  if (type == 'cash') return '';
-  return type.isEmpty ? '' : '${type[0].toUpperCase()}${type.substring(1)}';
+  final type = account.accountTypeKind;
+  if (type == AccountType.cash) return '';
+  return type.displayName;
 }
 
 class _CategorySummary extends StatelessWidget {
@@ -374,12 +374,7 @@ class _CategoryTile extends StatelessWidget {
             children: [
               Icon(icon, color: color),
               const SizedBox(height: AppSpacing.xs),
-              Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
+              Text(label, textAlign: TextAlign.center),
             ],
           ),
         ),
@@ -387,4 +382,3 @@ class _CategoryTile extends StatelessWidget {
     );
   }
 }
-

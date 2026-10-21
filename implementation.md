@@ -323,8 +323,8 @@ The first Analysis page and its daily-series calculation services are implemente
 
 ## Daily valuation planning decisions recorded
 
-- Keep the existing `Accounts.account_type` column and expand its values to `cash`, `credit`, `asset`, and `liability`.
-- Infer balance source from `account_type` initially: `cash` and `credit` use transaction-derived balances; `asset` and `liability` use manual valuations.
+- Keep the existing `Accounts.account_type` column with values `cash`, `asset`, and `liability`.
+- Infer balance source from `account_type` initially: `cash` uses transaction-derived balances; `asset` and `liability` use manual valuations.
 - Add a new `DailyManualValuations` table.
 - Initial columns are exactly: `valuation_id`, `date`, `account_id`, `value`.
 - The valuation currency is inferred from the referenced account.
@@ -336,9 +336,9 @@ The first Analysis page and its daily-series calculation services are implemente
 - The valuation form order is account, date, valuation.
 - Duplicate account/date dates and dates outside account opening/closing bounds are disabled; changing account clears an invalid selected date.
 - If a valuation is missing for a date, carry forward the latest prior valuation and mark it stale.
-- `DailyAccountBalances` remains limited to open `cash` and `credit` accounts.
+- `DailyAccountBalances` remains limited to open `cash` accounts.
 - `DailyNetWorth` combines ledger-derived balances with manual valuations for `asset` and `liability` accounts.
-- Future color coding/subtext for positive and negative account classes is planned; credit/liability merging remains deferred.
+- Future color coding/subtext for positive and negative account classes is planned.
 - Transfer account-type pairs are allowed without validation restrictions; transfer interpretation will be designed when transfer analysis is implemented.
 - Daily valuation batch saves use all-or-nothing validation: blank, malformed, negative, duplicate, or out-of-range values prevent the entire batch from saving.
 

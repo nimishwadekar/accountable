@@ -102,6 +102,146 @@ void main() {
     },
   );
 
+  test('validates batch valuation signs, dates, and duplicate keys', () async {
+    final data = await AssetAppDataRepository().load();
+    final asset = data.accountsById['fidelity-401k-2065']!;
+    final liability = data.accountsById['hdfc-credila-loan']!;
+    final usd = data.currenciesById['USD']!;
+    final inr = data.currenciesById['INR']!;
+
+    final errors = validateManualValuationsForWrite([
+      DailyManualValuation(
+        id: 'asset-negative',
+        date: DateTime.utc(2026, 10, 15),
+        accountId: asset.id,
+        value: Money.fromMajorUnits(value: '-1', currency: usd),
+      ),
+      DailyManualValuation(
+        id: 'liability-positive',
+        date: DateTime.utc(2026, 10, 15),
+        accountId: liability.id,
+        value: Money.fromMajorUnits(value: '1', currency: inr),
+      ),
+      DailyManualValuation(
+        id: 'duplicate-a',
+        date: DateTime.utc(2026, 10, 16),
+        accountId: asset.id,
+        value: Money.fromMajorUnits(value: '1', currency: usd),
+      ),
+      DailyManualValuation(
+        id: 'duplicate-b',
+        date: DateTime.utc(2026, 10, 16),
+        accountId: asset.id,
+        value: Money.fromMajorUnits(value: '2', currency: usd),
+      ),
+    ], data);
+
+    expect(errors, contains('Asset valuations cannot be negative.'));
+    expect(
+      errors,
+      contains('Liability valuations must be stored as negative values.'),
+    );
+    expect(
+      errors,
+      contains('Duplicate valuation for fidelity-401k-2065 on 2026-10-16.'),
+    );
+  });
+
+  test(
+    'reports invalid valuation accounts, currencies, dates, and IDs',
+    () async {
+      final data = await AssetAppDataRepository().load();
+      final asset = data.accountsById['fidelity-401k-2065']!;
+      final checking = data.accountsById['chase_checking']!;
+      final usd = data.currenciesById['USD']!;
+      final inr = data.currenciesById['INR']!;
+      final errors = validateManualValuationsForWrite([
+        DailyManualValuation(
+          id: 'unknown-account',
+          date: DateTime.utc(2026, 10, 15),
+          accountId: 'missing',
+          value: Money.fromMajorUnits(value: '1', currency: usd),
+        ),
+        DailyManualValuation(
+          id: 'ledger-account',
+          date: DateTime.utc(2026, 10, 15),
+          accountId: checking.id,
+          value: Money.fromMajorUnits(value: '1', currency: usd),
+        ),
+        DailyManualValuation(
+          id: 'wrong-currency',
+          date: DateTime.utc(2026, 10, 15),
+          accountId: asset.id,
+          value: Money.fromMajorUnits(value: '1', currency: inr),
+        ),
+        DailyManualValuation(
+          id: 'before-opening',
+          date: DateTime.utc(2026, 10, 4),
+          accountId: asset.id,
+          value: Money.fromMajorUnits(value: '1', currency: usd),
+        ),
+        DailyManualValuation(
+          id: 'after-closing',
+          date: DateTime.utc(2026, 10, 15),
+          accountId: asset.id,
+          value: Money.fromMajorUnits(value: '1', currency: usd),
+        ),
+        DailyManualValuation(
+          id: 'duplicate-existing',
+          date: DateTime.utc(2026, 10, 14),
+          accountId: asset.id,
+          value: Money.fromMajorUnits(value: '1', currency: usd),
+        ),
+      ], data);
+
+      expect(errors, contains('Unknown valuation account: missing.'));
+      expect(errors, contains('Account chase_checking does not use manual valuations.'));
+      expect(
+      errors,
+      contains('Valuation currency INR does not match account currency USD.'),
+    );
+      expect(
+      errors,
+      contains(
+        'Valuation date is before account fidelity-401k-2065 opened.',
+      ),
+    );
+      expect(
+        errors,
+        contains('Duplicate valuation for fidelity-401k-2065 on 2026-10-14.'),
+      );
+    },
+  );
+
+  test('rejects duplicate valuation account dates', () {
+    const currencies = {
+      'USD': CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2),
+    };
+    final accounts = {
+      'brokerage': Account(
+        id: 'brokerage',
+        name: 'Brokerage',
+        accountType: 'asset',
+        currencyId: 'USD',
+        openingBalance: Money.zero(currencies['USD']!),
+        openingDate: DateTime.utc(2026, 1, 1),
+        closingDate: null,
+        usesManualValuations: true,
+      ),
+    };
+
+    expect(
+      () => ModelParsers.parseDailyManualValuations(
+        'valuation_id,date,account_id,value\n'
+        'v1,2026-10-15,brokerage,100\n'
+        'v2,2026-10-15,brokerage,200\n',
+        accounts: accounts,
+        currencies: currencies,
+      ),
+      throwsFormatException,
+    );
+  });
+
   test('rejects valuation rows for ledger accounts', () {
     const currencies = {
       'USD': CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2),

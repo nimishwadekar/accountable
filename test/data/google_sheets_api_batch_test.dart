@@ -7,6 +7,79 @@ import 'package:http/testing.dart';
 import 'package:accountable/data/data.dart';
 
 void main() {
+  test('replaces derived tables in one Sheets update request', () async {
+    var requestCount = 0;
+    Object? body;
+    final client = MockClient((request) async {
+      requestCount++;
+      if (request.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'valueRanges': [
+              {
+                'values': [
+                  ['header'],
+                ],
+              },
+              {
+                'values': [
+                  ['header'],
+                ],
+              },
+              {
+                'values': [
+                  ['header'],
+                ],
+              },
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      body = jsonDecode(request.body);
+      return http.Response(
+        '{}',
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+    final api = GoogleSheetsApi(
+      spreadsheetId: 'spreadsheet-id',
+      accessTokenProvider: ({forceRefresh = false}) async => 'token',
+      client: client,
+    );
+
+    await api.replaceRanges({
+      'DailyExchangeRates!A:F': [
+        [
+          'rate_id',
+          'rate_date',
+          'currency',
+          'rate_to_usd',
+          'source_rate_date',
+          'retrieved_at',
+        ],
+      ],
+      'DailyAccountBalances!A:F': [
+        [
+          'balance_id',
+          'balance_date',
+          'account_id',
+          'balance',
+          'balance_usd',
+          'retrieved_at',
+        ],
+      ],
+      'DailyNetWorth!A:D': [
+        ['net_worth_id', 'net_worth_date', 'amount', 'retrieved_at'],
+      ],
+    });
+
+    expect(requestCount, 2);
+    expect((body as Map<String, dynamic>)['data'], hasLength(3));
+  });
+
   test('appends a transaction batch in one Sheets request', () async {
     var requestCount = 0;
     Object? body;

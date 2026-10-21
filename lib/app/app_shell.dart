@@ -231,7 +231,7 @@ class _AppShellState extends State<AppShell> {
       ),
       AppSection.assetsLiabilities => AssetsLiabilitiesPage(
         data: data,
-        onValuationAdded: _handleValuationAdded,
+        onValuationsAdded: _handleValuationsAdded,
       ),
       AppSection.settings => SettingsPage(
         data: data,
@@ -306,8 +306,10 @@ class _AppShellState extends State<AppShell> {
     await future;
   }
 
-  Future<void> _handleValuationAdded(DailyManualValuation valuation) async {
-    final future = widget.dataRepository.addManualValuation(valuation);
+  Future<void> _handleValuationsAdded(
+    List<DailyManualValuation> valuations,
+  ) async {
+    final future = widget.dataRepository.addManualValuations(valuations);
     setState(() {
       _snapshotFuture = future;
     });

@@ -42,11 +42,11 @@ class AppDataSnapshot {
          (valuation) => valuation.id,
        ),
        displayPreferences = List.unmodifiable(displayPreferences),
-       displayPreferencesByKey = {
+       displayPreferencesByKey = Map.unmodifiable({
          for (final preference in displayPreferences)
            _preferenceKey(preference.entityType, preference.entityId):
                preference,
-       },
+       }),
        transactionTemplates = List.unmodifiable(transactionTemplates),
        transactionTemplatesById = _indexById(
          transactionTemplates,

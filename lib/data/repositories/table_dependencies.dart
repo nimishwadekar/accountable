@@ -1,6 +1,6 @@
 const tableDependencies = <String, List<String>>{
   'Accounts': ['Currencies'],
-  'Transactions': ['Accounts', 'Currencies'],
+  'Transactions': ['Accounts', 'Currencies', 'Categories', 'Tags'],
   'DailyAccountBalances': ['Accounts', 'Currencies'],
   'DailyNetWorth': ['Currencies'],
   'DailyManualValuations': ['Accounts', 'Currencies'],

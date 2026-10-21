@@ -9,9 +9,8 @@ String manualValuationId(DateTime date, String accountId) =>
     '${_dateString(date)}-$accountId';
 
 String _displayAccountType(Account account) {
-  final type = account.isLiability ? 'liability' : account.accountType.trim();
-  if (type.isEmpty) return type;
-  return '${type[0].toUpperCase()}${type.substring(1).toLowerCase()}';
+  if (account.isLiability) return AccountType.liability.displayName;
+  return account.accountTypeKind.displayName;
 }
 
 DateTime defaultManualValuationDate(AppDataSnapshot data) {
@@ -76,11 +75,12 @@ class AssetsLiabilitiesPage extends StatefulWidget {
   const AssetsLiabilitiesPage({
     super.key,
     required this.data,
-    required this.onValuationAdded,
+    required this.onValuationsAdded,
   });
 
   final AppDataSnapshot data;
-  final Future<void> Function(DailyManualValuation valuation) onValuationAdded;
+  final Future<void> Function(List<DailyManualValuation> valuations)
+  onValuationsAdded;
 
   @override
   State<AssetsLiabilitiesPage> createState() => _AssetsLiabilitiesPageState();
@@ -146,9 +146,7 @@ class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
     if (!mounted || valuations == null || valuations.isEmpty) return;
     setState(() => _submitting = true);
     try {
-      for (final valuation in valuations) {
-        await widget.onValuationAdded(valuation);
-      }
+      await widget.onValuationsAdded(valuations);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Valuations added.')));
@@ -160,210 +158,6 @@ class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
-  }
-
-  // Kept for future single-entry correction support.
-  // ignore: unused_element
-  DailyManualValuation? _submitValuation(
-    String? accountId,
-    DateTime? date,
-    String value,
-  ) {
-    final account = accountId == null
-        ? null
-        : widget.data.accountsById[accountId];
-    final currency = account == null
-        ? null
-        : widget.data.currenciesById[account.currencyId];
-    if (account == null || currency == null || date == null) return null;
-    final normalizedDate = DateTime.utc(date.year, date.month, date.day);
-    if (!isManualValuationDateAllowed(
-      date: normalizedDate,
-      account: account,
-      existing: widget.data.dailyManualValuationsById.values,
-    )) {
-      return null;
-    }
-    final enteredValue = account.isLiability && !value.trim().startsWith('-')
-        ? '-${value.trim()}'
-        : value.trim();
-    final money = Money.fromMajorUnits(value: enteredValue, currency: currency);
-    return DailyManualValuation(
-      id: manualValuationId(normalizedDate, account.id),
-      date: normalizedDate,
-      accountId: account.id,
-      value: money,
-    );
-  }
-}
-
-class _ValuationForm extends StatefulWidget {
-  const _ValuationForm({required this.data, required this.onSubmit});
-
-  final AppDataSnapshot data;
-  final DailyManualValuation? Function(
-    String? accountId,
-    DateTime? date,
-    String value,
-  )
-  onSubmit;
-
-  @override
-  State<_ValuationForm> createState() => _ValuationFormState();
-}
-
-class _ValuationFormState extends State<_ValuationForm> {
-  final _formKey = GlobalKey<FormState>();
-  final _valueController = TextEditingController();
-  String? _accountId;
-  DateTime? _date;
-  String? _error;
-
-  List<Account> get _accounts => widget.data.visibleAccounts
-      .where((account) => account.isValuationAccount)
-      .toList();
-
-  @override
-  void dispose() {
-    _valueController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final account = _accountId == null
-        ? null
-        : widget.data.accountsById[_accountId!];
-    final currency = account == null
-        ? null
-        : widget.data.currenciesById[account.currencyId];
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.sm,
-          AppSpacing.lg,
-          MediaQuery.viewInsetsOf(context).bottom + AppSpacing.lg,
-        ),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Add valuation',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              DropdownButtonFormField<String>(
-                initialValue: _accountId,
-                decoration: const InputDecoration(labelText: 'Account'),
-                items: [
-                  for (final item in _accounts)
-                    DropdownMenuItem(
-                      value: item.id,
-                      child: Text('${item.name} (${item.currencyId})'),
-                    ),
-                ],
-                validator: (value) =>
-                    value == null ? 'Select an account.' : null,
-                onChanged: (value) {
-                  setState(() {
-                    _accountId = value;
-                    if (_date != null && !_isSelectable(_date!, value)) {
-                      _date = null;
-                    }
-                    _error = null;
-                  });
-                },
-              ),
-              const SizedBox(height: AppSpacing.md),
-              OutlinedButton.icon(
-                onPressed: account == null ? null : _selectDate,
-                icon: const Icon(Icons.calendar_today_outlined),
-                label: Text(_date == null ? 'Select date' : formatDate(_date!)),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              TextFormField(
-                controller: _valueController,
-                decoration: InputDecoration(
-                  labelText: 'Valuation',
-                  filled: true,
-                  fillColor: account?.isLiability == true
-                      ? AppColors.danger.withValues(alpha: 0.06)
-                      : AppColors.success.withValues(alpha: 0.06),
-                  suffixText: currency?.id,
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Enter a valuation.';
-                  }
-                  final parsed = num.tryParse(value.trim());
-                  if (parsed == null) {
-                    return 'Enter a valid valuation.';
-                  }
-                  return null;
-                },
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ],
-              const SizedBox(height: AppSpacing.lg),
-              FilledButton(
-                onPressed: _submit,
-                child: const Text('Add valuation'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _selectDate() async {
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: _date ?? DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      selectableDayPredicate: (date) => _isSelectable(date, _accountId),
-    );
-    if (!mounted || selected == null) return;
-    setState(() => _date = selected);
-  }
-
-  void _submit() {
-    if (!_formKey.currentState!.validate()) return;
-    if (_date == null) {
-      setState(() => _error = 'Select a date.');
-      return;
-    }
-    final valuation = widget.onSubmit(_accountId, _date, _valueController.text);
-    if (valuation == null) {
-      setState(
-        () => _error = 'That date already has a valuation or is invalid.',
-      );
-      return;
-    }
-    Navigator.of(context).pop(valuation);
-  }
-
-  bool _isSelectable(DateTime date, String? accountId) {
-    if (accountId == null) return true;
-    final account = widget.data.accountsById[accountId];
-    if (account == null) return false;
-    return isManualValuationDateAllowed(
-      date: date,
-      account: account,
-      existing: widget.data.dailyManualValuationsById.values,
-    );
   }
 }
 
@@ -466,7 +260,9 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
           return 'Enter a valuation.';
         }
         final parsed = num.tryParse(value.trim());
-        return parsed == null ? 'Enter a valid value.' : null;
+        return parsed == null || !parsed.isFinite || parsed < 0
+            ? 'Enter a non-negative valuation.'
+            : null;
       },
     );
   }

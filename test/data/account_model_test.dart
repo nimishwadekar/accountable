@@ -25,4 +25,19 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('rejects closing dates before opening dates', () {
+    const currencies = {
+      'USD': CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2),
+    };
+
+    expect(
+      () => ModelParsers.parseAccounts(
+        'account_id,name,account_type,currency,opening_balance,opening_date,closing_date,uses_manual_valuations\n'
+        'checking,Checking,cash,USD,0,2026-01-02,2026-01-01,FALSE\n',
+        currencies,
+      ),
+      throwsFormatException,
+    );
+  });
 }

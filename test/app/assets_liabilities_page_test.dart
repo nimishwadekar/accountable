@@ -40,7 +40,7 @@ void main() {
         home: Scaffold(
           body: AssetsLiabilitiesPage(
             data: data,
-            onValuationAdded: (_) async {},
+            onValuationsAdded: (_) async {},
           ),
         ),
       ),

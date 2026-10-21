@@ -4,17 +4,15 @@ import 'package:flutter/services.dart';
 
 enum AccountableDataSource {
   csv,
-  sheets,
-  appsScript;
+  sheets;
 
   static AccountableDataSource fromJsonValue(Object? value) {
     final normalized = value?.toString().trim().toLowerCase();
     return switch (normalized) {
       'csv' => AccountableDataSource.csv,
       'sheets' => AccountableDataSource.sheets,
-      'apps_script' => AccountableDataSource.appsScript,
       _ => throw const FormatException(
-        'assets/config.json dataSource must be "csv", "sheets", or "apps_script".',
+        'assets/config.json dataSource must be "csv" or "sheets".',
       ),
     };
   }
@@ -23,12 +21,11 @@ enum AccountableDataSource {
 final class AccountableConfig {
   const AccountableConfig({
     required this.dataSource,
-    required this.googleClientId,
-    required this.spreadsheetId,
-    required this.allowedEmail,
-    required this.oauthOrigin,
-    required this.sheetsScope,
-    this.appsScriptUrl = '',
+    this.googleClientId = '',
+    this.spreadsheetId = '',
+    this.allowedEmail = '',
+    this.oauthOrigin = '',
+    this.sheetsScope = '',
     this.additionalOauthOrigins = const [],
   });
 
@@ -39,7 +36,6 @@ final class AccountableConfig {
   final String oauthOrigin;
   final List<String> additionalOauthOrigins;
   final String sheetsScope;
-  final String appsScriptUrl;
 
   List<String> get oauthOrigins => [oauthOrigin, ...additionalOauthOrigins];
 
@@ -47,11 +43,6 @@ final class AccountableConfig {
 
   bool get isGoogleSheetsDataSource =>
       dataSource == AccountableDataSource.sheets;
-
-  bool get isAppsScriptDataSource =>
-      dataSource == AccountableDataSource.appsScript;
-
-  bool get hasConfiguredAppsScript => _isConfiguredValue(appsScriptUrl);
 
   bool get hasConfiguredGoogleSheets =>
       _isConfiguredValue(googleClientId) &&
@@ -85,7 +76,6 @@ final class AccountableConfig {
         'additionalOauthOrigins',
       ),
       sheetsScope: _requireString(json, 'sheetsScope'),
-      appsScriptUrl: _optionalString(json, 'appsScriptUrl'),
     );
   }
 
@@ -95,11 +85,6 @@ final class AccountableConfig {
       return value;
     }
     throw FormatException('assets/config.json is missing "$key".');
-  }
-
-  static String _optionalString(Map<String, dynamic> json, String key) {
-    final value = json[key];
-    return value is String ? value : '';
   }
 
   static List<String> _optionalStringList(

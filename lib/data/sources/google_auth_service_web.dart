@@ -95,7 +95,7 @@ class GoogleAuthService {
     if (email == null || email.isEmpty) {
       throw const GoogleAuthException('Google ID token has no email.');
     }
-    return AccountableGoogleAccount(email: email, idToken: token);
+    return AccountableGoogleAccount(email: email);
   }
 
   Future<String> authorizeSheets(
@@ -172,9 +172,6 @@ class GoogleAuthService {
       throw UnauthorizedGoogleAccountException(account.email);
     }
   }
-
-  Future<String> idToken(AccountableGoogleAccount account) async =>
-      account.idToken;
 
   Future<void> signOut() async {
     _sheetsAccessToken = null;

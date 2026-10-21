@@ -3,44 +3,108 @@ import 'package:flutter/material.dart';
 import '../../data/models/models.dart';
 import '../theme/design_tokens.dart';
 
-IconData categoryIcon(Category category) {
-  final text = '${category.id} ${category.name}'.toLowerCase();
-  if (_contains(text, ['dining', 'restaurant', 'food', 'meal'])) return Icons.restaurant;
-  if (_contains(text, ['groceries'])) return Icons.eco;
-  if (_contains(text, ['shopping', 'clothing'])) return Icons.shopping_bag;
-  if (_contains(text, ['personal', 'beauty'])) return Icons.spa;
-  if (_contains(text, ['nightlife', 'bar', 'drinks', 'alcohol'])) return Icons.wine_bar;
-  if (_contains(text, ['gifts', 'gift'])) return Icons.card_giftcard;
-  if (_contains(text, ['travel'])) return Icons.directions_car;
-  if (_contains(text, ['transport', 'fuel', 'car'])) return Icons.train;
-  if (_contains(text, ['health', 'medical', 'dental'])) return Icons.health_and_safety;
-  if (_contains(text, ['housing', 'rent', 'home'])) return Icons.home;
-  if (_contains(text, ['bills', 'bill'])) return Icons.note_alt;
-  if (_contains(text, ['utilities', 'internet', 'phone'])) return Icons.receipt_long;
-  if (_contains(text, ['entertainment', 'leisure', 'hobby'])) return Icons.movie;
-  if (_contains(text, ['education', 'school', 'course'])) return Icons.school;
-  if (_contains(text, ['tax', 'government', 'fee'])) return Icons.account_balance;
-  return Icons.category_outlined;
+class CategoryVisual {
+  const CategoryVisual({
+    required this.terms,
+    required this.icon,
+    required this.color,
+  });
+
+  final List<String> terms;
+  final IconData icon;
+  final Color color;
 }
 
-Color categoryColor(Category category) {
-  final text = '${category.id} ${category.name}'.toLowerCase();
-  if (_contains(text, ['dining', 'restaurant', 'food', 'meal'])) return const Color(0xFFE76F51);
-  if (_contains(text, ['groceries'])) return const Color(0xFF4CAF50);
-  if (_contains(text, ['shopping', 'clothing'])) return const Color(0xFF7B61FF);
-  if (_contains(text, ['personal', 'beauty'])) return const Color(0xFFE07A5F);
-  if (_contains(text, ['nightlife', 'bar', 'drinks', 'alcohol'])) return const Color(0xFF9B5DE5);
-  if (_contains(text, ['gifts', 'gift'])) return const Color(0xFFE63946);
-  if (_contains(text, ['travel'])) return const Color(0xFF2A9D8F);
-  if (_contains(text, ['transport', 'fuel', 'car'])) return const Color(0xFF277DA1);
-  if (_contains(text, ['health', 'medical', 'dental'])) return const Color(0xFFD1495B);
-  if (_contains(text, ['housing', 'rent', 'home'])) return const Color(0xFF457B9D);
-  if (_contains(text, ['bills', 'bill'])) return const Color(0xFF8D99AE);
-  if (_contains(text, ['utilities', 'internet', 'phone'])) return const Color(0xFFF4A261);
-  if (_contains(text, ['entertainment', 'leisure', 'hobby'])) return const Color(0xFF6A4C93);
-  if (_contains(text, ['education', 'school', 'course'])) return const Color(0xFF277DA1);
-  if (_contains(text, ['tax', 'government', 'fee'])) return const Color(0xFF606C38);
-  return AppColors.teal;
-}
+const _categoryVisuals = <CategoryVisual>[
+  CategoryVisual(
+    terms: ['dining', 'restaurant', 'food', 'meal'],
+    icon: Icons.restaurant,
+    color: Color(0xFFE76F51),
+  ),
+  CategoryVisual(
+    terms: ['groceries'],
+    icon: Icons.eco,
+    color: Color(0xFF4CAF50),
+  ),
+  CategoryVisual(
+    terms: ['shopping', 'clothing'],
+    icon: Icons.shopping_bag,
+    color: Color(0xFF7B61FF),
+  ),
+  CategoryVisual(
+    terms: ['personal', 'beauty'],
+    icon: Icons.spa,
+    color: Color(0xFFE07A5F),
+  ),
+  CategoryVisual(
+    terms: ['nightlife', 'bar', 'drinks', 'alcohol'],
+    icon: Icons.wine_bar,
+    color: Color(0xFF9B5DE5),
+  ),
+  CategoryVisual(
+    terms: ['gifts', 'gift'],
+    icon: Icons.card_giftcard,
+    color: Color(0xFFE63946),
+  ),
+  CategoryVisual(
+    terms: ['travel'],
+    icon: Icons.directions_car,
+    color: Color(0xFF2A9D8F),
+  ),
+  CategoryVisual(
+    terms: ['transport', 'fuel', 'car'],
+    icon: Icons.train,
+    color: Color(0xFF277DA1),
+  ),
+  CategoryVisual(
+    terms: ['health', 'medical', 'dental'],
+    icon: Icons.health_and_safety,
+    color: Color(0xFFD1495B),
+  ),
+  CategoryVisual(
+    terms: ['housing', 'rent', 'home'],
+    icon: Icons.home,
+    color: Color(0xFF457B9D),
+  ),
+  CategoryVisual(
+    terms: ['bills', 'bill'],
+    icon: Icons.note_alt,
+    color: Color(0xFF8D99AE),
+  ),
+  CategoryVisual(
+    terms: ['utilities', 'internet', 'phone'],
+    icon: Icons.receipt_long,
+    color: Color(0xFFF4A261),
+  ),
+  CategoryVisual(
+    terms: ['entertainment', 'leisure', 'hobby'],
+    icon: Icons.movie,
+    color: Color(0xFF6A4C93),
+  ),
+  CategoryVisual(
+    terms: ['education', 'school', 'course'],
+    icon: Icons.school,
+    color: Color(0xFF277DA1),
+  ),
+  CategoryVisual(
+    terms: ['tax', 'government', 'fee'],
+    icon: Icons.account_balance,
+    color: Color(0xFF606C38),
+  ),
+];
 
-bool _contains(String text, List<String> terms) => terms.any(text.contains);
+IconData categoryIcon(Category category) => _visualFor(category).icon;
+
+Color categoryColor(Category category) => _visualFor(category).color;
+
+CategoryVisual _visualFor(Category category) {
+  final text = '${category.id} ${category.name}'.toLowerCase();
+  return _categoryVisuals.firstWhere(
+    (visual) => visual.terms.any(text.contains),
+    orElse: () => const CategoryVisual(
+      terms: [],
+      icon: Icons.category_outlined,
+      color: AppColors.teal,
+    ),
+  );
+}

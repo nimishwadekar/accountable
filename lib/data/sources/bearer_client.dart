@@ -6,7 +6,7 @@ typedef SheetsAccessTokenProvider = Future<String> Function({
 
 class BearerClient extends http.BaseClient {
   BearerClient(this._accessTokenProvider, {http.Client? innerClient})
-      : _innerClient = innerClient ?? http.Client();
+    : _innerClient = innerClient ?? http.Client();
 
   final SheetsAccessTokenProvider _accessTokenProvider;
   final http.Client _innerClient;

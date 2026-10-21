@@ -31,4 +31,30 @@ void main() {
     expect(templates.single.date, isNull);
     expect(templates.single.tagId, isNull);
   });
+
+  test('reports populated fields and updates template names', () {
+    final now = DateTime.utc(2026, 10, 20);
+    final template = TransactionTemplate(
+      id: 'template',
+      name: 'Coffee',
+      type: TransactionType.expense,
+      date: now,
+      description: 'Morning coffee',
+      categoryId: 'dining',
+      tagId: 'home',
+      sourceAccountId: 'checking',
+      sourceAmount: const Money(minorUnits: 450, currencyId: 'USD'),
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    expect(template.hasDescription, isTrue);
+    expect(template.hasCategory, isTrue);
+    expect(template.hasTag, isTrue);
+    expect(template.hasSourceAccount, isTrue);
+    expect(template.hasSourceAmount, isTrue);
+    expect(template.hasDestinationAccount, isFalse);
+    expect(template.hasDestinationAmount, isFalse);
+    expect(template.copyWith(name: 'Lunch').name, 'Lunch');
+  });
 }

@@ -1,4 +1,4 @@
-import 'dart:async';
+ import 'dart:async';
 
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -89,9 +89,6 @@ class GoogleAuthService {
     }
   }
 
-  Future<String> idToken(AccountableGoogleAccount account) async =>
-      account.idToken;
-
   Future<void> signOut() async {
     _sheetsAccessToken = null;
     _sheetsAccount = null;
@@ -105,7 +102,6 @@ class GoogleAuthService {
     }
     return AccountableGoogleAccount(
       email: account.email,
-      idToken: token,
       nativeAccount: account,
     );
   }

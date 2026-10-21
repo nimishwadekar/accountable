@@ -1,4 +1,4 @@
-import 'package:accountable/config/data_source_config.dart';
+import 'package:accountable/config/accountable_config.dart';
 import 'package:accountable/data/data.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -27,11 +27,16 @@ void main() {
       () => snapshot.accountsById['new'] = snapshot.accounts.first,
       throwsUnsupportedError,
     );
+    expect(
+      () => snapshot.displayPreferencesByKey['new'] =
+          snapshot.displayPreferences.first,
+      throwsUnsupportedError,
+    );
   });
 
   test('factory creates local asset data when configured', () async {
     final repository = createAppDataRepository(
-      config: const AppDataConfig(dataSourceMode: DataSourceMode.localAssets),
+      config: const AccountableConfig(dataSource: AccountableDataSource.csv),
     );
 
     final snapshot = await repository.load();
@@ -42,8 +47,8 @@ void main() {
   test('google sheets mode requires an API client', () {
     expect(
       () => createAppDataRepository(
-        config: const AppDataConfig(
-          dataSourceMode: DataSourceMode.googleSheets,
+        config: const AccountableConfig(
+          dataSource: AccountableDataSource.sheets,
         ),
       ),
       throwsStateError,

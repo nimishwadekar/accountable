@@ -29,19 +29,23 @@ class IncomeAllocationAnalyzer {
     required DateTime month,
     required String incomeCategoryId,
   }) {
+    final monthDate = _dateOnly(month);
     return [
       for (final allocation in data.incomeAllocations.where(
         (allocation) => allocation.incomeCategoryId == incomeCategoryId,
       ))
         _progress(
           allocation,
-          month,
+          monthDate,
           data.transactions.where((transaction) {
+            final transactionDate = _dateOnly(transaction.date);
             return transaction.type == TransactionType.income &&
                 transaction.categoryId == incomeCategoryId &&
-                transaction.destinationAccountId == allocation.incomeAccountId &&
-                transaction.date.year == month.year &&
-                transaction.date.month == month.month;
+                transaction.destinationAccountId ==
+                    allocation.incomeAccountId &&
+                transactionDate.year == monthDate.year &&
+                transactionDate.month == monthDate.month &&
+                _isWithinAllocationPeriod(transactionDate, allocation);
           }).length,
         ),
     ];
@@ -52,17 +56,22 @@ class IncomeAllocationAnalyzer {
     DateTime month,
     int incomeCount,
   ) {
-    final expected = allocation.expectedAmountPerIncome.minorUnits * incomeCount;
+    final expected =
+        allocation.expectedAmountPerIncome.minorUnits * incomeCount;
+    final usd = data.currenciesById['USD'];
+    if (usd == null) {
+      throw StateError('USD currency definition is required for allocations.');
+    }
     final missingDates = <DateTime>[];
     var actual = 0;
     for (final transaction in data.transactions) {
+      final transactionDate = _dateOnly(transaction.date);
       if (transaction.type != TransactionType.transfer ||
           transaction.sourceAccountId != allocation.sourceAccountId ||
           transaction.destinationAccountId != allocation.destinationAccountId ||
-          transaction.date.year != month.year ||
-          transaction.date.month != month.month ||
-          transaction.date.isBefore(allocation.startDate) ||
-          (allocation.endDate != null && transaction.date.isAfter(allocation.endDate!))) {
+          transactionDate.year != month.year ||
+          transactionDate.month != month.month ||
+          !_isWithinAllocationPeriod(transactionDate, allocation)) {
         continue;
       }
       if (allocation.descriptionKeyword != null &&
@@ -81,20 +90,17 @@ class IncomeAllocationAnalyzer {
               rate.date.day == transaction.date.day;
         }).firstOrNull;
         if (rate == null) {
-          missingDates.add(DateTime.utc(
-            transaction.date.year,
-            transaction.date.month,
-            transaction.date.day,
-          ));
+          missingDates.add(transactionDate);
           continue;
         }
         final currency = data.currenciesById[amount.currencyId]!;
-        actual += (amount.toMajorUnits(currency) *
-                rate.rateToUsd *
-                Decimal.fromInt(100))
-            .round()
-            .toBigInt()
-            .toInt();
+        actual +=
+            (amount.toMajorUnits(currency) *
+                    rate.rateToUsd *
+                    Decimal.fromInt(_powerOfTen(usd.decimalPlaces)))
+                .round()
+                .toBigInt()
+                .toInt();
       }
     }
     return IncomeAllocationProgress(
@@ -103,5 +109,29 @@ class IncomeAllocationAnalyzer {
       actualUsdMinorUnits: actual,
       missingRateDates: missingDates.toSet().toList(),
     );
+  }
+
+  static bool _isWithinAllocationPeriod(
+    DateTime date,
+    IncomeAllocation allocation,
+  ) {
+    final normalizedDate = _dateOnly(date);
+    final startDate = _dateOnly(allocation.startDate);
+    final endDate = allocation.endDate == null
+        ? null
+        : _dateOnly(allocation.endDate!);
+    return !normalizedDate.isBefore(startDate) &&
+        (endDate == null || !normalizedDate.isAfter(endDate));
+  }
+
+  static DateTime _dateOnly(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
+
+  static int _powerOfTen(int exponent) {
+    var result = 1;
+    for (var index = 0; index < exponent; index++) {
+      result *= 10;
+    }
+    return result;
   }
 }

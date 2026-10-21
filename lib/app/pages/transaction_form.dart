@@ -101,14 +101,12 @@ class TransactionFormSheet extends StatefulWidget {
     required this.data,
     this.template,
     this.createTemplate = false,
-    this.editTemplate = false,
   });
 
   final TransactionType type;
   final AppDataSnapshot data;
   final TransactionTemplate? template;
   final bool createTemplate;
-  final bool editTemplate;
 
   @override
   State<TransactionFormSheet> createState() => _TransactionFormSheetState();
@@ -254,7 +252,8 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
             ),
             if (_destinationRequired) const SizedBox(height: AppSpacing.md),
           ],
-          if (widget.type == TransactionType.transfer) ...[
+          if (widget.type == TransactionType.transfer &&
+              !widget.createTemplate) ...[
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               value: _sourceFeeEnabled,
@@ -290,7 +289,8 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
               label: _sourceRequired ? 'Destination Amount' : 'Amount',
               accountId: _destinationAccountId,
             ),
-          if (widget.type == TransactionType.transfer) ...[
+          if (widget.type == TransactionType.transfer &&
+              !widget.createTemplate) ...[
             const SizedBox(height: AppSpacing.md),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
@@ -513,21 +513,14 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
         );
         return;
       }
-      if (destinationFee != null &&
-          transferDestinationAmount != null &&
-          destinationFee.minorUnits >= transferDestinationAmount.minorUnits) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Destination fee must be less than the transfer amount.',
-            ),
-          ),
-        );
-        return;
-      }
-      final transferSourceAmount = sourceFee == null || sourceAmount == null
-          ? sourceAmount
-          : sourceAmount - sourceFee;
+      final transferAmounts = calculateTransferAmounts(
+        sameCurrency: _transferSameCurrency,
+        sourceAmount: sourceAmount,
+        destinationAmount: transferDestinationAmount,
+        sourceFee: sourceFee,
+      );
+      final transferSourceAmount = transferAmounts.source;
+      transferDestinationAmount = transferAmounts.destination;
       final generated = <Transaction>[];
       final feeDescription =
           'Transfer Fee - ${_descriptionController.text.trim()}';
@@ -624,6 +617,21 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-'
         '${date.day.toString().padLeft(2, '0')}';
   }
+}
+
+({Money? source, Money? destination}) calculateTransferAmounts({
+  required bool sameCurrency,
+  required Money? sourceAmount,
+  required Money? destinationAmount,
+  required Money? sourceFee,
+}) {
+  final transferSourceAmount = sourceFee == null || sourceAmount == null
+      ? sourceAmount
+      : sourceAmount - sourceFee;
+  return (
+    source: transferSourceAmount,
+    destination: sameCurrency ? transferSourceAmount : destinationAmount,
+  );
 }
 
 const _transactionIdAlphabet =

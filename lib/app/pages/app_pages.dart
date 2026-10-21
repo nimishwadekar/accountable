@@ -616,32 +616,15 @@ String accountSubtitle(
 ) {
   final currency = currencies[account.currencyId];
   final currencyCode = currency?.id ?? account.currencyId;
-  final type = account.accountType.trim().toLowerCase();
-  if (type == 'cash') return currencyCode;
-  final displayType =
-      type == 'liability' && account.name.toLowerCase().contains('credit')
-      ? 'Credit'
-      : switch (type) {
-          'liability' => 'Liability',
-          'asset' => 'Asset',
-          _ => _titleCase(account.accountType),
-        };
+  final type = account.accountTypeKind;
+  if (type == AccountType.cash) return currencyCode;
+  final displayType = type.displayName;
   return '$currencyCode · $displayType';
-}
-
-String _titleCase(String value) {
-  return value
-      .split(RegExp(r'[_\\s]+'))
-      .where((part) => part.isNotEmpty)
-      .map(
-        (part) => '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
-      )
-      .join(' ');
 }
 
 Color accountTypeColor(Account account) {
   if (account.isLiability) return AppColors.danger;
-  if (account.accountType.trim().toLowerCase() == 'asset') {
+  if (account.accountTypeKind == AccountType.asset) {
     return AppColors.success;
   }
   return const Color(0xFF90CAF9);

@@ -4,50 +4,34 @@ import '../app_data_snapshot.dart';
 import '../csv/csv.dart';
 import '../models/models.dart';
 import '../sources/google_sheets_api.dart';
+import '../table_schema.dart';
 import 'data_load_exception.dart';
 import 'display_preference_manager.dart';
 import 'data_validation_failure.dart';
+import 'transaction_write_validator.dart';
+import 'manual_valuation_write_validator.dart';
 import 'table_dependencies.dart';
 import 'repositories.dart';
 
 abstract final class GoogleSheetsRanges {
-  static const accounts = 'Accounts!A:H';
-  static const categories = 'Categories!A:C';
-  static const currencies = 'Currencies!A:C';
-  static const dailyAccountBalances = 'DailyAccountBalances!A:F';
-  static const dailyExchangeRates = 'DailyExchangeRates!A:F';
-  static const dailyNetWorth = 'DailyNetWorth!A:D';
-  static const dailyManualValuations = 'DailyManualValuations!A:D';
-  static const displayPreferences = 'DisplayPreferences!A:E';
-  static const tags = 'Tags!A:B';
-  static const transactions = 'Transactions!A:K';
-  static const transactionTemplates = 'TransactionTemplates!A:M';
-  static const incomeAllocations = 'IncomeAllocations!A:L';
+  static final accounts = RuntimeTableSchemas.accounts.range;
+  static final categories = RuntimeTableSchemas.categories.range;
+  static final currencies = RuntimeTableSchemas.currencies.range;
+  static final dailyAccountBalances =
+      RuntimeTableSchemas.dailyAccountBalances.range;
+  static final dailyExchangeRates =
+      RuntimeTableSchemas.dailyExchangeRates.range;
+  static final dailyNetWorth = RuntimeTableSchemas.dailyNetWorth.range;
+  static final dailyManualValuations =
+      RuntimeTableSchemas.dailyManualValuations.range;
+  static final displayPreferences =
+      RuntimeTableSchemas.displayPreferences.range;
+  static final tags = RuntimeTableSchemas.tags.range;
+  static final transactions = RuntimeTableSchemas.transactions.range;
+  static final transactionTemplates =
+      RuntimeTableSchemas.transactionTemplates.range;
+  static final incomeAllocations = RuntimeTableSchemas.incomeAllocations.range;
 }
-
-const _transactionTemplateHeaders = <String>[
-  'template_id',
-  'name',
-  'transaction_type',
-  'date',
-  'description',
-  'category',
-  'tag',
-  'source_account_id',
-  'source_amount',
-  'dest_account_id',
-  'dest_amount',
-  'created_at',
-  'updated_at',
-];
-
-const _displayPreferenceHeaders = <String>[
-  'entity_type',
-  'entity_id',
-  'display_order',
-  'show_in_app',
-  'show_in_entry_forms',
-];
 
 class GoogleSheetsAppDataRepository implements AppDataRepository {
   GoogleSheetsAppDataRepository(this.api);
@@ -68,22 +52,31 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
   }
 
   @override
-  Future<AppDataSnapshot> addManualValuation(
-    DailyManualValuation valuation,
+  Future<AppDataSnapshot> addManualValuation(DailyManualValuation valuation) =>
+      addManualValuations([valuation]);
+
+  @override
+  Future<AppDataSnapshot> addManualValuations(
+    List<DailyManualValuation> valuations,
   ) async {
     final current = await load();
-    final account = current.accountsById[valuation.accountId];
-    final currency = account == null
-        ? null
-        : current.currenciesById[account.currencyId];
-    if (account == null || currency == null || !account.isValuationAccount) {
-      throw StateError('Invalid manual valuation account.');
+    final validationErrors = validateManualValuationsForWrite(
+      valuations,
+      current,
+    );
+    if (validationErrors.isNotEmpty) {
+      throw StateError(validationErrors.join(' '));
     }
-    await api.appendRow(GoogleSheetsRanges.dailyManualValuations, [
-      valuation.id,
-      _dateString(valuation.date),
-      valuation.accountId,
-      valuation.value.toMajorUnitsString(currency),
+    await api.appendRows(GoogleSheetsRanges.dailyManualValuations, [
+      for (final valuation in valuations)
+        [
+          valuation.id,
+          _dateString(valuation.date),
+          valuation.accountId,
+          valuation.value.toMajorUnitsString(
+            current.currenciesById[valuation.value.currencyId]!,
+          ),
+        ],
     ]);
     return reload();
   }
@@ -103,7 +96,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       throw StateError('Display preferences must include every entity.');
     }
     await api.replaceRange(GoogleSheetsRanges.displayPreferences, [
-      _displayPreferenceHeaders,
+      RuntimeTableSchemas.displayPreferences.headers,
       for (final preference in normalized.preferences)
         _displayPreferenceRow(preference),
     ]);
@@ -121,7 +114,11 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
     }
     await api.appendRow(
       GoogleSheetsRanges.incomeAllocations,
-      _incomeAllocationRow(allocation, current.accountsById, current.currenciesById),
+      _incomeAllocationRow(
+        allocation,
+        current.accountsById,
+        current.currenciesById,
+      ),
     );
     return reload();
   }
@@ -131,11 +128,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
     TransactionTemplate template,
   ) async {
     final current = await load();
-    if (current.transactionTemplates.any(
-      (item) => item.name.trim().toLowerCase() == template.name.trim().toLowerCase(),
-    )) {
-      throw StateError('A template with this name already exists.');
-    }
+    _validateTemplateName(template, current.transactionTemplates);
     await api.appendRow(
       GoogleSheetsRanges.transactionTemplates,
       _transactionTemplateRow(
@@ -152,12 +145,16 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
     TransactionTemplate template,
   ) async {
     final current = await load();
+    if (!current.transactionTemplates.any((item) => item.id == template.id)) {
+      throw StateError('Template ${template.id} does not exist.');
+    }
+    _validateTemplateName(template, current.transactionTemplates);
     final templates = [
       for (final item in current.transactionTemplates)
         item.id == template.id ? template : item,
     ];
     await api.replaceRange(GoogleSheetsRanges.transactionTemplates, [
-      _transactionTemplateHeaders,
+      RuntimeTableSchemas.transactionTemplates.headers,
       for (final item in templates)
         _transactionTemplateRow(
           item,
@@ -171,11 +168,14 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
   @override
   Future<AppDataSnapshot> deleteTransactionTemplate(String templateId) async {
     final current = await load();
+    if (!current.transactionTemplates.any((item) => item.id == templateId)) {
+      throw StateError('Template $templateId does not exist.');
+    }
     final templates = current.transactionTemplates
         .where((item) => item.id != templateId)
         .toList();
     await api.replaceRange(GoogleSheetsRanges.transactionTemplates, [
-      _transactionTemplateHeaders,
+      RuntimeTableSchemas.transactionTemplates.headers,
       for (final item in templates)
         _transactionTemplateRow(
           item,
@@ -191,29 +191,52 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       addTransactions([transaction]);
 
   @override
-  Future<AppDataSnapshot> addTransactions(List<Transaction> transactions) async {
+  Future<AppDataSnapshot> addTransactions(
+    List<Transaction> transactions,
+  ) async {
     final current = await load();
+    final validationErrors = validateTransactionsForWrite(
+      transactions,
+      current,
+    );
+    if (validationErrors.isNotEmpty) {
+      throw StateError(validationErrors.join(' '));
+    }
     final accountCurrencies = {
       for (final account in current.accounts) account.id: account.currencyId,
     };
-    await api.appendRows(
-      GoogleSheetsRanges.transactions,
-      [
-        for (final transaction in transactions)
-          _transactionHeaders
-              .map(
-                (header) =>
-                    transactionToRow(
-                      transaction,
-                      current.currenciesById,
-                      accountCurrencies,
-                    )[header] ??
-                    '',
-              )
-              .toList(),
-      ],
-    );
+    await api.appendRows(GoogleSheetsRanges.transactions, [
+      for (final transaction in transactions)
+        RuntimeTableSchemas.transactions.headers
+            .map(
+              (header) =>
+                  transactionToRow(
+                    transaction,
+                    current.currenciesById,
+                    accountCurrencies,
+                  )[header] ??
+                  '',
+            )
+            .toList(),
+    ]);
     return reload();
+  }
+
+  static void _validateTemplateName(
+    TransactionTemplate template,
+    Iterable<TransactionTemplate> existing,
+  ) {
+    final normalizedName = template.name.trim().toLowerCase();
+    if (normalizedName.isEmpty) {
+      throw StateError('Template name cannot be empty.');
+    }
+    if (existing.any(
+      (item) =>
+          item.id != template.id &&
+          item.name.trim().toLowerCase() == normalizedName,
+    )) {
+      throw StateError('A template with this name already exists.');
+    }
   }
 
   Future<AppDataSnapshot> _loadFreshSnapshot() async {
@@ -353,6 +376,10 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
             _encode(tables[GoogleSheetsRanges.transactions]!),
             accounts: accountById,
             currencies: currencyById,
+            categories: {
+              for (final category in categories) category.id: category,
+            },
+            tags: {for (final tag in tags) tag.id: tag},
           );
           transactions = result.values;
           recordIssues('Transactions', result.issues);
@@ -443,7 +470,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
   }
 
   Future<Map<String, List<List<String>>>> _readRuntimeTables() async {
-    final ranges = const [
+    final ranges = [
       GoogleSheetsRanges.accounts,
       GoogleSheetsRanges.categories,
       GoogleSheetsRanges.currencies,
@@ -460,7 +487,10 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
     final response = await api.batchReadRanges(ranges);
     return {
       for (final range in ranges)
-        range: _padRows(response[range] ?? const [], _columnCount[range]!),
+        range: _padRows(
+          response[range] ?? const [],
+          RuntimeTableSchemas.byRange(range).columnCount,
+        ),
     };
   }
 
@@ -544,32 +574,3 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       '${value.month.toString().padLeft(2, '0')}-'
       '${value.day.toString().padLeft(2, '0')}';
 }
-
-const _columnCount = <String, int>{
-  GoogleSheetsRanges.accounts: 8,
-  GoogleSheetsRanges.categories: 3,
-  GoogleSheetsRanges.currencies: 2,
-  GoogleSheetsRanges.dailyAccountBalances: 6,
-  GoogleSheetsRanges.dailyExchangeRates: 6,
-  GoogleSheetsRanges.dailyNetWorth: 4,
-  GoogleSheetsRanges.dailyManualValuations: 4,
-  GoogleSheetsRanges.displayPreferences: 5,
-  GoogleSheetsRanges.transactionTemplates: 13,
-  GoogleSheetsRanges.incomeAllocations: 12,
-  GoogleSheetsRanges.tags: 2,
-  GoogleSheetsRanges.transactions: 11,
-};
-
-const _transactionHeaders = <String>[
-  'transaction_id',
-  'date',
-  'description',
-  'category',
-  'transaction_type',
-  'source_amount',
-  'source_account_id',
-  'dest_amount',
-  'dest_account_id',
-  'tag',
-  'created_at',
-];
