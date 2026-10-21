@@ -82,7 +82,7 @@ class GoogleSheetsApi implements SheetsTableClient {
       ),
       spreadsheetId,
       range,
-      valueInputOption: 'RAW',
+      valueInputOption: 'USER_ENTERED',
       insertDataOption: 'INSERT_ROWS',
     );
   }
@@ -101,7 +101,7 @@ class GoogleSheetsApi implements SheetsTableClient {
       ),
       spreadsheetId,
       range,
-      valueInputOption: 'RAW',
+      valueInputOption: 'USER_ENTERED',
     );
 
     final existingRowCount = existing.values?.length ?? 0;
@@ -144,7 +144,7 @@ class GoogleSheetsApi implements SheetsTableClient {
       updates.add(sheets.ValueRange(range: entry.key, values: rows));
     }
     await _sheetsApi.spreadsheets.values.batchUpdate(
-      sheets.BatchUpdateValuesRequest(valueInputOption: 'RAW', data: updates),
+      sheets.BatchUpdateValuesRequest(valueInputOption: 'USER_ENTERED', data: updates),
       spreadsheetId,
     );
   }

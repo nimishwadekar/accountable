@@ -17,9 +17,13 @@ AppDataRepository createAppDataRepository({
     AccountableDataSource.csv => AssetAppDataRepository(
         reader: assetReader,
         store: SharedPreferencesLocalDatasetStore(),
+        migrationAssistance: config.migrationAssistance,
       ),
     AccountableDataSource.sheets => googleSheetsApi == null
         ? throw StateError('A Google Sheets API client is required.')
-        : GoogleSheetsAppDataRepository(googleSheetsApi),
+        : GoogleSheetsAppDataRepository(
+            googleSheetsApi,
+            migrationAssistance: config.migrationAssistance,
+          ),
   };
 }

@@ -1,3 +1,17 @@
+const transactionsHeaders = <String>[
+  'transaction_id',
+  'date',
+  'description',
+  'category',
+  'transaction_type',
+  'source_amount',
+  'source_account_id',
+  'dest_amount',
+  'dest_account_id',
+  'tag',
+  'created_at',
+];
+
 class RuntimeTableSchema {
   const RuntimeTableSchema({
     required this.name,
@@ -51,19 +65,7 @@ abstract final class RuntimeTableSchemas {
   );
   static const transactions = RuntimeTableSchema(
     name: 'Transactions',
-    headers: [
-      'transaction_id',
-      'date',
-      'description',
-      'category',
-      'transaction_type',
-      'source_amount',
-      'source_account_id',
-      'dest_amount',
-      'dest_account_id',
-      'tag',
-      'created_at',
-    ],
+    headers: transactionsHeaders,
     range: 'Transactions!A:K',
     numericColumns: {5, 7},
   );
@@ -136,6 +138,13 @@ abstract final class RuntimeTableSchemas {
       'updated_at',
     ],
     range: 'TransactionTemplates!A:M',
+    numericColumns: {8, 10},
+  );
+  static const transactionsToMigrate = RuntimeTableSchema(
+    name: 'TransactionsToMigrate',
+    headers: transactionsHeaders,
+    range: 'TransactionsToMigrate!A:K',
+    numericColumns: {5, 7},
   );
   static const incomeAllocations = RuntimeTableSchema(
     name: 'IncomeAllocations',
@@ -154,6 +163,7 @@ abstract final class RuntimeTableSchemas {
       'updated_at',
     ],
     range: 'IncomeAllocations!A:L',
+    numericColumns: {6},
   );
 
   static const all = [
@@ -166,6 +176,7 @@ abstract final class RuntimeTableSchemas {
     dailyAccountBalances,
     dailyNetWorth,
     dailyManualValuations,
+    transactionsToMigrate,
     displayPreferences,
     transactionTemplates,
     incomeAllocations,

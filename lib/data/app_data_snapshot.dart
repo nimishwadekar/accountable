@@ -7,6 +7,7 @@ class AppDataSnapshot {
     required List<CurrencyDefinition> currencies,
     required List<Tag> tags,
     required List<Transaction> transactions,
+    List<Transaction> transactionsToMigrate = const [],
     required List<ExchangeRate> exchangeRates,
     required List<DailyAccountBalance> dailyAccountBalances,
     required List<DailyNetWorth> dailyNetWorth,
@@ -19,6 +20,7 @@ class AppDataSnapshot {
        currencies = List.unmodifiable(currencies),
        tags = List.unmodifiable(tags),
        transactions = List.unmodifiable(transactions),
+       transactionsToMigrate = List.unmodifiable(transactionsToMigrate),
        exchangeRates = List.unmodifiable(exchangeRates),
        dailyAccountBalances = List.unmodifiable(dailyAccountBalances),
        dailyNetWorth = List.unmodifiable(dailyNetWorth),
@@ -63,6 +65,7 @@ class AppDataSnapshot {
   final List<CurrencyDefinition> currencies;
   final List<Tag> tags;
   final List<Transaction> transactions;
+  final List<Transaction> transactionsToMigrate;
   final List<ExchangeRate> exchangeRates;
   final List<DailyAccountBalance> dailyAccountBalances;
   final List<DailyNetWorth> dailyNetWorth;

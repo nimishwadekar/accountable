@@ -104,10 +104,12 @@ class _AccountableAppState extends State<AccountableApp> {
     if (config.isCsvDataSource) {
       return AppShell(
         dataRepository: createAppDataRepository(
-          config: const AccountableConfig(
+          config: AccountableConfig(
             dataSource: AccountableDataSource.csv,
+            migrationAssistance: config.migrationAssistance,
           ),
         ),
+        migrationAssistance: config.migrationAssistance,
         textScale: _textScale,
         onTextScaleChanged: _setTextScale,
       );

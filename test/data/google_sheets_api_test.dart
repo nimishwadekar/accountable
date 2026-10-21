@@ -48,7 +48,9 @@ void main() {
 
   test('writes numeric sheet values as numbers, not text', () async {
     Object? requestBody;
+    Uri? requestUri;
     final client = MockClient((request) async {
+      requestUri = request.url;
       requestBody = jsonDecode(request.body);
       return http.Response(
         '{}',
@@ -69,7 +71,9 @@ void main() {
       '-2862922.00',
     ]);
 
-    final values = (requestBody as Map<String, dynamic>)['values'] as List;
+    final request = requestBody as Map<String, dynamic>;
+    expect(requestUri?.queryParameters['valueInputOption'], 'USER_ENTERED');
+    final values = request['values'] as List;
     expect(values.first[3], -2862922.00);
     expect(values.first[3], isA<num>());
   });

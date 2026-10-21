@@ -102,6 +102,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     if (_repository != null) {
       return AppShell(
         dataRepository: _repository!,
+        migrationAssistance: widget.config.migrationAssistance,
         onRebuildDailyTables: _rebuildDailyTables,
         textScale: widget.textScale,
         onTextScaleChanged: widget.onTextScaleChanged,
@@ -339,7 +340,10 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         accessTokenProvider: ({forceRefresh = false}) =>
             _authService.authorizeSheets(account, forceRefresh: forceRefresh),
       );
-      final repository = GoogleSheetsAppDataRepository(api);
+      final repository = GoogleSheetsAppDataRepository(
+        api,
+        migrationAssistance: widget.config.migrationAssistance,
+      );
       _logTiming('loading initial Sheets snapshot');
       final initialData = await repository.load();
       _logTiming('initial Sheets snapshot loaded');

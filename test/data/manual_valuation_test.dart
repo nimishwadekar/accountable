@@ -36,6 +36,49 @@ void main() {
   });
 
   test(
+    'manual valuation before transaction history is carried into net worth',
+    () async {
+      final source = await AssetAppDataRepository().load();
+      final asset = source.accountsById['fidelity-401k-2065']!;
+      final usd = source.currenciesById['USD']!;
+      final data = AppDataSnapshot(
+        accounts: source.accounts,
+        categories: source.categories,
+        currencies: source.currencies,
+        tags: source.tags,
+        transactions: source.transactions,
+        exchangeRates: const [],
+        dailyAccountBalances: const [],
+        dailyNetWorth: const [],
+        dailyManualValuations: [
+          DailyManualValuation(
+            id: '2026-10-05-fidelity-401k-2065',
+            date: DateTime.utc(2026, 10, 5),
+            accountId: asset.id,
+            value: Money.fromMajorUnits(value: '1000', currency: usd),
+          ),
+        ],
+      );
+      final client = _MaintenanceClient();
+      await DailyMaintenanceService(
+        client: client,
+        data: data,
+        httpClient: MockClient(
+          (_) async => http.Response(
+            jsonEncode({'rates': {'INR': 96.4}}),
+            200,
+          ),
+        ),
+      ).catchUp(yesterday: DateTime.utc(2026, 10, 10));
+
+      final netWorth = client.replacedNetWorthRows.firstWhere(
+        (row) => row.first == '2026-10-10-net',
+      );
+      expect(netWorth[2], '1717.47');
+    },
+  );
+
+  test(
     'manual valuation replaces the asset account in daily net worth',
     () async {
       final source = await AssetAppDataRepository().load();
@@ -88,17 +131,11 @@ void main() {
         ),
       ).catchUp(yesterday: DateTime.utc(2026, 10, 10));
 
-      expect(client.replacedNetWorthRows, isEmpty);
-      final netWorthRow = client.appendedRows.firstWhere(
+      expect(client.replacedNetWorthRows, isNotEmpty);
+      final netWorthRow = client.replacedNetWorthRows.firstWhere(
         (row) => row.first == '2026-10-10-net',
       );
       expect(netWorthRow[2], '1757.47');
-      expect(
-        client.appendedRows.any(
-          (row) => row.first == '2026-10-10-chase_checking',
-        ),
-        isFalse,
-      );
     },
   );
 

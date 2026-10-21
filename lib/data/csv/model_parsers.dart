@@ -380,8 +380,9 @@ class ModelParsers {
     required Map<String, CurrencyDefinition> currencies,
     Map<String, Category>? categories,
     Map<String, Tag>? tags,
+    String tableName = 'Transactions',
   }) {
-    final table = CsvTable.parse(source, tableName: 'Transactions');
+    final table = CsvTable.parse(source, tableName: tableName);
     return _uniqueById(
       table.rows.map((row) {
         final sourceAccountId = optionalValue(row, 'source_account_id');

@@ -7,5 +7,6 @@
   "additionalOauthOrigins": [
     "http://localhost:9000"
   ],
-  "sheetsScope": "https://www.googleapis.com/auth/spreadsheets"
+  "sheetsScope": "https://www.googleapis.com/auth/spreadsheets",
+  "migration_assistance": false
 }

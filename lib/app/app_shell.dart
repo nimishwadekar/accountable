@@ -9,6 +9,7 @@ import 'pages/transactions_page.dart';
 import 'pages/settings_page.dart';
 import 'navigation_history.dart';
 import '../features/analysis/analysis_page.dart';
+import '../features/migration_assistance/migration_assistance_page.dart';
 import 'theme/design_tokens.dart';
 
 enum AppSection {
@@ -18,6 +19,7 @@ enum AppSection {
   accounts,
   assetsLiabilities,
   settings,
+  migrationAssistance,
 }
 
 extension AppSectionDetails on AppSection {
@@ -28,6 +30,7 @@ extension AppSectionDetails on AppSection {
     AppSection.analysis => 'Analysis',
     AppSection.assetsLiabilities => 'Assets & Liabilities',
     AppSection.settings => 'Settings',
+    AppSection.migrationAssistance => 'Migration Assistance',
   };
 
   String get compactLabel => switch (this) {
@@ -37,6 +40,7 @@ extension AppSectionDetails on AppSection {
     AppSection.analysis => 'Analysis',
     AppSection.assetsLiabilities => 'Assets',
     AppSection.settings => 'Settings',
+    AppSection.migrationAssistance => 'Migration Assistance',
   };
 
   IconData get icon => switch (this) {
@@ -46,6 +50,7 @@ extension AppSectionDetails on AppSection {
     AppSection.analysis => Icons.insights_outlined,
     AppSection.assetsLiabilities => Icons.account_balance_outlined,
     AppSection.settings => Icons.settings_outlined,
+    AppSection.migrationAssistance => Icons.compare_arrows_outlined,
   };
 
   IconData get selectedIcon => switch (this) {
@@ -55,6 +60,7 @@ extension AppSectionDetails on AppSection {
     AppSection.analysis => Icons.insights,
     AppSection.assetsLiabilities => Icons.account_balance,
     AppSection.settings => Icons.settings,
+    AppSection.migrationAssistance => Icons.compare_arrows,
   };
 }
 
@@ -62,6 +68,7 @@ class AppShell extends StatefulWidget {
   const AppShell({
     super.key,
     required this.dataRepository,
+    this.migrationAssistance = false,
     this.onRebuildDailyTables,
     this.onReloadData,
     this.textScale = 1,
@@ -69,6 +76,7 @@ class AppShell extends StatefulWidget {
   });
 
   final AppDataRepository dataRepository;
+  final bool migrationAssistance;
   final Future<void> Function()? onRebuildDailyTables;
   final Future<void> Function()? onReloadData;
   final double textScale;
@@ -112,6 +120,16 @@ class _AppShellState extends State<AppShell> {
     super.dispose();
   }
 
+  List<AppSection> get _navigationSections => [
+    for (final section in AppSection.values)
+      if (section != AppSection.migrationAssistance ||
+          widget.migrationAssistance)
+        section,
+  ];
+
+  int get _selectedNavigationIndex =>
+      _navigationSections.indexOf(_selectedSection);
+
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
@@ -150,7 +168,7 @@ class _AppShellState extends State<AppShell> {
       ),
       child: NavigationRail(
         extended: extended,
-        selectedIndex: _selectedSection.index,
+        selectedIndex: _selectedNavigationIndex,
         onDestinationSelected: _selectSection,
         leading: Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -170,7 +188,7 @@ class _AppShellState extends State<AppShell> {
               : const Icon(Icons.account_balance_outlined),
         ),
         destinations: [
-          for (final section in AppSection.values)
+          for (final section in _navigationSections)
             NavigationRailDestination(
               icon: Icon(section.icon),
               selectedIcon: Icon(section.selectedIcon),
@@ -183,10 +201,10 @@ class _AppShellState extends State<AppShell> {
 
   Widget _buildNavigationBar() {
     return NavigationBar(
-      selectedIndex: _selectedSection.index,
+      selectedIndex: _selectedNavigationIndex,
       onDestinationSelected: _selectSection,
       destinations: [
-        for (final section in AppSection.values)
+        for (final section in _navigationSections)
           NavigationDestination(
             icon: Icon(section.icon),
             selectedIcon: Icon(section.selectedIcon),
@@ -233,6 +251,7 @@ class _AppShellState extends State<AppShell> {
         data: data,
         onValuationsAdded: _handleValuationsAdded,
       ),
+      AppSection.migrationAssistance => MigrationAssistancePage(data: data),
       AppSection.settings => SettingsPage(
         data: data,
         onSaveDisplayPreferences: _saveDisplayPreferences,
@@ -247,7 +266,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _selectSection(int index) {
-    final section = AppSection.values[index];
+    final section = _navigationSections[index];
     setState(() => _selectedSection = section);
     _navigationHistory.push(
       _navigationHistory.authenticatedPath(_pathForSection(section)),
@@ -263,6 +282,8 @@ class _AppShellState extends State<AppShell> {
       'accounts' => AppSection.accounts,
       'assets-liabilities' => AppSection.assetsLiabilities,
       'settings' => AppSection.settings,
+      'migration-assistance' when widget.migrationAssistance =>
+        AppSection.migrationAssistance,
       _ => AppSection.overview,
     };
   }
@@ -276,6 +297,7 @@ class _AppShellState extends State<AppShell> {
       'accounts',
       'assets-liabilities',
       'settings',
+      'migration-assistance',
     }.contains(segments.isEmpty ? null : segments.last);
     final baseSegments = knownSection && segments.isNotEmpty
         ? segments.sublist(0, segments.length - 1)
@@ -288,6 +310,7 @@ class _AppShellState extends State<AppShell> {
       AppSection.accounts => '/accounts',
       AppSection.assetsLiabilities => '/assets-liabilities',
       AppSection.settings => '/settings',
+      AppSection.migrationAssistance => '/migration-assistance',
     };
     return base.isEmpty ? (suffix.isEmpty ? '/' : suffix) : '$base$suffix';
   }

@@ -31,12 +31,18 @@ abstract final class GoogleSheetsRanges {
   static final transactionTemplates =
       RuntimeTableSchemas.transactionTemplates.range;
   static final incomeAllocations = RuntimeTableSchemas.incomeAllocations.range;
+  static final transactionsToMigrate =
+      RuntimeTableSchemas.transactionsToMigrate.range;
 }
 
 class GoogleSheetsAppDataRepository implements AppDataRepository {
-  GoogleSheetsAppDataRepository(this.api);
+  GoogleSheetsAppDataRepository(
+    this.api, {
+    this.migrationAssistance = false,
+  });
 
   final SheetsTableClient api;
+  final bool migrationAssistance;
   AppDataSnapshot? _cachedSnapshot;
 
   @override
@@ -261,6 +267,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       List<Category> categories = const [];
       List<Tag> tags = const [];
       List<Transaction> transactions = const [];
+      List<Transaction> transactionsToMigrate = const [];
       List<ExchangeRate> exchangeRates = const [];
       List<DailyAccountBalance> dailyAccountBalances = const [];
       List<DailyNetWorth> dailyNetWorth = const [];
@@ -387,6 +394,34 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
           recordIssues('Transactions', [issueFromError('Transactions', error)]);
         }
       }
+      if (migrationAssistance) {
+        try {
+          final result = ModelParsers.parseTransactionsWithIssues(
+            _encode(tables[GoogleSheetsRanges.transactionsToMigrate]!),
+            accounts: accountById,
+            currencies: currencyById,
+            categories: {
+              for (final category in categories) category.id: category,
+            },
+            tags: {for (final tag in tags) tag.id: tag},
+          );
+          transactionsToMigrate = result.values;
+          final migrationIssues = [
+            ...result.issues,
+            if (result.values.isEmpty)
+              const DataValidationIssue(
+                table: 'TransactionsToMigrate',
+                message:
+                    'TransactionsToMigrate must contain at least one transaction.',
+              ),
+          ];
+          recordIssues('TransactionsToMigrate', migrationIssues);
+        } catch (error) {
+          recordIssues('TransactionsToMigrate', [
+            issueFromError('TransactionsToMigrate', error),
+          ]);
+        }
+      }
       try {
         final result = ModelParsers.parseExchangeRatesWithIssues(
           _encode(tables[GoogleSheetsRanges.dailyExchangeRates]!),
@@ -450,6 +485,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
         currencies: currencies,
         tags: tags,
         transactions: transactions,
+        transactionsToMigrate: transactionsToMigrate,
         exchangeRates: exchangeRates,
         dailyAccountBalances: dailyAccountBalances,
         dailyNetWorth: dailyNetWorth,
@@ -483,6 +519,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       GoogleSheetsRanges.incomeAllocations,
       GoogleSheetsRanges.tags,
       GoogleSheetsRanges.transactions,
+      if (migrationAssistance) GoogleSheetsRanges.transactionsToMigrate,
     ];
     final response = await api.batchReadRanges(ranges);
     return {

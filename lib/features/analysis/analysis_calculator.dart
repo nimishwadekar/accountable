@@ -140,9 +140,14 @@ class AnalysisCalculator {
       dates.add(date);
       date = date.add(const Duration(days: 1));
     }
+    final openingDate = _dateOnly(account.openingDate);
     final valuations =
         data.dailyManualValuations
-            .where((valuation) => valuation.accountId == account.id)
+            .where(
+              (valuation) =>
+                  valuation.accountId == account.id &&
+                  !_dateOnly(valuation.date).isBefore(openingDate),
+            )
             .toList()
           ..sort((a, b) => a.date.compareTo(b.date));
     final currency = data.currenciesById[account.currencyId]!;

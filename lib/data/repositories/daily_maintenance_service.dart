@@ -22,11 +22,15 @@ class DailyMaintenanceService {
 
   Future<void> catchUp({required DateTime yesterday}) async {
     final endDate = _dateOnly(yesterday);
-    final existingIds = await _readDailyIds();
     final fallbackStart = _earliestSourceDate ?? endDate;
     if (fallbackStart.isAfter(endDate)) return;
+    if (_requiresFullRebuild) {
+      return rebuild(yesterday: endDate);
+    }
 
+    final existingIds = await _readDailyIds();
     final rates = <ExchangeRate>[...data.exchangeRates];
+    final missingRates = <ExchangeRate>[];
     for (
       var date = fallbackStart;
       !date.isAfter(endDate);
@@ -39,12 +43,17 @@ class DailyMaintenanceService {
       if (expectedRateIds.every(existingIds['rates']!.contains)) continue;
 
       final dateRates = await _ratesForDate(date);
+      rates.addAll(dateRates);
       for (final rate in dateRates) {
         if (existingIds['rates']!.add(rate.id)) {
-          rates.add(rate);
-          await _appendExchangeRates([rate]);
+          missingRates.add(rate);
         }
       }
+    }
+    if (missingRates.isNotEmpty) {
+      await client.appendRows(GoogleSheetsRanges.dailyExchangeRates, [
+        for (final rate in missingRates) _exchangeRateRow(rate),
+      ]);
     }
 
     final balances = _balancesThrough(
@@ -52,10 +61,14 @@ class DailyMaintenanceService {
       endDate: endDate,
       rates: rates,
     );
-    for (final balance in balances) {
-      if (existingIds['balances']!.add(balance.id)) {
-        await _appendBalance(balance);
-      }
+    final missingBalances = [
+      for (final balance in balances)
+        if (existingIds['balances']!.add(balance.id)) balance,
+    ];
+    if (missingBalances.isNotEmpty) {
+      await client.appendRows(GoogleSheetsRanges.dailyAccountBalances, [
+        for (final balance in missingBalances) _balanceRow(balance),
+      ]);
     }
 
     final allBalances = [...data.dailyAccountBalances, ...balances].where((
@@ -70,16 +83,21 @@ class DailyMaintenanceService {
       startDate: fallbackStart,
       endDate: endDate,
     );
-    for (final netWorth in netWorths) {
-      if (existingIds['netWorth']!.add(netWorth.id)) {
-        await _appendNetWorth(netWorth);
-      }
+    final missingNetWorths = [
+      for (final netWorth in netWorths)
+        if (existingIds['netWorth']!.add(netWorth.id)) netWorth,
+    ];
+    if (missingNetWorths.isNotEmpty) {
+      await client.appendRows(GoogleSheetsRanges.dailyNetWorth, [
+        for (final netWorth in missingNetWorths) _netWorthRow(netWorth),
+      ]);
     }
   }
 
-  Future<void> rebuild() async {
-    final today = DateTime.now();
-    final endDate = _dateOnly(today.subtract(const Duration(days: 1)));
+  Future<void> rebuild({DateTime? yesterday}) async {
+    final endDate = _dateOnly(
+      yesterday ?? DateTime.now().subtract(const Duration(days: 1)),
+    );
     final startDate = _earliestSourceDate;
     if (startDate == null || startDate.isAfter(endDate)) return;
 
@@ -192,18 +210,14 @@ class DailyMaintenanceService {
     );
   }
 
-  Future<void> _appendExchangeRates(List<ExchangeRate> rates) async {
-    for (final rate in rates) {
-      await client.appendRow(GoogleSheetsRanges.dailyExchangeRates, [
-        rate.id,
-        _dateString(rate.date),
-        rate.currencyId,
-        rate.rateToUsd.toString(),
-        _dateString(rate.sourceRateDate),
-        rate.retrievedAt.toUtc().toIso8601String(),
-      ]);
-    }
-  }
+  List<String> _exchangeRateRow(ExchangeRate rate) => [
+    rate.id,
+    _dateString(rate.date),
+    rate.currencyId,
+    rate.rateToUsd.toString(),
+    _dateString(rate.sourceRateDate),
+    rate.retrievedAt.toUtc().toIso8601String(),
+  ];
 
   List<DailyAccountBalance> _balancesThrough({
     required DateTime startDate,
@@ -289,27 +303,23 @@ class DailyMaintenanceService {
     ];
   }
 
-  Future<void> _appendBalance(DailyAccountBalance balance) {
-    return client.appendRow(GoogleSheetsRanges.dailyAccountBalances, [
-      balance.id,
-      _dateString(balance.date),
-      balance.accountId,
-      balance.balance.toMajorUnitsString(
-        data.currenciesById[balance.balance.currencyId]!,
-      ),
-      balance.balanceUsd.toMajorUnitsString(data.currenciesById['USD']!),
-      balance.retrievedAt.toUtc().toIso8601String(),
-    ]);
-  }
+  List<String> _balanceRow(DailyAccountBalance balance) => [
+    balance.id,
+    _dateString(balance.date),
+    balance.accountId,
+    balance.balance.toMajorUnitsString(
+      data.currenciesById[balance.balance.currencyId]!,
+    ),
+    balance.balanceUsd.toMajorUnitsString(data.currenciesById['USD']!),
+    balance.retrievedAt.toUtc().toIso8601String(),
+  ];
 
-  Future<void> _appendNetWorth(DailyNetWorth netWorth) {
-    return client.appendRow(GoogleSheetsRanges.dailyNetWorth, [
-      netWorth.id,
-      _dateString(netWorth.date),
-      netWorth.amount.toMajorUnitsString(data.currenciesById['USD']!),
-      netWorth.retrievedAt.toUtc().toIso8601String(),
-    ]);
-  }
+  List<String> _netWorthRow(DailyNetWorth netWorth) => [
+    netWorth.id,
+    _dateString(netWorth.date),
+    netWorth.amount.toMajorUnitsString(data.currenciesById['USD']!),
+    netWorth.retrievedAt.toUtc().toIso8601String(),
+  ];
 
   void _applyTransaction(Map<String, Money> balances, Transaction transaction) {
     if (transaction.sourceAccountId != null &&
@@ -366,16 +376,18 @@ class DailyMaintenanceService {
   }
 
   DailyManualValuation? _latestValuation(String accountId, DateTime date) {
-    final historyStart = _earliestSourceDate;
+    final account = data.accountsById[accountId];
+    if (account == null) return null;
+    final openingDate = _dateOnly(account.openingDate);
     DailyManualValuation? latest;
     for (final valuation in data.dailyManualValuationsById.values) {
       final valuationDate = _dateOnly(valuation.date);
       if (valuation.accountId != accountId ||
-          valuationDate.isAfter(date) ||
-          (historyStart != null && valuationDate.isBefore(historyStart))) {
+          valuationDate.isBefore(openingDate) ||
+          valuationDate.isAfter(date)) {
         continue;
       }
-      if (latest == null || valuation.date.isAfter(latest.date)) {
+      if (latest == null || valuationDate.isAfter(_dateOnly(latest.date))) {
         latest = valuation;
       }
     }
@@ -399,6 +411,22 @@ class DailyMaintenanceService {
     return data.currencies.where(
       (currency) => openCurrencyIds.contains(currency.id),
     );
+  }
+
+  bool get _requiresFullRebuild {
+    final earliestSource = _earliestSourceDate;
+    if (earliestSource == null) return false;
+    if (data.exchangeRates.isEmpty ||
+        data.dailyAccountBalances.isEmpty ||
+        data.dailyNetWorth.isEmpty) {
+      return true;
+    }
+    final earliestDerived = [
+      ...data.exchangeRates.map((value) => _dateOnly(value.date)),
+      ...data.dailyAccountBalances.map((value) => _dateOnly(value.date)),
+      ...data.dailyNetWorth.map((value) => _dateOnly(value.date)),
+    ].reduce((a, b) => a.isBefore(b) ? a : b);
+    return earliestSource.isBefore(earliestDerived);
   }
 
   DateTime? get _earliestSourceDate {

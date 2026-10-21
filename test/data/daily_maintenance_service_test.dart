@@ -150,6 +150,50 @@ void main() {
     );
   });
 
+  test('full rebuilds when source history predates derived history', () async {
+    final source = await AssetAppDataRepository().load();
+    final data = AppDataSnapshot(
+      accounts: source.accounts,
+      categories: source.categories,
+      currencies: source.currencies,
+      tags: source.tags,
+      transactions: source.transactions,
+      exchangeRates: source.exchangeRates
+          .where((rate) => rate.date.isAfter(DateTime.utc(2026, 10, 10)))
+          .toList(),
+      dailyAccountBalances: source.dailyAccountBalances
+          .where((balance) => balance.date.isAfter(DateTime.utc(2026, 10, 10)))
+          .toList(),
+      dailyNetWorth: source.dailyNetWorth
+          .where((value) => value.date.isAfter(DateTime.utc(2026, 10, 10)))
+          .toList(),
+      dailyManualValuations: source.dailyManualValuations,
+    );
+    final client = _FakeSheetsClient({});
+    await DailyMaintenanceService(
+      client: client,
+      data: data,
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'rates': {'INR': 96.4},
+          }),
+          200,
+        ),
+      ),
+    ).catchUp(yesterday: DateTime.utc(2026, 10, 13));
+
+    expect(
+      client.replacedRanges.keys,
+      containsAll(<String>[
+        GoogleSheetsRanges.dailyExchangeRates,
+        GoogleSheetsRanges.dailyAccountBalances,
+        GoogleSheetsRanges.dailyNetWorth,
+      ]),
+    );
+    expect(client.appendedRows, isEmpty);
+  });
+
   test('includes an account through its inclusive closing date', () async {
     final data = await AssetAppDataRepository().load();
     final client = _FakeSheetsClient({

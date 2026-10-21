@@ -89,6 +89,7 @@ Current column order is part of the Sheets/CSV contract:
 ```text
 Currencies: currency_id, currency_symbol, decimal_places
 Transactions: transaction_id, date, description, category, transaction_type, source_amount, source_account_id, dest_amount, dest_account_id, tag, created_at
+TransactionsToMigrate: transaction_id, date, description, category, transaction_type, source_amount, source_account_id, dest_amount, dest_account_id, tag, created_at
 DailyExchangeRates: rate_id, rate_date, currency, rate_to_usd, source_rate_date, retrieved_at
 DailyManualValuations: valuation_id, date, account_id, value
 DisplayPreferences: entity_type, entity_id, display_order, show_in_app, show_in_entry_forms
@@ -180,6 +181,22 @@ Existing legacy rows may have blank descriptions or tags while migration is pend
 - Exchange rates use decimal arithmetic.
 - Preserve the full exchange rate during calculations.
 - Round only the final converted monetary result to the target currency's minor unit.
+
+## Migration Assistance — implemented when enabled
+
+When `assets/config.json` contains `migration_assistance: true`, the normal app remains available and a read-only **Migration Assistance** tab is appended to the main navigation. The tab loads `TransactionsToMigrate` using the same A:K schema and strict validation as `Transactions`.
+
+It displays every account from `Accounts`, including accounts without migration activity:
+
+- Active opening balance.
+- Native-currency net change caused by migration transactions.
+- Reverse-calculated balance before those older transactions:
+
+```text
+pre-migration balance = active opening balance - migration net change
+```
+
+Source amounts decrease source accounts; destination amounts increase destination accounts. The migration table is required and must contain at least one valid transaction when the option is enabled. No migration data is written back.
 
 ## Navigation and screen behavior
 

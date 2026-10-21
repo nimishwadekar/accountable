@@ -8,6 +8,8 @@ The app reads runtime settings from the committed [`assets/config.json`](./asset
 
 `oauthOrigin` is the production GitHub Pages origin. `additionalOauthOrigins` keeps the local development origin available. Add both origins as authorized JavaScript origins for the Google OAuth client.
 
+Set `migration_assistance` to `true` to append the read-only Migration Assistance tab. It requires a `TransactionsToMigrate` sheet (or bundled CSV fixture) with the same columns as `Transactions`.
+
 The web client ID and spreadsheet ID are not secrets; OAuth access tokens are never stored in this file.
 
 ## Local development

@@ -20,6 +20,27 @@ void main() {
       'https://nimishwadekar.github.io',
       'http://localhost:9000',
     ]);
+    expect(config.migrationAssistance, isFalse);
+  });
+
+  test('parses migration assistance as an optional boolean', () {
+    final config = AccountableConfig.fromJson({
+      'dataSource': 'csv',
+      'googleClientId': 'client-id',
+      'spreadsheetId': 'sheet-id',
+      'allowedEmail': 'owner@example.com',
+      'oauthOrigin': 'https://example.com',
+      'sheetsScope': 'scope',
+      'migration_assistance': true,
+    });
+    expect(config.migrationAssistance, isTrue);
+    expect(
+      () => AccountableConfig.fromJson({
+        'dataSource': 'csv',
+        'migration_assistance': 'true',
+      }),
+      throwsFormatException,
+    );
   });
 
   test('supports Sheets configuration and rejects invalid values', () {

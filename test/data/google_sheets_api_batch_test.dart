@@ -77,13 +77,17 @@ void main() {
     });
 
     expect(requestCount, 2);
-    expect((body as Map<String, dynamic>)['data'], hasLength(3));
+    final request = body as Map<String, dynamic>;
+    expect(request['valueInputOption'], 'USER_ENTERED');
+    expect(request['data'], hasLength(3));
   });
 
   test('appends a transaction batch in one Sheets request', () async {
     var requestCount = 0;
     Object? body;
+    Uri? requestUri;
     final client = MockClient((request) async {
+      requestUri = request.url;
       requestCount++;
       body = jsonDecode(request.body);
       return http.Response(
@@ -104,6 +108,8 @@ void main() {
     ]);
 
     expect(requestCount, 1);
-    expect((body as Map<String, dynamic>)['values'], hasLength(2));
+    final request = body as Map<String, dynamic>;
+    expect(requestUri?.queryParameters['valueInputOption'], 'USER_ENTERED');
+    expect(request['values'], hasLength(2));
   });
 }

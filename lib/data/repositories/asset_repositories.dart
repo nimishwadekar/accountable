@@ -28,6 +28,8 @@ abstract final class DataAssetPaths {
       RuntimeTableSchemas.displayPreferences.assetPath;
   static final tags = RuntimeTableSchemas.tags.assetPath;
   static final transactions = RuntimeTableSchemas.transactions.assetPath;
+  static final transactionsToMigrate =
+      RuntimeTableSchemas.transactionsToMigrate.assetPath;
   static final transactionTemplates =
       RuntimeTableSchemas.transactionTemplates.assetPath;
   static final incomeAllocations =
@@ -200,11 +202,15 @@ class AssetDailyNetWorthRepository implements DailyNetWorthRepository {
 }
 
 class AssetAppDataRepository implements AppDataRepository {
-  AssetAppDataRepository({AssetReader? reader, this.store})
-    : reader = reader ?? const FlutterAssetReader();
+  AssetAppDataRepository({
+    AssetReader? reader,
+    this.store,
+    this.migrationAssistance = false,
+  }) : reader = reader ?? const FlutterAssetReader();
 
   final AssetReader reader;
   final LocalDatasetStore? store;
+  final bool migrationAssistance;
 
   AppDataSnapshot? _cachedSnapshot;
 
@@ -386,6 +392,23 @@ class AssetAppDataRepository implements AppDataRepository {
         },
         tags: {for (final tag in tagList) tag.id: tag},
       );
+      final migrationTransactions = migrationAssistance
+          ? ModelParsers.parseTransactions(
+              tables[DataAssetPaths.transactionsToMigrate]!,
+              accounts: accountById,
+              currencies: currencyById,
+              categories: {
+                for (final category in categoryList) category.id: category,
+              },
+              tags: {for (final tag in tagList) tag.id: tag},
+              tableName: 'TransactionsToMigrate',
+            )
+          : const <Transaction>[];
+      if (migrationAssistance && migrationTransactions.isEmpty) {
+        throw const FormatException(
+          'TransactionsToMigrate must contain at least one transaction.',
+        );
+      }
       final exchangeRateList = ModelParsers.parseExchangeRates(
         tables[DataAssetPaths.dailyExchangeRates]!,
       );
@@ -410,6 +433,7 @@ class AssetAppDataRepository implements AppDataRepository {
         currencies: currencyList,
         tags: tagList,
         transactions: transactionList,
+        transactionsToMigrate: migrationTransactions,
         exchangeRates: exchangeRateList,
         dailyAccountBalances: dailyAccountBalanceList,
         dailyNetWorth: dailyNetWorthList,
@@ -427,9 +451,10 @@ class AssetAppDataRepository implements AppDataRepository {
 
   Future<Map<String, String>> _readDataset() async {
     final stored = await store?.read();
-    if (stored != null && _storedDatasetMatchesSchema(stored)) {
+    if (stored != null &&
+        _storedDatasetMatchesSchema(stored, migrationAssistance)) {
       final tables = Map.of(stored);
-      for (final path in _runtimeAssetPaths) {
+      for (final path in _runtimeAssetPaths(migrationAssistance)) {
         if (tables.containsKey(path)) continue;
         try {
           tables[path] = await reader.readString(path);
@@ -446,7 +471,7 @@ class AssetAppDataRepository implements AppDataRepository {
     }
 
     final tables = <String, String>{};
-    for (final path in _runtimeAssetPaths) {
+    for (final path in _runtimeAssetPaths(migrationAssistance)) {
       try {
         tables[path] = await reader.readString(path);
       } catch (error) {
@@ -461,14 +486,18 @@ class AssetAppDataRepository implements AppDataRepository {
     return tables;
   }
 
-  static bool _storedDatasetMatchesSchema(Map<String, String> tables) {
-    for (final entry in _runtimeHeaders.entries) {
-      final source = tables[entry.key];
+  static bool _storedDatasetMatchesSchema(
+    Map<String, String> tables,
+    bool migrationAssistance,
+  ) {
+    for (final path in _runtimeAssetPaths(migrationAssistance)) {
+      final source = tables[path];
+      final headers = _runtimeHeaders[path]!;
       if (source == null) return false;
       final rows = csv.decode(source);
       if (rows.isEmpty ||
           rows.first.map((value) => value.toString()).join(',') !=
-              entry.value.join(',')) {
+              headers.join(',')) {
         return false;
       }
     }
@@ -509,9 +538,12 @@ final _runtimeHeaders = Map.unmodifiable({
   for (final schema in RuntimeTableSchemas.all) schema.assetPath: schema.headers,
 });
 
-final _runtimeAssetPaths = List.unmodifiable([
-  for (final schema in RuntimeTableSchemas.all) schema.assetPath,
-]);
+List<String> _runtimeAssetPaths(bool migrationAssistance) => [
+  for (final schema in RuntimeTableSchemas.all)
+    if (schema != RuntimeTableSchemas.transactionsToMigrate)
+      schema.assetPath,
+  if (migrationAssistance) RuntimeTableSchemas.transactionsToMigrate.assetPath,
+];
 
 String _dateString(DateTime value) =>
     '${value.year.toString().padLeft(4, '0')}-'

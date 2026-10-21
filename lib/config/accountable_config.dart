@@ -27,6 +27,7 @@ final class AccountableConfig {
     this.oauthOrigin = '',
     this.sheetsScope = '',
     this.additionalOauthOrigins = const [],
+    this.migrationAssistance = false,
   });
 
   final AccountableDataSource dataSource;
@@ -36,6 +37,7 @@ final class AccountableConfig {
   final String oauthOrigin;
   final List<String> additionalOauthOrigins;
   final String sheetsScope;
+  final bool migrationAssistance;
 
   List<String> get oauthOrigins => [oauthOrigin, ...additionalOauthOrigins];
 
@@ -76,6 +78,7 @@ final class AccountableConfig {
         'additionalOauthOrigins',
       ),
       sheetsScope: _requireString(json, 'sheetsScope'),
+      migrationAssistance: _optionalBoolean(json, 'migration_assistance'),
     );
   }
 
@@ -85,6 +88,15 @@ final class AccountableConfig {
       return value;
     }
     throw FormatException('assets/config.json is missing "$key".');
+  }
+
+  static bool _optionalBoolean(Map<String, dynamic> json, String key) {
+    final value = json[key];
+    if (value == null) return false;
+    if (value is! bool) {
+      throw FormatException('assets/config.json "$key" must be a boolean.');
+    }
+    return value;
   }
 
   static List<String> _optionalStringList(
