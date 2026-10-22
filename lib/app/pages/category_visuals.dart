@@ -99,6 +99,29 @@ Color categoryColor(Category category) => _visualFor(category).color;
 
 CategoryVisual _visualFor(Category category) {
   final text = '${category.id} ${category.name}'.toLowerCase();
+  if (text.contains('salary') || text.contains('paycheck')) {
+    return const CategoryVisual(
+      terms: [],
+      icon: Icons.payments_outlined,
+      color: Color(0xFF2E7D32),
+    );
+  }
+  if (text.contains('401k') ||
+      text.contains('retirement') ||
+      text.contains('employer match')) {
+    return const CategoryVisual(
+      terms: [],
+      icon: Icons.savings_outlined,
+      color: Color(0xFF1565C0),
+    );
+  }
+  if (text.contains('interest') || text.contains('dividend')) {
+    return const CategoryVisual(
+      terms: [],
+      icon: Icons.trending_up,
+      color: Color(0xFF00897B),
+    );
+  }
   return _categoryVisuals.firstWhere(
     (visual) => visual.terms.any(text.contains),
     orElse: () => const CategoryVisual(
