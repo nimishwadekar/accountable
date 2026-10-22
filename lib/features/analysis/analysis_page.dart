@@ -410,7 +410,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
                             value: null,
                             child: Text('All Tags'),
                           ),
-                          for (final tag in widget.data.entryFormTags)
+                          for (final tag in widget.data.visibleTags)
                             DropdownMenuItem(
                               value: tag.id,
                               child: Text(tag.name),
