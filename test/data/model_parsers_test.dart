@@ -63,7 +63,7 @@ checking,Checking,cash,USD,1000,2026-10-01,,FALSE
 
     expect(currencies, hasLength(2));
     expect(accounts, hasLength(5));
-    expect(categories, hasLength(14));
+    expect(categories, hasLength(15));
     expect(tags, hasLength(1));
     expect(transactions, hasLength(8));
     expect(exchangeRates, hasLength(6));

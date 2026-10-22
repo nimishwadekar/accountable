@@ -362,6 +362,9 @@ class AssetAppDataRepository implements AppDataRepository {
         tables[DataAssetPaths.incomeAllocations]!,
         accounts: accountById,
         currencies: currencyById,
+        categories: {
+          for (final category in categoryList) category.id: category,
+        },
       );
       final templateList = ModelParsers.parseTransactionTemplates(
         tables[DataAssetPaths.transactionTemplates]!,

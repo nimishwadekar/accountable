@@ -12,5 +12,6 @@ shopping,Shopping,"expense,reimbursement"
 financial_fees,Financial Fees,"expense,reimbursement"
 entertainment,Entertainment,"expense,reimbursement"
 other,Other,"expense,reimbursement"
-,,
+general,General,transfer
+, ,
 salary,Salary,income

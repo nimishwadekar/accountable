@@ -112,6 +112,46 @@ void main() {
       Icons.eco,
     );
     expect(categoryColor(dining), isNot(equals(categoryColor(personalCare))));
+    expect(
+      categoryIcon(
+        const Category(
+          id: 'loan_repayment',
+          name: 'Loan Repayment',
+          allowedTransactionTypes: {TransactionType.transfer},
+        ),
+      ),
+      Icons.account_balance,
+    );
+    expect(
+      categoryIcon(
+        const Category(
+          id: 'credit_repayment',
+          name: 'Credit Repayment',
+          allowedTransactionTypes: {TransactionType.transfer},
+        ),
+      ),
+      Icons.credit_card,
+    );
+    expect(
+      categoryIcon(
+        const Category(
+          id: 'emergency_fund',
+          name: 'Emergency Fund',
+          allowedTransactionTypes: {TransactionType.transfer},
+        ),
+      ),
+      Icons.health_and_safety,
+    );
+    expect(
+      categoryIcon(
+        const Category(
+          id: 'general',
+          name: 'General',
+          allowedTransactionTypes: {TransactionType.transfer},
+        ),
+      ),
+      Icons.swap_horiz,
+    );
   });
 
   testWidgets('template type chooser has its own title and close action', (

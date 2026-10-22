@@ -115,8 +115,22 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
   ) async {
     final current = await load();
     final incomeAccount = current.accountsById[allocation.incomeAccountId];
-    if (incomeAccount == null || incomeAccount.currencyId != 'USD') {
-      throw StateError('Income allocation income account must use USD.');
+    final incomeCategory = current.categoriesById[allocation.incomeCategoryId];
+    final transferCategory = current.categoriesById[allocation.transferCategoryId];
+    if (incomeAccount == null ||
+        incomeCategory == null ||
+        !incomeCategory.allowedTransactionTypes.contains(TransactionType.income) ||
+        transferCategory == null ||
+        !transferCategory.allowedTransactionTypes.contains(TransactionType.transfer)) {
+      throw StateError('Income allocation references invalid categories or account.');
+    }
+    if (current.incomeAllocations.any(
+      (item) =>
+          item.incomeCategoryId == allocation.incomeCategoryId &&
+          item.incomeAccountId == allocation.incomeAccountId &&
+          item.transferCategoryId == allocation.transferCategoryId,
+    )) {
+      throw StateError('An allocation with this category and income account already exists.');
     }
     await api.appendRow(
       GoogleSheetsRanges.incomeAllocations,
@@ -355,6 +369,9 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
             _encode(tables[GoogleSheetsRanges.incomeAllocations]!),
             accounts: accountById,
             currencies: currencyById,
+            categories: {
+              for (final category in categories) category.id: category,
+            },
           );
           recordIssues('IncomeAllocations', const []);
         } catch (error) {
@@ -555,12 +572,10 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
     allocation.name,
     allocation.incomeCategoryId,
     allocation.incomeAccountId,
-    allocation.sourceAccountId,
-    allocation.destinationAccountId,
+    allocation.transferCategoryId,
     allocation.expectedAmountPerIncome.toMajorUnitsString(
       currencies[accounts[allocation.incomeAccountId]!.currencyId]!,
     ),
-    allocation.descriptionKeyword ?? '',
     _dateString(allocation.startDate),
     allocation.endDate == null ? '' : _dateString(allocation.endDate!),
     allocation.createdAt.toUtc().toIso8601String(),

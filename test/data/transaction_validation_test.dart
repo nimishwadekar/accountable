@@ -73,6 +73,7 @@ void main() {
         sourceAccountId: 'checking',
         destinationAmount: amount,
         destinationAccountId: 'savings',
+        categoryId: 'general',
       ).validate(),
       isEmpty,
     );

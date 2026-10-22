@@ -16,11 +16,9 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _amount = TextEditingController();
-  final _keyword = TextEditingController();
   String? _categoryId;
   String? _incomeAccountId;
-  String? _sourceAccountId;
-  String? _destinationAccountId;
+  String? _transferCategoryId;
   DateTime _startDate = DateTime.now();
   DateTime? _endDate;
 
@@ -28,7 +26,6 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
   void dispose() {
     _name.dispose();
     _amount.dispose();
-    _keyword.dispose();
     super.dispose();
   }
 
@@ -71,12 +68,10 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 _dropdown<String>(
-                  label: 'Income Account (USD)',
+                  label: 'Income Account',
                   value: _incomeAccountId,
                   items: [
-                    for (final account in accounts.where(
-                      (account) => account.currencyId == 'USD',
-                    ))
+                    for (final account in accounts)
                       DropdownMenuItem(
                         value: account.id,
                         child: Text(account.name),
@@ -89,7 +84,7 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
                 TextFormField(
                   controller: _amount,
                   decoration: const InputDecoration(
-                    labelText: 'Expected Amount per Income (USD)',
+                    labelText: 'Expected Amount per Income',
                   ),
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
@@ -98,38 +93,21 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 _dropdown<String>(
-                  label: 'Transfer Source Account',
-                  value: _sourceAccountId,
+                  label: 'Transfer Category',
+                  value: _transferCategoryId,
                   items: [
-                    for (final account in accounts)
+                    for (final category
+                        in widget.data.entryFormCategories.where(
+                          (category) => category.allowedTransactionTypes
+                              .contains(TransactionType.transfer),
+                        ))
                       DropdownMenuItem(
-                        value: account.id,
-                        child: Text(account.name),
+                        value: category.id,
+                        child: Text(category.name),
                       ),
                   ],
                   onChanged: (value) =>
-                      setState(() => _sourceAccountId = value),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                _dropdown<String>(
-                  label: 'Transfer Destination Account',
-                  value: _destinationAccountId,
-                  items: [
-                    for (final account in accounts)
-                      DropdownMenuItem(
-                        value: account.id,
-                        child: Text(account.name),
-                      ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _destinationAccountId = value),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                TextFormField(
-                  controller: _keyword,
-                  decoration: const InputDecoration(
-                    labelText: 'Description Keyword (optional)',
-                  ),
+                      setState(() => _transferCategoryId = value),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 _dateButton(
@@ -211,12 +189,6 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
-    if (_sourceAccountId == _destinationAccountId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Source and destination must differ.')),
-      );
-      return;
-    }
     if (_endDate != null && _endDate!.isBefore(_startDate)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('End date must be after start date.')),
@@ -224,7 +196,8 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
       return;
     }
     final now = DateTime.now().toUtc();
-    final usd = widget.data.currenciesById['USD']!;
+    final incomeAccount = widget.data.accountsById[_incomeAccountId!]!;
+    final currency = widget.data.currenciesById[incomeAccount.currencyId]!;
     Navigator.pop(
       context,
       IncomeAllocation(
@@ -232,15 +205,11 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
         name: _name.text.trim(),
         incomeCategoryId: _categoryId!,
         incomeAccountId: _incomeAccountId!,
-        sourceAccountId: _sourceAccountId!,
-        destinationAccountId: _destinationAccountId!,
+        transferCategoryId: _transferCategoryId!,
         expectedAmountPerIncome: Money.fromMajorUnits(
           value: _amount.text.trim(),
-          currency: usd,
+          currency: currency,
         ),
-        descriptionKeyword: _keyword.text.trim().isEmpty
-            ? null
-            : _keyword.text.trim(),
         startDate: _startDate,
         endDate: _endDate,
         createdAt: now,

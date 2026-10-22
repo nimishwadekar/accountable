@@ -283,43 +283,56 @@ class ModelParsers {
     String source, {
     required Map<String, Account> accounts,
     required Map<String, CurrencyDefinition> currencies,
+    required Map<String, Category> categories,
   }) {
     final table = CsvTable.parse(source, tableName: 'IncomeAllocations');
-    return _uniqueById(
-      table.rows.map((row) {
+    final allocations = table.rows.map((row) {
         final incomeAccountId = requiredValue(row, 'income_account_id');
-        final sourceAccountId = requiredValue(row, 'source_account_id');
-        final destinationAccountId = requiredValue(row, 'destination_account_id');
+        final transferCategoryId = requiredValue(row, 'transfer_category_id');
         final incomeAccount = accounts[incomeAccountId];
-        final sourceAccount = accounts[sourceAccountId];
-        final destinationAccount = accounts[destinationAccountId];
-        if (incomeAccount == null || sourceAccount == null || destinationAccount == null) {
-          throw FormatException('Income allocation references an unknown account.');
+        if (incomeAccount == null) {
+          throw FormatException('Income allocation references an unknown income account.');
         }
-        if (incomeAccount.currencyId != 'USD') {
-          throw FormatException('Income allocation income account must use USD.');
+        final incomeCategory = categories[requiredValue(row, 'income_category_id')];
+        if (incomeCategory == null ||
+            !incomeCategory.allowedTransactionTypes.contains(
+              TransactionType.income,
+            )) {
+          throw FormatException('Income allocation income category must allow income.');
+        }
+        final transferCategory = categories[transferCategoryId];
+        if (transferCategory == null ||
+            !transferCategory.allowedTransactionTypes.contains(
+              TransactionType.transfer,
+            )) {
+          throw FormatException(
+            'Income allocation transfer category must allow transfers.',
+          );
         }
         return IncomeAllocation(
           id: requiredValue(row, 'allocation_id'),
           name: requiredValue(row, 'name'),
           incomeCategoryId: requiredValue(row, 'income_category_id'),
           incomeAccountId: incomeAccountId,
-          sourceAccountId: sourceAccountId,
-          destinationAccountId: destinationAccountId,
+          transferCategoryId: transferCategoryId,
           expectedAmountPerIncome: Money.fromMajorUnits(
             value: requiredValue(row, 'expected_amount_per_income'),
             currency: _currency(currencies, incomeAccount.currencyId),
           ),
-          descriptionKeyword: optionalValue(row, 'description_keyword'),
           startDate: parseDateOnly(requiredValue(row, 'start_date'), fieldName: 'start_date'),
           endDate: _optionalDate(row, 'end_date'),
           createdAt: parseUtcTimestamp(requiredValue(row, 'created_at'), fieldName: 'created_at'),
           updatedAt: parseUtcTimestamp(requiredValue(row, 'updated_at'), fieldName: 'updated_at'),
         );
-      }),
-      (allocation) => allocation.id,
-      table.tableName,
-    );
+      }).toList();
+    final keys = <String>{};
+    for (final allocation in allocations) {
+      final key = '${allocation.incomeCategoryId}:${allocation.incomeAccountId}:${allocation.transferCategoryId}';
+      if (!keys.add(key)) {
+        throw FormatException('Duplicate income allocation transfer category for $key.');
+      }
+    }
+    return _uniqueById(allocations, (allocation) => allocation.id, table.tableName);
   }
 
   static List<TransactionTemplate> parseTransactionTemplates(

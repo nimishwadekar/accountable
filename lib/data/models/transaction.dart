@@ -58,7 +58,7 @@ const transactionTypeRules = <TransactionType, TransactionTypeRule>{
   TransactionType.transfer: TransactionTypeRule(
     sourceRequired: true,
     destinationRequired: true,
-    categoryRequired: false,
+    categoryRequired: true,
   ),
 };
 

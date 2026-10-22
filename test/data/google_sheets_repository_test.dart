@@ -18,7 +18,7 @@ void main() {
     expect(snapshot.transactions, hasLength(8));
     expect(snapshot.dailyNetWorth, hasLength(3));
     expect(snapshot.dailyManualValuations, hasLength(2));
-    expect(snapshot.displayPreferences, hasLength(5 + 14 + 1));
+    expect(snapshot.displayPreferences, hasLength(5 + 15 + 1));
     expect(client.appendedRows, isNotEmpty);
     await expectLater(
       repository.deleteTransactionTemplate('missing-template'),

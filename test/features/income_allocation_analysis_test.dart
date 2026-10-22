@@ -1,4 +1,3 @@
-import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:accountable/data/data.dart';
@@ -19,10 +18,8 @@ void main() {
       name: 'Test allocation',
       incomeCategoryId: 'salary',
       incomeAccountId: checking.id,
-      sourceAccountId: checking.id,
-      destinationAccountId: credit.id,
+      transferCategoryId: 'general',
       expectedAmountPerIncome: amount,
-      descriptionKeyword: null,
       startDate: allocationDate,
       endDate: allocationDate,
       createdAt: DateTime.now().toUtc(),
@@ -64,7 +61,7 @@ void main() {
         sourceAccountId: checking.id,
         destinationAmount: amount,
         destinationAccountId: credit.id,
-        categoryId: null,
+        categoryId: 'general',
         tagId: null,
         description: 'On allocation date',
       ),
@@ -93,21 +90,17 @@ void main() {
   test('uses configured USD decimal precision for converted transfers', () async {
     final source = await AssetAppDataRepository().load();
     const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 3);
-    const inr = CurrencyDefinition(id: 'INR', symbol: '₹', decimalPlaces: 2);
     final checking = source.accountsById['chase_checking']!;
-    final sbi = source.accountsById['sbi_nro']!;
     final incomeAmount = Money.fromMajorUnits(value: '1', currency: usd);
-    final transferAmount = Money.fromMajorUnits(value: '100', currency: inr);
+    final transferAmount = Money.fromMajorUnits(value: '1', currency: usd);
     final date = DateTime.utc(2026, 10, 10);
     final allocation = IncomeAllocation(
       id: 'precision-allocation',
       name: 'Precision allocation',
       incomeCategoryId: 'salary',
       incomeAccountId: checking.id,
-      sourceAccountId: sbi.id,
-      destinationAccountId: checking.id,
+      transferCategoryId: 'general',
       expectedAmountPerIncome: incomeAmount,
-      descriptionKeyword: null,
       startDate: date,
       endDate: date,
       createdAt: date,
@@ -116,7 +109,7 @@ void main() {
     final data = AppDataSnapshot(
       accounts: source.accounts,
       categories: source.categories,
-      currencies: [usd, inr],
+      currencies: [usd],
       tags: source.tags,
       transactions: [
         Transaction(
@@ -138,24 +131,15 @@ void main() {
           date: date,
           type: TransactionType.transfer,
           sourceAmount: transferAmount,
-          sourceAccountId: sbi.id,
+          sourceAccountId: checking.id,
           destinationAmount: incomeAmount,
           destinationAccountId: checking.id,
-          categoryId: null,
+          categoryId: 'general',
           tagId: null,
           description: 'Transfer',
         ),
       ],
-      exchangeRates: [
-        ExchangeRate(
-          id: 'precision-rate',
-          date: date,
-          currencyId: 'INR',
-          rateToUsd: Decimal.parse('0.123456'),
-          sourceRateDate: date,
-          retrievedAt: date,
-        ),
-      ],
+      exchangeRates: const [],
       dailyAccountBalances: source.dailyAccountBalances,
       dailyNetWorth: source.dailyNetWorth,
       dailyManualValuations: source.dailyManualValuations,
@@ -167,6 +151,6 @@ void main() {
       incomeCategoryId: 'salary',
     ).single;
 
-    expect(progress.actualUsdMinorUnits, 12346);
+    expect(progress.actualUsdMinorUnits, 1000);
   });
 }

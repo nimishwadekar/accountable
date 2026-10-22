@@ -153,16 +153,14 @@ abstract final class RuntimeTableSchemas {
       'name',
       'income_category_id',
       'income_account_id',
-      'source_account_id',
-      'destination_account_id',
+      'transfer_category_id',
       'expected_amount_per_income',
-      'description_keyword',
       'start_date',
       'end_date',
       'created_at',
       'updated_at',
     ],
-    range: 'IncomeAllocations!A:L',
+    range: 'IncomeAllocations!A:J',
     numericColumns: {6},
   );
 

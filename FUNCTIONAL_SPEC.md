@@ -94,7 +94,7 @@ DailyExchangeRates: rate_id, rate_date, currency, rate_to_usd, source_rate_date,
 DailyManualValuations: valuation_id, date, account_id, value
 DisplayPreferences: entity_type, entity_id, display_order, show_in_app, show_in_entry_forms
 TransactionTemplates: template_id, name, transaction_type, date, description, category, tag, source_account_id, source_amount, dest_account_id, dest_amount, created_at, updated_at
-IncomeAllocations: allocation_id, name, income_category_id, income_account_id, source_account_id, destination_account_id, expected_amount_per_income, description_keyword, start_date, end_date, created_at, updated_at
+IncomeAllocations: allocation_id, name, income_category_id, income_account_id, transfer_category_id, expected_amount_per_income, start_date, end_date, created_at, updated_at
 ```
 
 `source_rate_date` records the actual Frankfurter date used when the requested sequential rate date fell on a weekend or holiday. Legacy local data without this column is read compatibly by treating `rate_date` as the source date. Google Sheets serial-number dates are normalized to calendar dates before freshness checks and parsing.
@@ -117,6 +117,20 @@ The runtime data snapshot contains:
 `TransactionTypes.csv` is not runtime data. Transaction types and their validation rules are defined in Dart.
 
 ## Transaction model
+
+### Income allocations — implemented
+
+An income allocation identifies:
+
+- `income_category_id`: the income category being allocated.
+- `income_account_id`: the account receiving that income.
+- `transfer_category_id`: the category assigned to the initial allocation transfer.
+- `expected_amount_per_income`: expressed in the income account's currency.
+- `start_date` and optional `end_date`: the active recognition period.
+
+Matching allocation transfers must be `transfer` transactions whose source account is `income_account_id` and whose category is `transfer_category_id`. The transfer source amount is the allocated amount; destination accounts and descriptions are not used for matching. Intermediate or terminal transfers should remain uncategorized to avoid double-counting.
+
+A transfer category is mandatory for every transfer transaction and must allow `transfer`. Two allocations may not reuse the same transfer category for the same `(income_category_id, income_account_id)` pair.
 
 ### Supported transaction types
 

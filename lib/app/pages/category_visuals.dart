@@ -99,6 +99,37 @@ Color categoryColor(Category category) => _visualFor(category).color;
 
 CategoryVisual _visualFor(Category category) {
   final text = '${category.id} ${category.name}'.toLowerCase();
+  if (text.contains('credit_repayment') ||
+      text.contains('credit repayment') ||
+      text.contains('credit card')) {
+    return const CategoryVisual(
+      terms: [],
+      icon: Icons.credit_card,
+      color: Color(0xFF8E24AA),
+    );
+  }
+  if (text.contains('loan_repayment') || text.contains('loan repayment')) {
+    return const CategoryVisual(
+      terms: [],
+      icon: Icons.account_balance,
+      color: Color(0xFF6D4C41),
+    );
+  }
+  if (text.contains('emergency_fund') || text.contains('emergency fund')) {
+    return const CategoryVisual(
+      terms: [],
+      icon: Icons.health_and_safety,
+      color: Color(0xFFE65100),
+    );
+  }
+  if (text.contains('general') &&
+      category.allowedTransactionTypes.contains(TransactionType.transfer)) {
+    return const CategoryVisual(
+      terms: [],
+      icon: Icons.swap_horiz,
+      color: Color(0xFF546E7A),
+    );
+  }
   if (text.contains('salary') || text.contains('paycheck')) {
     return const CategoryVisual(
       terms: [],
