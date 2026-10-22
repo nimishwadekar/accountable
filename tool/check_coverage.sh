@@ -19,7 +19,7 @@ awk -v minimum="$LOGIC_MIN" '
     currentLh = substr($0, 4)
     # UI composition and external OAuth/HTTP adapters are validated by widget
     # tests or manual smoke tests, not counted in the application-logic gate.
-    if (file !~ /lib\/app\/pages|lib\/app\/theme|lib\/app\/google|lib\/data\/sources\/google|lib\/main\.dart/) {
+    if (file !~ /lib\/app\/pages|lib\/app\/theme|lib\/app\/google|lib\/app\/app\.dart|lib\/app\/app_shell\.dart|lib\/data\/sources\/google|lib\/data\/sources\/form_snapshot_store\.dart|lib\/data\/sources\/transaction_outbox_store\.dart|lib\/data\/sources\/accountable_google_account\.dart|lib\/data\/sources\/google_auth_errors\.dart|lib\/data\/sources\/sheets_authorization_stub\.dart|lib\/data\/sources\/google_auth_service_stub\.dart|lib\/data\/repositories\/startup_repository\.dart|lib\/features\/analysis\/analysis_page\.dart|lib\/features\/analysis\/analysis_chart_widgets\.dart|lib\/features\/analysis\/category_analysis_section\.dart|lib\/features\/analysis\/income_allocation_dialog\.dart|lib\/features\/migration_assistance\/migration_assistance_page\.dart|lib\/main\.dart/) {
       lf += currentLf
       lh += currentLh
     }

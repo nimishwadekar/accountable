@@ -43,12 +43,20 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   StreamSubscription<AccountableGoogleAccount>? _eventsSubscription;
   Completer<AccountableGoogleAccount?>? _silentSignInCompleter;
   String? _error;
+  String? _outboxError;
   DataValidationFailure? _dataFailure;
   _GateState _state = _GateState.restoringSignIn;
   AccountableGoogleAccount? _account;
   AppDataRepository? _repository;
+  AppDataRepository? _pendingOnlineRepository;
+  StartupDataRepository? _startupRepository;
+  final FormSnapshotStore _formSnapshotStore =
+      SharedPreferencesFormSnapshotStore();
+  final TransactionOutboxStore _outboxStore =
+      SharedPreferencesTransactionOutboxStore();
   Future<void> Function()? _rebuildDailyTables;
   bool _connectionInProgress = false;
+  bool _transactionFormActive = false;
   final Stopwatch _startupStopwatch = Stopwatch()..start();
 
   @override
@@ -85,6 +93,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         }
       },
     );
+    unawaited(_loadCachedStartupData());
     _initialize();
   }
 
@@ -102,6 +111,20 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     if (_repository != null) {
       return AppShell(
         dataRepository: _repository!,
+        migrationAssistance: widget.config.migrationAssistance,
+        onRebuildDailyTables: _rebuildDailyTables,
+        textScale: widget.textScale,
+        onTextScaleChanged: widget.onTextScaleChanged,
+      );
+    }
+    if (_startupRepository != null) {
+      return AppShell(
+        dataRepository: _startupRepository!,
+        restrictedStartup: true,
+        onStartupSignIn: _transactionFormActive ? null : _signIn,
+        startupError: _outboxError,
+        onRetryOutbox: _retryOutbox,
+        onTransactionFormActiveChanged: _handleTransactionFormActiveChanged,
         migrationAssistance: widget.config.migrationAssistance,
         onRebuildDailyTables: _rebuildDailyTables,
         textScale: widget.textScale,
@@ -228,8 +251,48 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     };
   }
 
+  Future<void> _loadCachedStartupData() async {
+    try {
+      final cached = await _formSnapshotStore.read();
+      if (cached == null || !mounted) return;
+      final pending = await _outboxStore.read();
+      final cachedData = cached.toDataSnapshot();
+      final pendingTransactions = [
+        for (final item in pending) item.transaction,
+      ];
+      final startupData = withAdditionalTransactions(
+        cachedData,
+        pendingTransactions,
+      );
+      if (!mounted || _repository != null) return;
+      setState(() {
+        _startupRepository = StartupDataRepository(
+          snapshot: startupData,
+          outbox: _outboxStore,
+        );
+      });
+    } catch (error) {
+      if (kDebugMode) debugPrint('[Accountable startup cache] $error');
+    }
+  }
+
   Future<void> _initialize() async {
     _logTiming('starting authentication initialization');
+    final scenario = widget.config.debugStartupScenario;
+    if (scenario == StartupScenario.delayAutoSignIn ||
+        scenario == StartupScenario.delayAndAutoSignInFailure) {
+      await Future<void>.delayed(const Duration(seconds: 10));
+    }
+    if (scenario == StartupScenario.autoSignInFailure ||
+        scenario == StartupScenario.delayAndAutoSignInFailure) {
+      if (mounted) {
+        setState(() {
+          _state = _GateState.error;
+          _error = 'Debug startup scenario: automatic sign-in failed.';
+        });
+      }
+      return;
+    }
     if (!widget.config.hasConfiguredGoogleSheets) {
       if (mounted) {
         setState(() => _state = _GateState.configurationRequired);
@@ -326,6 +389,13 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
             ? 'starting interactive Sheets authorization'
             : 'starting silent Sheets authorization',
       );
+      if (!interactiveConsent &&
+          widget.config.debugStartupScenario ==
+              StartupScenario.sheetsAuthorizationFailure) {
+        throw const GoogleAuthException(
+          'Debug startup scenario: Sheets authorization failed.',
+        );
+      }
       if (interactiveConsent) {
         await _authService.authorizeSheetsInteractively(account);
       } else {
@@ -347,6 +417,13 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       _logTiming('loading initial Sheets snapshot');
       final initialData = await repository.load();
       _logTiming('initial Sheets snapshot loaded');
+      if (widget.config.debugStartupScenario ==
+          StartupScenario.dataLoadFailure) {
+        throw const DataLoadException(
+          tableName: 'Debug startup',
+          message: 'Debug startup scenario: data loading failed.',
+        );
+      }
       final maintenance = DailyMaintenanceService(
         client: api,
         data: initialData,
@@ -357,8 +434,16 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         yesterday: today.subtract(const Duration(days: 1)),
       );
       _logTiming('daily catch-up completed; reloading snapshot');
-      await repository.reload();
+      var finalData = await repository.reload();
       _logTiming('final Sheets snapshot loaded');
+      _pendingOnlineRepository = repository;
+      if (!_transactionFormActive) {
+        await _flushPendingTransactions(repository);
+        finalData = await repository.reload();
+        await _formSnapshotStore.write(
+          FormSnapshot.fromData(finalData, dataSource: 'sheets'),
+        );
+      }
       _rebuildDailyTables = () async {
         final latestData = await repository.reload();
         final latestMaintenance = DailyMaintenanceService(
@@ -369,11 +454,18 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         await repository.reload();
       };
       if (!mounted) return;
-      setState(() {
-        _repository = repository;
-        _state = _GateState.ready;
-        _connectionInProgress = false;
-      });
+      if (!_transactionFormActive) {
+        setState(() {
+          _repository = repository;
+          _pendingOnlineRepository = null;
+          _startupRepository = null;
+          _outboxError = null;
+          _state = _GateState.ready;
+        });
+      } else {
+        setState(() => _state = _GateState.ready);
+      }
+      _connectionInProgress = false;
       _logTiming('app startup finished');
     } on SheetsAuthorizationRequiredException {
       _connectionInProgress = false;
@@ -388,11 +480,100 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       });
     } catch (error) {
       _connectionInProgress = false;
+      if (_pendingOnlineRepository != null) {
+        _outboxError = error.toString();
+      }
       if (!mounted) return;
       setState(() {
         _state = _GateState.error;
         _error = error.toString();
       });
+    }
+  }
+
+  Future<void> _flushPendingTransactions(AppDataRepository repository) async {
+    final pending = await _outboxStore.read();
+    final batches = <String, List<Transaction>>{};
+    for (final item in pending) {
+      batches.putIfAbsent(item.batchId, () => []).add(item.transaction);
+    }
+    for (final entry in batches.entries) {
+      await _outboxStore.updateBatch(
+        entry.key,
+        TransactionOutboxStatus.uploading,
+        lastError: null,
+      );
+      try {
+        final current = await repository.load();
+        final missing = entry.value
+            .where((item) => !current.transactionsById.containsKey(item.id))
+            .toList();
+        if (missing.isNotEmpty) {
+          await repository.addTransactions(missing);
+        }
+        await _outboxStore.removeBatch(entry.key);
+      } catch (error) {
+        await _outboxStore.updateBatch(
+          entry.key,
+          TransactionOutboxStatus.uncertain,
+          lastError: error.toString(),
+        );
+        rethrow;
+      }
+    }
+  }
+
+  void _handleTransactionFormActiveChanged(bool active) {
+    if (!mounted) return;
+    setState(() => _transactionFormActive = active);
+    if (!active && _pendingOnlineRepository != null && _repository == null) {
+      unawaited(_completeOnlineTransition());
+    }
+  }
+
+  Future<void> _completeOnlineTransition() async {
+    final repository = _pendingOnlineRepository;
+    if (repository == null || _repository != null || _connectionInProgress) {
+      return;
+    }
+    _connectionInProgress = true;
+    try {
+      await _flushPendingTransactions(repository);
+      final finalData = await repository.reload();
+      await _formSnapshotStore.write(
+        FormSnapshot.fromData(finalData, dataSource: 'sheets'),
+      );
+      if (!mounted) return;
+      setState(() {
+        _repository = repository;
+        _pendingOnlineRepository = null;
+        _startupRepository = null;
+        _outboxError = null;
+        _state = _GateState.ready;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _outboxError = error.toString());
+    } finally {
+      _connectionInProgress = false;
+    }
+  }
+
+  Future<void> _retryOutbox() async {
+    final repository = _pendingOnlineRepository;
+    if (repository == null || _connectionInProgress || _transactionFormActive) return;
+    setState(() => _outboxError = null);
+    try {
+      _connectionInProgress = true;
+      await _flushPendingTransactions(repository);
+      await repository.reload();
+      if (!mounted) return;
+      setState(() => _outboxError = null);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _outboxError = error.toString());
+    } finally {
+      _connectionInProgress = false;
     }
   }
 

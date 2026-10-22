@@ -25,6 +25,11 @@ class TransactionsPage extends StatefulWidget {
     required this.onTransactionAdded,
     required this.onTransactionsAdded,
     required this.onTemplateAdded,
+    this.restrictedStartup = false,
+    this.onStartupSignIn,
+    this.startupError,
+    this.onRetryOutbox,
+    this.onTransactionFormActiveChanged,
   });
 
   final AppDataSnapshot data;
@@ -32,6 +37,11 @@ class TransactionsPage extends StatefulWidget {
   final Future<void> Function(List<Transaction> transactions)
   onTransactionsAdded;
   final Future<void> Function(TransactionTemplate template) onTemplateAdded;
+  final bool restrictedStartup;
+  final Future<void> Function()? onStartupSignIn;
+  final String? startupError;
+  final Future<void> Function()? onRetryOutbox;
+  final ValueChanged<bool>? onTransactionFormActiveChanged;
 
   @override
   State<TransactionsPage> createState() => _TransactionsPageState();
@@ -93,10 +103,39 @@ class _TransactionsPageState extends State<TransactionsPage> {
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        '${transactions.length} of ${widget.data.transactions.length} transactions',
+                        widget.restrictedStartup
+                            ? '${transactions.length} pending local transactions'
+                            : '${transactions.length} of ${widget.data.transactions.length} transactions',
                         style: Theme.of(context).textTheme.bodyLarge
                             ?.copyWith(color: AppColors.mutedText),
                       ),
+                      if (widget.restrictedStartup) ...[
+                        const SizedBox(height: AppSpacing.sm),
+                        if (widget.startupError != null)
+                          Text(
+                            'Pending upload issue: ${widget.startupError}',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        Wrap(
+                          spacing: AppSpacing.sm,
+                          children: [
+                            if (widget.onStartupSignIn != null)
+                              TextButton.icon(
+                                onPressed: widget.onStartupSignIn,
+                                icon: const Icon(Icons.login),
+                                label: const Text('Sign in to sync'),
+                              ),
+                            if (widget.onRetryOutbox != null)
+                              TextButton.icon(
+                                onPressed: widget.onRetryOutbox,
+                                icon: const Icon(Icons.sync),
+                                label: const Text('Retry upload'),
+                              ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: AppSpacing.md),
                       if (isCompact)
                         _buildCompactFilterButton(context)
@@ -150,6 +189,15 @@ class _TransactionsPageState extends State<TransactionsPage> {
   }
 
   Future<void> _openAddTransaction() async {
+    widget.onTransactionFormActiveChanged?.call(true);
+    try {
+      await _openAddTransactionFlow();
+    } finally {
+      if (mounted) widget.onTransactionFormActiveChanged?.call(false);
+    }
+  }
+
+  Future<void> _openAddTransactionFlow() async {
     final choice = await _showTransactionDialog<AddTransactionChoice>(
       TransactionTypeChooser(data: widget.data),
     );
@@ -679,4 +727,3 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
     return '${formatDate(_dateRange!.start)} – ${formatDate(_dateRange!.end)}';
   }
 }
-

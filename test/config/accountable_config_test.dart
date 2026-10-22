@@ -23,6 +23,26 @@ void main() {
     expect(config.migrationAssistance, isFalse);
   });
 
+  test('parses debug startup scenarios', () {
+    final config = AccountableConfig.fromJson({
+      'dataSource': 'csv',
+      'googleClientId': 'client-id',
+      'spreadsheetId': 'sheet-id',
+      'allowedEmail': 'owner@example.com',
+      'oauthOrigin': 'https://example.com',
+      'sheetsScope': 'scope',
+      'debug_startup_scenario': 'delay_auto_sign_in',
+    });
+    expect(config.debugStartupScenario, StartupScenario.delayAutoSignIn);
+    expect(
+      () => AccountableConfig.fromJson({
+        'dataSource': 'csv',
+        'debug_startup_scenario': 'not-real',
+      }),
+      throwsFormatException,
+    );
+  });
+
   test('parses migration assistance as an optional boolean', () {
     final config = AccountableConfig.fromJson({
       'dataSource': 'csv',

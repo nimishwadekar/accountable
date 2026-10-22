@@ -374,7 +374,7 @@ The Assets & liabilities page, DailyManualValuations model/parser/repositories, 
 - Keep the configured spreadsheet ID and OAuth settings in a checked-in non-secret Dart configuration file; no private credentials belong in the repository.
 - Request only the Google Sheets read/write OAuth scope; do not request Drive permissions.
 - Reject unauthorized accounts before any Sheets request and show a sign-out/retry action.
-- Complete OAuth, daily catch-up, and initial Sheets data loading before showing the main app, so the first displayed snapshot is internally consistent.
+- The planned startup outbox flow may show the normal shell with loading states before OAuth and full Sheets loading complete; only Add Transaction is active until initialization finishes.
 - Use row-level Sheets operations rather than rewriting the entire Transactions sheet for future mutation support.
 - The first integration supports appending new transactions only; editing and deletion are deferred.
 - Include the user-invoked full rebuild action in Settings in the first Sheets integration; it is not part of daily startup catch-up.
@@ -384,13 +384,17 @@ The Assets & liabilities page, DailyManualValuations model/parser/repositories, 
 - The release build will not expose a runtime data-source toggle and will default to Sheets.
 - Standardize Google OAuth Flutter web testing on `http://localhost:9000`; authorize this origin in the Google Cloud OAuth client.
 - Tests and local development can inject the asset repository directly; normal app runs follow the committed runtime config unless a repository is injected.
-- Attempt silent Google authentication on startup with a loading state; wait up to 3 seconds for restoration before showing the sign-in action.
+- Attempt silent Google authentication on startup while the restricted shell remains visible; debug startup scenarios can delay or simulate authentication outcomes.
 - After account restoration, attempt Sheets scope authorization silently; request interactive consent only when needed.
 - Where Google permits it, combine account restoration and Sheets authorization into the earliest possible flow.
 - On expired/invalid Sheets tokens, retry once after silently reacquiring authorization; show reauthorization only if that fails.
 - Provide an explicit account-switch/sign-out action.
-- Use distinct UI states for restoring session, signing in, granting Sheets access, loading data, unauthorized account, and configuration errors.
+- Use distinct UI states for restoring session, signing in, granting Sheets access, loading data, unauthorized account, configuration errors, restricted startup, pending local uploads, and uncertain uploads.
 - Expired-token retry remains a follow-up integration task.
+
+## Planned startup transaction outbox
+
+See the detailed specification in [`FUNCTIONAL_SPEC.md`](./FUNCTIONAL_SPEC.md). The planned flow uses a browser-persisted form snapshot containing only Accounts, Categories, Currencies, Tags, TransactionTemplates, and DisplayPreferences. It uses a separate transaction outbox for entries made before authentication and full synchronization complete. The outbox is flushed in atomic batches after initialization, with manual recovery for ambiguous upload failures.
 
 ## Future Apps Script backend option
 

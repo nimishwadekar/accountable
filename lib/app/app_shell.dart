@@ -68,6 +68,11 @@ class AppShell extends StatefulWidget {
   const AppShell({
     super.key,
     required this.dataRepository,
+    this.restrictedStartup = false,
+    this.onStartupSignIn,
+    this.startupError,
+    this.onRetryOutbox,
+    this.onTransactionFormActiveChanged,
     this.migrationAssistance = false,
     this.onRebuildDailyTables,
     this.onReloadData,
@@ -76,6 +81,11 @@ class AppShell extends StatefulWidget {
   });
 
   final AppDataRepository dataRepository;
+  final bool restrictedStartup;
+  final Future<void> Function()? onStartupSignIn;
+  final String? startupError;
+  final Future<void> Function()? onRetryOutbox;
+  final ValueChanged<bool>? onTransactionFormActiveChanged;
   final bool migrationAssistance;
   final Future<void> Function()? onRebuildDailyTables;
   final Future<void> Function()? onReloadData;
@@ -96,7 +106,9 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     _navigationHistory = NavigationHistory();
-    _selectedSection = _sectionFromPath(_navigationHistory.currentPath);
+    _selectedSection = widget.restrictedStartup
+        ? AppSection.transactions
+        : _sectionFromPath(_navigationHistory.currentPath);
     // Mark the authenticated app entry so Back cannot return to pre-auth UI.
     _navigationHistory.replace(
       _navigationHistory.authenticatedPath(_navigationHistory.currentPath),
@@ -111,6 +123,18 @@ class _AppShellState extends State<AppShell> {
       setState(() => _selectedSection = _sectionFromPath(path));
     });
     _snapshotFuture = widget.dataRepository.load();
+  }
+
+  @override
+  void didUpdateWidget(covariant AppShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.dataRepository != widget.dataRepository ||
+        oldWidget.restrictedStartup != widget.restrictedStartup) {
+      _snapshotFuture = widget.dataRepository.load();
+      _selectedSection = widget.restrictedStartup
+          ? AppSection.transactions
+          : _sectionFromPath(_navigationHistory.currentPath);
+    }
   }
 
   @override
@@ -193,6 +217,9 @@ class _AppShellState extends State<AppShell> {
               icon: Icon(section.icon),
               selectedIcon: Icon(section.selectedIcon),
               label: Text(section.label),
+              disabled:
+                  widget.restrictedStartup &&
+                  section != AppSection.transactions,
             ),
         ],
       ),
@@ -209,6 +236,8 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(section.icon),
             selectedIcon: Icon(section.selectedIcon),
             label: section.compactLabel,
+            enabled:
+                !widget.restrictedStartup || section == AppSection.transactions,
           ),
       ],
     );
@@ -233,6 +262,10 @@ class _AppShellState extends State<AppShell> {
         onReload: _reload,
       );
     }
+    if (widget.restrictedStartup &&
+        _selectedSection != AppSection.transactions) {
+      return const AppLoadingPage();
+    }
 
     return switch (_selectedSection) {
       AppSection.overview => OverviewPage(data: data),
@@ -241,6 +274,11 @@ class _AppShellState extends State<AppShell> {
         onTransactionAdded: _handleTransactionAdded,
         onTransactionsAdded: _handleTransactionsAdded,
         onTemplateAdded: _handleTemplateAdded,
+        restrictedStartup: widget.restrictedStartup,
+        onStartupSignIn: widget.onStartupSignIn,
+        startupError: widget.startupError,
+        onRetryOutbox: widget.onRetryOutbox,
+        onTransactionFormActiveChanged: widget.onTransactionFormActiveChanged,
       ),
       AppSection.accounts => AccountsPage(data: data),
       AppSection.analysis => AnalysisPage(
@@ -267,6 +305,9 @@ class _AppShellState extends State<AppShell> {
 
   void _selectSection(int index) {
     final section = _navigationSections[index];
+    if (widget.restrictedStartup && section != AppSection.transactions) {
+      return;
+    }
     setState(() => _selectedSection = section);
     _navigationHistory.push(
       _navigationHistory.authenticatedPath(_pathForSection(section)),

@@ -538,6 +538,83 @@ Changing the base currency will require:
 
 Historical exchange-rate provider revisions or unavailable dates may cause rebuilt derived values to differ from prior materialized values.
 
+## Planned: instant transaction capture during startup
+
+The app will support transaction entry before Google authentication and full Sheets initialization finish.
+
+### Cached form snapshot
+
+The browser will persist only the tables needed to render transaction forms:
+
+- Accounts
+- Categories
+- Currencies
+- Tags
+- TransactionTemplates
+- DisplayPreferences
+
+It will not persist Transactions, TransactionsToMigrate, daily tables, manual valuations, exchange rates, or other financial history.
+
+The snapshot is stored in browser storage under a separate versioned record and is atomically overwritten after every successful synchronization with the active data source. It includes `schema_version`, `saved_at`, and `data_source` metadata. Access tokens and credentials are never stored.
+
+### Restricted startup mode
+
+The normal responsive shell remains visible while initialization is pending:
+
+- The same navigation destinations remain visible but disabled.
+- Page layouts and headings remain structurally present.
+- Each page shows loading indicators instead of financial data.
+- The only active app action is `Add Transaction`.
+- Cached form data supplies account/category/tag/template selectors when available.
+- If no cached form snapshot exists, the transaction form waits for the required tables.
+- Only transactions entered during this period may appear in the temporary pending list.
+
+### Pending transaction outbox
+
+Transactions entered before initialization are saved to a separate browser outbox. Each item includes its transaction ID, transaction data, batch ID, creation time, status, and last error. Transfer-plus-fee transactions share a batch ID and remain atomic.
+
+The outbox lifecycle is:
+
+```text
+validate locally → save atomically → show Pending upload → authenticate → batch upload → verify → remove
+```
+
+New IDs are generated before queueing and never changed. Items are removed only after the write is confirmed and the source data contains the submitted IDs.
+
+Ambiguous network failures are not retried automatically. The UI marks the batch `Upload uncertain`; manual recovery reloads Transactions, removes IDs already present, and retries only confirmed-absent IDs.
+
+### Initialization concurrency
+
+A single startup coordinator owns initialization, synchronization, sign-in transitions, and outbox flushing:
+
+- Only one initialization runs at a time.
+- Only one outbox flush runs at a time.
+- Form submission during initialization always writes to the outbox.
+- New entries during a flush wait for the next flush.
+- Snapshot replacement never modifies the outbox.
+- Sign-in prompts are deferred while a transaction form is active.
+- After a form is submitted or cancelled, a failed silent sign-in can show an active `Sign in to sync` action.
+- Users may dismiss sign-in and continue local pending entry.
+
+### Debug startup scenarios
+
+`assets/config.json` will support one debug-only option:
+
+```json
+"debug_startup_scenario": "off"
+```
+
+Supported scenarios include:
+
+- `off`
+- `delay_auto_sign_in`
+- `auto_sign_in_failure`
+- `delay_and_auto_sign_in_failure`
+- `sheets_authorization_failure`
+- `data_load_failure`
+
+Scenarios are honored only in debug mode. Any non-`off` scenario in release mode is a configuration error. Delay scenarios use a deterministic 10-second delay. Automated tests can inject scenarios without modifying the committed configuration.
+
 ## Deferred functionality
 
 - Transaction editing.

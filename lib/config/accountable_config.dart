@@ -1,6 +1,32 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
+enum StartupScenario {
+  off,
+  delayAutoSignIn,
+  autoSignInFailure,
+  delayAndAutoSignInFailure,
+  sheetsAuthorizationFailure,
+  dataLoadFailure;
+
+  static StartupScenario parse(Object? value) {
+    return switch (value?.toString().trim().toLowerCase()) {
+      null || '' || 'off' => StartupScenario.off,
+      'delay_auto_sign_in' => StartupScenario.delayAutoSignIn,
+      'auto_sign_in_failure' => StartupScenario.autoSignInFailure,
+      'delay_and_auto_sign_in_failure' =>
+        StartupScenario.delayAndAutoSignInFailure,
+      'sheets_authorization_failure' =>
+        StartupScenario.sheetsAuthorizationFailure,
+      'data_load_failure' => StartupScenario.dataLoadFailure,
+      _ => throw const FormatException(
+        'assets/config.json debug_startup_scenario is invalid.',
+      ),
+    };
+  }
+}
 
 enum AccountableDataSource {
   csv,
@@ -28,6 +54,7 @@ final class AccountableConfig {
     this.sheetsScope = '',
     this.additionalOauthOrigins = const [],
     this.migrationAssistance = false,
+    this.debugStartupScenario = StartupScenario.off,
   });
 
   final AccountableDataSource dataSource;
@@ -38,6 +65,7 @@ final class AccountableConfig {
   final List<String> additionalOauthOrigins;
   final String sheetsScope;
   final bool migrationAssistance;
+  final StartupScenario debugStartupScenario;
 
   List<String> get oauthOrigins => [oauthOrigin, ...additionalOauthOrigins];
 
@@ -79,6 +107,9 @@ final class AccountableConfig {
       ),
       sheetsScope: _requireString(json, 'sheetsScope'),
       migrationAssistance: _optionalBoolean(json, 'migration_assistance'),
+      debugStartupScenario: _parseDebugStartupScenario(
+        json['debug_startup_scenario'],
+      ),
     );
   }
 
@@ -88,6 +119,16 @@ final class AccountableConfig {
       return value;
     }
     throw FormatException('assets/config.json is missing "$key".');
+  }
+
+  static StartupScenario _parseDebugStartupScenario(Object? value) {
+    final scenario = StartupScenario.parse(value);
+    if (!kDebugMode && scenario != StartupScenario.off) {
+      throw const FormatException(
+        'debug_startup_scenario must be "off" in release mode.',
+      );
+    }
+    return scenario;
   }
 
   static bool _optionalBoolean(Map<String, dynamic> json, String key) {
