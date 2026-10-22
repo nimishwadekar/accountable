@@ -49,12 +49,12 @@ class OverviewPage extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xl),
           Text(
-            'Current Account Balances',
+            'Current Cash Account Balances',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Current ledger balance through the latest transaction.',
+            'Cash account ledger balances through the latest transaction.',
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: AppColors.mutedText),
           ),
@@ -64,11 +64,11 @@ class OverviewPage extends StatelessWidget {
             child: Column(
               children: [
                 for (final account in data.visibleAccounts.where(
-                  (account) => account.isLedgerAccount,
+                  (account) => account.accountTypeKind == AccountType.cash,
                 )) ...[
                   if (account !=
                       data.visibleAccounts.firstWhere(
-                        (item) => item.isLedgerAccount,
+                        (item) => item.accountTypeKind == AccountType.cash,
                       ))
                     const Divider(height: 1),
                   _AccountRow(
@@ -83,8 +83,10 @@ class OverviewPage extends StatelessWidget {
           const SizedBox(height: AppSpacing.xl),
           Builder(
             builder: (context) {
-              final valuationAccounts = data.visibleAccounts
-                  .where((account) => account.isValuationAccount)
+              final assetLiabilityAccounts = data.visibleAccounts
+                  .where(
+                    (account) => account.accountTypeKind != AccountType.cash,
+                  )
                   .toList();
               final latestDate = data.dailyManualValuations.isEmpty
                   ? null
@@ -95,21 +97,21 @@ class OverviewPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Latest Assets & Liabilities Valuation',
+                    'Current Assets & Liabilities',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     latestDate == null
-                        ? 'No valuation available'
-                        : 'As of ${formatDate(latestDate)}',
+                        ? 'No manual valuation available'
+                        : 'Latest manual valuation: ${formatDate(latestDate)}',
                     style: Theme.of(context).textTheme.bodyMedium
                         ?.copyWith(color: AppColors.mutedText),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Card(
                     clipBehavior: Clip.hardEdge,
-                    child: valuationAccounts.isEmpty
+                    child: assetLiabilityAccounts.isEmpty
                         ? const EmptyState(
                             message: 'No Asset or Liability accounts yet.',
                           )
@@ -117,13 +119,14 @@ class OverviewPage extends StatelessWidget {
                             children: [
                               for (
                                 var index = 0;
-                                index < valuationAccounts.length;
+                                index < assetLiabilityAccounts.length;
                                 index++
                               ) ...[
                                 if (index > 0) const Divider(height: 1),
                                 _ManualValuationRow(
-                                  account: valuationAccounts[index],
+                                  account: assetLiabilityAccounts[index],
                                   data: data,
+                                  balances: balances,
                                 ),
                               ],
                             ],
@@ -225,13 +228,13 @@ class AccountsPage extends StatelessWidget {
     );
     return AppPageFrame(
       title: 'Accounts',
-      subtitle: 'Balances across your connected accounts.',
+      subtitle: 'Cash accounts and their current ledger balances.',
       child: Card(
         clipBehavior: Clip.hardEdge,
         child: Column(
           children: [
             for (final account in data.visibleAccounts.where(
-              (account) => account.isLedgerAccount,
+              (account) => account.accountTypeKind == AccountType.cash,
             )) ...[
               _AccountRow(
                 account: account,
@@ -560,10 +563,15 @@ class EmptyState extends StatelessWidget {
 }
 
 class _ManualValuationRow extends StatelessWidget {
-  const _ManualValuationRow({required this.account, required this.data});
+  const _ManualValuationRow({
+    required this.account,
+    required this.data,
+    required this.balances,
+  });
 
   final Account account;
   final AppDataSnapshot data;
+  final Map<String, Money> balances;
 
   @override
   Widget build(BuildContext context) {
@@ -577,9 +585,10 @@ class _ManualValuationRow extends StatelessWidget {
               : current,
         );
     final currency = data.currenciesById[account.currencyId];
-    final color = latest == null
-        ? null
-        : amountColor(context, latest.value.minorUnits);
+    final value = account.isValuationAccount
+        ? latest?.value
+        : balances[account.id];
+    final color = value == null ? null : amountColor(context, value.minorUnits);
     return Container(
       color: accountTypeColor(account).withValues(alpha: 0.06),
       child: ListTile(
@@ -599,9 +608,9 @@ class _ManualValuationRow extends StatelessWidget {
         title: Text(account.name),
         subtitle: Text(accountSubtitle(account, data.currenciesById)),
         trailing: Text(
-          latest == null || currency == null
+          value == null || currency == null
               ? '—'
-              : formatMoney(latest.value, data.currenciesById),
+              : formatMoney(value, data.currenciesById),
           style: Theme.of(context).textTheme.titleMedium
               ?.copyWith(color: color, fontWeight: FontWeight.w700),
         ),

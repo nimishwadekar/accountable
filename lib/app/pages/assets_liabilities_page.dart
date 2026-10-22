@@ -89,15 +89,15 @@ class AssetsLiabilitiesPage extends StatefulWidget {
 class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
   bool _submitting = false;
 
-  List<Account> get _valuationAccounts => widget.data.visibleAccounts
-      .where((account) => account.isValuationAccount)
+  List<Account> get _assetLiabilityAccounts => widget.data.visibleAccounts
+      .where((account) => account.accountTypeKind != AccountType.cash)
       .toList();
 
   @override
   Widget build(BuildContext context) {
     return AppPageFrame(
       title: 'Assets & Liabilities',
-      subtitle: 'Track manually observed values for loans and investments.',
+      subtitle: 'View current assets and liabilities; add manual valuations for accounts that use them.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -110,7 +110,7 @@ class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          if (_valuationAccounts.isEmpty)
+          if (_assetLiabilityAccounts.isEmpty)
             const EmptyState(message: 'No Asset or Liability accounts yet.')
           else
             Card(
@@ -119,12 +119,12 @@ class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
                 children: [
                   for (
                     var index = 0;
-                    index < _valuationAccounts.length;
+                    index < _assetLiabilityAccounts.length;
                     index++
                   ) ...[
                     if (index > 0) const Divider(height: 1),
-                    _AccountValuationRow(
-                      account: _valuationAccounts[index],
+                    _AssetLiabilityRow(
+                      account: _assetLiabilityAccounts[index],
                       data: widget.data,
                     ),
                   ],
@@ -306,14 +306,18 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
   }
 }
 
-class _AccountValuationRow extends StatelessWidget {
-  const _AccountValuationRow({required this.account, required this.data});
+class _AssetLiabilityRow extends StatelessWidget {
+  const _AssetLiabilityRow({required this.account, required this.data});
 
   final Account account;
   final AppDataSnapshot data;
 
   @override
   Widget build(BuildContext context) {
+    final balances = const AccountBalanceCalculator().calculate(
+      accounts: data.accounts,
+      transactions: data.transactions,
+    );
     final latest = data.dailyManualValuationsById.values
         .where((valuation) => valuation.accountId == account.id)
         .fold<DailyManualValuation?>(
@@ -324,11 +328,14 @@ class _AccountValuationRow extends StatelessWidget {
               : current,
         );
     final currency = data.currenciesById[account.currencyId];
-    final valueColor = latest == null
+    final value = account.isValuationAccount
+        ? latest?.value
+        : balances[account.id];
+    final valueColor = value == null
         ? null
-        : latest.value.minorUnits > 0
+        : value.minorUnits > 0
         ? AppColors.success
-        : latest.value.minorUnits < 0
+        : value.minorUnits < 0
         ? Theme.of(context).colorScheme.error
         : null;
     return Container(
@@ -346,9 +353,9 @@ class _AccountValuationRow extends StatelessWidget {
         title: Text(account.name),
         subtitle: Text(accountSubtitle(account, data.currenciesById)),
         trailing: Text(
-          latest == null || currency == null
+          value == null || currency == null
               ? '—'
-              : formatMoney(latest.value, data.currenciesById),
+              : formatMoney(value, data.currenciesById),
           style: Theme.of(context).textTheme.titleMedium
               ?.copyWith(color: valueColor, fontWeight: FontWeight.w700),
         ),
