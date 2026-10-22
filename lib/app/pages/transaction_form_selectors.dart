@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
 import '../theme/design_tokens.dart';
+import 'account_visuals.dart';
 import 'category_visuals.dart';
 
 class CategoryChoice {
@@ -42,7 +43,7 @@ class TransactionAccountSelector extends StatelessWidget {
             ? const Text('Select account')
             : DecoratedBox(
                 decoration: BoxDecoration(
-                  color: _accountTypeColor(selected).withValues(alpha: 0.06),
+                  color: accountTypeColor(selected).withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(AppRadii.control),
                 ),
                 child: Padding(
@@ -165,10 +166,7 @@ class _AccountSummary extends StatelessWidget {
     final currency = data.currenciesById[account.currencyId];
     return Row(
       children: [
-        Icon(
-          account.isLiability ? Icons.credit_card : Icons.account_balance,
-          color: _accountTypeColor(account),
-        ),
+        AccountVisualIcon(account: account, currencies: data.currenciesById),
         const SizedBox(width: AppSpacing.sm),
         Expanded(child: Text(account.name, overflow: TextOverflow.ellipsis)),
         Text(
@@ -180,18 +178,10 @@ class _AccountSummary extends StatelessWidget {
   }
 }
 
-Color _accountTypeColor(Account account) {
-  final type = account.accountTypeKind;
-  if (account.isLiability) return AppColors.danger;
-  if (type == AccountType.asset) return AppColors.success;
-  return const Color(0xFF90CAF9);
-}
-
-String _accountTypeLabel(Account account) {
-  final type = account.accountTypeKind;
-  if (type == AccountType.cash) return '';
-  return type.displayName;
-}
+String _accountTypeLabel(Account account) =>
+    account.accountTypeKind == AccountType.cash
+    ? ''
+    : accountTypeLabel(account);
 
 class _CategorySummary extends StatelessWidget {
   const _CategorySummary({required this.category});
@@ -248,14 +238,9 @@ class _AccountPicker extends StatelessWidget {
                   ),
                   color: account.id == selectedId
                       ? Theme.of(context).colorScheme.secondaryContainer
-                      : _accountTypeColor(account).withValues(alpha: 0.06),
+                      : accountTypeColor(account).withValues(alpha: 0.06),
                   child: ListTile(
-                    leading: Icon(
-                      account.isLiability
-                          ? Icons.credit_card
-                          : Icons.account_balance,
-                      color: _accountTypeColor(account),
-                    ),
+                    leading: AccountVisualIcon(account: account, currencies: data.currenciesById),
                     title: Text(account.name),
                     subtitle: Text(
                       [

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/data.dart';
 import '../formatters.dart';
 import '../theme/design_tokens.dart';
+import 'account_visuals.dart';
 
 class OverviewPage extends StatelessWidget {
   const OverviewPage({super.key, required this.data});
@@ -599,11 +600,7 @@ class _ManualValuationRow extends StatelessWidget {
         leading: CircleAvatar(
           backgroundColor: accountTypeColor(account).withValues(alpha: 0.14),
           foregroundColor: accountTypeColor(account),
-          child: Icon(
-            account.isLiability
-                ? Icons.account_balance_outlined
-                : Icons.trending_up,
-          ),
+          child: AccountVisualIcon(account: account, currencies: data.currenciesById),
         ),
         title: Text(account.name),
         subtitle: Text(accountSubtitle(account, data.currenciesById)),
@@ -629,14 +626,6 @@ String accountSubtitle(
   if (type == AccountType.cash) return currencyCode;
   final displayType = type.displayName;
   return '$currencyCode · $displayType';
-}
-
-Color accountTypeColor(Account account) {
-  if (account.isLiability) return AppColors.danger;
-  if (account.accountTypeKind == AccountType.asset) {
-    return AppColors.success;
-  }
-  return const Color(0xFF90CAF9);
 }
 
 Color? amountColor(BuildContext context, int minorUnits) {
@@ -669,7 +658,7 @@ class _AccountRow extends StatelessWidget {
         leading: CircleAvatar(
           backgroundColor: accountTypeColor(account).withValues(alpha: 0.14),
           foregroundColor: accountTypeColor(account),
-          child: const Icon(Icons.account_balance_wallet_outlined),
+          child: AccountVisualIcon(account: account, currencies: currencies),
         ),
         title: Text(account.name),
         subtitle: Text(accountSubtitle(account, currencies)),

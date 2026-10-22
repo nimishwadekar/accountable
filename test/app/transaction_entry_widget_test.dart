@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:accountable/app/pages/transaction_form.dart';
+import 'package:accountable/app/pages/account_visuals.dart';
 import 'package:accountable/app/pages/category_visuals.dart';
 import 'package:accountable/app/theme/app_theme.dart';
 import 'package:accountable/data/data.dart';
@@ -53,6 +54,22 @@ void main() {
 
     expect(amounts.source?.minorUnits, 9700);
     expect(amounts.destination?.minorUnits, 830000);
+  });
+
+  test('account cash icon uses the currency table symbol', () {
+    const inr = CurrencyDefinition(id: 'INR', symbol: '₹', decimalPlaces: 2);
+    final account = Account(
+      id: 'cash',
+      name: 'Cash',
+      accountType: 'cash',
+      currencyId: 'INR',
+      openingBalance: Money.zero(inr),
+      openingDate: DateTime.utc(2026, 1, 1),
+      closingDate: null,
+      usesManualValuations: false,
+    );
+    expect(accountTypeLabel(account), 'Cash');
+    expect(accountTypeColor(account), isNotNull);
   });
 
   test('category icon mapping uses category semantics', () {

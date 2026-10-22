@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
 import 'app_pages.dart';
+import 'account_visuals.dart';
 import '../formatters.dart';
 import '../theme/design_tokens.dart';
 
@@ -348,7 +349,7 @@ class _AssetLiabilityRow extends StatelessWidget {
         leading: CircleAvatar(
           backgroundColor: accountTypeColor(account).withValues(alpha: 0.14),
           foregroundColor: accountTypeColor(account),
-          child: const Icon(Icons.account_balance_wallet_outlined),
+          child: AccountVisualIcon(account: account, currencies: data.currenciesById),
         ),
         title: Text(account.name),
         subtitle: Text(accountSubtitle(account, data.currenciesById)),

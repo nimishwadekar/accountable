@@ -229,13 +229,6 @@ class _AnalysisPageState extends State<AnalysisPage> {
       header: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildRangeSelector(
-            label: 'Account Period',
-            selectedPreset: _accountRangePreset,
-            range: _accountRange,
-            onSelected: (preset) => _selectPreset(preset, forAccount: true),
-          ),
-          const SizedBox(height: AppSpacing.md),
           LayoutBuilder(
             builder: (context, constraints) {
               final accountDropdown = TransactionAccountSelector(
@@ -293,6 +286,13 @@ class _AnalysisPageState extends State<AnalysisPage> {
                 ],
               );
             },
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _buildRangeSelector(
+            label: 'Account Period',
+            selectedPreset: _accountRangePreset,
+            range: _accountRange,
+            onSelected: (preset) => _selectPreset(preset, forAccount: true),
           ),
         ],
       ),
@@ -528,4 +528,3 @@ class _AnalysisPageState extends State<AnalysisPage> {
     };
   }
 }
-
