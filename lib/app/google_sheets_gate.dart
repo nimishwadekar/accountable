@@ -119,12 +119,23 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       );
     }
     if (_startupRepository != null) {
+      final backgroundSignIn = switch (_state) {
+        _GateState.restoringSignIn ||
+        _GateState.signingIn ||
+        _GateState.authorizingSheets ||
+        _GateState.loadingData => true,
+        _ => false,
+      };
       return AppShell(
         dataRepository: _startupRepository!,
         restrictedStartup: true,
-        onStartupSignIn: _transactionFormActive ? null : _signIn,
-        startupError: _outboxError,
-        onRetryOutbox: _retryOutbox,
+        onStartupSignIn: _transactionFormActive || backgroundSignIn
+            ? null
+            : _signIn,
+        startupError: backgroundSignIn ? null : _outboxError,
+        onRetryOutbox: !backgroundSignIn && _pendingOnlineRepository != null
+            ? _retryOutbox
+            : null,
         onTransactionFormActiveChanged: _handleTransactionFormActiveChanged,
         migrationAssistance: widget.config.migrationAssistance,
         onRebuildDailyTables: _rebuildDailyTables,

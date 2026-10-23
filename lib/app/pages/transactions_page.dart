@@ -109,7 +109,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
                         style: Theme.of(context).textTheme.bodyLarge
                             ?.copyWith(color: AppColors.mutedText),
                       ),
-                      if (widget.restrictedStartup) ...[
+                      if (widget.restrictedStartup &&
+                          (widget.startupError != null ||
+                              widget.onStartupSignIn != null ||
+                              widget.onRetryOutbox != null)) ...[
                         const SizedBox(height: AppSpacing.sm),
                         if (widget.startupError != null)
                           Text(

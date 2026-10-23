@@ -131,9 +131,18 @@ class _AppShellState extends State<AppShell> {
     if (oldWidget.dataRepository != widget.dataRepository ||
         oldWidget.restrictedStartup != widget.restrictedStartup) {
       _snapshotFuture = widget.dataRepository.load();
-      _selectedSection = widget.restrictedStartup
-          ? AppSection.transactions
-          : _sectionFromPath(_navigationHistory.currentPath);
+      if (oldWidget.restrictedStartup && !widget.restrictedStartup) {
+        _selectedSection = AppSection.transactions;
+        _navigationHistory.push(
+          _navigationHistory.authenticatedPath(
+            _pathForSection(AppSection.transactions),
+          ),
+        );
+      } else {
+        _selectedSection = widget.restrictedStartup
+            ? AppSection.transactions
+            : _sectionFromPath(_navigationHistory.currentPath);
+      }
     }
   }
 
