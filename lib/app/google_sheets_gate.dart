@@ -57,6 +57,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   Future<void> Function()? _rebuildDailyTables;
   bool _connectionInProgress = false;
   bool _transactionFormActive = false;
+  int _connectionGeneration = 0;
   final Stopwatch _startupStopwatch = Stopwatch()..start();
 
   @override
@@ -251,7 +252,11 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     };
   }
 
+  bool _isCurrentConnection(int generation) =>
+      mounted && generation == _connectionGeneration;
+
   Future<void> _loadCachedStartupData() async {
+    final generation = _connectionGeneration;
     try {
       final cached = await _formSnapshotStore.read();
       if (cached == null || !mounted) return;
@@ -264,7 +269,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         cachedData,
         pendingTransactions,
       );
-      if (!mounted || _repository != null) return;
+      if (!_isCurrentConnection(generation) || _repository != null) return;
       setState(() {
         _startupRepository = StartupDataRepository(
           snapshot: startupData,
@@ -376,6 +381,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     bool interactiveConsent = false,
   }) async {
     if (!mounted || _repository != null || _connectionInProgress) return;
+    final generation = _connectionGeneration;
     _connectionInProgress = true;
     setState(() {
       _account = account;
@@ -401,10 +407,9 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       } else {
         await _authService.authorizeSheets(account);
       }
+      if (!_isCurrentConnection(generation)) return;
       _logTiming('Sheets authorization completed');
-      if (mounted) {
-        setState(() => _state = _GateState.loadingData);
-      }
+      setState(() => _state = _GateState.loadingData);
       final api = GoogleSheetsApi(
         spreadsheetId: widget.config.spreadsheetId,
         accessTokenProvider: ({forceRefresh = false}) =>
@@ -416,6 +421,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       );
       _logTiming('loading initial Sheets snapshot');
       final initialData = await repository.load();
+      if (!_isCurrentConnection(generation)) return;
       _logTiming('initial Sheets snapshot loaded');
       if (widget.config.debugStartupScenario ==
           StartupScenario.dataLoadFailure) {
@@ -433,17 +439,23 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       await maintenance.catchUp(
         yesterday: today.subtract(const Duration(days: 1)),
       );
+      if (!_isCurrentConnection(generation)) return;
       _logTiming('daily catch-up completed; reloading snapshot');
       var finalData = await repository.reload();
+      if (!_isCurrentConnection(generation)) return;
       _logTiming('final Sheets snapshot loaded');
       _pendingOnlineRepository = repository;
       if (!_transactionFormActive) {
         await _flushPendingTransactions(repository);
+        if (!_isCurrentConnection(generation)) return;
         finalData = await repository.reload();
+        if (!_isCurrentConnection(generation)) return;
         await _formSnapshotStore.write(
           FormSnapshot.fromData(finalData, dataSource: 'sheets'),
         );
+        if (!_isCurrentConnection(generation)) return;
       }
+      if (!_isCurrentConnection(generation)) return;
       _rebuildDailyTables = () async {
         final latestData = await repository.reload();
         final latestMaintenance = DailyMaintenanceService(
@@ -453,7 +465,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         await latestMaintenance.rebuild();
         await repository.reload();
       };
-      if (!mounted) return;
+      if (!_isCurrentConnection(generation)) return;
       if (!_transactionFormActive) {
         setState(() {
           _repository = repository;
@@ -465,29 +477,29 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       } else {
         setState(() => _state = _GateState.ready);
       }
-      _connectionInProgress = false;
       _logTiming('app startup finished');
     } on SheetsAuthorizationRequiredException {
-      _connectionInProgress = false;
-      if (!mounted) return;
+      if (!_isCurrentConnection(generation)) return;
       setState(() => _state = _GateState.awaitingSheetsConsent);
     } on DataValidationFailure catch (failure) {
-      _connectionInProgress = false;
-      if (!mounted) return;
+      if (!_isCurrentConnection(generation)) return;
       setState(() {
         _dataFailure = failure;
         _state = _GateState.error;
       });
     } catch (error) {
-      _connectionInProgress = false;
+      if (!_isCurrentConnection(generation)) return;
       if (_pendingOnlineRepository != null) {
         _outboxError = error.toString();
       }
-      if (!mounted) return;
       setState(() {
         _state = _GateState.error;
         _error = error.toString();
       });
+    } finally {
+      if (generation == _connectionGeneration) {
+        _connectionInProgress = false;
+      }
     }
   }
 
@@ -536,14 +548,26 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     if (repository == null || _repository != null || _connectionInProgress) {
       return;
     }
+    final generation = _connectionGeneration;
     _connectionInProgress = true;
     try {
       await _flushPendingTransactions(repository);
+      if (!_isCurrentConnection(generation) ||
+          !identical(_pendingOnlineRepository, repository)) {
+        return;
+      }
       final finalData = await repository.reload();
+      if (!_isCurrentConnection(generation) ||
+          !identical(_pendingOnlineRepository, repository)) {
+        return;
+      }
       await _formSnapshotStore.write(
         FormSnapshot.fromData(finalData, dataSource: 'sheets'),
       );
-      if (!mounted) return;
+      if (!_isCurrentConnection(generation) ||
+          !identical(_pendingOnlineRepository, repository)) {
+        return;
+      }
       setState(() {
         _repository = repository;
         _pendingOnlineRepository = null;
@@ -552,37 +576,68 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         _state = _GateState.ready;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!_isCurrentConnection(generation)) return;
       setState(() => _outboxError = error.toString());
     } finally {
-      _connectionInProgress = false;
+      if (generation == _connectionGeneration) {
+        _connectionInProgress = false;
+      }
     }
   }
 
   Future<void> _retryOutbox() async {
     final repository = _pendingOnlineRepository;
     if (repository == null || _connectionInProgress || _transactionFormActive) return;
+    final generation = _connectionGeneration;
     setState(() => _outboxError = null);
     try {
       _connectionInProgress = true;
       await _flushPendingTransactions(repository);
-      await repository.reload();
-      if (!mounted) return;
-      setState(() => _outboxError = null);
+      if (!_isCurrentConnection(generation) ||
+          !identical(_pendingOnlineRepository, repository)) {
+        return;
+      }
+      final finalData = await repository.reload();
+      if (!_isCurrentConnection(generation) ||
+          !identical(_pendingOnlineRepository, repository)) {
+        return;
+      }
+      await _formSnapshotStore.write(
+        FormSnapshot.fromData(finalData, dataSource: 'sheets'),
+      );
+      if (!_isCurrentConnection(generation) ||
+          !identical(_pendingOnlineRepository, repository)) {
+        return;
+      }
+      setState(() {
+        _repository = repository;
+        _pendingOnlineRepository = null;
+        _startupRepository = null;
+        _outboxError = null;
+        _state = _GateState.ready;
+      });
     } catch (error) {
-      if (!mounted) return;
+      if (!_isCurrentConnection(generation)) return;
       setState(() => _outboxError = error.toString());
     } finally {
-      _connectionInProgress = false;
+      if (generation == _connectionGeneration) {
+        _connectionInProgress = false;
+      }
     }
   }
 
   Future<void> _switchAccount() async {
+    _connectionGeneration++;
+    _connectionInProgress = false;
+    _pendingOnlineRepository = null;
+    _rebuildDailyTables = null;
     await _authService.signOut();
     if (!mounted) return;
     setState(() {
       _account = null;
       _repository = null;
+      _startupRepository = null;
+      _outboxError = null;
       _state = _GateState.signedOut;
       _error = null;
     });

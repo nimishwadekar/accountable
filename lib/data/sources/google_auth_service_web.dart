@@ -208,5 +208,10 @@ class GoogleAuthService {
     _sheetsAccessToken = null;
     _sheetsAccount = null;
     _pendingAuthentication = null;
+    try {
+      gis.id.disableAutoSelect();
+    } catch (_) {
+      // The GIS SDK may not be initialized when sign-out is requested.
+    }
   }
 }

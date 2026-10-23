@@ -30,6 +30,10 @@ The canonical behavioral documentation is [`FUNCTIONAL_SPEC.md`](./FUNCTIONAL_SP
 - Make surgical changes only after the user approves the finding.
 - Update directly related documentation when behavior changes.
 
+### Tool-output redaction caveat
+
+The tool display layer may redact strings matching `Bearer <token>` as `******`, including harmless test values and source-code examples. Do not infer that an authorization header is missing or malformed from redacted tool output alone. Verify the saved file through a non-redacting path before reporting a bearer-header finding, and never expose real credentials while doing so.
+
 ## Review sequence
 
 ### 1. Establish the baseline
