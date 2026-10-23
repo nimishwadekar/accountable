@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
@@ -5,6 +7,7 @@ import '../formatters.dart';
 import '../theme/design_tokens.dart';
 import 'transaction_form.dart';
 import 'transaction_review_sheet.dart';
+import '../session_ui_preferences.dart';
 import 'transaction_list_widgets.dart';
 
 bool isTransactionDateInRange(DateTime transactionDate, DateTimeRange range) {
@@ -60,7 +63,32 @@ class _TransactionsPageState extends State<TransactionsPage> {
   @override
   void initState() {
     super.initState();
+    final session = SessionUiPreferences.instance;
+    _transactionType = _transactionTypeFromName(session.transactionType);
+    _accountId =
+        widget.data.accountsById.containsKey(session.transactionAccountId)
+        ? session.transactionAccountId
+        : null;
+    _categoryId =
+        widget.data.categoriesById.containsKey(session.transactionCategoryId)
+        ? session.transactionCategoryId
+        : null;
+    _tagId = widget.data.tagsById.containsKey(session.transactionTagId)
+        ? session.transactionTagId
+        : null;
+    final start = DateTime.tryParse(session.transactionDateStart ?? '');
+    final end = DateTime.tryParse(session.transactionDateEnd ?? '');
+    if (start != null && end != null) {
+      _dateRange = DateTimeRange(start: start, end: end);
+    }
     _scrollController.addListener(_handleScroll);
+  }
+
+  TransactionType? _transactionTypeFromName(String? value) {
+    for (final type in TransactionType.values) {
+      if (type.name == value) return type;
+    }
+    return null;
   }
 
   @override
@@ -362,6 +390,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
     }
 
     return ListView.separated(
+      key: const PageStorageKey<String>('transactions-list'),
       controller: _scrollController,
       padding: const EdgeInsets.only(bottom: AppSpacing.xl),
       itemCount: children.length,
@@ -387,7 +416,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
             child: Text(transactionTypeLabel(type)),
           ),
       ],
-      onChanged: (value) => setState(() => _transactionType = value),
+      onChanged: (value) {
+        setState(() => _transactionType = value);
+        _persistFilters();
+      },
     );
   }
 
@@ -407,7 +439,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
             child: Text(account.name),
           ),
       ],
-      onChanged: (value) => setState(() => _accountId = value),
+      onChanged: (value) {
+        setState(() => _accountId = value);
+        _persistFilters();
+      },
     );
   }
 
@@ -427,7 +462,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
             child: Text(category.name),
           ),
       ],
-      onChanged: (value) => setState(() => _categoryId = value),
+      onChanged: (value) {
+        setState(() => _categoryId = value);
+        _persistFilters();
+      },
     );
   }
 
@@ -441,7 +479,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
         for (final tag in widget.data.visibleTags)
           DropdownMenuItem<String?>(value: tag.id, child: Text(tag.name)),
       ],
-      onChanged: (value) => setState(() => _tagId = value),
+      onChanged: (value) {
+        setState(() => _tagId = value);
+        _persistFilters();
+      },
     );
   }
 
@@ -469,6 +510,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
       _tagId = filters.tagId;
       _dateRange = filters.dateRange;
     });
+    _persistFilters();
   }
 
   Future<void> _selectDateRange() async {
@@ -480,6 +522,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
     );
     if (!mounted || selectedRange == null) return;
     setState(() => _dateRange = selectedRange);
+    _persistFilters();
   }
 
   void _clearFilters() {
@@ -490,6 +533,19 @@ class _TransactionsPageState extends State<TransactionsPage> {
       _tagId = null;
       _dateRange = null;
     });
+    _persistFilters();
+  }
+
+  void _persistFilters() {
+    final session = SessionUiPreferences.instance;
+    session
+      ..transactionType = _transactionType?.name
+      ..transactionAccountId = _accountId
+      ..transactionCategoryId = _categoryId
+      ..transactionTagId = _tagId
+      ..transactionDateStart = _dateRange?.start.toIso8601String()
+      ..transactionDateEnd = _dateRange?.end.toIso8601String();
+    unawaited(session.persist());
   }
 
   void _handleScroll() {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -5,6 +7,7 @@ import '../config/accountable_config.dart';
 import '../data/data.dart';
 import 'app_shell.dart';
 import 'google_sheets_gate.dart';
+import 'session_ui_preferences.dart';
 import 'theme/app_theme.dart';
 
 class AccountableApp extends StatefulWidget {
@@ -28,6 +31,7 @@ class _AccountableAppState extends State<AccountableApp> {
   void initState() {
     super.initState();
     _restoreTextScale();
+    unawaited(SessionUiPreferences.instance.startSession());
   }
 
   Future<void> _restoreTextScale() async {

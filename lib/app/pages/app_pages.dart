@@ -462,6 +462,7 @@ class AppPageFrame extends StatelessWidget {
     return Align(
       alignment: Alignment.topCenter,
       child: SingleChildScrollView(
+        key: PageStorageKey<String>('app-page-$title'),
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: ConstrainedBox(
           constraints: const BoxConstraints(
@@ -600,7 +601,10 @@ class _ManualValuationRow extends StatelessWidget {
         leading: CircleAvatar(
           backgroundColor: accountTypeColor(account).withValues(alpha: 0.14),
           foregroundColor: accountTypeColor(account),
-          child: AccountVisualIcon(account: account, currencies: data.currenciesById),
+          child: AccountVisualIcon(
+            account: account,
+            currencies: data.currenciesById,
+          ),
         ),
         title: Text(account.name),
         subtitle: Text(accountSubtitle(account, data.currenciesById)),

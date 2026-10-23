@@ -378,7 +378,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                     width: 1,
                     child: IgnorePointer(
                       child: CustomPaint(
-                        painter: _DashedVerticalLinePainter(color),
+                        painter: const _DashedVerticalLinePainter(),
                       ),
                     ),
                   );
@@ -725,14 +725,12 @@ class _ChartAreaGradientPainter extends CustomPainter {
 }
 
 class _DashedVerticalLinePainter extends CustomPainter {
-  const _DashedVerticalLinePainter(this.color);
-
-  final Color color;
+  const _DashedVerticalLinePainter();
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color.withValues(alpha: 0.55)
+      ..color = const Color(0xFF667085).withValues(alpha: 0.7)
       ..strokeWidth = 1.5;
     const dashLength = 5.0;
     const gapLength = 5.0;
@@ -748,8 +746,7 @@ class _DashedVerticalLinePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _DashedVerticalLinePainter oldDelegate) =>
-      oldDelegate.color != color;
+  bool shouldRepaint(covariant _DashedVerticalLinePainter oldDelegate) => false;
 }
 
 class _ValueOverlay extends StatelessWidget {

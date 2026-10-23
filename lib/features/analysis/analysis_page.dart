@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/formatters.dart';
 import '../../app/pages/app_pages.dart';
 import '../../app/theme/design_tokens.dart';
 import '../../app/pages/transaction_form_selectors.dart';
+import '../../app/session_ui_preferences.dart';
 import '../../data/data.dart';
 import 'analysis_calculator.dart';
 import 'category_analysis.dart';
@@ -56,14 +59,29 @@ class _AnalysisPageState extends State<AnalysisPage> {
     _calculator = AnalysisCalculator(widget.data);
     _categoryCalculator = CategoryAnalysisCalculator(widget.data);
     final months = _availableAnalysisMonths;
-    _categoryMonth = months.isEmpty ? DateTime.now() : months.last;
-    _netWorthRangePreset = AnalysisRangePreset.oneMonth;
-    _netWorthRange = _rangeForPreset(AnalysisRangePreset.oneMonth);
-    _accountRangePreset = AnalysisRangePreset.oneMonth;
-    _accountRange = _rangeForPreset(AnalysisRangePreset.oneMonth);
-    _selectedAccountId = widget.data.visibleAccounts.isEmpty
+    final session = SessionUiPreferences.instance;
+    _categoryMonth = _storedMonth(months, session.analysisMonth) ??
+        (months.isEmpty ? DateTime.now() : months.last);
+    _netWorthRangePreset = _storedPreset(session.netWorthRangePreset);
+    _netWorthRange = _rangeForPreset(_netWorthRangePreset);
+    _accountRangePreset = _storedPreset(session.accountRangePreset);
+    _accountRange = _rangeForPreset(_accountRangePreset);
+    _selectedAccountId = widget.data.visibleAccounts.any(
+            (account) => account.id == session.analysisAccountId,
+          )
+        ? session.analysisAccountId
+        : widget.data.visibleAccounts.isEmpty
         ? null
         : widget.data.visibleAccounts.first.id;
+    _accountChartUnit = AccountChartUnit.values.firstWhere(
+      (unit) => unit.name == session.analysisAccountUnit,
+      orElse: () => AccountChartUnit.native,
+    );
+    _categoryTagId = widget.data.visibleTags.any(
+            (tag) => tag.id == session.analysisTagId,
+          )
+        ? session.analysisTagId
+        : null;
   }
 
   @override
@@ -289,7 +307,13 @@ class _AnalysisPageState extends State<AnalysisPage> {
                 accounts: widget.data.visibleAccounts,
                 data: widget.data,
                 onChanged: (value) {
-                  if (value != null) setState(() => _selectedAccountId = value);
+                  if (value != null) {
+                    setState(() => _selectedAccountId = value);
+                    final session = SessionUiPreferences.instance;
+                    session.analysisAccountId = value;
+                    session.analysisAccountUnit = _accountChartUnit.name;
+                    unawaited(session.persist());
+                  }
                 },
               );
               final unitToggle = SegmentedButton<AccountChartUnit>(
@@ -317,6 +341,9 @@ class _AnalysisPageState extends State<AnalysisPage> {
                     ? null
                     : (selection) {
                         setState(() => _accountChartUnit = selection.first);
+                      final session = SessionUiPreferences.instance;
+                      session.analysisAccountUnit = selection.first.name;
+                      unawaited(session.persist());
                       },
               );
 
@@ -457,6 +484,9 @@ class _AnalysisPageState extends State<AnalysisPage> {
                         onChanged: (value) {
                           if (value != null) {
                             setState(() => _categoryMonth = value);
+                            final session = SessionUiPreferences.instance;
+                            session.analysisMonth = value.toIso8601String();
+                            unawaited(session.persist());
                           }
                         },
                       ),
@@ -478,8 +508,12 @@ class _AnalysisPageState extends State<AnalysisPage> {
                               child: Text(tag.name),
                             ),
                         ],
-                        onChanged: (value) =>
-                            setState(() => _categoryTagId = value),
+                        onChanged: (value) {
+                          setState(() => _categoryTagId = value);
+                          final session = SessionUiPreferences.instance;
+                          session.analysisTagId = value;
+                          unawaited(session.persist());
+                        },
                       ),
                     ),
                   ],
@@ -539,6 +573,21 @@ class _AnalysisPageState extends State<AnalysisPage> {
         ? 'daily data or exchange rates'
         : 'daily data';
     return 'Missing $subject for $preview$suffix.';
+  }
+
+  AnalysisRangePreset _storedPreset(String? value) {
+    return AnalysisRangePreset.values.firstWhere(
+      (preset) => preset.name == value,
+      orElse: () => AnalysisRangePreset.oneMonth,
+    );
+  }
+
+  DateTime? _storedMonth(List<DateTime> months, String? value) {
+    if (value == null) return null;
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) return null;
+    final month = DateTime.utc(parsed.year, parsed.month);
+    return months.contains(month) ? month : null;
   }
 
   DateTimeRange? _rangeForPreset(AnalysisRangePreset preset) {
@@ -609,6 +658,13 @@ class _AnalysisPageState extends State<AnalysisPage> {
         _netWorthRange = range;
       }
     });
+    final session = SessionUiPreferences.instance;
+    if (forAccount) {
+      session.accountRangePreset = preset.name;
+    } else {
+      session.netWorthRangePreset = preset.name;
+    }
+    unawaited(session.persist());
   }
 
   String _presetLabel(AnalysisRangePreset preset) {
