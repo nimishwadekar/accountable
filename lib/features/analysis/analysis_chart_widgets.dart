@@ -149,7 +149,16 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         final xMargin = spanDays == 0 ? 0.5 : spanDays * 0.05;
         final chartMinX = -xMargin;
         final chartMaxX = spanDays == 0 ? 0.5 : spanDays + xMargin;
-        const chartHeight = 296.0;
+        const outerChartHeight = 304.0;
+        const chartBottomInset = 8.0;
+        const narrowChartAspectRatio = 1.975;
+        final outerHeight = constraints.maxWidth < AppBreakpoints.compact
+            ? (constraints.maxWidth / narrowChartAspectRatio).clamp(
+                180.0,
+                outerChartHeight,
+              )
+            : outerChartHeight;
+        final chartHeight = outerHeight - chartBottomInset;
         const bottomAxisHeight = 32.0;
         const labelClearance = 52.0;
         final chartMinY = minimum - padding;
@@ -229,12 +238,12 @@ class _LineChartWidgetState extends State<LineChartWidget> {
 
         return SizedBox(
           width: double.infinity,
-          height: 304,
+          height: outerHeight,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
               Positioned.fill(
-                bottom: 8,
+                bottom: chartBottomInset,
                 child: CustomPaint(
                   painter: _ChartAreaGradientPainter(
                     points: points,
@@ -250,7 +259,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                 ),
               ),
               Positioned.fill(
-                bottom: 8,
+                bottom: chartBottomInset,
                 child: LineChart(
                   LineChartData(
                     minX: chartMinX,
@@ -544,37 +553,21 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     DateTime firstDate, {
     double? selectedX,
   }) {
-    if (points.length == 1) {
-      return [
-        LineChartBarData(
-          spots: [FlSpot(0, points.first.value)],
-          color: _pointColor(points.first.value),
-          barWidth: 3,
-          dotData: _selectedDotData(selectedX),
-        ),
-      ];
-    }
     return [
-      for (var index = 0; index < points.length - 1; index++)
-        LineChartBarData(
-          spots: [
+      LineChartBarData(
+        spots: [
+          for (final point in points)
             FlSpot(
-              points[index].date.difference(firstDate).inDays.toDouble(),
-              points[index].value,
+              point.date.difference(firstDate).inDays.toDouble(),
+              point.value,
             ),
-            FlSpot(
-              points[index + 1].date.difference(firstDate).inDays.toDouble(),
-              points[index + 1].value,
-            ),
-          ],
-          color: _pointColor(
-            (points[index].value + points[index + 1].value) / 2,
-          ),
-          barWidth: 3,
-          isCurved: false,
-          dotData: _selectedDotData(selectedX),
-          belowBarData: BarAreaData(show: false),
-        ),
+        ],
+        color: widget.color,
+        barWidth: 3,
+        isCurved: false,
+        dotData: _selectedDotData(selectedX),
+        belowBarData: BarAreaData(show: false),
+      ),
     ];
   }
 
