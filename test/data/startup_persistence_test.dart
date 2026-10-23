@@ -1,9 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import 'package:accountable/data/data.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferencesAsyncPlatform.instance =
+      InMemorySharedPreferencesAsync.empty();
 
   final transaction = Transaction(
     id: 'tx-1',
@@ -55,6 +60,23 @@ void main() {
     expect(snapshot.tables['TransactionTemplates'], contains('template_id'));
   });
 
+  test('shared-preferences form snapshot survives and clears', () async {
+    final preferences = SharedPreferencesAsync();
+    final store = SharedPreferencesFormSnapshotStore(preferences: preferences);
+    final data = await AssetAppDataRepository().load();
+    final snapshot = FormSnapshot.fromData(
+      data,
+      dataSource: 'sheets',
+      savedAt: DateTime.utc(2026, 1, 2),
+    );
+
+    await store.write(snapshot);
+    final loaded = await store.read();
+    expect(loaded?.tables, snapshot.tables);
+    await store.clear();
+    expect(await store.read(), isNull);
+  });
+
   test(
     'outbox preserves transaction data and groups entries by batch',
     () async {
@@ -79,6 +101,27 @@ void main() {
     },
   );
 
+  test('shared-preferences outbox survives a new store instance', () async {
+    final preferences = SharedPreferencesAsync();
+    final first = SharedPreferencesTransactionOutboxStore(
+      preferences: preferences,
+    );
+    await first.enqueueBatch(
+      batchId: 'persistent-batch',
+      transactions: [transaction],
+    );
+
+    final second = SharedPreferencesTransactionOutboxStore(
+      preferences: SharedPreferencesAsync(),
+    );
+    final entries = await second.read();
+
+    expect(entries.single.batchId, 'persistent-batch');
+    expect(entries.single.transaction.id, transaction.id);
+    await second.removeBatch('persistent-batch');
+    expect(await first.read(), isEmpty);
+  });
+
   test(
     'startup repository queues transactions and exposes them locally',
     () async {
@@ -91,6 +134,40 @@ void main() {
 
       expect(queued.transactionsById['tx-1'], isNotNull);
       expect((await repository.outbox.read()), hasLength(1));
+    },
+  );
+
+  test(
+    'startup repository blocks unsupported operations while offline',
+    () async {
+      final base = await AssetAppDataRepository().load();
+      final repository = StartupDataRepository(
+        snapshot: base,
+        outbox: MemoryTransactionOutboxStore(),
+      );
+
+      expect(() => repository.addManualValuations([]), throwsStateError);
+      expect(() => repository.saveDisplayPreferences([]), throwsStateError);
+      expect(
+        () => repository.addIncomeAllocation(
+          IncomeAllocation(
+            id: 'allocation-1',
+            name: 'Offline allocation',
+            incomeCategoryId: 'salary',
+            incomeAccountId: 'chase_checking',
+            transferCategoryId: 'general',
+            expectedAmountPerIncome: const Money(
+              minorUnits: 100,
+              currencyId: 'USD',
+            ),
+            startDate: DateTime.utc(2026, 1, 1),
+            endDate: null,
+            createdAt: DateTime.utc(2026, 1, 1),
+            updatedAt: DateTime.utc(2026, 1, 1),
+          ),
+        ),
+        throwsStateError,
+      );
     },
   );
 
