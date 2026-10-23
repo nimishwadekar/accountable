@@ -54,15 +54,11 @@ class TransactionListRow extends StatelessWidget {
     final detailParts = <String>[
       if (category != null) category.name,
       if (tag != null) tag.name,
-      if (transaction.type != TransactionType.transfer &&
-          sourceAccount != null &&
-          destinationAccount != null)
+      if (sourceAccount != null && destinationAccount != null)
         '${sourceAccount.name} → ${destinationAccount.name}'
-      else if (transaction.type != TransactionType.transfer &&
-          sourceAccount != null)
+      else if (sourceAccount != null)
         sourceAccount.name
-      else if (transaction.type != TransactionType.transfer &&
-          destinationAccount != null)
+      else if (destinationAccount != null)
         destinationAccount.name,
     ];
 
@@ -98,60 +94,29 @@ class TransactionListRow extends StatelessWidget {
     );
   }
 
-  Widget _transferLine({
-    required String accountName,
-    required String amount,
-    required Color color,
-    required TextStyle? style,
-  }) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            accountName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Text(amount, style: style?.copyWith(color: color)),
-      ],
-    );
-  }
-
   Widget _buildAmount(BuildContext context) {
     if (transaction.type == TransactionType.transfer &&
         transaction.sourceAmount != null &&
         transaction.destinationAmount != null) {
-      final source = transaction.sourceAccountId == null
-          ? null
-          : data.accountsById[transaction.sourceAccountId!];
-      final destination = transaction.destinationAccountId == null
-          ? null
-          : data.accountsById[transaction.destinationAccountId!];
       final amountStyle = Theme.of(context).textTheme.titleMedium
           ?.copyWith(fontWeight: FontWeight.w700);
-      return ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 300),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _transferLine(
-              accountName: source?.name ?? 'Source',
-              amount:
-                  '-${formatMoney(transaction.sourceAmount!, data.currenciesById)}',
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            '-${formatMoney(transaction.sourceAmount!, data.currenciesById)}',
+            textAlign: TextAlign.right,
+            style: amountStyle?.copyWith(
               color: Theme.of(context).colorScheme.error,
-              style: amountStyle,
             ),
-            _transferLine(
-              accountName: destination?.name ?? 'Destination',
-              amount:
-                  '+${formatMoney(transaction.destinationAmount!, data.currenciesById)}',
-              color: AppColors.success,
-              style: amountStyle,
-            ),
-          ],
-        ),
+          ),
+          Text(
+            '+${formatMoney(transaction.destinationAmount!, data.currenciesById)}',
+            textAlign: TextAlign.right,
+            style: amountStyle?.copyWith(color: AppColors.success),
+          ),
+        ],
       );
     }
 

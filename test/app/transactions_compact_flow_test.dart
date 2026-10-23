@@ -13,6 +13,36 @@ void main() {
   SharedPreferencesAsyncPlatform.instance =
       InMemorySharedPreferencesAsync.empty();
 
+  testWidgets('renders transfer rows without narrow-layout overflow', (
+    tester,
+  ) async {
+    await SessionUiPreferences.instance.startSession();
+    final repository = AssetAppDataRepository();
+    await repository.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(390, 844)),
+          child: AppShell(dataRepository: repository),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byIcon(Icons.receipt_long_outlined));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    await tester.scrollUntilVisible(
+      find.text('Credit Payment'),
+      300,
+      scrollable: find.byType(Scrollable),
+    );
+    expect(find.text('Credit Payment'), findsOneWidget);
+    expect(find.textContaining('Chase Checking → Chase Freedom'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('opens compact filters, applies a type, and clears it', (
     tester,
   ) async {
