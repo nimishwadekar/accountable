@@ -356,6 +356,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
                 liability: account?.isLiability == true,
               ),
               currency: useUsd ? usd : currency,
+              isLiability: account?.isLiability == true,
               axisLabel: account?.isLiability == true
                   ? 'Debt Value (${(useUsd ? usd : currency)?.id ?? 'USD'})'
                   : 'Value (${(useUsd ? usd : currency)?.id ?? 'USD'})',
@@ -363,10 +364,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
     );
   }
 
-  Color _netChangeColor(
-    List<ChartPoint> points, {
-    bool liability = false,
-  }) {
+  Color _netChangeColor(List<ChartPoint> points, {bool liability = false}) {
     if (points.length < 2) return AppColors.mutedText;
     final change = liability
         ? points.first.value - points.last.value

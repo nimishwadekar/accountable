@@ -105,19 +105,20 @@ class LineChartWidget extends StatefulWidget {
     required this.color,
     required this.currency,
     required this.axisLabel,
+    this.isLiability = false,
   });
 
   final List<ChartPoint> points;
   final Color color;
   final CurrencyDefinition? currency;
   final String axisLabel;
+  final bool isLiability;
 
   @override
   State<LineChartWidget> createState() => _LineChartWidgetState();
 }
 
 class _LineChartWidgetState extends State<LineChartWidget> {
-  LineTouchResponse? _touchResponse;
   final ValueNotifier<double?> _selectedX = ValueNotifier(null);
 
   @override
@@ -125,9 +126,6 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     _selectedX.dispose();
     super.dispose();
   }
-
-  static double _horizontalDistance(Offset touch, Offset spot) =>
-      (touch.dx - spot.dx).abs();
 
   @override
   Widget build(BuildContext context) {
@@ -159,10 +157,10 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         final baseYRange = baseMaxY - chartMinY;
         final axisStyle =
             Theme.of(context).textTheme.labelSmall ?? const TextStyle();
-        final selectedSpot = _touchResponse?.lineBarSpots?.first;
-        final selectedIndex = selectedSpot == null
+        final selectedX = _selectedX.value;
+        final selectedIndex = selectedX == null
             ? points.length - 1
-            : _pointIndexForX(points, firstDate, selectedSpot.x);
+            : _pointIndexForX(points, firstDate, selectedX);
         final displayPoint = points[selectedIndex];
         final previousValue = selectedIndex == 0
             ? null
@@ -237,6 +235,22 @@ class _LineChartWidgetState extends State<LineChartWidget> {
             children: [
               Positioned.fill(
                 bottom: 8,
+                child: CustomPaint(
+                  painter: _ChartAreaGradientPainter(
+                    points: points,
+                    firstDate: firstDate,
+                    minX: chartMinX,
+                    maxX: chartMaxX,
+                    minY: chartMinY,
+                    maxY: maxY,
+                    axisReservedSize: axisReservedSize,
+                    bottomAxisHeight: bottomAxisHeight,
+                    color: color,
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                bottom: 8,
                 child: LineChart(
                   LineChartData(
                     minX: chartMinX,
@@ -261,30 +275,26 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                     ),
                     lineTouchData: LineTouchData(
                       touchSpotThreshold: 100000,
-                      distanceCalculator: _horizontalDistance,
+                      distanceCalculator: (touch, spot) {
+                        final distance = spot.dx - touch.dx;
+                        return distance >= 0 ? distance : double.infinity;
+                      },
                       handleBuiltInTouches: false,
                       touchCallback: (event, response) {
                         if (event is FlPointerExitEvent ||
                             event is FlPanCancelEvent) {
                           _selectedX.value = null;
-                          if (_touchResponse != null) {
-                            setState(() => _touchResponse = null);
-                          }
+                          setState(() {});
                           return;
                         }
                         final spots = response?.lineBarSpots;
-                        if (spots == null || spots.isEmpty) {
-                          if (_touchResponse != null) {
-                            setState(() => _touchResponse = null);
-                          }
-                          return;
-                        }
-                        _selectedX.value = spots.first.x;
-                        setState(
-                          () => _touchResponse = response!.copyWith(
-                            lineBarSpots: [spots.first],
-                          ),
-                        );
+                        _selectedX.value = spots == null || spots.isEmpty
+                            ? points.last.date
+                                  .difference(firstDate)
+                                  .inDays
+                                  .toDouble()
+                            : spots.first.x;
+                        setState(() {});
                       },
                     ),
                     titlesData: FlTitlesData(
@@ -346,8 +356,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                     lineBarsData: _lineBars(
                       points,
                       firstDate,
-                      color,
-                      selectedSpot: selectedSpot,
+                      selectedX: selectedX,
                     ),
                   ),
                 ),
@@ -387,13 +396,14 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                     point: displayPoint,
                     baseline: previousValue,
                     currency: currency,
+                    isLiability: widget.isLiability,
                   ),
                 ),
               ),
-              if (selectedSpot != null)
+              if (selectedX != null)
                 Positioned(
                   left: _xPosition(
-                    selectedSpot.x,
+                    selectedX,
                     chartMinX,
                     chartMaxX,
                     constraints.maxWidth,
@@ -441,7 +451,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     final text =
         '$label: ${currency?.symbol ?? ''} '
         '${_formatChartValue(point.value)} '
-        '(${percentage == null ? '—' : '${percentage >= 0 ? '+' : ''}${percentage.toStringAsFixed(2)}%'})';
+        '(${percentage == null || percentage == 0 ? '0.00%' : '${percentage >= 0 ? '+' : ''}${percentage.toStringAsFixed(2)}%'})';
     final style = Theme.of(context).textTheme.labelLarge ?? const TextStyle();
     final painter = TextPainter(
       text: TextSpan(text: text, style: style),
@@ -531,9 +541,8 @@ class _LineChartWidgetState extends State<LineChartWidget> {
 
   List<LineChartBarData> _lineBars(
     List<ChartPoint> points,
-    DateTime firstDate,
-    Color fallbackColor, {
-    TouchLineBarSpot? selectedSpot,
+    DateTime firstDate, {
+    double? selectedX,
   }) {
     if (points.length == 1) {
       return [
@@ -541,7 +550,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
           spots: [FlSpot(0, points.first.value)],
           color: _pointColor(points.first.value),
           barWidth: 3,
-          dotData: const FlDotData(show: true),
+          dotData: _selectedDotData(selectedX),
         ),
       ];
     }
@@ -563,22 +572,16 @@ class _LineChartWidgetState extends State<LineChartWidget> {
           ),
           barWidth: 3,
           isCurved: false,
-          dotData: _selectedDotData(selectedSpot),
-          belowBarData: BarAreaData(
-            show: false,
-            color: fallbackColor.withValues(alpha: 0.12),
-          ),
+          dotData: _selectedDotData(selectedX),
+          belowBarData: BarAreaData(show: false),
         ),
     ];
   }
 
-  FlDotData _selectedDotData(TouchLineBarSpot? selectedSpot) {
+  FlDotData _selectedDotData(double? selectedX) {
     return FlDotData(
-      show: selectedSpot != null,
-      checkToShowDot: (spot, _) =>
-          selectedSpot != null &&
-          spot.x == selectedSpot.x &&
-          spot.y == selectedSpot.y,
+      show: selectedX != null,
+      checkToShowDot: (spot, _) => selectedX != null && spot.x == selectedX,
       getDotPainter: (spot, _, _, _) => FlDotCirclePainter(
         radius: 6,
         color: _pointColor(spot.y),
@@ -647,6 +650,80 @@ class _LineChartWidgetState extends State<LineChartWidget> {
   }
 }
 
+class _ChartAreaGradientPainter extends CustomPainter {
+  const _ChartAreaGradientPainter({
+    required this.points,
+    required this.firstDate,
+    required this.minX,
+    required this.maxX,
+    required this.minY,
+    required this.maxY,
+    required this.axisReservedSize,
+    required this.bottomAxisHeight,
+    required this.color,
+  });
+
+  final List<ChartPoint> points;
+  final DateTime firstDate;
+  final double minX;
+  final double maxX;
+  final double minY;
+  final double maxY;
+  final double axisReservedSize;
+  final double bottomAxisHeight;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2 || maxX == minX || maxY == minY) return;
+
+    final plotWidth = size.width - axisReservedSize;
+    final plotHeight = size.height - bottomAxisHeight;
+
+    double xFor(ChartPoint point) {
+      final x = point.date.difference(firstDate).inDays.toDouble();
+      return axisReservedSize + (x - minX) / (maxX - minX) * plotWidth;
+    }
+
+    double yFor(ChartPoint point) {
+      return (maxY - point.value) / (maxY - minY) * plotHeight;
+    }
+
+    final areaPath = Path()..moveTo(xFor(points.first), yFor(points.first));
+    for (final point in points.skip(1)) {
+      areaPath.lineTo(xFor(point), yFor(point));
+    }
+    areaPath
+      ..lineTo(xFor(points.last), plotHeight)
+      ..lineTo(xFor(points.first), plotHeight)
+      ..close();
+
+    final gradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [color.withValues(alpha: 0.20), color.withValues(alpha: 0)],
+    );
+    final paint = Paint()
+      ..shader = gradient.createShader(
+        Rect.fromLTWH(0, 0, size.width, plotHeight),
+      );
+    canvas
+      ..save()
+      ..clipPath(areaPath)
+      ..drawRect(Offset.zero & size, paint)
+      ..restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChartAreaGradientPainter oldDelegate) =>
+      oldDelegate.points != points ||
+      oldDelegate.minX != minX ||
+      oldDelegate.maxX != maxX ||
+      oldDelegate.minY != minY ||
+      oldDelegate.maxY != maxY ||
+      oldDelegate.color != color;
+}
+
 class _DashedVerticalLinePainter extends CustomPainter {
   const _DashedVerticalLinePainter(this.color);
 
@@ -681,12 +758,14 @@ class _ValueOverlay extends StatelessWidget {
     required this.point,
     required this.baseline,
     required this.currency,
+    required this.isLiability,
   });
 
   final String label;
   final ChartPoint point;
   final double? baseline;
   final CurrencyDefinition? currency;
+  final bool isLiability;
 
   static String _formatValue(double value) {
     final fixed = value.toStringAsFixed(2);
@@ -706,12 +785,12 @@ class _ValueOverlay extends StatelessWidget {
     final percentage = baselineValue == null || baselineValue == 0
         ? null
         : ((point.value - baselineValue) / baselineValue.abs()) * 100;
-    final percentageLabel = percentage == null
-        ? '—'
+    final percentageLabel = percentage == null || percentage == 0
+        ? '0.00%'
         : '${percentage >= 0 ? '+' : ''}${percentage.toStringAsFixed(2)}%';
-    final percentageColor = percentage == null
-        ? AppColors.mutedText
-        : percentage >= 0
+    final percentageColor = percentage == null || percentage == 0
+        ? const Color(0xFF475467)
+        : (percentage >= 0) != isLiability
         ? AppColors.success
         : AppColors.danger;
 
