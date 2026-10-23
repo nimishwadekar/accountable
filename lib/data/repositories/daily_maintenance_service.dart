@@ -94,6 +94,42 @@ class DailyMaintenanceService {
     }
   }
 
+  Future<void> rebuildNetWorth({
+    required DateTime startDate,
+    DateTime? yesterday,
+  }) async {
+    final start = _dateOnly(startDate);
+    final end = _dateOnly(
+      yesterday ?? DateTime.now().subtract(const Duration(days: 1)),
+    );
+    if (start.isAfter(end)) return;
+
+    final rates = data.exchangeRates;
+    final balances = data.dailyAccountBalances.where((balance) {
+      final date = _dateOnly(balance.date);
+      return !date.isBefore(start) && !date.isAfter(end);
+    });
+    final recalculated = _netWorthThrough(
+      balances,
+      rates: rates,
+      startDate: start,
+      endDate: end,
+    );
+    final recalculatedById = {
+      for (final value in recalculated) value.id: value,
+    };
+    final merged = [
+      for (final value in data.dailyNetWorth)
+        recalculatedById.remove(value.id) ?? value,
+      ...recalculatedById.values,
+    ]..sort((a, b) => a.date.compareTo(b.date));
+
+    await client.replaceRange(GoogleSheetsRanges.dailyNetWorth, [
+      RuntimeTableSchemas.dailyNetWorth.headers,
+      for (final value in merged) _netWorthRow(value),
+    ]);
+  }
+
   Future<void> rebuild({DateTime? yesterday}) async {
     final endDate = _dateOnly(
       yesterday ?? DateTime.now().subtract(const Duration(days: 1)),

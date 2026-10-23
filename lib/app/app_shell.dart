@@ -75,6 +75,7 @@ class AppShell extends StatefulWidget {
     this.onTransactionFormActiveChanged,
     this.migrationAssistance = false,
     this.onRebuildDailyTables,
+    this.onRebuildNetWorth,
     this.onReloadData,
     this.textScale = 1,
     this.onTextScaleChanged,
@@ -88,6 +89,7 @@ class AppShell extends StatefulWidget {
   final ValueChanged<bool>? onTransactionFormActiveChanged;
   final bool migrationAssistance;
   final Future<void> Function()? onRebuildDailyTables;
+  final Future<void> Function(DateTime startDate)? onRebuildNetWorth;
   final Future<void> Function()? onReloadData;
   final double textScale;
   final ValueChanged<double>? onTextScaleChanged;
@@ -417,6 +419,14 @@ class _AppShellState extends State<AppShell> {
       _snapshotFuture = future;
     });
     await future;
+    final rebuildNetWorth = widget.onRebuildNetWorth;
+    if (rebuildNetWorth != null && valuations.isNotEmpty) {
+      final earliest = valuations
+          .map((valuation) => valuation.date)
+          .reduce((a, b) => a.isBefore(b) ? a : b);
+      await rebuildNetWorth(earliest);
+      await _reloadData();
+    }
   }
 
   Future<void> _updateTemplate(TransactionTemplate template) async {

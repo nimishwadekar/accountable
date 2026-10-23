@@ -7,6 +7,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:accountable/data/data.dart';
 
+String _dateString(DateTime value) =>
+    '${value.year.toString().padLeft(4, '0')}-'
+    '${value.month.toString().padLeft(2, '0')}-'
+    '${value.day.toString().padLeft(2, '0')}';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -54,6 +59,49 @@ void main() {
       client.appendedRows.any((row) => row.first == '2026-10-13-sbi_nro'),
       isFalse,
     );
+  });
+
+  test('manual valuation changes replace an existing net-worth row', () async {
+    final source = await AssetAppDataRepository().load();
+    final targetDate = source.dailyNetWorth.first.date;
+    final account = source.dailyManualValuations.first;
+    final changed = DailyManualValuation(
+      id: '${_dateString(targetDate)}-${account.accountId}',
+      date: targetDate,
+      accountId: account.accountId,
+      value: Money(
+        minorUnits: account.value.minorUnits + 100,
+        currencyId: account.value.currencyId,
+      ),
+    );
+    final data = AppDataSnapshot(
+      accounts: source.accounts,
+      categories: source.categories,
+      currencies: source.currencies,
+      tags: source.tags,
+      transactions: source.transactions,
+      exchangeRates: source.exchangeRates,
+      dailyAccountBalances: source.dailyAccountBalances,
+      dailyNetWorth: source.dailyNetWorth,
+      dailyManualValuations: [...source.dailyManualValuations, changed],
+    );
+    final client = _FakeSheetsClient({});
+    final usd = data.currenciesById['USD']!;
+    final oldNetWorth = data
+        .dailyNetWorthById['${_dateString(targetDate)}-net']
+        ?.amount
+        .toMajorUnitsString(usd);
+
+    await DailyMaintenanceService(
+      client: client,
+      data: data,
+    ).rebuildNetWorth(startDate: targetDate, yesterday: targetDate);
+
+    final rows = client.replacedRanges[GoogleSheetsRanges.dailyNetWorth]!;
+    final updated = rows.firstWhere(
+      (row) => row.first == '${_dateString(targetDate)}-net',
+    );
+    expect(updated[2], isNot(oldNetWorth));
   });
 
   test('idempotent catch-up skips rows whose IDs already exist', () async {

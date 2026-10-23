@@ -55,6 +55,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   final TransactionOutboxStore _outboxStore =
       SharedPreferencesTransactionOutboxStore();
   Future<void> Function()? _rebuildDailyTables;
+  Future<void> Function(DateTime startDate)? _rebuildNetWorth;
   bool _connectionInProgress = false;
   bool _transactionFormActive = false;
   int _connectionGeneration = 0;
@@ -114,6 +115,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         dataRepository: _repository!,
         migrationAssistance: widget.config.migrationAssistance,
         onRebuildDailyTables: _rebuildDailyTables,
+        onRebuildNetWorth: _rebuildNetWorth,
         textScale: widget.textScale,
         onTextScaleChanged: widget.onTextScaleChanged,
       );
@@ -139,6 +141,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         onTransactionFormActiveChanged: _handleTransactionFormActiveChanged,
         migrationAssistance: widget.config.migrationAssistance,
         onRebuildDailyTables: _rebuildDailyTables,
+        onRebuildNetWorth: _rebuildNetWorth,
         textScale: widget.textScale,
         onTextScaleChanged: widget.onTextScaleChanged,
       );
@@ -476,6 +479,15 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         await latestMaintenance.rebuild();
         await repository.reload();
       };
+      _rebuildNetWorth = (startDate) async {
+        final latestData = await repository.reload();
+        final latestMaintenance = DailyMaintenanceService(
+          client: api,
+          data: latestData,
+        );
+        await latestMaintenance.rebuildNetWorth(startDate: startDate);
+        await repository.reload();
+      };
       if (!_isCurrentConnection(generation)) return;
       if (!_transactionFormActive) {
         setState(() {
@@ -642,6 +654,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     _connectionInProgress = false;
     _pendingOnlineRepository = null;
     _rebuildDailyTables = null;
+    _rebuildNetWorth = null;
     await _authService.signOut();
     if (!mounted) return;
     setState(() {
