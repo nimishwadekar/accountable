@@ -9,6 +9,7 @@ import 'app_shell.dart';
 import 'google_sheets_gate.dart';
 import 'session_ui_preferences.dart';
 import 'theme/app_theme.dart';
+import 'theme/design_tokens.dart';
 
 class AccountableApp extends StatefulWidget {
   const AccountableApp({super.key, this.dataRepository, this.configLoader});
@@ -51,9 +52,21 @@ class _AccountableAppState extends State<AccountableApp> {
 
   Widget _withTextScale(BuildContext context, Widget? child) {
     final mediaQuery = MediaQuery.of(context);
-    return MediaQuery(
-      data: mediaQuery.copyWith(textScaler: TextScaler.linear(_textScale)),
-      child: child ?? const SizedBox.shrink(),
+    final compact = mediaQuery.size.width < AppBreakpoints.compact;
+    final scale = (compact ? _textScale * 0.9 : _textScale)
+        .clamp(0.75, 1.0)
+        .toDouble();
+    final baseTheme = Theme.of(context);
+    return Theme(
+      data: baseTheme.copyWith(
+        visualDensity: compact
+            ? const VisualDensity(horizontal: -1, vertical: -1)
+            : baseTheme.visualDensity,
+      ),
+      child: MediaQuery(
+        data: mediaQuery.copyWith(textScaler: TextScaler.linear(scale)),
+        child: child ?? const SizedBox.shrink(),
+      ),
     );
   }
 

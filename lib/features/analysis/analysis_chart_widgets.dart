@@ -196,6 +196,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
         );
+        final canShowOverlay = constraints.maxWidth > baseAxisReservedSize + 24;
         final overlayWidth = _valueOverlayWidth(
           context,
           label: widget.axisLabel,
@@ -205,26 +206,28 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         );
         final overlayLeft = baseAxisReservedSize + AppSpacing.sm;
         final overlayRight = overlayLeft + overlayWidth;
-        final clashValues = [
-          for (final point in points)
-            if (_xPosition(
-                      point.date.difference(firstDate).inDays.toDouble(),
-                      chartMinX,
-                      chartMaxX,
-                      constraints.maxWidth,
-                      baseAxisReservedSize,
-                    ) >=
-                    overlayLeft - AppSpacing.sm &&
-                _xPosition(
-                      point.date.difference(firstDate).inDays.toDouble(),
-                      chartMinX,
-                      chartMaxX,
-                      constraints.maxWidth,
-                      baseAxisReservedSize,
-                    ) <=
-                    overlayRight + AppSpacing.sm)
-              point.value,
-        ];
+        final clashValues = canShowOverlay
+            ? [
+                for (final point in points)
+                  if (_xPosition(
+                            point.date.difference(firstDate).inDays.toDouble(),
+                            chartMinX,
+                            chartMaxX,
+                            constraints.maxWidth,
+                            baseAxisReservedSize,
+                          ) >=
+                          overlayLeft - AppSpacing.sm &&
+                      _xPosition(
+                            point.date.difference(firstDate).inDays.toDouble(),
+                            chartMinX,
+                            chartMaxX,
+                            constraints.maxWidth,
+                            baseAxisReservedSize,
+                          ) <=
+                          overlayRight + AppSpacing.sm)
+                    point.value,
+              ]
+            : const <double>[];
         var maxY = baseMaxY;
         if (clashValues.isNotEmpty) {
           final clashValue = clashValues.reduce(math.max);
@@ -444,22 +447,26 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                   );
                 },
               ),
-              Positioned(
-                top: AppSpacing.sm,
-                left: axisReservedSize + AppSpacing.sm,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: constraints.maxWidth - axisReservedSize - 24,
-                  ),
-                  child: _ValueOverlay(
-                    label: widget.axisLabel,
-                    point: displayPoint,
-                    baseline: previousValue,
-                    currency: currency,
-                    isLiability: widget.isLiability,
+              if (canShowOverlay)
+                Positioned(
+                  top: AppSpacing.sm,
+                  left: axisReservedSize + AppSpacing.sm,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: math.max(
+                        0,
+                        constraints.maxWidth - axisReservedSize - 24,
+                      ),
+                    ),
+                    child: _ValueOverlay(
+                      label: widget.axisLabel,
+                      point: displayPoint,
+                      baseline: previousValue,
+                      currency: currency,
+                      isLiability: widget.isLiability,
+                    ),
                   ),
                 ),
-              ),
               if (selectedX != null)
                 Positioned(
                   left: _xPosition(
@@ -543,7 +550,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     double chartWidth,
     double axisReservedSize,
   ) {
-    final plotWidth = chartWidth - axisReservedSize;
+    final plotWidth = math.max(1.0, chartWidth - axisReservedSize);
     final fraction = (x - chartMinX) / (chartMaxX - chartMinX);
     return axisReservedSize + fraction.clamp(0.0, 1.0) * plotWidth;
   }
@@ -721,8 +728,8 @@ class _ChartAreaGradientPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (points.length < 2 || maxX == minX || maxY == minY) return;
 
-    final plotWidth = size.width - axisReservedSize;
-    final plotHeight = size.height - bottomAxisHeight;
+    final plotWidth = math.max(1.0, size.width - axisReservedSize);
+    final plotHeight = math.max(1.0, size.height - bottomAxisHeight);
 
     double xFor(ChartPoint point) {
       final x = point.date.difference(firstDate).inDays.toDouble();

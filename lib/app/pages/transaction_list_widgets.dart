@@ -38,6 +38,7 @@ class TransactionListRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
     final sourceAccount = transaction.sourceAccountId == null
         ? null
         : data.accountsById[transaction.sourceAccountId!];
@@ -66,11 +67,12 @@ class TransactionListRow extends StatelessWidget {
       clipBehavior: Clip.hardEdge,
       child: ListTile(
         onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.xs,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: compact ? AppSpacing.sm : AppSpacing.md,
+          vertical: compact ? AppSpacing.xs / 2 : AppSpacing.xs,
         ),
         leading: CircleAvatar(
+          radius: compact ? 18 : 20,
           backgroundColor: _backgroundColor(context),
           foregroundColor: _foregroundColor(context),
           child: Icon(_icon),
