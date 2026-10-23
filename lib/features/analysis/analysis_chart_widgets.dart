@@ -14,12 +14,16 @@ class AnalysisChartSection extends StatelessWidget {
     required this.child,
     this.warning,
     this.header,
+    this.footer,
+    this.cardBottomPadding = AppSpacing.md,
   });
 
   final String title;
   final String? subtitle;
   final String? warning;
   final Widget? header;
+  final Widget? footer;
+  final double cardBottomPadding;
   final Widget child;
 
   @override
@@ -44,15 +48,16 @@ class AnalysisChartSection extends StatelessWidget {
         const SizedBox(height: AppSpacing.sm),
         Card(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(
+            padding: EdgeInsets.fromLTRB(
               AppSpacing.sm,
               AppSpacing.md,
               AppSpacing.md,
-              AppSpacing.md,
+              cardBottomPadding,
             ),
             child: child,
           ),
         ),
+        if (footer != null) ...[const SizedBox(height: AppSpacing.sm), footer!],
       ],
     );
   }
@@ -100,14 +105,12 @@ class LineChartWidget extends StatefulWidget {
     required this.color,
     required this.currency,
     required this.axisLabel,
-    this.isLiability = false,
   });
 
   final List<ChartPoint> points;
   final Color color;
   final CurrencyDefinition? currency;
   final String axisLabel;
-  final bool isLiability;
 
   @override
   State<LineChartWidget> createState() => _LineChartWidgetState();
@@ -115,11 +118,12 @@ class LineChartWidget extends StatefulWidget {
 
 class _LineChartWidgetState extends State<LineChartWidget> {
   LineTouchResponse? _touchResponse;
+  final ValueNotifier<double?> _selectedX = ValueNotifier(null);
 
-  static double _distanceToSpot(Offset touch, Offset spot) {
-    final dx = touch.dx - spot.dx;
-    final dy = touch.dy - spot.dy;
-    return math.sqrt(dx * dx + dy * dy);
+  @override
+  void dispose() {
+    _selectedX.dispose();
+    super.dispose();
   }
 
   static double _horizontalDistance(Offset touch, Offset spot) =>
@@ -147,12 +151,78 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         final xMargin = spanDays == 0 ? 0.5 : spanDays * 0.05;
         final chartMinX = -xMargin;
         final chartMaxX = spanDays == 0 ? 0.5 : spanDays + xMargin;
+        const chartHeight = 296.0;
+        const bottomAxisHeight = 32.0;
+        const labelClearance = 52.0;
+        final chartMinY = minimum - padding;
+        final baseMaxY = maximum + padding;
+        final baseYRange = baseMaxY - chartMinY;
         final axisStyle =
             Theme.of(context).textTheme.labelSmall ?? const TextStyle();
         final selectedSpot = _touchResponse?.lineBarSpots?.first;
+        final selectedIndex = selectedSpot == null
+            ? points.length - 1
+            : _pointIndexForX(points, firstDate, selectedSpot.x);
+        final displayPoint = points[selectedIndex];
+        final previousValue = selectedIndex == 0
+            ? null
+            : points[selectedIndex - 1].value;
+        final baseAxisReservedSize = _axisReservedSize(
+          minimum: chartMinY,
+          maximum: baseMaxY,
+          style: axisStyle,
+          currency: currency,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        );
+        final overlayWidth = _valueOverlayWidth(
+          context,
+          label: widget.axisLabel,
+          point: displayPoint,
+          baseline: previousValue,
+          currency: currency,
+        );
+        final overlayLeft = baseAxisReservedSize + AppSpacing.sm;
+        final overlayRight = overlayLeft + overlayWidth;
+        final clashValues = [
+          for (final point in points)
+            if (_xPosition(
+                      point.date.difference(firstDate).inDays.toDouble(),
+                      chartMinX,
+                      chartMaxX,
+                      constraints.maxWidth,
+                      baseAxisReservedSize,
+                    ) >=
+                    overlayLeft - AppSpacing.sm &&
+                _xPosition(
+                      point.date.difference(firstDate).inDays.toDouble(),
+                      chartMinX,
+                      chartMaxX,
+                      constraints.maxWidth,
+                      baseAxisReservedSize,
+                    ) <=
+                    overlayRight + AppSpacing.sm)
+              point.value,
+        ];
+        var maxY = baseMaxY;
+        if (clashValues.isNotEmpty) {
+          final clashValue = clashValues.reduce(math.max);
+          final basePixel =
+              (baseMaxY - clashValue) /
+              baseYRange *
+              (chartHeight - bottomAxisHeight);
+          if (basePixel < labelClearance) {
+            final extraRange =
+                (labelClearance * baseYRange -
+                    (chartHeight - bottomAxisHeight) *
+                        (baseMaxY - clashValue)) /
+                (chartHeight - bottomAxisHeight - labelClearance);
+            maxY += extraRange.clamp(0, double.infinity);
+          }
+        }
         final axisReservedSize = _axisReservedSize(
-          minimum: minimum - padding,
-          maximum: maximum + padding,
+          minimum: chartMinY,
+          maximum: maxY,
           style: axisStyle,
           currency: currency,
           textDirection: Directionality.of(context),
@@ -160,40 +230,43 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         );
 
         return SizedBox(
-          height: 280,
-          child: Column(
+          width: double.infinity,
+          height: 304,
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              SizedBox(
-                height: 20,
-                child: Align(
-                  alignment: Alignment.center,
-                  child: Text(
-                    widget.axisLabel,
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
-                ),
-              ),
-              Expanded(
+              Positioned.fill(
+                bottom: 8,
                 child: LineChart(
                   LineChartData(
                     minX: chartMinX,
                     maxX: chartMaxX,
-                    minY: minimum - padding,
-                    maxY: maximum + padding,
-                    gridData: const FlGridData(show: true),
-                    showingTooltipIndicators: selectedSpot == null
-                        ? const []
-                        : [
-                            ShowingTooltipIndicators([selectedSpot]),
-                          ],
+                    minY: chartMinY,
+                    maxY: maxY,
+                    gridData: FlGridData(
+                      show: true,
+                      drawHorizontalLine: false,
+                      getDrawingVerticalLine: (value) => FlLine(
+                        color: AppColors.border.withValues(alpha: 0.65),
+                        strokeWidth: 1,
+                      ),
+                      verticalInterval: xInterval.toDouble(),
+                      checkToShowVerticalLine: (value) {
+                        final dayOffset = value.round();
+                        return value >= 0 &&
+                            dayOffset <= spanDays &&
+                            (value - dayOffset).abs() < 0.001 &&
+                            dayOffset % xInterval == 0;
+                      },
+                    ),
                     lineTouchData: LineTouchData(
-                      touchSpotThreshold: _touchResponse == null ? 10 : 100000,
-                      distanceCalculator: _touchResponse == null
-                          ? _distanceToSpot
-                          : _horizontalDistance,
+                      touchSpotThreshold: 100000,
+                      distanceCalculator: _horizontalDistance,
                       handleBuiltInTouches: false,
                       touchCallback: (event, response) {
-                        if (event is FlPointerExitEvent) {
+                        if (event is FlPointerExitEvent ||
+                            event is FlPanCancelEvent) {
+                          _selectedX.value = null;
                           if (_touchResponse != null) {
                             setState(() => _touchResponse = null);
                           }
@@ -206,55 +279,13 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                           }
                           return;
                         }
-                        final startsNewGesture =
-                            event is FlPanDownEvent || event is FlTapDownEvent;
-                        if (_touchResponse != null &&
-                            startsNewGesture &&
-                            spots.first.distance > 24) {
-                          setState(() => _touchResponse = null);
-                          return;
-                        }
+                        _selectedX.value = spots.first.x;
                         setState(
                           () => _touchResponse = response!.copyWith(
                             lineBarSpots: [spots.first],
                           ),
                         );
                       },
-                      touchTooltipData: LineTouchTooltipData(
-                        tooltipMargin: 16,
-                        tooltipHorizontalAlignment:
-                            FLHorizontalAlignment.center,
-                        fitInsideHorizontally: true,
-                        fitInsideVertically: true,
-                        getTooltipColor: (_) => Colors.white,
-                        tooltipBorder: const BorderSide(
-                          color: AppColors.border,
-                        ),
-                        getTooltipItems: (spots) {
-                          final selected = _touchResponse?.lineBarSpots?.first;
-                          final selectedIndex = selected == null
-                              ? 0
-                              : spots.indexWhere(
-                                  (spot) =>
-                                      spot.x == selected.x &&
-                                      spot.y == selected.y,
-                                );
-                          return [
-                            for (var index = 0; index < spots.length; index++)
-                              if (index ==
-                                  (selectedIndex < 0 ? 0 : selectedIndex))
-                                LineTooltipItem(
-                                  '${currency?.symbol ?? ''} ${_formatChartValue(spots[index].y)}',
-                                  TextStyle(
-                                    color: _pointColor(spots[index].y),
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                )
-                              else
-                                null,
-                          ];
-                        },
-                      ),
                     ),
                     titlesData: FlTitlesData(
                       rightTitles: const AxisTitles(
@@ -270,8 +301,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                           showTitles: true,
                           reservedSize: axisReservedSize,
                           getTitlesWidget: (value, meta) {
-                            if (value <= minimum - padding * 0.9 ||
-                                value >= maximum + padding * 0.9) {
+                            if (value <= chartMinY || value >= maxY) {
                               return const SizedBox.shrink();
                             }
                             return Text(
@@ -322,11 +352,148 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                   ),
                 ),
               ),
+              ValueListenableBuilder<double?>(
+                valueListenable: _selectedX,
+                builder: (context, selectedX, child) {
+                  if (selectedX == null) return const SizedBox.shrink();
+                  return Positioned(
+                    left: _xPosition(
+                      selectedX,
+                      chartMinX,
+                      chartMaxX,
+                      constraints.maxWidth,
+                      axisReservedSize,
+                    ),
+                    top: 0,
+                    bottom: 18,
+                    width: 1,
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _DashedVerticalLinePainter(color),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              Positioned(
+                top: AppSpacing.sm,
+                left: axisReservedSize + AppSpacing.sm,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: constraints.maxWidth - axisReservedSize - 24,
+                  ),
+                  child: _ValueOverlay(
+                    label: widget.axisLabel,
+                    point: displayPoint,
+                    baseline: previousValue,
+                    currency: currency,
+                  ),
+                ),
+              ),
+              if (selectedSpot != null)
+                Positioned(
+                  left: _xPosition(
+                    selectedSpot.x,
+                    chartMinX,
+                    chartMaxX,
+                    constraints.maxWidth,
+                    axisReservedSize,
+                  ),
+                  bottom: 14,
+                  child: FractionalTranslation(
+                    translation: const Offset(-0.5, 0),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        border: Border.all(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(AppRadii.control),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                          vertical: AppSpacing.xs,
+                        ),
+                        child: Text(
+                          _formatTooltipDate(displayPoint.date),
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         );
       },
     );
+  }
+
+  double _valueOverlayWidth(
+    BuildContext context, {
+    required String label,
+    required ChartPoint point,
+    required double? baseline,
+    required CurrencyDefinition? currency,
+  }) {
+    final percentage = baseline == null || baseline == 0
+        ? null
+        : ((point.value - baseline) / baseline.abs()) * 100;
+    final text =
+        '$label: ${currency?.symbol ?? ''} '
+        '${_formatChartValue(point.value)} '
+        '(${percentage == null ? '—' : '${percentage >= 0 ? '+' : ''}${percentage.toStringAsFixed(2)}%'})';
+    final style = Theme.of(context).textTheme.labelLarge ?? const TextStyle();
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    return painter.width + AppSpacing.md;
+  }
+
+  int _pointIndexForX(List<ChartPoint> points, DateTime firstDate, double x) {
+    var closestIndex = 0;
+    var closestDistance = double.infinity;
+    for (var index = 0; index < points.length; index++) {
+      final distance = (points[index].date.difference(firstDate).inDays - x)
+          .abs();
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    }
+    return closestIndex;
+  }
+
+  double _xPosition(
+    double x,
+    double chartMinX,
+    double chartMaxX,
+    double chartWidth,
+    double axisReservedSize,
+  ) {
+    final plotWidth = chartWidth - axisReservedSize;
+    final fraction = (x - chartMinX) / (chartMaxX - chartMinX);
+    return axisReservedSize + fraction.clamp(0.0, 1.0) * plotWidth;
+  }
+
+  String _formatTooltipDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   double _axisReservedSize({
@@ -375,9 +542,6 @@ class _LineChartWidgetState extends State<LineChartWidget> {
           color: _pointColor(points.first.value),
           barWidth: 3,
           dotData: const FlDotData(show: true),
-          showingIndicators: selectedSpot?.barIndex == 0
-              ? [selectedSpot!.spotIndex]
-              : const [],
         ),
       ];
     }
@@ -399,10 +563,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
           ),
           barWidth: 3,
           isCurved: false,
-          dotData: const FlDotData(show: false),
-          showingIndicators: selectedSpot?.barIndex == index
-              ? [selectedSpot!.spotIndex]
-              : const [],
+          dotData: _selectedDotData(selectedSpot),
           belowBarData: BarAreaData(
             show: false,
             color: fallbackColor.withValues(alpha: 0.12),
@@ -411,16 +572,23 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     ];
   }
 
-  Color _pointColor(double value) {
-    if (widget.isLiability) return AppColors.danger;
-    return _amountColor(value);
+  FlDotData _selectedDotData(TouchLineBarSpot? selectedSpot) {
+    return FlDotData(
+      show: selectedSpot != null,
+      checkToShowDot: (spot, _) =>
+          selectedSpot != null &&
+          spot.x == selectedSpot.x &&
+          spot.y == selectedSpot.y,
+      getDotPainter: (spot, _, _, _) => FlDotCirclePainter(
+        radius: 6,
+        color: _pointColor(spot.y),
+        strokeColor: Colors.white,
+        strokeWidth: 2,
+      ),
+    );
   }
 
-  static Color _amountColor(double value) {
-    if (value > 0) return AppColors.success;
-    if (value < 0) return AppColors.danger;
-    return AppColors.navy;
-  }
+  Color _pointColor(double value) => widget.color;
 
   static String _formatChartValue(double value) {
     final fixed = value.toStringAsFixed(2);
@@ -475,6 +643,113 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     return sensibleIntervals.firstWhere(
       (interval) => interval >= rawInterval,
       orElse: () => rawInterval,
+    );
+  }
+}
+
+class _DashedVerticalLinePainter extends CustomPainter {
+  const _DashedVerticalLinePainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color.withValues(alpha: 0.55)
+      ..strokeWidth = 1.5;
+    const dashLength = 5.0;
+    const gapLength = 5.0;
+    var y = 0.0;
+    while (y < size.height) {
+      canvas.drawLine(
+        Offset(0.5, y),
+        Offset(0.5, (y + dashLength).clamp(0.0, size.height)),
+        paint,
+      );
+      y += dashLength + gapLength;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedVerticalLinePainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+
+class _ValueOverlay extends StatelessWidget {
+  const _ValueOverlay({
+    required this.label,
+    required this.point,
+    required this.baseline,
+    required this.currency,
+  });
+
+  final String label;
+  final ChartPoint point;
+  final double? baseline;
+  final CurrencyDefinition? currency;
+
+  static String _formatValue(double value) {
+    final fixed = value.toStringAsFixed(2);
+    final parts = fixed.split('.');
+    final sign = parts.first.startsWith('-') ? '-' : '';
+    final integer = sign.isEmpty ? parts.first : parts.first.substring(1);
+    final grouped = integer.replaceAllMapped(
+      RegExp(r'(?<=\d)(?=(\d{3})+(?!\d))'),
+      (_) => ',',
+    );
+    return '$sign$grouped.${parts[1]}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final baselineValue = baseline;
+    final percentage = baselineValue == null || baselineValue == 0
+        ? null
+        : ((point.value - baselineValue) / baselineValue.abs()) * 100;
+    final percentageLabel = percentage == null
+        ? '—'
+        : '${percentage >= 0 ? '+' : ''}${percentage.toStringAsFixed(2)}%';
+    final percentageColor = percentage == null
+        ? AppColors.mutedText
+        : percentage >= 0
+        ? AppColors.success
+        : AppColors.danger;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.94),
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(AppRadii.control),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
+        ),
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: AppSpacing.xs,
+          children: [
+            Text('$label:', style: Theme.of(context).textTheme.labelMedium),
+            Text(
+              currency == null
+                  ? _formatValue(point.value)
+                  : '${currency!.symbol} ${_formatValue(point.value)}',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: percentageColor,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              '($percentageLabel)',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: percentageColor,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

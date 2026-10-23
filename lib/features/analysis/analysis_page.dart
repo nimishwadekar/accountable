@@ -11,7 +11,15 @@ import 'income_allocation_dialog.dart';
 import 'analysis_chart_widgets.dart';
 import 'category_analysis_section.dart';
 
-enum AnalysisRangePreset { thirtyDays, ninetyDays, yearToDate, allHistory }
+enum AnalysisRangePreset {
+  oneMonth,
+  threeMonths,
+  sixMonths,
+  yearToDate,
+  oneYear,
+  fiveYears,
+  allHistory,
+}
 
 enum AccountChartUnit { native, usd }
 
@@ -49,10 +57,10 @@ class _AnalysisPageState extends State<AnalysisPage> {
     _categoryCalculator = CategoryAnalysisCalculator(widget.data);
     final months = _availableAnalysisMonths;
     _categoryMonth = months.isEmpty ? DateTime.now() : months.last;
-    _netWorthRangePreset = AnalysisRangePreset.allHistory;
-    _netWorthRange = _calculator.allHistoryRange;
-    _accountRangePreset = AnalysisRangePreset.allHistory;
-    _accountRange = _calculator.allHistoryRange;
+    _netWorthRangePreset = AnalysisRangePreset.oneMonth;
+    _netWorthRange = _rangeForPreset(AnalysisRangePreset.oneMonth);
+    _accountRangePreset = AnalysisRangePreset.oneMonth;
+    _accountRange = _rangeForPreset(AnalysisRangePreset.oneMonth);
     _selectedAccountId = widget.data.visibleAccounts.isEmpty
         ? null
         : widget.data.visibleAccounts.first.id;
@@ -118,28 +126,71 @@ class _AnalysisPageState extends State<AnalysisPage> {
     required DateTimeRange? range,
     required ValueChanged<AnalysisRangePreset> onSelected,
   }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.sm,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(label, style: Theme.of(context).textTheme.titleMedium),
-            for (final preset in AnalysisRangePreset.values)
-              ChoiceChip(
-                label: Text(_presetLabel(preset)),
-                selected: selectedPreset == preset,
-                onSelected: (_) => onSelected(preset),
-              ),
-            if (range != null)
-              Text(
-                '${formatDate(range.start)} – ${formatDate(range.end)}',
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: AppColors.mutedText),
-              ),
-          ],
+    final dateRange = range == null
+        ? null
+        : '${formatDate(range.start)} – ${formatDate(range.end)}';
+    return Tooltip(
+      message: dateRange == null ? label : '$label: $dateRange',
+      child: Semantics(
+        label: dateRange == null ? label : '$label: $dateRange',
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(AppRadii.pill),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final preset in AnalysisRangePreset.values)
+                  _buildRangeOption(
+                    preset: preset,
+                    selected: selectedPreset == preset,
+                    onSelected: onSelected,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRangeOption({
+    required AnalysisRangePreset preset,
+    required bool selected,
+    required ValueChanged<AnalysisRangePreset> onSelected,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: _presetLabel(preset),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        onTap: () => onSelected(preset),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.all(3),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: selected ? colorScheme.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadii.pill),
+          ),
+          child: Text(
+            _presetShortLabel(preset),
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: selected
+                  ? colorScheme.onPrimary
+                  : colorScheme.onSurfaceVariant,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
         ),
       ),
     );
@@ -147,11 +198,19 @@ class _AnalysisPageState extends State<AnalysisPage> {
 
   Widget _buildNetWorthSection(DailySeries<DailyNetWorthPoint> series) {
     final usd = widget.data.currenciesById['USD'];
+    final chartPoints = [
+      for (final point in series.points)
+        ChartPoint(
+          date: point.date,
+          value: usd == null ? 0 : point.amount.toMajorUnits(usd).toDouble(),
+        ),
+    ];
     return AnalysisChartSection(
       title: 'Net Worth Trend',
       subtitle: null,
       warning: _missingWarning(series.missingDates),
-      header: _buildRangeSelector(
+      cardBottomPadding: 0,
+      footer: _buildRangeSelector(
         label: 'Net Worth Period',
         selectedPreset: _netWorthRangePreset,
         range: _netWorthRange,
@@ -160,16 +219,8 @@ class _AnalysisPageState extends State<AnalysisPage> {
       child: series.points.isEmpty
           ? const EmptyState(message: 'No net-worth values in this period.')
           : LineChartWidget(
-              points: [
-                for (final point in series.points)
-                  ChartPoint(
-                    date: point.date,
-                    value: usd == null
-                        ? 0
-                        : point.amount.toMajorUnits(usd).toDouble(),
-                  ),
-              ],
-              color: AppColors.teal,
+              points: chartPoints,
+              color: _netChangeColor(chartPoints),
               currency: usd,
               axisLabel: 'Value (${usd?.id ?? 'USD'})',
             ),
@@ -226,6 +277,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
               ...series.missingDates,
               ...series.unavailableDates,
             ], includesUnavailableValues: series.unavailableDates.isNotEmpty),
+      cardBottomPadding: 0,
       header: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -287,29 +339,41 @@ class _AnalysisPageState extends State<AnalysisPage> {
               );
             },
           ),
-          const SizedBox(height: AppSpacing.md),
-          _buildRangeSelector(
-            label: 'Account Period',
-            selectedPreset: _accountRangePreset,
-            range: _accountRange,
-            onSelected: (preset) => _selectPreset(preset, forAccount: true),
-          ),
         ],
+      ),
+      footer: _buildRangeSelector(
+        label: 'Account Period',
+        selectedPreset: _accountRangePreset,
+        range: _accountRange,
+        onSelected: (preset) => _selectPreset(preset, forAccount: true),
       ),
       child: chartPoints.isEmpty
           ? const EmptyState(message: 'No account history is available.')
           : LineChartWidget(
               points: chartPoints,
-              color: account?.isLiability == true
-                  ? AppColors.danger
-                  : AppColors.navy,
+              color: _netChangeColor(
+                chartPoints,
+                liability: account?.isLiability == true,
+              ),
               currency: useUsd ? usd : currency,
-              isLiability: account?.isLiability == true,
               axisLabel: account?.isLiability == true
                   ? 'Debt Value (${(useUsd ? usd : currency)?.id ?? 'USD'})'
                   : 'Value (${(useUsd ? usd : currency)?.id ?? 'USD'})',
             ),
     );
+  }
+
+  Color _netChangeColor(
+    List<ChartPoint> points, {
+    bool liability = false,
+  }) {
+    if (points.length < 2) return AppColors.mutedText;
+    final change = liability
+        ? points.first.value - points.last.value
+        : points.last.value - points.first.value;
+    if (change > 0) return AppColors.success;
+    if (change < 0) return AppColors.danger;
+    return AppColors.mutedText;
   }
 
   Future<void> _openIncomeAllocationForm() async {
@@ -479,35 +543,65 @@ class _AnalysisPageState extends State<AnalysisPage> {
     return 'Missing $subject for $preview$suffix.';
   }
 
-  void _selectPreset(AnalysisRangePreset preset, {required bool forAccount}) {
+  DateTimeRange? _rangeForPreset(AnalysisRangePreset preset) {
     final allHistory = _calculator.allHistoryRange;
+    if (allHistory == null) return null;
     final today = DateTime.now();
     final todayOnly = DateTime.utc(today.year, today.month, today.day);
+    final yesterday = todayOnly.subtract(const Duration(days: 1));
     final requested = switch (preset) {
-      AnalysisRangePreset.thirtyDays => DateTimeRange(
-        start: todayOnly.subtract(const Duration(days: 29)),
-        end: todayOnly.subtract(const Duration(days: 1)),
+      AnalysisRangePreset.oneMonth => DateTimeRange(
+        start: _subtractMonths(todayOnly, 1),
+        end: yesterday,
       ),
-      AnalysisRangePreset.ninetyDays => DateTimeRange(
-        start: todayOnly.subtract(const Duration(days: 89)),
-        end: todayOnly.subtract(const Duration(days: 1)),
+      AnalysisRangePreset.threeMonths => DateTimeRange(
+        start: _subtractMonths(todayOnly, 3),
+        end: yesterday,
+      ),
+      AnalysisRangePreset.sixMonths => DateTimeRange(
+        start: _subtractMonths(todayOnly, 6),
+        end: yesterday,
       ),
       AnalysisRangePreset.yearToDate => DateTimeRange(
         start: DateTime.utc(today.year),
-        end: todayOnly.subtract(const Duration(days: 1)),
+        end: yesterday,
+      ),
+      AnalysisRangePreset.oneYear => DateTimeRange(
+        start: _subtractMonths(todayOnly, 12),
+        end: yesterday,
+      ),
+      AnalysisRangePreset.fiveYears => DateTimeRange(
+        start: _subtractMonths(todayOnly, 60),
+        end: yesterday,
       ),
       AnalysisRangePreset.allHistory => allHistory,
     };
-    final range = allHistory == null
-        ? null
-        : DateTimeRange(
-            start: requested!.start.isBefore(allHistory.start)
-                ? allHistory.start
-                : requested.start,
-            end: requested.end.isAfter(allHistory.end)
-                ? allHistory.end
-                : requested.end,
-          );
+    return DateTimeRange(
+      start: requested.start.isBefore(allHistory.start)
+          ? allHistory.start
+          : requested.start,
+      end: requested.end.isAfter(allHistory.end)
+          ? allHistory.end
+          : requested.end,
+    );
+  }
+
+  DateTime _subtractMonths(DateTime date, int months) {
+    final firstOfTargetMonth = DateTime.utc(date.year, date.month - months, 1);
+    final lastDay = DateTime.utc(
+      firstOfTargetMonth.year,
+      firstOfTargetMonth.month + 1,
+      0,
+    ).day;
+    return DateTime.utc(
+      firstOfTargetMonth.year,
+      firstOfTargetMonth.month,
+      date.day > lastDay ? lastDay : date.day,
+    );
+  }
+
+  void _selectPreset(AnalysisRangePreset preset, {required bool forAccount}) {
+    final range = _rangeForPreset(preset);
     setState(() {
       if (forAccount) {
         _accountRangePreset = preset;
@@ -521,10 +615,25 @@ class _AnalysisPageState extends State<AnalysisPage> {
 
   String _presetLabel(AnalysisRangePreset preset) {
     return switch (preset) {
-      AnalysisRangePreset.thirtyDays => '30 days',
-      AnalysisRangePreset.ninetyDays => '90 days',
+      AnalysisRangePreset.oneMonth => '1 month',
+      AnalysisRangePreset.threeMonths => '3 months',
+      AnalysisRangePreset.sixMonths => '6 months',
       AnalysisRangePreset.yearToDate => 'Year to date',
+      AnalysisRangePreset.oneYear => '1 year',
+      AnalysisRangePreset.fiveYears => '5 years',
       AnalysisRangePreset.allHistory => 'All history',
+    };
+  }
+
+  String _presetShortLabel(AnalysisRangePreset preset) {
+    return switch (preset) {
+      AnalysisRangePreset.oneMonth => '1M',
+      AnalysisRangePreset.threeMonths => '3M',
+      AnalysisRangePreset.sixMonths => '6M',
+      AnalysisRangePreset.yearToDate => 'YTD',
+      AnalysisRangePreset.oneYear => '1Y',
+      AnalysisRangePreset.fiveYears => '5Y',
+      AnalysisRangePreset.allHistory => 'MAX',
     };
   }
 }

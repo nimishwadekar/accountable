@@ -38,8 +38,14 @@ void main() {
     expect(find.text('Analysis'), findsOneWidget);
     expect(find.text('Net Worth Trend'), findsOneWidget);
     expect(find.text('Individual Account Valuation Trend'), findsOneWidget);
-    expect(find.text('All history'), findsNWidgets(2));
-    expect(find.byType(LineChart), findsNWidgets(2));
+    expect(find.text('1M'), findsNWidgets(2));
+    final charts = find.byType(LineChart);
+    expect(charts, findsNWidgets(2));
+    for (var index = 0; index < 2; index++) {
+      final size = tester.getSize(charts.at(index));
+      expect(size.width, greaterThan(300));
+      expect(size.height, greaterThan(200));
+    }
     expect(find.textContaining('Closed on 2026-10-11'), findsNothing);
   });
 }
