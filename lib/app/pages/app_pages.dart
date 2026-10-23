@@ -16,10 +16,7 @@ class OverviewPage extends StatelessWidget {
       data.dailyNetWorth,
       (value) => value.date,
     );
-    final balances = const AccountBalanceCalculator().calculate(
-      accounts: data.accounts,
-      transactions: data.transactions,
-    );
+    final balances = data.ledgerBalances;
     final netWorthChange = _netWorthChangeOver30Days(
       data.dailyNetWorth,
       latestNetWorth,
@@ -223,10 +220,7 @@ class AccountsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final balances = const AccountBalanceCalculator().calculate(
-      accounts: data.accounts,
-      transactions: data.transactions,
-    );
+    final balances = data.ledgerBalances;
     return AppPageFrame(
       title: 'Accounts',
       subtitle: 'Cash accounts and their current ledger balances.',

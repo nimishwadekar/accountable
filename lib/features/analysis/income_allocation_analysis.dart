@@ -35,7 +35,7 @@ class IncomeAllocationAnalyzer {
         _progress(
           allocation,
           monthDate,
-          data.transactions.where((transaction) {
+          _transactionsInMonth(monthDate).where((transaction) {
             final transactionDate = _dateOnly(transaction.date);
             return transaction.type == TransactionType.income &&
                 transaction.categoryId == incomeCategoryId &&
@@ -58,11 +58,11 @@ class IncomeAllocationAnalyzer {
         allocation.expectedAmountPerIncome.minorUnits * incomeCount;
     final missingDates = <DateTime>[];
     var actual = 0;
-    for (final transaction in data.transactions) {
+    for (final transaction in _transactionsInMonth(month)) {
       final transactionDate = _dateOnly(transaction.date);
       if (transaction.type != TransactionType.transfer ||
-      transaction.sourceAccountId != allocation.incomeAccountId ||
-      transaction.categoryId != allocation.transferCategoryId ||
+          transaction.sourceAccountId != allocation.incomeAccountId ||
+          transaction.categoryId != allocation.transferCategoryId ||
           transactionDate.year != month.year ||
           transactionDate.month != month.month ||
           !_isWithinAllocationPeriod(transactionDate, allocation)) {
@@ -78,6 +78,11 @@ class IncomeAllocationAnalyzer {
       actualUsdMinorUnits: actual,
       missingRateDates: missingDates.toSet().toList(),
     );
+  }
+
+  Iterable<Transaction> _transactionsInMonth(DateTime month) {
+    return data.transactionsByMonth[DateTime.utc(month.year, month.month)] ??
+        const <Transaction>[];
   }
 
   static bool _isWithinAllocationPeriod(

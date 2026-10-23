@@ -233,9 +233,8 @@ class DailyMaintenanceService {
       !date.isAfter(endDate);
       date = date.add(const Duration(days: 1))
     ) {
-      for (final transaction in data.transactions.where(
-        (value) => _dateOnly(value.date) == date,
-      )) {
+      for (final transaction
+          in data.transactionsByDate[date] ?? const <Transaction>[]) {
         _applyTransaction(balances, transaction);
       }
       if (date.isBefore(startDate)) continue;
@@ -380,16 +379,13 @@ class DailyMaintenanceService {
     if (account == null) return null;
     final openingDate = _dateOnly(account.openingDate);
     DailyManualValuation? latest;
-    for (final valuation in data.dailyManualValuationsById.values) {
+    for (final valuation
+        in data.manualValuationsByAccountId[accountId] ??
+            const <DailyManualValuation>[]) {
       final valuationDate = _dateOnly(valuation.date);
-      if (valuation.accountId != accountId ||
-          valuationDate.isBefore(openingDate) ||
-          valuationDate.isAfter(date)) {
-        continue;
-      }
-      if (latest == null || valuationDate.isAfter(_dateOnly(latest.date))) {
-        latest = valuation;
-      }
+      if (valuationDate.isBefore(openingDate)) continue;
+      if (valuationDate.isAfter(date)) break;
+      latest = valuation;
     }
     return latest;
   }
@@ -429,14 +425,7 @@ class DailyMaintenanceService {
     return earliestSource.isBefore(earliestDerived);
   }
 
-  DateTime? get _earliestSourceDate {
-    final dates =
-        data.transactions
-            .map((transaction) => _dateOnly(transaction.date))
-            .toList()
-          ..sort();
-    return dates.isEmpty ? null : dates.first;
-  }
+  DateTime? get _earliestSourceDate => data.earliestTransactionDate;
 
   static Set<String> _ids(List<List<String>>? rows) {
     return {

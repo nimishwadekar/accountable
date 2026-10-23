@@ -59,6 +59,11 @@ class _TransactionsPageState extends State<TransactionsPage> {
   String? _tagId;
   DateTimeRange? _dateRange;
   bool _showScrollToTop = false;
+  AppDataSnapshot? _cachedFilterData;
+  String? _cachedFilterKey;
+  List<Transaction>? _cachedFilteredTransactions;
+  List<_TransactionListItem>? _cachedListItems;
+  List<Transaction>? _cachedListSource;
 
   @override
   void initState() {
@@ -288,33 +293,58 @@ class _TransactionsPageState extends State<TransactionsPage> {
   }
 
   List<Transaction> get _filteredTransactions {
-    final filtered = widget.data.transactions.where((transaction) {
-      if (_transactionType != null && transaction.type != _transactionType) {
-        return false;
-      }
-      if (_accountId != null &&
-          transaction.sourceAccountId != _accountId &&
-          transaction.destinationAccountId != _accountId) {
-        return false;
-      }
-      if (_categoryId != null && transaction.categoryId != _categoryId) {
-        return false;
-      }
-      if (_tagId != null && transaction.tagId != _tagId) {
-        return false;
-      }
-      if (_dateRange != null &&
-          !isTransactionDateInRange(transaction.date, _dateRange!)) {
-        return false;
-      }
-      return true;
-    }).toList();
+    final filterKey = [
+      _transactionType?.name ?? '',
+      _accountId ?? '',
+      _categoryId ?? '',
+      _tagId ?? '',
+      _dateRange?.start.toIso8601String() ?? '',
+      _dateRange?.end.toIso8601String() ?? '',
+    ].join('|');
+    if (identical(_cachedFilterData, widget.data) &&
+        _cachedFilterKey == filterKey &&
+        _cachedFilteredTransactions != null) {
+      return _cachedFilteredTransactions!;
+    }
 
-    filtered.sort((a, b) {
-      final dateComparison = b.date.compareTo(a.date);
-      if (dateComparison != 0) return dateComparison;
-      return b.createdAt.compareTo(a.createdAt);
-    });
+    final hasFilters =
+        _transactionType != null ||
+        _accountId != null ||
+        _categoryId != null ||
+        _tagId != null ||
+        _dateRange != null;
+    final filtered = hasFilters
+        ? widget.data.transactionsByDisplayOrder
+              .where((transaction) {
+                if (_transactionType != null &&
+                    transaction.type != _transactionType) {
+                  return false;
+                }
+                if (_accountId != null &&
+                    transaction.sourceAccountId != _accountId &&
+                    transaction.destinationAccountId != _accountId) {
+                  return false;
+                }
+                if (_categoryId != null &&
+                    transaction.categoryId != _categoryId) {
+                  return false;
+                }
+                if (_tagId != null && transaction.tagId != _tagId) {
+                  return false;
+                }
+                if (_dateRange != null &&
+                    !isTransactionDateInRange(transaction.date, _dateRange!)) {
+                  return false;
+                }
+                return true;
+              })
+              .toList(growable: false)
+        : widget.data.transactionsByDisplayOrder;
+    _cachedFilterData = widget.data;
+    _cachedFilterKey = filterKey;
+    _cachedFilteredTransactions = filtered;
+    _cachedListItems = null;
+    _cachedListSource = null;
     return filtered;
   }
 
@@ -364,40 +394,49 @@ class _TransactionsPageState extends State<TransactionsPage> {
   }
 
   Widget _buildGroupedList(List<Transaction> transactions) {
-    final groups = <DateTime, List<Transaction>>{};
+    final items = _listItemsFor(transactions);
+    return ListView.separated(
+      key: const PageStorageKey<String>('transactions-list'),
+      controller: _scrollController,
+      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return item.date == null
+            ? TransactionListRow(
+                transaction: item.transaction!,
+                data: widget.data,
+                onTap: () => _showTransactionDetails(item.transaction!),
+              )
+            : TransactionDateHeader(date: item.date!);
+      },
+      separatorBuilder: (context, index) =>
+          const SizedBox(height: AppSpacing.xs),
+    );
+  }
+
+  List<_TransactionListItem> _listItemsFor(List<Transaction> transactions) {
+    if (identical(_cachedListSource, transactions) &&
+        _cachedListItems != null) {
+      return _cachedListItems!;
+    }
+    final items = <_TransactionListItem>[];
+    DateTime? lastDate;
     for (final transaction in transactions) {
       final date = DateTime.utc(
         transaction.date.year,
         transaction.date.month,
         transaction.date.day,
       );
-      groups.putIfAbsent(date, () => []).add(transaction);
-    }
-
-    final dates = groups.keys.toList()..sort((a, b) => b.compareTo(a));
-    final children = <Widget>[];
-    for (final date in dates) {
-      children.add(TransactionDateHeader(date: date));
-      for (final transaction in groups[date]!) {
-        children.add(
-          TransactionListRow(
-            transaction: transaction,
-            data: widget.data,
-            onTap: () => _showTransactionDetails(transaction),
-          ),
-        );
+      if (lastDate != date) {
+        items.add(_TransactionListItem.header(date));
+        lastDate = date;
       }
+      items.add(_TransactionListItem.transaction(transaction));
     }
-
-    return ListView.separated(
-      key: const PageStorageKey<String>('transactions-list'),
-      controller: _scrollController,
-      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-      itemCount: children.length,
-      itemBuilder: (context, index) => children[index],
-      separatorBuilder: (context, index) =>
-          const SizedBox(height: AppSpacing.xs),
-    );
+    _cachedListSource = transactions;
+    _cachedListItems = List.unmodifiable(items);
+    return _cachedListItems!;
   }
 
   Widget _buildTypeDropdown() {
@@ -596,6 +635,15 @@ class _TransactionsPageState extends State<TransactionsPage> {
     if (_dateRange == null) return 'All Dates';
     return '${formatDate(_dateRange!.start)} – ${formatDate(_dateRange!.end)}';
   }
+}
+
+class _TransactionListItem {
+  const _TransactionListItem.header(this.date) : transaction = null;
+
+  const _TransactionListItem.transaction(this.transaction) : date = null;
+
+  final DateTime? date;
+  final Transaction? transaction;
 }
 
 class _TransactionFilters {

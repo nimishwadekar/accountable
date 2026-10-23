@@ -42,14 +42,16 @@ class AnalysisPage extends StatefulWidget {
 }
 
 class _AnalysisPageState extends State<AnalysisPage> {
-  late final AnalysisCalculator _calculator;
+  late AnalysisCalculator _calculator;
+  DateTimeRange? _allHistoryRange;
+  final Map<String, Object> _calculationCache = {};
   late AnalysisRangePreset _netWorthRangePreset;
   late DateTimeRange? _netWorthRange;
   late AnalysisRangePreset _accountRangePreset;
   late DateTimeRange? _accountRange;
   String? _selectedAccountId;
   AccountChartUnit _accountChartUnit = AccountChartUnit.native;
-  late final CategoryAnalysisCalculator _categoryCalculator;
+  late CategoryAnalysisCalculator _categoryCalculator;
   late DateTime _categoryMonth;
   String? _categoryTagId;
 
@@ -57,18 +59,21 @@ class _AnalysisPageState extends State<AnalysisPage> {
   void initState() {
     super.initState();
     _calculator = AnalysisCalculator(widget.data);
+    _allHistoryRange = _calculator.allHistoryRange;
     _categoryCalculator = CategoryAnalysisCalculator(widget.data);
     final months = _availableAnalysisMonths;
     final session = SessionUiPreferences.instance;
-    _categoryMonth = _storedMonth(months, session.analysisMonth) ??
+    _categoryMonth =
+        _storedMonth(months, session.analysisMonth) ??
         (months.isEmpty ? DateTime.now() : months.last);
     _netWorthRangePreset = _storedPreset(session.netWorthRangePreset);
     _netWorthRange = _rangeForPreset(_netWorthRangePreset);
     _accountRangePreset = _storedPreset(session.accountRangePreset);
     _accountRange = _rangeForPreset(_accountRangePreset);
-    _selectedAccountId = widget.data.visibleAccounts.any(
-            (account) => account.id == session.analysisAccountId,
-          )
+    _selectedAccountId =
+        widget.data.visibleAccounts.any(
+          (account) => account.id == session.analysisAccountId,
+        )
         ? session.analysisAccountId
         : widget.data.visibleAccounts.isEmpty
         ? null
@@ -77,11 +82,21 @@ class _AnalysisPageState extends State<AnalysisPage> {
       (unit) => unit.name == session.analysisAccountUnit,
       orElse: () => AccountChartUnit.native,
     );
-    _categoryTagId = widget.data.visibleTags.any(
-            (tag) => tag.id == session.analysisTagId,
-          )
+    _categoryTagId =
+        widget.data.visibleTags.any((tag) => tag.id == session.analysisTagId)
         ? session.analysisTagId
         : null;
+  }
+
+  @override
+  void didUpdateWidget(covariant AnalysisPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data) {
+      _calculator = AnalysisCalculator(widget.data);
+      _categoryCalculator = CategoryAnalysisCalculator(widget.data);
+      _allHistoryRange = _calculator.allHistoryRange;
+      _calculationCache.clear();
+    }
   }
 
   @override
@@ -90,7 +105,10 @@ class _AnalysisPageState extends State<AnalysisPage> {
     final accountRangeSelection = _accountRange;
     final netWorthSeries = netWorthRange == null
         ? null
-        : _calculator.netWorthSeries(netWorthRange);
+        : _cached(
+            'net-worth:${_rangeKey(netWorthRange)}',
+            () => _calculator.netWorthSeries(netWorthRange),
+          );
     final selectedAccount = _selectedAccountId == null
         ? null
         : widget.data.accountsById[_selectedAccountId!];
@@ -103,17 +121,26 @@ class _AnalysisPageState extends State<AnalysisPage> {
           );
     final accountSeries = accountRange == null || _selectedAccountId == null
         ? null
-        : _calculator.accountBalanceSeries(
-            accountId: _selectedAccountId!,
-            range: accountRange,
+        : _cached(
+            'account:${_selectedAccountId!}:${_accountChartUnit.name}:${_rangeKey(accountRange)}',
+            () => _calculator.accountBalanceSeries(
+              accountId: _selectedAccountId!,
+              range: accountRange,
+            ),
           );
-    final spending = _categoryCalculator.spending(
-      month: _categoryMonth,
-      tagId: _categoryTagId,
+    final spending = _cached(
+      'spending:${_categoryMonth.toIso8601String()}:${_categoryTagId ?? ''}',
+      () => _categoryCalculator.spending(
+        month: _categoryMonth,
+        tagId: _categoryTagId,
+      ),
     );
-    final income = _categoryCalculator.income(
-      month: _categoryMonth,
-      tagId: _categoryTagId,
+    final income = _cached(
+      'income:${_categoryMonth.toIso8601String()}:${_categoryTagId ?? ''}',
+      () => _categoryCalculator.income(
+        month: _categoryMonth,
+        tagId: _categoryTagId,
+      ),
     );
 
     return AppPageFrame(
@@ -341,9 +368,9 @@ class _AnalysisPageState extends State<AnalysisPage> {
                     ? null
                     : (selection) {
                         setState(() => _accountChartUnit = selection.first);
-                      final session = SessionUiPreferences.instance;
-                      session.analysisAccountUnit = selection.first.name;
-                      unawaited(session.persist());
+                        final session = SessionUiPreferences.instance;
+                        session.analysisAccountUnit = selection.first.name;
+                        unawaited(session.persist());
                       },
               );
 
@@ -575,6 +602,13 @@ class _AnalysisPageState extends State<AnalysisPage> {
     return 'Missing $subject for $preview$suffix.';
   }
 
+  T _cached<T>(String key, T Function() compute) {
+    return (_calculationCache[key] ??= compute() as Object) as T;
+  }
+
+  String _rangeKey(DateTimeRange range) =>
+      '${range.start.toIso8601String()}-${range.end.toIso8601String()}';
+
   AnalysisRangePreset _storedPreset(String? value) {
     return AnalysisRangePreset.values.firstWhere(
       (preset) => preset.name == value,
@@ -591,7 +625,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
   }
 
   DateTimeRange? _rangeForPreset(AnalysisRangePreset preset) {
-    final allHistory = _calculator.allHistoryRange;
+    final allHistory = _allHistoryRange;
     if (allHistory == null) return null;
     final today = DateTime.now();
     final todayOnly = DateTime.utc(today.year, today.month, today.day);

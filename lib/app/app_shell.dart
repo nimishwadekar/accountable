@@ -101,6 +101,8 @@ class _AppShellState extends State<AppShell> {
   late final NavigationHistory _navigationHistory;
   StreamSubscription<String>? _navigationSubscription;
   AppSection _selectedSection = AppSection.overview;
+  final Set<AppSection> _visitedSections = {};
+  final Map<AppSection, Widget> _pageCache = {};
 
   @override
   void initState() {
@@ -109,6 +111,7 @@ class _AppShellState extends State<AppShell> {
     _selectedSection = widget.restrictedStartup
         ? AppSection.transactions
         : _sectionFromPath(_navigationHistory.currentPath);
+    _visitedSections.add(_selectedSection);
     // Mark the authenticated app entry so Back cannot return to pre-auth UI.
     _navigationHistory.replace(
       _navigationHistory.authenticatedPath(_navigationHistory.currentPath),
@@ -120,7 +123,9 @@ class _AppShellState extends State<AppShell> {
         _navigationHistory.push(_pathForSection(AppSection.overview));
         return;
       }
-      setState(() => _selectedSection = _sectionFromPath(path));
+      final section = _sectionFromPath(path);
+      _visitedSections.add(section);
+      setState(() => _selectedSection = section);
     });
     _snapshotFuture = widget.dataRepository.load();
   }
@@ -130,6 +135,7 @@ class _AppShellState extends State<AppShell> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.dataRepository != widget.dataRepository ||
         oldWidget.restrictedStartup != widget.restrictedStartup) {
+      _pageCache.clear();
       _snapshotFuture = widget.dataRepository.load();
       if (oldWidget.restrictedStartup && !widget.restrictedStartup) {
         _selectedSection = AppSection.transactions;
@@ -276,7 +282,27 @@ class _AppShellState extends State<AppShell> {
       return const AppLoadingPage();
     }
 
-    return switch (_selectedSection) {
+    final sections = _navigationSections;
+    return IndexedStack(
+      index: sections.indexOf(_selectedSection),
+      children: [
+        for (final section in sections)
+          _visitedSections.contains(section)
+              ? _cachedSection(section, data)
+              : const SizedBox.shrink(),
+      ],
+    );
+  }
+
+  Widget _cachedSection(AppSection section, AppDataSnapshot data) {
+    if (widget.restrictedStartup && section == AppSection.transactions) {
+      return _createSection(section, data);
+    }
+    return _pageCache.putIfAbsent(section, () => _createSection(section, data));
+  }
+
+  Widget _createSection(AppSection section, AppDataSnapshot data) {
+    return switch (section) {
       AppSection.overview => OverviewPage(data: data),
       AppSection.transactions => TransactionsPage(
         data: data,
@@ -317,6 +343,7 @@ class _AppShellState extends State<AppShell> {
     if (widget.restrictedStartup && section != AppSection.transactions) {
       return;
     }
+    _visitedSections.add(section);
     setState(() => _selectedSection = section);
     _navigationHistory.push(
       _navigationHistory.authenticatedPath(_pathForSection(section)),
@@ -366,6 +393,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _reload() {
+    _pageCache.clear();
     setState(() {
       _snapshotFuture = widget.dataRepository.reload();
     });
@@ -373,6 +401,7 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _reloadData() async {
     final future = widget.dataRepository.reload();
+    _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
     });
@@ -383,6 +412,7 @@ class _AppShellState extends State<AppShell> {
     List<DailyManualValuation> valuations,
   ) async {
     final future = widget.dataRepository.addManualValuations(valuations);
+    _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
     });
@@ -391,6 +421,7 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _updateTemplate(TransactionTemplate template) async {
     final future = widget.dataRepository.updateTransactionTemplate(template);
+    _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
     });
@@ -399,6 +430,7 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _deleteTemplate(String templateId) async {
     final future = widget.dataRepository.deleteTransactionTemplate(templateId);
+    _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
     });
@@ -409,6 +441,7 @@ class _AppShellState extends State<AppShell> {
     List<DisplayPreference> preferences,
   ) async {
     final future = widget.dataRepository.saveDisplayPreferences(preferences);
+    _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
     });
@@ -417,6 +450,7 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _handleIncomeAllocationAdded(IncomeAllocation allocation) async {
     final future = widget.dataRepository.addIncomeAllocation(allocation);
+    _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
     });
@@ -425,6 +459,7 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _handleTemplateAdded(TransactionTemplate template) async {
     final future = widget.dataRepository.addTransactionTemplate(template);
+    _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
     });
@@ -433,6 +468,7 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _handleTransactionsAdded(List<Transaction> transactions) async {
     final future = widget.dataRepository.addTransactions(transactions);
+    _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
     });
@@ -441,6 +477,7 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _handleTransactionAdded(Transaction transaction) async {
     final future = widget.dataRepository.addTransaction(transaction);
+    _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
     });

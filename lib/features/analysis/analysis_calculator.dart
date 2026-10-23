@@ -41,29 +41,25 @@ class AnalysisCalculator {
   final AppDataSnapshot data;
 
   DateTimeRange? get allHistoryRange {
-    final transactionDates =
-        data.transactions
-            .map((transaction) => _dateOnly(transaction.date))
-            .toList()
-          ..sort();
-    if (transactionDates.isEmpty) return null;
+    final firstTransactionDate = data.earliestTransactionDate;
+    if (firstTransactionDate == null) return null;
     final today = DateTime.now();
     final yesterday = DateTime.utc(
       today.year,
       today.month,
       today.day,
     ).subtract(const Duration(days: 1));
-    return DateTimeRange(start: transactionDates.first, end: yesterday);
+    return DateTimeRange(start: firstTransactionDate, end: yesterday);
   }
 
   DailySeries<DailyNetWorthPoint> netWorthSeries(DateTimeRange range) {
     final values =
-        data.dailyNetWorth
-            .where((value) => _inRange(value.date, range))
+        data.dailyNetWorthByDate.entries
+            .where((entry) => _inRange(entry.key, range))
             .map(
-              (value) => DailyNetWorthPoint(
-                date: _dateOnly(value.date),
-                amount: value.amount,
+              (entry) => DailyNetWorthPoint(
+                date: entry.key,
+                amount: entry.value.amount,
               ),
             )
             .toList()
@@ -106,11 +102,8 @@ class AnalysisCalculator {
     }
 
     final values =
-        data.dailyAccountBalances
-            .where(
-              (value) =>
-                  value.accountId == accountId && _inRange(value.date, range),
-            )
+        (data.dailyBalancesByAccountId[accountId] ?? const <DailyAccountBalance>[])
+            .where((value) => _inRange(value.date, range))
             .map(
               (value) => AccountBalancePoint(
                 date: _dateOnly(value.date),
@@ -118,8 +111,7 @@ class AnalysisCalculator {
                 usdAmount: value.balanceUsd,
               ),
             )
-            .toList()
-          ..sort((a, b) => a.date.compareTo(b.date));
+            .toList();
 
     return DailySeries(
       points: List.unmodifiable(values),
@@ -141,15 +133,13 @@ class AnalysisCalculator {
       date = date.add(const Duration(days: 1));
     }
     final openingDate = _dateOnly(account.openingDate);
-    final valuations =
-        data.dailyManualValuations
-            .where(
-              (valuation) =>
-                  valuation.accountId == account.id &&
-                  !_dateOnly(valuation.date).isBefore(openingDate),
-            )
-            .toList()
-          ..sort((a, b) => a.date.compareTo(b.date));
+    final valuations = (data.manualValuationsByAccountId[account.id] ??
+            const <DailyManualValuation>[])
+        .where(
+          (valuation) =>
+              !_dateOnly(valuation.date).isBefore(openingDate),
+        )
+        .toList();
     final currency = data.currenciesById[account.currencyId]!;
     final usd = data.currenciesById['USD']!;
     final points = <AccountBalancePoint>[];
@@ -182,11 +172,10 @@ class AnalysisCalculator {
 
   ExchangeRate? _latestRate(String currencyId, DateTime date) {
     ExchangeRate? latest;
-    for (final rate in data.exchangeRates) {
-      if (rate.currencyId != currencyId || _dateOnly(rate.date).isAfter(date)) {
-        continue;
-      }
-      if (latest == null || rate.date.isAfter(latest.date)) latest = rate;
+    for (final rate in data.exchangeRatesByCurrencyId[currencyId] ??
+        const <ExchangeRate>[]) {
+      if (_dateOnly(rate.date).isAfter(date)) break;
+      latest = rate;
     }
     return latest;
   }

@@ -315,10 +315,7 @@ class _AssetLiabilityRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final balances = const AccountBalanceCalculator().calculate(
-      accounts: data.accounts,
-      transactions: data.transactions,
-    );
+    final balances = data.ledgerBalances;
     final latest = data.dailyManualValuationsById.values
         .where((valuation) => valuation.accountId == account.id)
         .fold<DailyManualValuation?>(

@@ -36,7 +36,7 @@ class CategoryAnalysisCalculator {
 
   CategoryAnalysisResult spending({required DateTime month, String? tagId}) {
     final totals = <String?, int>{};
-    for (final transaction in data.transactions) {
+    for (final transaction in _transactionsInMonth(month)) {
       if (!_inMonth(transaction.date, month)) continue;
       if (transaction.type != TransactionType.expense &&
           transaction.type != TransactionType.reimbursement) {
@@ -64,7 +64,7 @@ class CategoryAnalysisCalculator {
 
   CategoryAnalysisResult income({required DateTime month, String? tagId}) {
     final totals = <String?, int>{};
-    for (final transaction in data.transactions) {
+    for (final transaction in _transactionsInMonth(month)) {
       if (transaction.type != TransactionType.income ||
           !_inMonth(transaction.date, month)) {
         continue;
@@ -83,16 +83,19 @@ class CategoryAnalysisCalculator {
     return CategoryAnalysisResult(values: _values(totals));
   }
 
+  Iterable<Transaction> _transactionsInMonth(DateTime month) {
+    return data.transactionsByMonth[DateTime.utc(month.year, month.month)] ??
+        const <Transaction>[];
+  }
+
   int _toUsd(Money amount, String currencyId, DateTime date) {
     final usd = data.currenciesById['USD'];
     if (usd == null || currencyId == usd.id) return amount.minorUnits;
     ExchangeRate? latest;
-    for (final rate in data.exchangeRates) {
-      if (rate.currencyId != currencyId ||
-          _dateOnly(rate.date).isAfter(_dateOnly(date))) {
-        continue;
-      }
-      if (latest == null || rate.date.isAfter(latest.date)) latest = rate;
+    for (final rate in data.exchangeRatesByCurrencyId[currencyId] ??
+        const <ExchangeRate>[]) {
+      if (_dateOnly(rate.date).isAfter(_dateOnly(date))) break;
+      latest = rate;
     }
     if (latest == null) return 0;
     return (amount.toMajorUnits(data.currenciesById[currencyId]!) *
