@@ -98,6 +98,13 @@ class ChartPoint {
   final double value;
 }
 
+class ChartMarker {
+  const ChartMarker({required this.date, required this.label});
+
+  final DateTime date;
+  final String label;
+}
+
 class LineChartWidget extends StatefulWidget {
   const LineChartWidget({
     super.key,
@@ -106,6 +113,7 @@ class LineChartWidget extends StatefulWidget {
     required this.currency,
     required this.axisLabel,
     this.isLiability = false,
+    this.markers = const [],
   });
 
   final List<ChartPoint> points;
@@ -113,6 +121,7 @@ class LineChartWidget extends StatefulWidget {
   final CurrencyDefinition? currency;
   final String axisLabel;
   final bool isLiability;
+  final List<ChartMarker> markers;
 
   @override
   State<LineChartWidget> createState() => _LineChartWidgetState();
@@ -140,7 +149,12 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         ? (maximum.abs() * 0.1).clamp(1, double.infinity)
         : difference * 0.1;
     final firstDate = points.first.date;
-    final spanDays = points.last.date.difference(firstDate).inDays;
+    final lastDate = points.last.date;
+    final spanDays = lastDate.difference(firstDate).inDays;
+    final visibleMarkers = widget.markers.where(
+      (marker) =>
+          !marker.date.isBefore(firstDate) && !marker.date.isAfter(lastDate),
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -370,6 +384,43 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                   ),
                 ),
               ),
+              for (final marker in visibleMarkers) ...[
+                Positioned(
+                  left: _xPosition(
+                    marker.date.difference(firstDate).inDays.toDouble(),
+                    chartMinX,
+                    chartMaxX,
+                    constraints.maxWidth,
+                    axisReservedSize,
+                  ),
+                  top: 0,
+                  bottom: chartBottomInset + bottomAxisHeight,
+                  width: 1,
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: const _DashedVerticalLinePainter(),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: _xPosition(
+                    marker.date.difference(firstDate).inDays.toDouble(),
+                    chartMinX,
+                    chartMaxX,
+                    constraints.maxWidth,
+                    axisReservedSize,
+                  ),
+                  bottom: 8,
+                  child: FractionalTranslation(
+                    translation: const Offset(-0.5, 0),
+                    child: Text(
+                      marker.label,
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: const Color(0xFF667085)),
+                    ),
+                  ),
+                ),
+              ],
               ValueListenableBuilder<double?>(
                 valueListenable: _selectedX,
                 builder: (context, selectedX, child) {

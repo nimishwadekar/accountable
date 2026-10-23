@@ -80,7 +80,11 @@ class AnalysisCalculator {
     final account = data.accountsById[accountId];
     if (account == null) return null;
 
-    final start = _dateOnly(requestedRange.start);
+    final requestedStart = _dateOnly(requestedRange.start);
+    final openingDate = _dateOnly(account.openingDate);
+    final start = requestedStart.isBefore(openingDate)
+        ? openingDate
+        : requestedStart;
     final requestedEnd = _dateOnly(requestedRange.end);
     final closingDate = account.closingDate == null
         ? null

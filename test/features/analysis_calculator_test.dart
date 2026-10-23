@@ -50,6 +50,19 @@ void main() {
     ]);
   });
 
+  test('account ranges start at the account opening date', () async {
+    final data = await AssetAppDataRepository().load();
+    final range = AnalysisCalculator(data).accountRange(
+      accountId: 'sbi_nro',
+      requestedRange: DateTimeRange(
+        start: DateTime.utc(2026, 10, 1),
+        end: DateTime.utc(2026, 10, 14),
+      ),
+    );
+
+    expect(range?.start, data.accountsById['sbi_nro']!.openingDate);
+  });
+
   test('closed accounts stop at their inclusive closing date', () async {
     final data = await AssetAppDataRepository().load();
     final calculator = AnalysisCalculator(data);

@@ -156,7 +156,11 @@ class _AnalysisPageState extends State<AnalysisPage> {
             if (netWorthRange != null && accountRangeSelection != null)
               const SizedBox(height: AppSpacing.xl),
             if (accountRangeSelection != null)
-              _buildAccountSection(accountSeries, selectedAccount),
+              _buildAccountSection(
+                accountSeries,
+                selectedAccount,
+                accountRange: accountRange,
+              ),
           ],
           const SizedBox(height: AppSpacing.xl),
           _buildCategoryAnalysis(spending: spending, income: income),
@@ -274,8 +278,9 @@ class _AnalysisPageState extends State<AnalysisPage> {
 
   Widget _buildAccountSection(
     DailySeries<AccountBalancePoint>? series,
-    Account? account,
-  ) {
+    Account? account, {
+    required DateTimeRange? accountRange,
+  }) {
     final currency = account == null
         ? null
         : widget.data.currenciesById[account.currencyId];
@@ -398,7 +403,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
       footer: _buildRangeSelector(
         label: 'Account Period',
         selectedPreset: _accountRangePreset,
-        range: _accountRange,
+        range: accountRange ?? _accountRange,
         onSelected: (preset) => _selectPreset(preset, forAccount: true),
       ),
       child: chartPoints.isEmpty
@@ -411,6 +416,20 @@ class _AnalysisPageState extends State<AnalysisPage> {
               ),
               currency: useUsd ? usd : currency,
               isLiability: account?.isLiability == true,
+              markers: account == null || accountRange == null
+                  ? const []
+                  : [
+                      if (!account.openingDate.isBefore(accountRange.start) &&
+                          !account.openingDate.isAfter(accountRange.end))
+                        ChartMarker(date: account.openingDate, label: 'Opened'),
+                      if (account.closingDate != null &&
+                          !account.closingDate!.isBefore(accountRange.start) &&
+                          !account.closingDate!.isAfter(accountRange.end))
+                        ChartMarker(
+                          date: account.closingDate!,
+                          label: 'Closed',
+                        ),
+                    ],
               axisLabel: account?.isLiability == true
                   ? 'Debt Value (${(useUsd ? usd : currency)?.id ?? 'USD'})'
                   : 'Value (${(useUsd ? usd : currency)?.id ?? 'USD'})',

@@ -26,6 +26,12 @@ void main() {
               color: AppColors.success,
               currency: usd,
               axisLabel: 'Value (USD)',
+              markers: [
+                ChartMarker(
+                  date: DateTime.utc(2026, 10, 1),
+                  label: 'Opened',
+                ),
+              ],
             ),
           ),
         ),
@@ -37,5 +43,6 @@ void main() {
     expect(size.width, closeTo(390, 1));
     expect(size.height, lessThan(304));
     expect(size.height, greaterThan(150));
+    expect(find.text('Opened'), findsOneWidget);
   });
 }
