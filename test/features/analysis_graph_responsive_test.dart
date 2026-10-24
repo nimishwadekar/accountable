@@ -37,7 +37,8 @@ void main() {
     await tester.pump();
 
     final size = tester.getSize(find.byType(LineChart));
-    expect(size.width, closeTo(390, 1));
+    expect(size.width, greaterThan(250));
+    expect(size.width, lessThan(390));
     expect(size.height, lessThan(304));
     expect(size.height, greaterThan(150));
     expect(find.text('Opened'), findsOneWidget);

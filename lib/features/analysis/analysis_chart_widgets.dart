@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/theme/design_tokens.dart';
@@ -161,7 +162,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
       builder: (context, constraints) {
         final maxLabels = (constraints.maxWidth / 88).floor().clamp(3, 8);
         final xInterval = _niceDayInterval(spanDays, maxLabels);
-        final xMargin = spanDays == 0 ? 0.5 : spanDays * 0.05;
+        final xMargin = spanDays == 0 ? 0.5 : spanDays * 0.01;
         final chartMinX = -xMargin;
         final chartMaxX = spanDays == 0 ? 0.5 : spanDays + xMargin;
         const outerChartHeight = 304.0;
@@ -189,11 +190,14 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         final previousValue = selectedIndex == 0
             ? null
             : points[selectedIndex - 1].value;
-        final baseAxisReservedSize = _axisReservedSize(
+        final baseYAxisValues = _yAxisValues(
           minimum: chartMinY,
           maximum: baseMaxY,
+          plotHeight: chartHeight - bottomAxisHeight,
+        );
+        final baseAxisReservedSize = _measureYAxisLabels(
+          baseYAxisValues,
           style: axisStyle,
-          currency: currency,
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
         );
@@ -247,261 +251,326 @@ class _LineChartWidgetState extends State<LineChartWidget> {
             maxY += extraRange.clamp(0, double.infinity);
           }
         }
-        final axisReservedSize = _axisReservedSize(
+        final yAxisValues = _yAxisValues(
           minimum: chartMinY,
           maximum: maxY,
+          plotHeight: chartHeight - bottomAxisHeight,
+        );
+        final axisLabelWidth = _measureYAxisLabels(
+          yAxisValues,
           style: axisStyle,
-          currency: currency,
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
         );
+        const axisReservedSize = 0.0;
+        final plotWidth = math.max(1.0, constraints.maxWidth - axisLabelWidth);
+        double plotX(double value) =>
+            axisLabelWidth +
+            _xPosition(
+              value,
+              chartMinX,
+              chartMaxX,
+              plotWidth,
+              axisReservedSize,
+            );
+        void selectPointAt(double localX) {
+          final plotWidth = math.max(
+            1.0,
+            constraints.maxWidth - axisLabelWidth,
+          );
+          final fraction = ((localX - axisLabelWidth) / plotWidth).clamp(
+            0.0,
+            1.0,
+          );
+          final chartX = chartMinX + fraction * (chartMaxX - chartMinX);
+          final index = _nextPointIndexForX(points, firstDate, chartX);
+          final pointX = points[index].date
+              .difference(firstDate)
+              .inDays
+              .toDouble();
+          if (_selectedX.value != pointX) {
+            _selectedX.value = pointX;
+            setState(() {});
+          }
+        }
+
+        void clearPointSelection() {
+          if (_selectedX.value != null) {
+            _selectedX.value = null;
+            setState(() {});
+          }
+        }
 
         return SizedBox(
           width: double.infinity,
           height: outerHeight,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned.fill(
-                bottom: chartBottomInset,
-                child: CustomPaint(
-                  painter: _ChartAreaGradientPainter(
-                    points: points,
-                    firstDate: firstDate,
-                    minX: chartMinX,
-                    maxX: chartMaxX,
-                    minY: chartMinY,
-                    maxY: maxY,
-                    axisReservedSize: axisReservedSize,
-                    bottomAxisHeight: bottomAxisHeight,
-                    color: color,
-                  ),
-                ),
-              ),
-              Positioned.fill(
-                bottom: chartBottomInset,
-                child: LineChart(
-                  LineChartData(
-                    minX: chartMinX,
-                    maxX: chartMaxX,
-                    minY: chartMinY,
-                    maxY: maxY,
-                    gridData: FlGridData(
-                      show: true,
-                      drawHorizontalLine: false,
-                      getDrawingVerticalLine: (value) => FlLine(
-                        color: AppColors.border.withValues(alpha: 0.65),
-                        strokeWidth: 1,
-                      ),
-                      verticalInterval: xInterval.toDouble(),
-                      checkToShowVerticalLine: (value) {
-                        final dayOffset = value.round();
-                        return value >= 0 &&
-                            dayOffset <= spanDays &&
-                            (value - dayOffset).abs() < 0.001 &&
-                            dayOffset % xInterval == 0;
-                      },
-                    ),
-                    lineTouchData: LineTouchData(
-                      touchSpotThreshold: 100000,
-                      distanceCalculator: (touch, spot) {
-                        final distance = spot.dx - touch.dx;
-                        return distance >= 0 ? distance : double.infinity;
-                      },
-                      handleBuiltInTouches: false,
-                      touchCallback: (event, response) {
-                        if (event is FlPointerExitEvent ||
-                            event is FlPanCancelEvent ||
-                            event is FlTapUpEvent ||
-                            event is FlPanEndEvent) {
-                          _selectedX.value = null;
-                          setState(() {});
-                          return;
-                        }
-                        final spots = response?.lineBarSpots;
-                        _selectedX.value = spots == null || spots.isEmpty
-                            ? points.last.date
-                                  .difference(firstDate)
-                                  .inDays
-                                  .toDouble()
-                            : spots.first.x;
-                        setState(() {});
-                      },
-                    ),
-                    titlesData: FlTitlesData(
-                      rightTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                      topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                      leftTitles: AxisTitles(
-                        axisNameWidget: null,
-                        axisNameSize: 0,
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: axisReservedSize,
-                          getTitlesWidget: (value, meta) {
-                            if (value <= chartMinY || value >= maxY) {
-                              return const SizedBox.shrink();
-                            }
-                            return Text(
-                              _formatAxisValue(value),
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.clip,
-                              style: Theme.of(context).textTheme.labelSmall,
-                            );
-                          },
-                        ),
-                      ),
-                      bottomTitles: AxisTitles(
-                        axisNameWidget: null,
-                        axisNameSize: 0,
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          interval: xInterval.toDouble(),
-                          reservedSize: 32,
-                          getTitlesWidget: (value, meta) {
-                            final dayOffset = value.round();
-                            if ((value - dayOffset).abs() > 0.001 ||
-                                dayOffset < 0 ||
-                                dayOffset > spanDays) {
-                              return const SizedBox.shrink();
-                            }
-                            final date = firstDate.add(
-                              Duration(days: dayOffset),
-                            );
-                            return Text(
-                              _formatShortDate(date),
-                              maxLines: 1,
-                              softWrap: false,
-                              style: Theme.of(context).textTheme.labelSmall,
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    lineBarsData: _lineBars(
-                      points,
-                      firstDate,
-                      selectedX: selectedX,
-                    ),
-                  ),
-                ),
-              ),
-              for (final marker in visibleMarkers) ...[
-                Positioned(
-                  left: _xPosition(
-                    marker.date.difference(firstDate).inDays.toDouble(),
-                    chartMinX,
-                    chartMaxX,
-                    constraints.maxWidth,
-                    axisReservedSize,
-                  ),
-                  top: 0,
-                  bottom: chartBottomInset + bottomAxisHeight,
-                  width: 1,
-                  child: IgnorePointer(
-                    child: CustomPaint(
-                      painter: const _DashedVerticalLinePainter(),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: _xPosition(
-                    marker.date.difference(firstDate).inDays.toDouble(),
-                    chartMinX,
-                    chartMaxX,
-                    constraints.maxWidth,
-                    axisReservedSize,
-                  ),
-                  bottom: 8,
-                  child: FractionalTranslation(
-                    translation: const Offset(-0.5, 0),
-                    child: Text(
-                      marker.label,
-                      style: Theme.of(context).textTheme.labelSmall
-                          ?.copyWith(color: const Color(0xFF667085)),
-                    ),
-                  ),
-                ),
-              ],
-              ValueListenableBuilder<double?>(
-                valueListenable: _selectedX,
-                builder: (context, selectedX, child) {
-                  if (selectedX == null) return const SizedBox.shrink();
-                  return Positioned(
-                    left: _xPosition(
-                      selectedX,
-                      chartMinX,
-                      chartMaxX,
-                      constraints.maxWidth,
-                      axisReservedSize,
-                    ),
+          child: MouseRegion(
+            opaque: false,
+            onHover: (event) => selectPointAt(event.localPosition.dx),
+            onExit: (_) => clearPointSelection(),
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (event) => selectPointAt(event.localPosition.dx),
+              onPointerMove: (event) {
+                if (event.kind != PointerDeviceKind.mouse) {
+                  selectPointAt(event.localPosition.dx);
+                }
+              },
+              onPointerUp: (_) => clearPointSelection(),
+              onPointerCancel: (_) => clearPointSelection(),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    left: axisLabelWidth,
+                    right: 0,
                     top: 0,
-                    bottom: 18,
-                    width: 1,
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: const _DashedVerticalLinePainter(),
+                    bottom: chartBottomInset,
+                    child: CustomPaint(
+                      painter: _ChartAreaGradientPainter(
+                        points: points,
+                        firstDate: firstDate,
+                        minX: chartMinX,
+                        maxX: chartMaxX,
+                        minY: chartMinY,
+                        maxY: maxY,
+                        axisReservedSize: axisReservedSize,
+                        bottomAxisHeight: bottomAxisHeight,
+                        color: color,
                       ),
-                    ),
-                  );
-                },
-              ),
-              if (canShowOverlay)
-                Positioned(
-                  top: AppSpacing.sm,
-                  left: axisReservedSize + AppSpacing.sm,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: math.max(
-                        0,
-                        constraints.maxWidth - axisReservedSize - 24,
-                      ),
-                    ),
-                    child: _ValueOverlay(
-                      label: widget.axisLabel,
-                      point: displayPoint,
-                      baseline: previousValue,
-                      currency: currency,
-                      isLiability: widget.isLiability,
                     ),
                   ),
-                ),
-              if (selectedX != null)
-                Positioned(
-                  left: _xPosition(
-                    selectedX,
-                    chartMinX,
-                    chartMaxX,
-                    constraints.maxWidth,
-                    axisReservedSize,
-                  ),
-                  bottom: 14,
-                  child: FractionalTranslation(
-                    translation: const Offset(-0.5, 0),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        border: Border.all(color: AppColors.border),
-                        borderRadius: BorderRadius.circular(AppRadii.control),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm,
-                          vertical: AppSpacing.xs,
+                  Positioned(
+                    left: axisLabelWidth,
+                    right: 0,
+                    top: 0,
+                    bottom: chartBottomInset,
+                    child: LineChart(
+                      LineChartData(
+                        minX: chartMinX,
+                        maxX: chartMaxX,
+                        minY: chartMinY,
+                        maxY: maxY,
+                        borderData: FlBorderData(show: false),
+                        gridData: FlGridData(
+                          show: true,
+                          drawHorizontalLine: false,
+                          getDrawingVerticalLine: (value) => FlLine(
+                            color: AppColors.border.withValues(alpha: 0.65),
+                            strokeWidth: 1,
+                          ),
+                          verticalInterval: xInterval.toDouble(),
+                          checkToShowVerticalLine: (value) {
+                            final dayOffset = value.round();
+                            return value >= 0 &&
+                                dayOffset <= spanDays &&
+                                (value - dayOffset).abs() < 0.001 &&
+                                dayOffset % xInterval == 0;
+                          },
                         ),
+                        lineTouchData: LineTouchData(
+                          touchSpotThreshold: 100000,
+                          distanceCalculator: (touch, spot) {
+                            final distance = spot.dx - touch.dx;
+                            return distance >= 0 ? distance : double.infinity;
+                          },
+                          handleBuiltInTouches: false,
+                          touchCallback: (event, response) {
+                            if (event is FlPointerExitEvent ||
+                                event is FlPanCancelEvent ||
+                                event is FlTapUpEvent ||
+                                event is FlPanEndEvent) {
+                              _selectedX.value = null;
+                              setState(() {});
+                              return;
+                            }
+                            final spots = response?.lineBarSpots;
+                            _selectedX.value = spots == null || spots.isEmpty
+                                ? points.last.date
+                                      .difference(firstDate)
+                                      .inDays
+                                      .toDouble()
+                                : spots.first.x;
+                            setState(() {});
+                          },
+                        ),
+                        titlesData: FlTitlesData(
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          leftTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          bottomTitles: AxisTitles(
+                            axisNameWidget: null,
+                            axisNameSize: 0,
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              interval: xInterval.toDouble(),
+                              reservedSize: 32,
+                              getTitlesWidget: (value, meta) {
+                                final dayOffset = value.round();
+                                if ((value - dayOffset).abs() > 0.001 ||
+                                    dayOffset < 0 ||
+                                    dayOffset > spanDays) {
+                                  return const SizedBox.shrink();
+                                }
+                                final date = firstDate.add(
+                                  Duration(days: dayOffset),
+                                );
+                                return Text(
+                                  _formatShortDate(date),
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        lineBarsData: _lineBars(
+                          points,
+                          firstDate,
+                          selectedX: selectedX,
+                        ),
+                      ),
+                    ),
+                  ),
+                  for (final marker in visibleMarkers) ...[
+                    Positioned(
+                      left: plotX(
+                        marker.date.difference(firstDate).inDays.toDouble(),
+                      ),
+                      top: 0,
+                      bottom: chartBottomInset + bottomAxisHeight,
+                      width: 1,
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: const _DashedVerticalLinePainter(),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: plotX(
+                        marker.date.difference(firstDate).inDays.toDouble(),
+                      ),
+                      bottom: 8,
+                      child: FractionalTranslation(
+                        translation: const Offset(-0.5, 0),
                         child: Text(
-                          _formatTooltipDate(displayPoint.date),
-                          style: Theme.of(context).textTheme.labelMedium,
+                          marker.label,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: const Color(0xFF667085)),
                         ),
                       ),
                     ),
+                  ],
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    width: axisLabelWidth,
+                    bottom: bottomAxisHeight,
+                    child: IgnorePointer(
+                      child: Stack(
+                        children: [
+                          for (final value in yAxisValues)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              top:
+                                  _yPixel(
+                                    value,
+                                    chartMinY,
+                                    maxY,
+                                    chartHeight - bottomAxisHeight,
+                                  ) -
+                                  10,
+                              height: 20,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  _formatAxisValue(value),
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  overflow: TextOverflow.clip,
+                                  style: axisStyle,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-            ],
+                  ValueListenableBuilder<double?>(
+                    valueListenable: _selectedX,
+                    builder: (context, selectedX, child) {
+                      if (selectedX == null) return const SizedBox.shrink();
+                      return Positioned(
+                        left: plotX(selectedX),
+                        top: 0,
+                        bottom: 18,
+                        width: 1,
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: const _DashedVerticalLinePainter(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  if (canShowOverlay)
+                    Positioned(
+                      top: AppSpacing.sm,
+                      left: axisLabelWidth + AppSpacing.sm,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: math.max(
+                            0,
+                            constraints.maxWidth - axisLabelWidth - 24,
+                          ),
+                        ),
+                        child: _ValueOverlay(
+                          label: widget.axisLabel,
+                          point: displayPoint,
+                          baseline: previousValue,
+                          currency: currency,
+                          isLiability: widget.isLiability,
+                        ),
+                      ),
+                    ),
+                  if (selectedX != null)
+                    Positioned(
+                      left: plotX(selectedX),
+                      bottom: 14,
+                      child: FractionalTranslation(
+                        translation: const Offset(-0.5, 0),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            border: Border.all(color: AppColors.border),
+                            borderRadius: BorderRadius.circular(
+                              AppRadii.control,
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.sm,
+                              vertical: AppSpacing.xs,
+                            ),
+                            child: Text(
+                              _formatTooltipDate(displayPoint.date),
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         );
       },
@@ -530,6 +599,18 @@ class _LineChartWidgetState extends State<LineChartWidget> {
       maxLines: 1,
     )..layout();
     return painter.width + AppSpacing.md;
+  }
+
+  int _nextPointIndexForX(
+    List<ChartPoint> points,
+    DateTime firstDate,
+    double x,
+  ) {
+    for (var index = 0; index < points.length; index++) {
+      final pointX = points[index].date.difference(firstDate).inDays.toDouble();
+      if (pointX >= x) return index;
+    }
+    return points.length - 1;
   }
 
   int _pointIndexForX(List<ChartPoint> points, DateTime firstDate, double x) {
@@ -576,37 +657,67 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
-  double _axisReservedSize({
+  double _niceYAxisStep(double minimum, double maximum, double plotHeight) {
+    final range = maximum - minimum;
+    if (range <= 0) return 1;
+    final targetCount = math.max(3, (plotHeight / 34).floor());
+    final roughStep = range / targetCount;
+    final magnitude = math
+        .pow(10, (math.log(roughStep) / math.ln10).floor())
+        .toDouble();
+    final normalized = roughStep / magnitude;
+    return (normalized <= 1
+            ? 1
+            : normalized <= 2
+            ? 2
+            : normalized <= 5
+            ? 5
+            : 10) *
+        magnitude.toDouble();
+  }
+
+  List<double> _yAxisValues({
     required double minimum,
     required double maximum,
+    required double plotHeight,
+  }) {
+    final range = maximum - minimum;
+    if (range <= 0) return [minimum];
+    final step = _niceYAxisStep(minimum, maximum, plotHeight);
+    final first = (minimum / step).ceil() * step;
+    final values = <double>[];
+    for (var value = first; value < maximum; value += step) {
+      if (value > minimum) values.add(value);
+    }
+    return values;
+  }
+
+  double _yPixel(
+    double value,
+    double minimum,
+    double maximum,
+    double plotHeight,
+  ) {
+    return (maximum - value) / (maximum - minimum) * plotHeight;
+  }
+
+  double _measureYAxisLabels(
+    Iterable<double> values, {
     required TextStyle style,
-    required CurrencyDefinition? currency,
     required TextDirection textDirection,
     required TextScaler textScaler,
   }) {
-    final labels = [
-      _axisLabel(minimum, currency),
-      _axisLabel(maximum, currency),
-      _axisLabel(0, currency),
-    ];
     var width = 0.0;
-    for (final label in labels) {
-      final measuredStyle = style.copyWith(
-        fontSize: textScaler.scale(style.fontSize ?? 14),
-      );
+    for (final value in values) {
       final painter = TextPainter(
-        text: TextSpan(text: label, style: measuredStyle),
+        text: TextSpan(text: _formatAxisValue(value), style: style),
         textDirection: textDirection,
+        textScaler: textScaler,
         maxLines: 1,
       )..layout();
       if (painter.width > width) width = painter.width;
     }
-    return width + 14;
-  }
-
-  String _axisLabel(double value, CurrencyDefinition? currency) {
-    final amount = _formatAxisValue(value);
-    return currency == null ? amount : '${currency.symbol} $amount';
+    return width + 2;
   }
 
   static String _formatAxisValue(double value) {
@@ -666,24 +777,6 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     return '$sign$grouped.${parts[1]}';
   }
 
-  static String _formatShortDate(DateTime date) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${date.day.toString().padLeft(2, '0')}-${months[date.month - 1]}';
-  }
-
   static int _niceDayInterval(int spanDays, int maxLabels) {
     if (spanDays <= 0) return 1;
     final rawInterval = (spanDays / (maxLabels - 1)).ceil();
@@ -708,6 +801,24 @@ class _LineChartWidgetState extends State<LineChartWidget> {
       (interval) => interval >= rawInterval,
       orElse: () => rawInterval,
     );
+  }
+
+  static String _formatShortDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${date.day.toString().padLeft(2, '0')}-${months[date.month - 1]}';
   }
 }
 
