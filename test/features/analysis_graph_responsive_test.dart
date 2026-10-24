@@ -27,10 +27,7 @@ void main() {
               currency: usd,
               axisLabel: 'Value (USD)',
               markers: [
-                ChartMarker(
-                  date: DateTime.utc(2026, 10, 1),
-                  label: 'Opened',
-                ),
+                ChartMarker(date: DateTime.utc(2026, 10, 1), label: 'Opened'),
               ],
             ),
           ),
@@ -44,5 +41,6 @@ void main() {
     expect(size.height, lessThan(304));
     expect(size.height, greaterThan(150));
     expect(find.text('Opened'), findsOneWidget);
+    expect(find.textContaining('Value (USD)'), findsNothing);
   });
 }

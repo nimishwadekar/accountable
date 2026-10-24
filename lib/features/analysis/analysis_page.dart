@@ -223,9 +223,13 @@ class _AnalysisPageState extends State<AnalysisPage> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           margin: const EdgeInsets.all(3),
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
+          padding: EdgeInsets.symmetric(
+            horizontal: MediaQuery.sizeOf(context).width < AppBreakpoints.compact
+                ? AppSpacing.sm
+                : AppSpacing.md,
+            vertical: MediaQuery.sizeOf(context).width < AppBreakpoints.compact
+                ? AppSpacing.xs
+                : AppSpacing.sm,
           ),
           decoration: BoxDecoration(
             color: selected ? colorScheme.primary : Colors.transparent,

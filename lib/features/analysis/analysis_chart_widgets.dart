@@ -28,6 +28,7 @@ class AnalysisChartSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -49,10 +50,10 @@ class AnalysisChartSection extends StatelessWidget {
         Card(
           child: Padding(
             padding: EdgeInsets.fromLTRB(
-              AppSpacing.sm,
-              AppSpacing.md,
-              AppSpacing.md,
-              cardBottomPadding,
+              compact ? AppSpacing.xs : AppSpacing.sm,
+              compact ? AppSpacing.sm : AppSpacing.md,
+              compact ? AppSpacing.sm : AppSpacing.md,
+              compact ? 0 : cardBottomPadding,
             ),
             child: child,
           ),
@@ -196,7 +197,9 @@ class _LineChartWidgetState extends State<LineChartWidget> {
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
         );
-        final canShowOverlay = constraints.maxWidth > baseAxisReservedSize + 24;
+        final hasOverlaySpace =
+            constraints.maxWidth > baseAxisReservedSize + 24;
+        final canShowOverlay = selectedX != null && hasOverlaySpace;
         final overlayWidth = _valueOverlayWidth(
           context,
           label: widget.axisLabel,
@@ -206,7 +209,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         );
         final overlayLeft = baseAxisReservedSize + AppSpacing.sm;
         final overlayRight = overlayLeft + overlayWidth;
-        final clashValues = canShowOverlay
+        final clashValues = hasOverlaySpace
             ? [
                 for (final point in points)
                   if (_xPosition(
@@ -308,7 +311,9 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                       handleBuiltInTouches: false,
                       touchCallback: (event, response) {
                         if (event is FlPointerExitEvent ||
-                            event is FlPanCancelEvent) {
+                            event is FlPanCancelEvent ||
+                            event is FlTapUpEvent ||
+                            event is FlPanEndEvent) {
                           _selectedX.value = null;
                           setState(() {});
                           return;
@@ -342,8 +347,8 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                             }
                             return Text(
                               currency == null
-                                  ? _formatChartValue(value)
-                                  : '${currency.symbol} ${_formatChartValue(value)}',
+                                  ? _formatAxisValue(value)
+                                  : '${currency.symbol} ${_formatAxisValue(value)}',
                               maxLines: 1,
                               softWrap: false,
                               overflow: TextOverflow.clip,
@@ -602,8 +607,15 @@ class _LineChartWidgetState extends State<LineChartWidget> {
   }
 
   String _axisLabel(double value, CurrencyDefinition? currency) {
-    final amount = _formatChartValue(value);
+    final amount = _formatAxisValue(value);
     return currency == null ? amount : '${currency.symbol} $amount';
+  }
+
+  static String _formatAxisValue(double value) {
+    final rounded = value.roundToDouble();
+    return (value - rounded).abs() < 0.000001
+        ? rounded.toStringAsFixed(0)
+        : _formatChartValue(value);
   }
 
   List<LineChartBarData> _lineBars(
