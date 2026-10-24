@@ -12,14 +12,17 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   SharedPreferencesAsyncPlatform.instance =
       InMemorySharedPreferencesAsync.empty();
+  late final AssetAppDataRepository repository;
+
+  setUpAll(() async {
+    repository = AssetAppDataRepository();
+    await repository.load();
+  });
 
   testWidgets('renders transfer rows without narrow-layout overflow', (
     tester,
   ) async {
     await SessionUiPreferences.instance.startSession();
-    final repository = AssetAppDataRepository();
-    await repository.load();
-
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
@@ -39,7 +42,10 @@ void main() {
       scrollable: find.byType(Scrollable),
     );
     expect(find.text('Credit Payment'), findsOneWidget);
-    expect(find.textContaining('Chase Checking → Chase Freedom'), findsOneWidget);
+    expect(
+      find.textContaining('Chase Checking → Chase Freedom'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -47,9 +53,6 @@ void main() {
     tester,
   ) async {
     await SessionUiPreferences.instance.startSession();
-    final repository = AssetAppDataRepository();
-    await repository.load();
-
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
