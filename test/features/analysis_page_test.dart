@@ -40,7 +40,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Analysis'), findsOneWidget);
-    expect(find.text('Net Worth Trend'), findsOneWidget);
+    expect(find.text('Net Worth Trend (USD)'), findsOneWidget);
     expect(find.text('Individual Account Valuation Trend'), findsOneWidget);
     expect(find.text('1M'), findsNWidgets(2));
     final charts = find.byType(LineChart);

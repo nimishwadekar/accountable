@@ -346,9 +346,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                               return const SizedBox.shrink();
                             }
                             return Text(
-                              currency == null
-                                  ? _formatAxisValue(value)
-                                  : '${currency.symbol} ${_formatAxisValue(value)}',
+                              _formatAxisValue(value),
                               maxLines: 1,
                               softWrap: false,
                               overflow: TextOverflow.clip,
@@ -614,7 +612,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
   static String _formatAxisValue(double value) {
     final rounded = value.roundToDouble();
     return (value - rounded).abs() < 0.000001
-        ? rounded.toStringAsFixed(0)
+        ? _formatChartValue(rounded).split('.').first
         : _formatChartValue(value);
   }
 

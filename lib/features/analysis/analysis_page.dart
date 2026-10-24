@@ -224,7 +224,8 @@ class _AnalysisPageState extends State<AnalysisPage> {
           duration: const Duration(milliseconds: 150),
           margin: const EdgeInsets.all(3),
           padding: EdgeInsets.symmetric(
-            horizontal: MediaQuery.sizeOf(context).width < AppBreakpoints.compact
+            horizontal:
+                MediaQuery.sizeOf(context).width < AppBreakpoints.compact
                 ? AppSpacing.sm
                 : AppSpacing.md,
             vertical: MediaQuery.sizeOf(context).width < AppBreakpoints.compact
@@ -259,7 +260,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
         ),
     ];
     return AnalysisChartSection(
-      title: 'Net Worth Trend',
+      title: 'Net Worth Trend (USD)',
       subtitle: null,
       warning: _missingWarning(series.missingDates),
       cardBottomPadding: 0,
