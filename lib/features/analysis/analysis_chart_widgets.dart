@@ -161,6 +161,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxLabels = (constraints.maxWidth / 88).floor().clamp(3, 8);
+        final compactAxisLabels = constraints.maxWidth < AppBreakpoints.compact;
         final xInterval = _niceDayInterval(spanDays, maxLabels);
         final xMargin = spanDays == 0 ? 0.5 : spanDays * 0.01;
         final chartMinX = -xMargin;
@@ -197,6 +198,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         );
         final baseAxisReservedSize = _measureYAxisLabels(
           baseYAxisValues,
+          compact: compactAxisLabels,
           style: axisStyle,
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
@@ -258,6 +260,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         );
         final axisLabelWidth = _measureYAxisLabels(
           yAxisValues,
+          compact: compactAxisLabels,
           style: axisStyle,
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
@@ -492,7 +495,10 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                               child: Align(
                                 alignment: Alignment.centerLeft,
                                 child: Text(
-                                  _formatAxisValue(value),
+                                  _formatAxisValue(
+                                value,
+                                compact: compactAxisLabels,
+                              ),
                                   maxLines: 1,
                                   softWrap: false,
                                   overflow: TextOverflow.clip,
@@ -703,6 +709,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
 
   double _measureYAxisLabels(
     Iterable<double> values, {
+    required bool compact,
     required TextStyle style,
     required TextDirection textDirection,
     required TextScaler textScaler,
@@ -710,7 +717,10 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     var width = 0.0;
     for (final value in values) {
       final painter = TextPainter(
-        text: TextSpan(text: _formatAxisValue(value), style: style),
+        text: TextSpan(
+          text: _formatAxisValue(value, compact: compact),
+          style: style,
+        ),
         textDirection: textDirection,
         textScaler: textScaler,
         maxLines: 1,
@@ -720,11 +730,41 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     return width + 2;
   }
 
-  static String _formatAxisValue(double value) {
+  static String _formatAxisValue(
+    double value, {
+    required bool compact,
+  }) {
+    if (!compact) {
+      final rounded = value.roundToDouble();
+      return (value - rounded).abs() < 0.000001
+          ? _formatChartValue(rounded).split('.').first
+          : _formatChartValue(value);
+    }
+    final absolute = value.abs();
+    if (absolute >= 1000000000) {
+      return _formatCompactAxisValue(value / 1000000000, 'B');
+    }
+    if (absolute >= 1000000) {
+      return _formatCompactAxisValue(value / 1000000, 'M');
+    }
+    if (absolute >= 1000) {
+      return _formatCompactAxisValue(value / 1000, 'K');
+    }
     final rounded = value.roundToDouble();
     return (value - rounded).abs() < 0.000001
         ? _formatChartValue(rounded).split('.').first
         : _formatChartValue(value);
+  }
+
+  static String _formatCompactAxisValue(double value, String suffix) {
+    final decimals = value.abs() >= 100 ? 0 : 1;
+    final fixed = value.toStringAsFixed(decimals);
+    final trimmed = fixed.contains('.')
+        ? fixed
+              .replaceFirst(RegExp(r'0+$'), '')
+              .replaceFirst(RegExp(r'\.$'), '')
+        : fixed;
+    return '$trimmed$suffix';
   }
 
   List<LineChartBarData> _lineBars(
