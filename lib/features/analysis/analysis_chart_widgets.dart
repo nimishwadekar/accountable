@@ -319,7 +319,11 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                   selectPointAt(event.localPosition.dx);
                 }
               },
-              onPointerUp: (_) => clearPointSelection(),
+              onPointerUp: (_) {
+                WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => clearPointSelection(),
+                );
+              },
               onPointerCancel: (_) => clearPointSelection(),
               child: Stack(
                 clipBehavior: Clip.none,
@@ -383,8 +387,9 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                                 event is FlPanCancelEvent ||
                                 event is FlTapUpEvent ||
                                 event is FlPanEndEvent) {
-                              _selectedX.value = null;
-                              setState(() {});
+                              WidgetsBinding.instance.addPostFrameCallback(
+                                (_) => clearPointSelection(),
+                              );
                               return;
                             }
                             final spots = response?.lineBarSpots;
