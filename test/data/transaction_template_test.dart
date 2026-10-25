@@ -21,7 +21,7 @@ void main() {
     };
     final templates = ModelParsers.parseTransactionTemplates(
       'template_id,name,transaction_type,date,description,category,tag,source_account_id,source_amount,dest_account_id,dest_amount,created_at,updated_at\n'
-      'coffee,Coffee,expense,,Morning,dining,,checking,4.50,,,2026-10-20T00:00:00Z,2026-10-20T00:00:00Z\n',
+      'coffee,Coffee,expense,,Morning,food_drink,,checking,4.50,,,2026-10-20T00:00:00Z,2026-10-20T00:00:00Z\n',
       accounts: accounts,
       currencies: currencies,
     );
@@ -40,7 +40,7 @@ void main() {
       type: TransactionType.expense,
       date: now,
       description: 'Morning coffee',
-      categoryId: 'dining',
+      categoryId: 'food_drink',
       tagId: 'home',
       sourceAccountId: 'checking',
       sourceAmount: const Money(minorUnits: 450, currencyId: 'USD'),

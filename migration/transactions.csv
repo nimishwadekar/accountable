@@ -1,37 +1,37 @@
 transaction_id,date,description,category,transaction_type,source_amount,source_account_id,dest_amount,dest_account_id,tag,created_at
 G1LuZUo0tkn2,2026-08-29,Mattress,shopping,expense,223.11,,,,boston,2026-09-02T08:53:57Z
-Auq8nm1vJw52,2026-09-02,Breakfast - Paris Airport,dining,expense,17.13,,,,boston,2026-09-02T08:56:27Z
-uga1gHp7FAvG,2026-09-02,Beer,dining,expense,11.09,,,,boston,2026-09-02T10:23:04Z
+Auq8nm1vJw52,2026-09-02,Breakfast - Paris Airport,food_drink,expense,17.13,,,,boston,2026-09-02T08:56:27Z
+uga1gHp7FAvG,2026-09-02,Beer,food_drink,expense,11.09,,,,boston,2026-09-02T10:23:04Z
 MBYrWu60w6eH,2026-09-02,Mint Mobile 1-Year,bills,expense,207.1,,,,boston,2026-09-02T18:55:51Z
-T9ZXxiNffI36,2026-09-03,Dinner - Basil Rice,dining,expense,16.54,,,,boston,2026-09-03T10:28:17Z
+T9ZXxiNffI36,2026-09-03,Dinner - Basil Rice,food_drink,expense,16.54,,,,boston,2026-09-03T10:28:17Z
 1q3eRwbCN3K6,2026-09-03,Bedsheets,shopping,expense,21.24,,,,boston,2026-09-03T10:28:41Z
-04Uoe94JqIjk,2026-09-03,Breakfast,dining,expense,11.5,,,,boston,2026-09-03T14:20:47Z
-BeCDQ2TVa2H5,2026-09-03,Lunch - Phin Coffee House,dining,expense,21.33,,,,boston,2026-09-03T18:14:58Z
+04Uoe94JqIjk,2026-09-03,Breakfast,food_drink,expense,11.5,,,,boston,2026-09-03T14:20:47Z
+BeCDQ2TVa2H5,2026-09-03,Lunch - Phin Coffee House,food_drink,expense,21.33,,,,boston,2026-09-03T18:14:58Z
 6J8DDHJa2sR2,2026-09-03,Vape,shopping,expense,10.63,,,,boston,2026-09-03T20:20:32Z
-38cqosaeenmM,2026-09-03,7-11,dining,expense,10.63,,,,boston,2026-09-03T20:20:54Z
+38cqosaeenmM,2026-09-03,7-11,food_drink,expense,10.63,,,,boston,2026-09-03T20:20:54Z
 Bm9OXLwl7el8,2026-09-03,Extension board,shopping,expense,21.24,,,,boston,2026-09-03T21:21:29Z
 r5GLJkrHn7O1,2026-09-03,Dollar Tree,shopping,expense,2.66,,,,boston,2026-09-04T02:42:51Z
 PURtYg5ElaNm,2026-09-03,Star Market,shopping,expense,30.77,,,,boston,2026-09-04T02:43:06Z
-8Aruq57kDD6o,2026-09-03,Dinner - Anna S Taqueria,dining,expense,16.53,,,,boston,2026-09-04T02:43:34Z
+8Aruq57kDD6o,2026-09-03,Dinner - Anna S Taqueria,food_drink,expense,16.53,,,,boston,2026-09-04T02:43:34Z
 xl7kvdBtdxVR,2026-09-03,Visitor's Health Insurance - Sept 2026,health,expense,72.5,,,,boston,2026-09-04T02:44:12Z
 qLDIsQNQLDTR,2026-09-03,Rental Insurance - Sept 2026,bills,expense,14.42,,,,boston,2026-09-04T02:44:35Z
-TPVDws3R4zzl,2026-09-04,7-11,dining,expense,5.65,,,,boston,2026-09-04T16:23:27Z
-wcxVSkxUnlaM,2026-09-04,Lunch - Noodle Lab,dining,expense,14.63,,,,boston,2026-09-04T18:04:10Z
+TPVDws3R4zzl,2026-09-04,7-11,food_drink,expense,5.65,,,,boston,2026-09-04T16:23:27Z
+wcxVSkxUnlaM,2026-09-04,Lunch - Noodle Lab,food_drink,expense,14.63,,,,boston,2026-09-04T18:04:10Z
 Wq4Fx2PTO0NQ,2026-09-04,Mass ID Registration,government_fees,expense,25,,,,boston,2026-09-04T23:15:17Z
 xIY2vm4GCTP4,2026-09-04,MBTA,transport,expense,2.4,,,,boston,2026-09-04T23:15:32Z
-0oDBKU5zUtSq,2026-09-04,Protein Shake,dining,expense,3.89,,,,boston,2026-09-04T23:15:45Z
-FI326Fdeh21B,2026-09-05,Lunch - Hokkaido Ramen Santouka,dining,expense,21.46,,,,boston,2026-09-05T21:36:45Z
-rEiQdRuFidG0,2026-09-06,Breakfast,dining,expense,10,,,,boston,2026-09-06T19:00:12Z
+0oDBKU5zUtSq,2026-09-04,Protein Shake,food_drink,expense,3.89,,,,boston,2026-09-04T23:15:45Z
+FI326Fdeh21B,2026-09-05,Lunch - Hokkaido Ramen Santouka,food_drink,expense,21.46,,,,boston,2026-09-05T21:36:45Z
+rEiQdRuFidG0,2026-09-06,Breakfast,food_drink,expense,10,,,,boston,2026-09-06T19:00:12Z
 EenMir9CQ1li,2026-09-06,Ramen,groceries,expense,4.19,,,,boston,2026-09-06T19:00:27Z
 rsv6uDE5WtEL,2026-09-06,Paint Samples,shopping,expense,36.71,,,,boston,2026-09-06T20:17:51Z
 IHMAFuJnbgjv,2026-09-06,Trader Joe's,groceries,expense,35.06,,,,boston,2026-09-07T03:13:51Z
-lCgedJpFQLX9,2026-09-06,Riya DoorDash,dining,expense,19.6,,,,boston,2026-09-07T03:14:36Z
-WP5dSykKf6tN,2026-09-06,Dinner - Garlic and Lemons,dining,expense,12.27,,,,boston,2026-09-07T03:14:58Z
-TcM406C5t9Kz,2026-09-06,HeyTea,dining,expense,9.08,,,,boston,2026-09-07T03:15:14Z
-ohMgrtP3Sj0y,2026-09-07,Breakfast - Kupel's Bakery,dining,expense,6.36,,,,boston,2026-09-07T12:19:06Z
+lCgedJpFQLX9,2026-09-06,Riya DoorDash,food_drink,expense,19.6,,,,boston,2026-09-07T03:14:36Z
+WP5dSykKf6tN,2026-09-06,Dinner - Garlic and Lemons,food_drink,expense,12.27,,,,boston,2026-09-07T03:14:58Z
+TcM406C5t9Kz,2026-09-06,HeyTea,food_drink,expense,9.08,,,,boston,2026-09-07T03:15:14Z
+ohMgrtP3Sj0y,2026-09-07,Breakfast - Kupel's Bakery,food_drink,expense,6.36,,,,boston,2026-09-07T12:19:06Z
 RyLYwF7hChp1,2026-09-07,IKEA,shopping,expense,143.89,,,,boston,2026-09-07T16:10:34Z
-82Fa1KTeshCO,2026-09-07,Lunch - Domino's,dining,expense,17.11,,,,boston,2026-09-07T19:54:01Z
-7Z5cgNvcga83,2026-09-07,Mochinut,dining,expense,7.49,,,,boston,2026-09-07T20:15:33Z
+82Fa1KTeshCO,2026-09-07,Lunch - Domino's,food_drink,expense,17.11,,,,boston,2026-09-07T19:54:01Z
+7Z5cgNvcga83,2026-09-07,Mochinut,food_drink,expense,7.49,,,,boston,2026-09-07T20:15:33Z
 109HcOih3bi6,2026-09-08,MBTA,transport,expense,4.8,,,,boston,2026-09-09T14:57:27Z
 zUtf6WREEZ0H,2026-09-08,Bar,nightlife,expense,26.38,,,,boston,2026-09-09T14:57:59Z
 9VnV1cl3cxNo,2026-09-09,Vape,shopping,expense,15.94,,,,boston,2026-09-09T19:43:49Z
@@ -47,12 +47,12 @@ uFGBkr5sXEiQ,2026-09-11,MBTA,transport,expense,1.7,,,,boston,2026-09-11T21:53:35
 V9XUATFu67ih,2026-09-11,Home Depot,shopping,expense,62.58,,,,boston,2026-09-11T21:53:48Z
 eKu7ahZItiG8,2026-09-11,MBTA,transport,expense,1.7,,,,boston,2026-09-11T21:54:06Z
 Wb1PSE3So5KY,2026-09-12,O'Brien's Pub,nightlife,expense,18,,,,boston,2026-09-12T14:46:38Z
-e2Xj4F7ASLU6,2026-09-12,7-11,dining,expense,2.66,,,,boston,2026-09-12T14:46:50Z
+e2Xj4F7ASLU6,2026-09-12,7-11,food_drink,expense,2.66,,,,boston,2026-09-12T14:46:50Z
 PcDUIhLvknof,2026-09-12,Amazon,shopping,expense,70.41,,,,boston,2026-09-12T16:35:07Z
 1YkawtJx3zS1,2026-09-12,Star Market,groceries,expense,5,,,,boston,2026-09-12T19:17:27Z
 i3hvTqeZF24H,2026-09-12,Dollar Tree,shopping,expense,3.45,,,,boston,2026-09-12T19:27:13Z
 IKsoPLKmu2yk,2026-09-12,Dollar Tree,shopping,expense,7.09,,,,boston,2026-09-13T01:47:46Z
-qzIGA5B3Qzmb,2026-09-12,Dunkin,dining,expense,3.8,,,,boston,2026-09-13T01:48:00Z
+qzIGA5B3Qzmb,2026-09-12,Dunkin,food_drink,expense,3.8,,,,boston,2026-09-13T01:48:00Z
 MmSPzYNF01de,2026-09-13,Trader Joe's,groceries,expense,38.11,,,,boston,2026-09-13T18:59:12Z
 iRdP9OldI8UW,2026-09-13,MBTA,transport,expense,1.7,,,,boston,2026-09-13T18:59:27Z
 j3RZYSGliJbR,2026-09-13,Hong Kong Supermarket,groceries,expense,72.67,,,,boston,2026-09-14T00:36:44Z
@@ -60,19 +60,19 @@ j3RZYSGliJbR,2026-09-13,Hong Kong Supermarket,groceries,expense,72.67,,,,boston,
 T1ctumkUUGtC,2026-09-13,Amazon,shopping,expense,35.27,,,,boston,2026-09-14T03:54:20Z
 Tg3FAF2MAyzL,2026-09-14,(Cancelled) Boston - Amherst,transport,expense,21.58,,,,boston,2026-09-14T06:23:03Z
 hRK4gSuG63gT,2026-09-14,Movie - Akira,entertainment,expense,19.75,,,,boston,2026-09-14T17:22:38Z
-rS4OJ8wkEfsZ,2026-09-14,7-11,dining,expense,2.66,,,,boston,2026-09-14T19:20:29Z
+rS4OJ8wkEfsZ,2026-09-14,7-11,food_drink,expense,2.66,,,,boston,2026-09-14T19:20:29Z
 lOp6TFTmJtxG,2026-09-14,MBTA,transport,expense,2.4,,,,boston,2026-09-14T19:20:41Z
 hu6B1I2HBYA0,2026-09-14,Walmart,shopping,expense,27.41,,,,boston,2026-09-14T20:38:13Z
 x9nkmqe90lIc,2026-09-14,MBTA,transport,expense,2.4,,,,boston,2026-09-14T21:12:00Z
 9y7oAf4fKByZ,2026-09-14,MBTA,transport,expense,3.4,,,,boston,2026-09-15T02:03:03Z
 7TnJo7yd5dGb,2026-09-14,Amazon,shopping,expense,3.12,,,,boston,2026-09-15T03:09:00Z
-fucDBUZxznYf,2026-09-15,Lunch - Red Hat,dining,expense,1.07,,,,boston,2026-09-15T16:16:09Z
+fucDBUZxznYf,2026-09-15,Lunch - Red Hat,food_drink,expense,1.07,,,,boston,2026-09-15T16:16:09Z
 ko1f7MkS0QMb,2026-09-15,MBTA,transport,expense,2.4,,,,boston,2026-09-15T20:24:10Z
-yQwQ5TElh5RS,2026-09-16,Lunch - Red Hat,dining,expense,1.02,,,,boston,2026-09-16T07:13:25Z
+yQwQ5TElh5RS,2026-09-16,Lunch - Red Hat,food_drink,expense,1.02,,,,boston,2026-09-16T07:13:25Z
 MznmKyzKKJOr,2026-09-16,Rent - Sept 2026,housing,expense,1350,,,,boston,2026-09-16T07:14:48Z
 buzkZsoFwBOz,2026-09-16,Rent - August 2027,housing,expense,1350,,,,boston,2026-09-16T07:15:05Z
 BPrTg2660jVj,2026-09-16,HSBC Account Closure Post,financial_fees,expense,26.75,,,,boston,2026-09-16T17:57:07Z
-G58AvFXYeckb,2026-09-16,Lunch - Red Hat,dining,expense,4.28,,,,boston,2026-09-16T22:39:54Z
+G58AvFXYeckb,2026-09-16,Lunch - Red Hat,food_drink,expense,4.28,,,,boston,2026-09-16T22:39:54Z
 KXMCb7lcciyn,2026-09-16,MBTA,transport,expense,2.4,,,,boston,2026-09-16T23:01:43Z
 shEp3YtJf2A9,2026-09-16,Dollar Tree,shopping,expense,9.39,,,,boston,2026-09-16T23:02:13Z
 pR8pvwFp5zSU,2026-09-17,Health Insurance,health,expense,344.5,,,,boston,2026-09-17T14:06:23Z
@@ -83,31 +83,31 @@ agTCGdVcdkpF,2026-09-17,MBTA,transport,expense,1.7,,,,boston,2026-09-17T23:26:12
 a3w4dRzQP8Ku,2026-09-18,Star Market,groceries,expense,8.29,,,,boston,2026-09-19T04:46:51Z
 XWI36RApB4JQ,2026-09-18,Allston Market,groceries,expense,12.28,,,,boston,2026-09-19T04:47:14Z
 xiH10CyYjzX1,2026-09-19,Vape,other,expense,21.25,,,,boston,2026-09-19T20:27:14Z
-hd6t3Yd6IW8j,2026-09-19,Lunch - Hokkaido Ramen,dining,expense,17.39,,,,boston,2026-09-19T21:14:40Z
+hd6t3Yd6IW8j,2026-09-19,Lunch - Hokkaido Ramen,food_drink,expense,17.39,,,,boston,2026-09-19T21:14:40Z
 hHyYasHGuZhi,2026-09-19,MBTA - Bus,transport,expense,1.7,,,,boston,2026-09-19T21:14:49Z
 AZJ7zMm6SjAA,2026-09-19,Home Depot,shopping,expense,60.44,,,,boston,2026-09-19T22:40:00Z
 0tnMkblYRdC3,2026-09-19,MBTA - Bus,transport,expense,1.7,,,,boston,2026-09-19T22:51:48Z
-3lgiPX0zg8Nc,2026-09-20,Domino's,dining,expense,22.3,,,,boston,2026-09-20T18:18:30Z
+3lgiPX0zg8Nc,2026-09-20,Domino's,food_drink,expense,22.3,,,,boston,2026-09-20T18:18:30Z
 DRBQHshNxBKQ,2026-09-20,Walmart,shopping,expense,41.43,,,,boston,2026-09-20T18:33:45Z
-MKIxNCNmdItE,2026-09-20,Chai,dining,expense,8.54,,,,boston,2026-09-21T01:52:01Z
-p5L19rbxvCgw,2026-09-20,Lunch - Red Hat,dining,expense,1.9,,,,boston,2026-09-21T03:07:42Z
+MKIxNCNmdItE,2026-09-20,Chai,food_drink,expense,8.54,,,,boston,2026-09-21T01:52:01Z
+p5L19rbxvCgw,2026-09-20,Lunch - Red Hat,food_drink,expense,1.9,,,,boston,2026-09-21T03:07:42Z
 rDElWw5y3iYP,2026-09-21,MBTA - Bus,transport,expense,1.7,,,,boston,2026-09-21T20:12:07Z
 BFmkIKiEkmxN,2026-09-21,Duster Refills,shopping,expense,10.61,,,,boston,2026-09-21T21:26:30Z
 Zz0mOTl2BhEg,2026-09-21,Dollar Tree,shopping,expense,8.5,,,,boston,2026-09-21T22:31:33Z
 LV0iCXy22ybS,2026-09-22,MBTA - T,transport,expense,2.4,,,,boston,2026-09-22T20:08:00Z
 5YLtTNatoXxZ,2026-09-22,Doordash,gifts,expense,26.89,,,,boston,2026-09-23T02:34:10Z
 KBeD6Enj77PV,2026-09-23,MBTA - T,transport,expense,2.4,,,,boston,2026-09-23T20:11:54Z
-gKgZvLNcqh0g,2026-09-23,Gong Cha,dining,expense,8.03,,,,boston,2026-09-23T21:14:47Z
-rrvVt06Nqc5X,2026-09-24,Doordash,dining,expense,19.26,,,,boston,2026-09-24T18:14:11Z
+gKgZvLNcqh0g,2026-09-23,Gong Cha,food_drink,expense,8.03,,,,boston,2026-09-23T21:14:47Z
+rrvVt06Nqc5X,2026-09-24,Doordash,food_drink,expense,19.26,,,,boston,2026-09-24T18:14:11Z
 3qN3W0367dj3,2026-09-24,Bar,nightlife,expense,19.26,,,,boston,2026-09-25T04:20:18Z
 AOkHhJij6xs7,2026-09-24,MBTA - Bus,transport,expense,1.7,,,,boston,2026-09-25T04:20:49Z
-du82aXSjyKGa,2026-09-24,7-11,dining,expense,8.79,,,,boston,2026-09-25T04:21:03Z
+du82aXSjyKGa,2026-09-24,7-11,food_drink,expense,8.79,,,,boston,2026-09-25T04:21:03Z
 Hj59cFd7blKc,2026-09-25,MBTA - Bus,transport,expense,1.7,,,,boston,2026-09-26T01:42:07Z
 6AJJ7jcIanAQ,2026-09-26,MBTA - Bus,transport,expense,1.7,,,,boston,2026-09-26T16:39:33Z
 VxFJMjVLnalu,2026-09-26,Trader Joe's,groceries,expense,73.42,,,,boston,2026-09-26T17:31:41Z
 R0qy6YWu8bJk,2026-09-27,Rent,housing,expense,1350,,,,boston,2026-09-27T16:30:26Z
-tZslMCaNZjjc,2026-09-27,Lunch - Red Hat,dining,expense,0.48,,,,boston,2026-09-28T00:02:40Z
-eYqY0A2VeT6D,2026-09-27,Doordash,dining,expense,21.8,,,,boston,2026-09-28T00:36:19Z
+tZslMCaNZjjc,2026-09-27,Lunch - Red Hat,food_drink,expense,0.48,,,,boston,2026-09-28T00:02:40Z
+eYqY0A2VeT6D,2026-09-27,Doordash,food_drink,expense,21.8,,,,boston,2026-09-28T00:36:19Z
 J12Ezr8EKKRB,2026-09-28,Amazon Prime,bills,expense,2.25,,,,boston,2026-09-28T14:42:00Z
 ptfgvmQCAP7D,2026-09-28,MBTA - T,transport,expense,2.4,,,,boston,2026-09-28T15:01:16Z
 g98WdubA3IS0,2026-09-28,Amazon,gifts,expense,9.55,,,,boston,2026-09-28T18:56:37Z
@@ -125,49 +125,49 @@ KIHZWaVYET3F,2026-09-30,Amazon - Desk Chair,shopping,expense,74.36,,,,boston,202
 dXEkxKmJ2sQZ,2026-10-01,Couch,shopping,expense,50,,,,boston,2026-10-01T15:20:48Z
 kgw1wrL9Addz,2026-10-01,MBTA - T,transport,expense,2.4,,,,boston,2026-10-01T21:53:21Z
 iHkwTwHH1X55,2026-10-02,MBTA - T,transport,expense,2.4,,,,boston,2026-10-02T23:11:32Z
-UGaRdJcw7u6c,2026-10-02,7-11,dining,expense,4.27,,,,boston,2026-10-02T23:50:21Z
+UGaRdJcw7u6c,2026-10-02,7-11,food_drink,expense,4.27,,,,boston,2026-10-02T23:50:21Z
 p4rSw3H09ToA,2026-10-03,Star Market,groceries,expense,15.42,,,,boston,2026-10-04T00:48:19Z
 XukDCK3Dx6R5,2026-10-03,MBTA - T,transport,expense,2.4,,,,boston,2026-10-04T01:14:30Z
-Yt03ZAP7lHKe,2026-10-03,Boba,dining,expense,16.11,,,,boston,2026-10-04T15:14:27Z
-1hG0IZQwMNv0,2026-10-04,7-11,dining,expense,15.94,,,,boston,2026-10-04T15:14:59Z
-7Wal9gwu6EJF,2026-10-04,Dinner - Inbound Pizza,dining,expense,18.73,,,,boston,2026-10-04T15:15:24Z
+Yt03ZAP7lHKe,2026-10-03,Boba,food_drink,expense,16.11,,,,boston,2026-10-04T15:14:27Z
+1hG0IZQwMNv0,2026-10-04,7-11,food_drink,expense,15.94,,,,boston,2026-10-04T15:14:59Z
+7Wal9gwu6EJF,2026-10-04,Dinner - Inbound Pizza,food_drink,expense,18.73,,,,boston,2026-10-04T15:15:24Z
 hjjxVGZx3XkI,2026-10-04,MBTA - T,transport,expense,2.4,,,,boston,2026-10-04T20:07:49Z
-P9i5N2Kcy2tW,2026-10-04,Gong Cha,dining,expense,17.12,,,,boston,2026-10-05T00:14:42Z
-QA0Kb3iMfbe1,2026-10-04,Lunch - Potluck Cafe,dining,expense,19.21,,,,boston,2026-10-05T00:15:20Z
+P9i5N2Kcy2tW,2026-10-04,Gong Cha,food_drink,expense,17.12,,,,boston,2026-10-05T00:14:42Z
+QA0Kb3iMfbe1,2026-10-04,Lunch - Potluck Cafe,food_drink,expense,19.21,,,,boston,2026-10-05T00:15:20Z
 PjaFNVBSIXqL,2026-10-04,Asian Supermarket,shopping,expense,41,,,,boston,2026-10-05T00:15:38Z
 zGIhyJ4sCHfp,2026-10-04,Marshall's,shopping,expense,291.97,,,,boston,2026-10-05T04:23:01Z
 AS6St6u4JBOU,2026-10-04,MBTA - T,transport,expense,2.4,,,,boston,2026-10-05T04:23:21Z
-4I6J7bunMRc4,2026-10-04,Dinner - The Q,dining,expense,71.91,,,,boston,2026-10-05T04:24:08Z
+4I6J7bunMRc4,2026-10-04,Dinner - The Q,food_drink,expense,71.91,,,,boston,2026-10-05T04:24:08Z
 AIwKGFv4cMGE,2026-10-04,Lyft,transport,expense,16.96,,,,boston,2026-10-05T04:24:35Z
-xIwqhyHOoSGD,2026-10-05,Clear Flour Bakery,dining,expense,16.5,,,,boston,2026-10-05T15:49:54Z
+xIwqhyHOoSGD,2026-10-05,Clear Flour Bakery,food_drink,expense,16.5,,,,boston,2026-10-05T15:49:54Z
 5dVNhMhVCMfR,2026-10-05,MBTA - T,transport,expense,2.4,,,,boston,2026-10-05T20:11:47Z
-GWkf2ktdMMRx,2026-10-05,Gong Cha,dining,expense,8.03,,,,boston,2026-10-05T20:50:20Z
-kfytrMoChvk7,2026-10-06,Lunch - Red Hat,dining,expense,1.28,,,,boston,2026-10-06T23:23:15Z
+GWkf2ktdMMRx,2026-10-05,Gong Cha,food_drink,expense,8.03,,,,boston,2026-10-05T20:50:20Z
+kfytrMoChvk7,2026-10-06,Lunch - Red Hat,food_drink,expense,1.28,,,,boston,2026-10-06T23:23:15Z
 zlJBeP589l9D,2026-10-06,Amazon - Space Heater,shopping,expense,36.11,,,,boston,2026-10-06T23:28:09Z
-tJZm3bcoDm2L,2026-10-07,Dinner - RedWhite Ramen,dining,expense,26,,,,boston,2026-10-07T16:26:36Z
+tJZm3bcoDm2L,2026-10-07,Dinner - RedWhite Ramen,food_drink,expense,26,,,,boston,2026-10-07T16:26:36Z
 sTDtzjkssY35,2026-10-07,MBTA - T,transport,expense,2.4,,,,boston,2026-10-07T20:10:48Z
 jTKNb6AKsEWu,2026-10-08,Amazon - Desk and Mats,shopping,expense,131.61,,,,boston,2026-10-08T06:11:25Z
 wHcrKyUpLPtL,2026-10-08,MBTA - T,transport,expense,2.4,,,,boston,2026-10-08T19:20:12Z
 FB9l8mTIFpy3,2026-10-08,Amazon - Skincare,gifts,expense,18.88,,,,boston,2026-10-08T19:29:19Z
 f7SxtEnM2fVt,2026-10-08,Trader Joe's,groceries,expense,39.63,,,,boston,2026-10-08T20:49:44Z
 Rjex30FiZzte,2026-10-08,Armchair,shopping,expense,11,,,,boston,2026-10-09T00:11:36Z
-TDjjqJZMIVmI,2026-10-08,(Cr) Dinner - Mirchi Nation,dining,expense,28.87,,,,boston,2026-10-09T00:57:47Z
+TDjjqJZMIVmI,2026-10-08,(Cr) Dinner - Mirchi Nation,food_drink,expense,28.87,,,,boston,2026-10-09T00:57:47Z
 GKbIOslDMjxk,2026-10-08,Wise,financial_fees,expense,3.51,,,,boston,2026-10-09T06:57:42Z
 3feLaoWxlt69,2026-10-08,Credila Loan Prepayment,REVIEW,transfer,568.78,REVIEW,,,boston,2026-10-09T06:59:24Z
 sUlkavHGy5dG,2026-10-10,Credila Loan Prepayment,REVIEW,transfer,600,REVIEW,,,boston,2026-10-10T04:59:36Z
-BEFM8xg9obva,2026-10-10,(Cr) Dinner - Hopewell Bar & Kitchen,dining,expense,36.76,,,,boston,2026-10-11T01:26:06Z
-4Q87RpjZMSHK,2026-10-11,(Cr) Lunch - Red Hat,dining,expense,2.67,,,,boston,2026-10-11T21:10:02Z
-yEsQ469mkenv,2026-10-11,(Cr) Dinner - Mirchi Nation,dining,expense,29.92,,,,boston,2026-10-12T03:46:47Z
+BEFM8xg9obva,2026-10-10,(Cr) Dinner - Hopewell Bar & Kitchen,food_drink,expense,36.76,,,,boston,2026-10-11T01:26:06Z
+4Q87RpjZMSHK,2026-10-11,(Cr) Lunch - Red Hat,food_drink,expense,2.67,,,,boston,2026-10-11T21:10:02Z
+yEsQ469mkenv,2026-10-11,(Cr) Dinner - Mirchi Nation,food_drink,expense,29.92,,,,boston,2026-10-12T03:46:47Z
 T9phOuSsRAkG,2026-10-12,MBTA - T,transport,expense,2.4,,,,boston,2026-10-12T22:37:51Z
 c8fvbP2EZIA4,2026-10-12,Dollar Tree,shopping,expense,9.61,,,,boston,2026-10-13T00:41:43Z
 kzdQh7qNB7mZ,2026-10-12,Allston Market,groceries,expense,15.28,,,,boston,2026-10-13T00:42:04Z
 QZT6PRc7Qbia,2026-10-12,7-11,groceries,expense,5.49,,,,boston,2026-10-13T00:42:16Z
 e8uBJaCnSBuB,2026-10-12,[Bus] Boston - Amherst - Boston,travel,expense,45.07,,,,boston,2026-10-13T01:16:25Z
 tC1Tgnwsh9gM,2026-10-13,MBTA - T,transport,expense,2.4,,,,boston,2026-10-13T23:31:07Z
-4V47kAHbL061,2026-10-13,(Cr) Lunch - Red Hat,dining,expense,3.2,,,,boston,2026-10-13T23:31:14Z
-i3gHLLDmRRbJ,2026-10-13,Heytea,dining,expense,9.08,,,,boston,2026-10-14T02:51:18Z
+4V47kAHbL061,2026-10-13,(Cr) Lunch - Red Hat,food_drink,expense,3.2,,,,boston,2026-10-13T23:31:14Z
+i3gHLLDmRRbJ,2026-10-13,Heytea,food_drink,expense,9.08,,,,boston,2026-10-14T02:51:18Z
 djtssFihor55,2026-10-14,(Wise) ETH Tuition,education,expense,815.34,,,,boston,2026-10-14T14:58:45Z
-hWMXQHqfAsia,2026-10-14,Riya Meal,dining,expense,31,REVIEW,,,boston,2026-10-14T18:09:44Z
+hWMXQHqfAsia,2026-10-14,Riya Meal,food_drink,expense,31,REVIEW,,,boston,2026-10-14T18:09:44Z
 6VOSBhl8OoVZ,2026-10-14,MBTA - T,transport,expense,2.4,,,,boston,2026-10-14T22:15:58Z
-ulQ82KjYExR1,2026-10-14,(Cr) Lunch - Red Hat,dining,expense,2.14,,,,boston,2026-10-14T22:33:48Z
+ulQ82KjYExR1,2026-10-14,(Cr) Lunch - Red Hat,food_drink,expense,2.14,,,,boston,2026-10-14T22:33:48Z
 Cx4SSqnOnjy3,2026-10-14,Trader Joe's,groceries,expense,15.42,,,,boston,2026-10-15T00:11:08Z

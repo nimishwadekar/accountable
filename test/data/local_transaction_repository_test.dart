@@ -20,7 +20,7 @@ void main() {
       sourceAccountId: checking.id,
       destinationAmount: null,
       destinationAccountId: null,
-      categoryId: 'dining',
+      categoryId: 'food_drink',
       tagId: 'boston',
       description: 'Test entry',
     );
@@ -51,7 +51,7 @@ void main() {
       sourceAccountId: account.id,
       destinationAmount: null,
       destinationAccountId: null,
-      categoryId: 'dining',
+      categoryId: 'food_drink',
       tagId: 'boston',
       description: 'Read-only',
     );

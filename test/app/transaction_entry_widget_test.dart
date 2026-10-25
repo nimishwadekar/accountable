@@ -73,9 +73,9 @@ void main() {
   });
 
   test('category icon mapping uses category semantics', () {
-    const dining = Category(
-      id: 'dining',
-      name: 'Dining',
+    const foodDrink = Category(
+      id: 'food_drink',
+      name: 'Food & Drink',
       allowedTransactionTypes: {},
     );
     const personalCare = Category(
@@ -84,7 +84,7 @@ void main() {
       allowedTransactionTypes: {},
     );
 
-    expect(categoryIcon(dining), Icons.restaurant);
+    expect(categoryIcon(foodDrink), Icons.restaurant);
     expect(categoryIcon(personalCare), Icons.spa);
     expect(
       categoryIcon(
@@ -128,7 +128,7 @@ void main() {
       ),
       Icons.eco,
     );
-    expect(categoryColor(dining), isNot(equals(categoryColor(personalCare))));
+    expect(categoryColor(foodDrink), isNot(equals(categoryColor(personalCare))));
     expect(
       categoryIcon(
         const Category(

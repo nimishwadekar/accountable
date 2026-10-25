@@ -10,10 +10,10 @@ void main() {
     final result = CategoryAnalysisCalculator(data)
         .spending(month: DateTime.utc(2026, 10));
 
-    final dining = result.values.firstWhere(
-      (value) => value.categoryId == 'dining',
+    final foodDrink = result.values.firstWhere(
+      (value) => value.categoryId == 'food_drink',
     );
-    expect(dining.amountUsdMinorUnits, greaterThan(0));
+    expect(foodDrink.amountUsdMinorUnits, greaterThan(0));
   });
 
   test(

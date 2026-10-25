@@ -17,7 +17,7 @@ class CategoryVisual {
 
 const _categoryVisuals = <CategoryVisual>[
   CategoryVisual(
-    terms: ['dining', 'restaurant', 'food', 'meal'],
+    terms: ['food', 'restaurant', 'meal'],
     icon: Icons.restaurant,
     color: Color(0xFFE76F51),
   ),

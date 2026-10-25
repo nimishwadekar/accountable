@@ -19,7 +19,7 @@ void main() {
     sourceAccountId: 'chase_checking',
     destinationAmount: null,
     destinationAccountId: null,
-    categoryId: 'dining',
+    categoryId: 'food_drink',
     tagId: 'boston',
     description: 'Lunch',
   );

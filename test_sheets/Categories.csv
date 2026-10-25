@@ -1,7 +1,7 @@
 category_id,category_name,allowed_transaction_types
 housing,Housing,"expense,reimbursement"
 bills,Bills,"expense,reimbursement"
-dining,Dining,"expense,reimbursement"
+food_drink,Dining,"expense,reimbursement"
 groceries,Groceries,"expense,reimbursement"
 transport,Transport,"expense,reimbursement"
 travel,Travel,"expense,reimbursement"
