@@ -21,6 +21,7 @@ class OverviewPage extends StatelessWidget {
       data.dailyNetWorth,
       latestNetWorth,
     );
+    final monthlyComparison = _monthlyNetWorthComparison(data.dailyNetWorth);
 
     return AppPageFrame(
       title: 'Overview',
@@ -28,22 +29,62 @@ class OverviewPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          MetricCard(
-            label: 'Net Worth',
-            value: latestNetWorth == null
-                ? 'Unavailable'
-                : formatMoney(latestNetWorth.amount, data.currenciesById),
-            detail: latestNetWorth == null
-                ? 'No daily snapshot available'
-                : _netWorthDetail(
-                    latestNetWorth: latestNetWorth,
-                    change: netWorthChange,
-                    currencies: data.currenciesById,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cards = [
+                MetricCard(
+                  label: 'Net Worth',
+                  value: latestNetWorth == null
+                      ? 'Unavailable'
+                      : formatMoney(latestNetWorth.amount, data.currenciesById),
+                  detail: latestNetWorth == null
+                      ? 'No daily snapshot available'
+                      : _netWorthDetail(
+                          latestNetWorth: latestNetWorth,
+                          change: netWorthChange,
+                          currencies: data.currenciesById,
+                        ),
+                  accent: latestNetWorth == null
+                      ? AppColors.mutedText
+                      : amountColor(
+                              context,
+                              latestNetWorth.amount.minorUnits,
+                            ) ??
+                            AppColors.teal,
+                ),
+                _monthlyAverageCard(
+                  comparison: monthlyComparison,
+                  currencies: data.currenciesById,
+                ),
+                _monthlyChangeCard(
+                  comparison: monthlyComparison,
+                  currencies: data.currenciesById,
+                ),
+              ];
+              if (constraints.maxWidth < AppBreakpoints.compact) {
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (var index = 0; index < cards.length; index++) ...[
+                        SizedBox(width: 260, child: cards[index]),
+                        if (index < cards.length - 1)
+                          const SizedBox(width: AppSpacing.sm),
+                      ],
+                    ],
                   ),
-            accent: latestNetWorth == null
-                ? AppColors.mutedText
-                : amountColor(context, latestNetWorth.amount.minorUnits) ??
-                      AppColors.teal,
+                );
+              }
+              return Row(
+                children: [
+                  for (var index = 0; index < cards.length; index++) ...[
+                    Expanded(child: cards[index]),
+                    if (index < cards.length - 1)
+                      const SizedBox(width: AppSpacing.md),
+                  ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: AppSpacing.xl),
           Text(
@@ -160,6 +201,108 @@ class OverviewPage extends StatelessWidget {
     return '$sign$amount · $sign$percentage over 30 days · $asOf';
   }
 
+  static Widget _monthlyAverageCard({
+    required _MonthlyNetWorthComparison? comparison,
+    required Map<String, CurrencyDefinition> currencies,
+  }) {
+    if (comparison == null) {
+      return const MetricCard(
+        label: 'Monthly Average',
+        value: 'Unavailable',
+        detail: 'Not enough monthly data',
+      );
+    }
+    return MetricCard(
+      label: '${comparison.currentLabel} Average',
+      value: formatMoney(comparison.currentAverage, currencies),
+      detail: '${comparison.currentSnapshotCount} daily snapshots',
+      accent: AppColors.teal,
+    );
+  }
+
+  static Widget _monthlyChangeCard({
+    required _MonthlyNetWorthComparison? comparison,
+    required Map<String, CurrencyDefinition> currencies,
+  }) {
+    if (comparison == null || comparison.percentageChange == null) {
+      return const MetricCard(
+        label: 'Monthly Change',
+        value: 'Unavailable',
+        detail: 'Not enough monthly data',
+      );
+    }
+    final percentage = comparison.percentageChange!;
+    final sign = percentage >= 0 ? '+' : '';
+    return MetricCard(
+      label: 'vs ${comparison.previousLabel} Average',
+      value: '$sign${percentage.toStringAsFixed(1)}%',
+      detail:
+          '${formatMoney(comparison.currentAverage, currencies)} vs ${formatMoney(comparison.previousAverage, currencies)}',
+      accent: percentage > 0
+          ? AppColors.success
+          : percentage < 0
+          ? AppColors.danger
+          : AppColors.mutedText,
+    );
+  }
+
+  static _MonthlyNetWorthComparison? _monthlyNetWorthComparison(
+    Iterable<DailyNetWorth> values,
+  ) {
+    final byMonth = <DateTime, List<DailyNetWorth>>{};
+    for (final value in values) {
+      final month = DateTime.utc(value.date.year, value.date.month);
+      byMonth.putIfAbsent(month, () => []).add(value);
+    }
+    final months = byMonth.keys.toList()..sort();
+    if (months.length < 2) return null;
+    final currentMonth = months.last;
+    final previousMonth = months[months.length - 2];
+    int average(DateTime month) {
+      final entries = byMonth[month]!;
+      final total = entries.fold<int>(
+        0,
+        (sum, value) => sum + value.amount.minorUnits,
+      );
+      return (total / entries.length).round();
+    }
+
+    final currentAverage = average(currentMonth);
+    final previousAverage = average(previousMonth);
+    final percentage = previousAverage == 0
+        ? null
+        : (currentAverage - previousAverage) / previousAverage.abs() * 100;
+    return _MonthlyNetWorthComparison(
+      currentLabel: _monthLabel(currentMonth),
+      previousLabel: _monthLabel(previousMonth),
+      currentAverage: Money(
+        minorUnits: currentAverage,
+        currencyId: byMonth[currentMonth]!.first.amount.currencyId,
+      ),
+      previousAverage: Money(
+        minorUnits: previousAverage,
+        currencyId: byMonth[previousMonth]!.first.amount.currencyId,
+      ),
+      currentSnapshotCount: byMonth[currentMonth]!.length,
+      percentageChange: percentage,
+    );
+  }
+
+  static String _monthLabel(DateTime month) => const [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ][month.month - 1];
+
   static _NetWorthChange? _netWorthChangeOver30Days(
     Iterable<DailyNetWorth> values,
     DailyNetWorth? latest,
@@ -201,6 +344,24 @@ class OverviewPage extends StatelessWidget {
     }
     return latest;
   }
+}
+
+class _MonthlyNetWorthComparison {
+  const _MonthlyNetWorthComparison({
+    required this.currentLabel,
+    required this.previousLabel,
+    required this.currentAverage,
+    required this.previousAverage,
+    required this.currentSnapshotCount,
+    required this.percentageChange,
+  });
+
+  final String currentLabel;
+  final String previousLabel;
+  final Money currentAverage;
+  final Money previousAverage;
+  final int currentSnapshotCount;
+  final double? percentageChange;
 }
 
 class _NetWorthChange {

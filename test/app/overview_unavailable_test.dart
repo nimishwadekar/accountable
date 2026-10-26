@@ -30,7 +30,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Unavailable'), findsOneWidget);
+    expect(find.text('Unavailable'), findsNWidgets(3));
     expect(find.text('No daily snapshot available'), findsOneWidget);
   });
 }
