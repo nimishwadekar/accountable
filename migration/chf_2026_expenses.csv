@@ -1,0 +1,696 @@
+Date,Description,Category,Amount,Currency,Tag
+2026-01-01,Hot Dog,food_drink,8.5,CHF,Switzerland
+2026-01-01,Swiggy - Domino's,food_drink,370,INR,Switzerland
+2026-01-02,Swiggy - Soup,food_drink,556,INR,Switzerland
+2026-01-03,Psych Assessment,health,6000,INR,Switzerland
+2026-01-03,Wise,financial_fees,0.78,CHF,Switzerland
+2026-01-03,Swype,bills,19.95,CHF,Switzerland
+2026-01-05,Migros,groceries,19.1,CHF,Switzerland
+2026-01-06,Commute,transport,8.55,CHF,Switzerland
+2026-01-06,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-01-06,Crochet Supplies,shopping,14.54,CHF,Switzerland
+2026-01-06,Coop,groceries,6.95,CHF,Switzerland
+2026-01-07,Galaxus Internet,bills,11.33,CHF,Switzerland
+2026-01-07,Commute,transport,8.55,CHF,Switzerland
+2026-01-07,Lidl,groceries,9,CHF,Switzerland
+2026-01-07,Coop,groceries,7.8,CHF,Switzerland
+2026-01-10,Dinner - Burger King,food_drink,10.8,CHF,Switzerland
+2026-01-11,Lunch - Oh My Greek,food_drink,22.9,CHF,Switzerland
+2026-01-11,Dinner - Burger King,food_drink,12.3,CHF,Switzerland
+2026-01-12,Protein Drink,food_drink,1.95,CHF,Switzerland
+2026-01-13,Commute,transport,8.55,CHF,Switzerland
+2026-01-13,Snack - Migros,food_drink,2.35,CHF,Switzerland
+2026-01-13,Riya Birthday Letter Material,shopping,9.5,CHF,Switzerland
+2026-01-13,Coop,groceries,23.4,CHF,Switzerland
+2026-01-13,Therapy [1/2],health,386.32,INR,Switzerland
+2026-01-13,Therapy [2/2],health,1195.725,INR,Switzerland
+2026-01-14,Commute,transport,4.275,CHF,Switzerland
+2026-01-14,Breakfast - Coop,food_drink,1.1,CHF,Switzerland
+2026-01-14,Riya Birthday Letter Material,shopping,10.05,CHF,Switzerland
+2026-01-14,Protein Drink,food_drink,2.3,CHF,Switzerland
+2026-01-15,Post Birthday Card,gifts,10.5,CHF,Switzerland
+2026-01-15,Aldi,groceries,9.55,CHF,Switzerland
+2026-01-15,Art of Food,groceries,22.65,CHF,Switzerland
+2026-01-15,Face Wash,shopping,6.5,CHF,Switzerland
+2026-01-15,Coop,groceries,10.9,CHF,Switzerland
+2026-01-16,Commute,transport,8.55,CHF,Switzerland
+2026-01-16,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-01-16,Amazon,shopping,100.78,CHF,Switzerland
+2026-01-17,Coop,groceries,12.7,CHF,Switzerland
+2026-01-17,Dinner - Burger King,food_drink,9.8,CHF,Switzerland
+2026-01-18,Tomatoes,groceries,1.5,CHF,Switzerland
+2026-01-18,Swiggy for Riya,gifts,640,INR,Switzerland
+2026-01-19,Energy Drink,food_drink,2.1,CHF,Switzerland
+2026-01-19,Birthday Gifts for Riya,gifts,3189,INR,Switzerland
+2026-01-19,Stained Glass Bulbs,gifts,34.44,CHF,Switzerland
+2026-01-19,Energy Drink,food_drink,3.4,CHF,Switzerland
+2026-01-20,Snacks - Coop,food_drink,2.95,CHF,Switzerland
+2026-01-20,Coop,groceries,4.9,CHF,Switzerland
+2026-01-21,Commute,transport,4.275,CHF,Switzerland
+2026-01-21,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-01-21,Uber One,bills,14.9,CHF,Switzerland
+2026-01-21,Dinner - Domino's,food_drink,36.34,CHF,Switzerland
+2026-01-23,Steam Gift,gifts,599,INR,Switzerland
+2026-01-23,Commute,transport,8.55,CHF,Switzerland
+2026-01-23,Lunch - Coop,food_drink,6.4,CHF,Switzerland
+2026-01-23,Coop,groceries,1.25,CHF,Switzerland
+2026-01-23,Dinner - Burger King,food_drink,11.7,CHF,Switzerland
+2026-01-24,Lollapalooza Top-up,food_drink,1000,INR,Switzerland
+2026-01-24,Wise,financial_fees,0.86,CHF,Switzerland
+2026-01-24,Dinner - Burger King,food_drink,21.3,CHF,Switzerland
+2026-01-25,Belli Shop,groceries,4.85,CHF,Switzerland
+2026-01-25,Aloe Vera Drink,food_drink,2.9,CHF,Switzerland
+2026-01-25,Boiled Chestnut,food_drink,4,CHF,Switzerland
+2026-01-25,[Flight] Zurich - Mumbai - Zurich,transport,599,CHF,India - Feb 2026
+2026-01-25,Dinner - Burger King,food_drink,12.3,CHF,Switzerland
+2026-01-26,Temu,shopping,42.86,CHF,Switzerland
+2026-01-26,Dinner - Burger King,food_drink,12.6,CHF,Switzerland
+2026-01-27,Rent,housing,596.67,CHF,Switzerland
+2026-01-27,Commute,transport,4.275,CHF,Switzerland
+2026-01-27,Snack,food_drink,2.1,CHF,Switzerland
+2026-01-27,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-01-27,Dinner - Rice Up,food_drink,16.9,CHF,Switzerland
+2026-01-28,Commute,transport,8.55,CHF,Switzerland
+2026-01-28,Snack,food_drink,2.1,CHF,Switzerland
+2026-01-28,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-01-28,Aldi Süd,groceries,22.11,CHF,Switzerland
+2026-01-28,Dinner - Burger King,food_drink,12.9,CHF,Switzerland
+2026-01-29,Commute,transport,8.55,CHF,Switzerland
+2026-01-29,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-01-29,Belimo Card Top-Up,food_drink,10,CHF,Switzerland
+2026-01-30,Instamart,gifts,372,INR,Switzerland
+2026-01-30,Dinner - Burger King,food_drink,2.5,CHF,Switzerland
+2026-01-30,Riya Birthday Food,gifts,562.65,INR,Switzerland
+2026-01-31,Steam [1/2],entertainment,1639.16,INR,Switzerland
+2026-01-31,Steam [2/2],entertainment,2037.84,INR,Switzerland
+2026-01-31,Steam Gift for Riya,gifts,3156,INR,Switzerland
+2026-01-31,Energy Drink,food_drink,5,CHF,Switzerland
+2026-02-02,Lunch - Mensa,food_drink,9.9,CHF,Switzerland
+2026-02-02,Coop,groceries,1.25,CHF,Switzerland
+2026-02-02,Swype,bills,19.95,CHF,Switzerland
+2026-02-03,Lunch - Subway,food_drink,12.5,CHF,Switzerland
+2026-02-03,Coop,groceries,7.8,CHF,Switzerland
+2026-02-03,Essentials,shopping,8,CHF,Switzerland
+2026-02-04,Commute,transport,4.275,CHF,Switzerland
+2026-02-04,Lunch - Belimo,food_drink,10.75,CHF,Switzerland
+2026-02-04,Dinner - Burger King,food_drink,12.8,CHF,Switzerland
+2026-02-04,[Airbnb] Kraków,housing,15.09,CHF,Poland - Feb 2026
+2026-02-04,[Hostel] Wrocław,housing,15.47,CHF,Poland - Feb 2026
+2026-02-04,[Flight] Basel - Wrocław - Basel,transport,29.64,CHF,Poland - Feb 2026
+2026-02-04,[Bus] Kraków - Wrocław,transport,9.65,CHF,Poland - Feb 2026
+2026-02-04,Wise,financial_fees,0.24,CHF,Poland - Feb 2026
+2026-02-05,Kraków Salt Mine,travel,121,PLN,Poland - Feb 2026
+2026-02-05,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-02-05,Instamart,gifts,221,INR,Switzerland
+2026-02-05,Dinner - Burger King,food_drink,12.6,CHF,Switzerland
+2026-02-06,Candy,food_drink,2.3,CHF,Poland - Feb 2026
+2026-02-06,Coffee and Croissant,food_drink,5.32,CHF,Poland - Feb 2026
+2026-02-06,Swype Roaming,bills,3,CHF,Poland - Feb 2026
+2026-02-06,Wroclaw Day Ticket,transport,15,PLN,Poland - Feb 2026
+2026-02-06,Water,food_drink,1.55,PLN,Poland - Feb 2026
+2026-02-06,Lunch - KFC,food_drink,49.47,PLN,Poland - Feb 2026
+2026-02-06,Tower Viewpoint,travel,11,PLN,Poland - Feb 2026
+2026-02-06,Restaurant Targowa,food_drink,51,PLN,Poland - Feb 2026
+2026-02-06,Wise,financial_fees,0.24,CHF,Poland - Feb 2026
+2026-02-06,Plug Adapter,shopping,9,PLN,Poland - Feb 2026
+2026-02-06,Toilet,health,1,PLN,Poland - Feb 2026
+2026-02-06,Penitent Tower Bridge,travel,12,PLN,Poland - Feb 2026
+2026-02-06,Beer and Chocolate,food_drink,18.9,PLN,Poland - Feb 2026
+2026-02-06,Ice Cream,food_drink,7.99,PLN,Poland - Feb 2026
+2026-02-06,Wrocław Souvenirs,shopping,103,PLN,Poland - Feb 2026
+2026-02-06,Dinner - Setka,food_drink,65.8,PLN,Poland - Feb 2026
+2026-02-06,Chimney Cake,food_drink,21,PLN,Poland - Feb 2026
+2026-02-06,Vape,shopping,89.99,PLN,Poland - Feb 2026
+2026-02-06,Wise,financial_fees,0.23,CHF,Poland - Feb 2026
+2026-02-07,Swype Roaming,bills,3,CHF,Poland - Feb 2026
+2026-02-07,Galaxus Internet,bills,11.33,CHF,Switzerland
+2026-02-07,[Train] Wrocław - Katowice,transport,71,PLN,Poland - Feb 2026
+2026-02-07,[Train] Katowice - Oświęcim,transport,14.35,PLN,Poland - Feb 2026
+2026-02-07,Lunch - Pod Siódemką,food_drink,52,PLN,Poland - Feb 2026
+2026-02-07,Drink,food_drink,3.6,PLN,Poland - Feb 2026
+2026-02-07,Toilet,health,5,PLN,Poland - Feb 2026
+2026-02-07,[Train] Oświęcim - Kraków,transport,16.5,PLN,Poland - Feb 2026
+2026-02-07,Kraków Day Ticket,transport,17,PLN,Poland - Feb 2026
+2026-02-07,Dinner,food_drink,56,PLN,Poland - Feb 2026
+2026-02-08,Swype Roaming,bills,3,CHF,Poland - Feb 2026
+2026-02-08,Breakfast - Żabka,food_drink,13.99,PLN,Poland - Feb 2026
+2026-02-08,Kraków Souvenirs,shopping,182.5,PLN,Poland - Feb 2026
+2026-02-08,Lunch - Żabka,food_drink,17.29,PLN,Poland - Feb 2026
+2026-02-08,[Train] Kraków - Wieliczka,transport,7,PLN,Poland - Feb 2026
+2026-02-08,Sprite,food_drink,7,PLN,Poland - Feb 2026
+2026-02-08,[Train] Wieliczka - Kraków,transport,7,PLN,Poland - Feb 2026
+2026-02-08,Dinner - Żabka,food_drink,14,PLN,Poland - Feb 2026
+2026-02-08,[Tram] Vistula River - Kraków Główny,transport,4,PLN,Poland - Feb 2026
+2026-02-09,[Bus] Wrocław - Airport,transport,4.6,PLN,Poland - Feb 2026
+2026-02-09,Late Dinner,food_drink,16,PLN,Poland - Feb 2026
+2026-02-09,Basel Europort - Zürich,transport,15.975,CHF,Poland - Feb 2026
+2026-02-09,Croissant,food_drink,2.1,CHF,Switzerland
+2026-02-09,Dinner - Burger King,food_drink,19.1,CHF,Switzerland
+2026-02-10,Coop,groceries,11.9,CHF,Switzerland
+2026-02-11,Commute,transport,8.55,CHF,Switzerland
+2026-02-11,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-02-12,Commute,transport,8.55,CHF,Switzerland
+2026-02-12,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-02-12,Läderach,gifts,21.1,CHF,India - Feb 2026
+2026-02-12,Chocolate + Beer,gifts,20.9,CHF,India - Feb 2026
+2026-02-12,Chocolates,gifts,14.85,CHF,India - Feb 2026
+2026-02-12,Chocolates,gifts,7,CHF,India - Feb 2026
+2026-02-13,Zürich Airport Extension,transport,2.475,CHF,India - Feb 2026
+2026-02-13,Lunch - Burger King,food_drink,20.7,CHF,India - Feb 2026
+2026-02-14,Dinner - Qatar Airport,food_drink,14.43,CHF,India - Feb 2026
+2026-02-14,Drink,food_drink,3.4,CHF,India - Feb 2026
+2026-02-14,[Cab] Airport - Home,transport,1350,INR,India - Feb 2026
+2026-02-14,Flowers,gifts,870,INR,India - Feb 2026
+2026-02-14,Rickshaw,transport,183,INR,India - Feb 2026
+2026-02-14,Lunch - Mansionairre by the Roof,food_drink,2819.1,INR,India - Feb 2026
+2026-02-14,Rickshaw,transport,123,INR,India - Feb 2026
+2026-02-14,Mahabi's,food_drink,540,INR,India - Feb 2026
+2026-02-14,Rickshaw,transport,113,INR,India - Feb 2026
+2026-02-15,Rickshaw,transport,119.48,INR,India - Feb 2026
+2026-02-15,Swiggy One,food_drink,35,INR,India - Feb 2026
+2026-02-15,Instamart [1/2],food_drink,404.46,INR,India - Feb 2026
+2026-02-15,Instamart [2/2],food_drink,232.54,INR,India - Feb 2026
+2026-02-16,Vape,shopping,750,INR,India - Feb 2026
+2026-02-16,Twisties,food_drink,465,INR,India - Feb 2026
+2026-02-17,Instamart,groceries,674,INR,India - Feb 2026
+2026-02-17,Wise,financial_fees,0.86,CHF,India - Feb 2026
+2026-02-17,Gym [1/2],health,1109.76,INR,India - Feb 2026
+2026-02-17,Gym [2/2],health,1390.24,INR,India - Feb 2026
+2026-02-17,Twisties,food_drink,1090,INR,India - Feb 2026
+2026-02-17,Scooter Fuel,transport,300,INR,India - Feb 2026
+2026-02-18,Sanitizer,health,35,INR,India - Feb 2026
+2026-02-18,Cotton Candy,food_drink,60,INR,India - Feb 2026
+2026-02-18,Mad Over Donuts,food_drink,400,INR,India - Feb 2026
+2026-02-19,Rickshaw,transport,34,INR,India - Feb 2026
+2026-02-19,Rickshaw,transport,43,INR,India - Feb 2026
+2026-02-19,Odomos,health,36,INR,India - Feb 2026
+2026-02-19,Instamart,food_drink,184,INR,India - Feb 2026
+2026-02-19,[Train] Thane - Vashi,transport,65,INR,India - Feb 2026
+2026-02-19,Rickshaw,transport,45,INR,India - Feb 2026
+2026-02-19,Coke,food_drink,39.99,INR,India - Feb 2026
+2026-02-19,McDonald's [1/2],food_drink,12.37,INR,India - Feb 2026
+2026-02-19,McDonald's [2/2],food_drink,341,INR,India - Feb 2026
+2026-02-20,Rickshaw to Powai,transport,196.16,INR,India - Feb 2026
+2026-02-20,Wise,financial_fees,0.86,CHF,India - Feb 2026
+2026-02-20,[Cab] Powai - Vashi,transport,309.96,INR,India - Feb 2026
+2026-02-20,Coke + Strepsils,food_drink,75.59,INR,India - Feb 2026
+2026-02-20,Seti Momos,food_drink,240,INR,India - Feb 2026
+2026-02-20,McDonald's,food_drink,1.44,CHF,India - Feb 2026
+2026-02-21,Instamart,food_drink,345,INR,India - Feb 2026
+2026-02-22,Flowers,gifts,40,INR,India - Feb 2026
+2026-02-22,Kinder Joy,food_drink,45,INR,India - Feb 2026
+2026-02-22,[Cab] Thane - Bandra,transport,610,INR,India - Feb 2026
+2026-02-22,Rickshaw,transport,48.2,INR,India - Feb 2026
+2026-02-22,Magnolia Bakery,food_drink,473,INR,India - Feb 2026
+2026-02-22,Rickshaw,transport,44.2,INR,India - Feb 2026
+2026-02-22,Puppy Cuddles Dog Cafe,travel,1000,INR,India - Feb 2026
+2026-02-22,Shoe Covers,shopping,100,INR,India - Feb 2026
+2026-02-22,Rickshaw,transport,34,INR,India - Feb 2026
+2026-02-22,Rickshaw,transport,107,INR,India - Feb 2026
+2026-02-22,Dinner - O Pedro,food_drink,4704,INR,India - Feb 2026
+2026-02-22,[Cab] BKC - Thane,transport,590,INR,India - Feb 2026
+2026-02-23,Instamart,food_drink,304,INR,India - Feb 2026
+2026-02-24,[Train] Thane - Vashi,transport,15,INR,India - Feb 2026
+2026-02-24,Rickshaw,transport,46,INR,India - Feb 2026
+2026-02-24,Iphone Screen Guard,gifts,120,INR,India - Feb 2026
+2026-02-24,Energy Drink,food_drink,124.99,INR,India - Feb 2026
+2026-02-24,McDonald's,food_drink,206.85,INR,India - Feb 2026
+2026-02-24,Sev Puri,food_drink,65,INR,India - Feb 2026
+2026-02-24,Rickshaw,transport,134,INR,India - Feb 2026
+2026-02-24,Rickshaw,transport,46,INR,India - Feb 2026
+2026-02-25,Haircare,shopping,648,INR,India - Feb 2026
+2026-02-25,Rent,housing,596.67,CHF,Switzerland
+2026-02-25,Printout,other,62,INR,India - Feb 2026
+2026-02-25,Rickshaw,transport,74,INR,India - Feb 2026
+2026-02-25,Rickshaw,transport,99,INR,India - Feb 2026
+2026-02-25,Printout,other,25,INR,India - Feb 2026
+2026-02-25,Aajoba Cab to Mumbai Central [1/2],transport,399.5,INR,India - Feb 2026
+2026-02-25,Aajoba Cab to Mumbai Central [2/2],transport,200.5,INR,India - Feb 2026
+2026-02-25,Rickshaw,transport,50,INR,India - Feb 2026
+2026-02-25,Rickshaw,transport,55,INR,India - Feb 2026
+2026-02-25,Rickshaw,transport,69,INR,India - Feb 2026
+2026-02-26,Rickshaw,transport,137,INR,India - Feb 2026
+2026-02-26,Rickshaw,transport,90,INR,India - Feb 2026
+2026-02-26,Laptop Cleaning Kit,shopping,350,INR,India - Feb 2026
+2026-02-26,Dental X-Ray,health,5.13,CHF,India - Feb 2026
+2026-02-26,Eye Drops,health,97.5,INR,India - Feb 2026
+2026-02-26,Flowers,gifts,20,INR,India - Feb 2026
+2026-02-26,Dessert,food_drink,220,INR,India - Feb 2026
+2026-02-26,Bombay Gourmet,groceries,2783,INR,India - Feb 2026
+2026-02-27,Jhumka,gifts,1099,INR,India - Feb 2026
+2026-02-27,Wise,financial_fees,0.96,CHF,India - Feb 2026
+2026-02-27,Instamart,food_drink,253,INR,India - Feb 2026
+2026-02-28,Instamart,groceries,1795,INR,India - Feb 2026
+2026-02-28,Lunch - Swiggy,food_drink,1062,INR,India - Feb 2026
+2026-02-28,Swiggy,food_drink,269,INR,India - Feb 2026
+2026-02-28,Biryani Festival,food_drink,120,INR,India - Feb 2026
+2026-03-01,Instamart,groceries,241,INR,India - Feb 2026
+2026-03-01,Instamart,food_drink,314,INR,India - Feb 2026
+2026-03-01,Biryani Festival,food_drink,1135,INR,India - Feb 2026
+2026-03-01,Scooter Fuel,transport,458.09,INR,India - Feb 2026
+2026-03-02,Haircut,other,250,INR,India - Feb 2026
+2026-03-02,Laptop Repair [1/2],shopping,559.84,INR,India - Feb 2026
+2026-03-02,Laptop Repair [2/2],shopping,5640.16,INR,India - Feb 2026
+2026-03-02,Wise,financial_fees,1.06,CHF,India - Feb 2026
+2026-03-03,Holi Festival,entertainment,1570.8,INR,India - Feb 2026
+2026-03-03,Holi Pichkari,shopping,600,INR,India - Feb 2026
+2026-03-03,Rickshaw,transport,120.06,INR,India - Feb 2026
+2026-03-03,Rickshaw,transport,91,INR,India - Feb 2026
+2026-03-03,Soft Spot Ice Cream,food_drink,180,INR,India - Feb 2026
+2026-03-03,Rickshaw,transport,75,INR,India - Feb 2026
+2026-03-03,Neal Medicine,health,207,INR,India - Feb 2026
+2026-03-04,Therapy,health,16.64,CHF,India - Feb 2026
+2026-03-04,Galaxus Internet,bills,11.33,CHF,Switzerland
+2026-03-04,Lunch - Swiggy,food_drink,529,INR,India - Feb 2026
+2026-03-04,Rickshaw,transport,73,INR,India - Feb 2026
+2026-03-04,Swype,bills,19.95,CHF,Switzerland
+2026-03-04,Face Brush,gifts,1169.1,INR,India - Feb 2026
+2026-03-05,Rickshaw,transport,66,INR,India - Feb 2026
+2026-03-05,Doctor Visit,health,1800,INR,India - Feb 2026
+2026-03-05,Medicines,health,412,INR,India - Feb 2026
+2026-03-05,Rickshaw,transport,26,INR,India - Feb 2026
+2026-03-05,Blood Test,health,3850,INR,India - Feb 2026
+2026-03-04,Chariar Clinic,health,2530,INR,India - Feb 2026
+2026-03-05,Rickshaw,transport,80,INR,India - Feb 2026
+2026-03-05,Chiku Medicines,health,709,INR,India - Feb 2026
+2026-03-05,Medicines,health,65,INR,India - Feb 2026
+2026-03-06,[Cab] Home - Vetic,transport,540,INR,India - Feb 2026
+2026-03-06,[Cab] Vetic - Home,transport,300,INR,India - Feb 2026
+2026-03-06,[Cab] Home - Vetic,transport,390,INR,India - Feb 2026
+2026-03-06,Aai Cab,transport,750,INR,India - Feb 2026
+2026-03-06,[Cab] Vetic - Home,transport,676,INR,India - Feb 2026
+2026-03-06,Cab,transport,279.96,INR,India - Feb 2026
+2026-03-07,Rickshaw,transport,42,INR,India - Feb 2026
+2026-03-07,Twisties,food_drink,480,INR,India - Feb 2026
+2026-03-07,Medicine,health,20,INR,India - Feb 2026
+2026-03-08,Urine Culture,health,1050,INR,India - Feb 2026
+2026-03-08,Lozenges,health,50,INR,India - Feb 2026
+2026-03-08,Holi Lunch,food_drink,790,INR,India - Feb 2026
+2026-03-08,Amazon,shopping,504,INR,India - Feb 2026
+2026-03-09,Cafe,food_drink,290,INR,India - Feb 2026
+2026-03-09,Water,food_drink,20,INR,India - Feb 2026
+2026-03-10,Medicine,health,373.28,INR,India - Feb 2026
+2026-03-10,Instamart,groceries,600,INR,India - Feb 2026
+2026-03-10,Swiggy,food_drink,300,INR,India - Feb 2026
+2026-03-10,Dentist,health,7000,INR,India - Feb 2026
+2026-03-10,[Train] Thane - Vashi,transport,63.05,INR,India - Feb 2026
+2026-03-10,Rickshaw,transport,61,INR,India - Feb 2026
+2026-03-10,Vashi Social,food_drink,2279,INR,India - Feb 2026
+2026-03-10,Miniso,shopping,1270,INR,India - Feb 2026
+2026-03-10,Cab,transport,450,INR,India - Feb 2026
+2026-03-10,Doctor,health,200,INR,India - Feb 2026
+2026-03-11,Medcine,health,1600,INR,India - Feb 2026
+2026-03-11,Swiggy,food_drink,399,INR,India - Feb 2026
+2026-03-12,Plushie Repair,other,50,INR,India - Feb 2026
+2026-03-12,Nintendo Switch 2,entertainment,66500,INR,India - Feb 2026
+2026-03-11,[Flight] Mumbai - Zurich,transport,729.4,CHF,India - Feb 2026
+2026-03-12,[Train] Thane - Vashi,transport,63.05,INR,India - Feb 2026
+2026-03-12,Snacks,food_drink,319.98,INR,India - Feb 2026
+2026-03-12,Dinner,food_drink,1009,INR,India - Feb 2026
+2026-03-13,Train,transport,63.05,INR,India - Feb 2026
+2026-03-13,Rickshaw,transport,82,INR,India - Feb 2026
+2026-03-13,Food,food_drink,534,INR,India - Feb 2026
+2026-03-13,Rickshaw,transport,128,INR,India - Feb 2026
+2026-03-14,Viviana Food Court,food_drink,572,INR,India - Feb 2026
+2026-03-14,Book,shopping,899,INR,India - Feb 2026
+2026-03-14,Starbucks,food_drink,772,INR,India - Feb 2026
+2026-03-14,Sunscreen,shopping,599,INR,India - Feb 2026
+2026-03-14,Ice Cream,food_drink,189,INR,India - Feb 2026
+2026-03-16,Groceries,groceries,717,INR,India - Feb 2026
+2026-03-16,Rickshaw,transport,104,INR,India - Feb 2026
+2026-03-17,Dentist,health,1500,INR,India - Feb 2026
+2026-03-17,Rickshaw,transport,29,INR,India - Feb 2026
+2026-03-17,[Train] Thane - Vashi,transport,63.05,INR,India - Feb 2026
+2026-03-17,Rickshaw,transport,50,INR,India - Feb 2026
+2026-03-17,Therapy,health,1950,INR,India - Feb 2026
+2026-03-18,Pani Puri,food_drink,55,INR,India - Feb 2026
+2026-03-18,Bombay Gourmet,groceries,285,INR,India - Feb 2026
+2026-03-19,Nintendo Eshop,entertainment,2586,INR,India - Feb 2026
+2026-03-19,Dumplings,food_drink,249,INR,India - Feb 2026
+2026-03-19,Shawarmaji,food_drink,260,INR,India - Feb 2026
+2026-03-20,Rickshaw,transport,139,INR,India - Feb 2026
+2026-03-20,Fully Body Checkup,health,7500,INR,India - Feb 2026
+2026-03-20,Lunch,food_drink,2076,INR,India - Feb 2026
+2026-03-20,Rickshaw,transport,156,INR,India - Feb 2026
+2026-03-20,Dentist,health,500,INR,India - Feb 2026
+2026-03-20,Veggies,groceries,75,INR,India - Feb 2026
+2026-03-20,Bean Theory Cafe,food_drink,660,INR,India - Feb 2026
+2026-03-20,Shoes,shopping,348,INR,India - Feb 2026
+2026-03-21,Flight Refund,transport,-135.21,CHF,India - Feb 2026
+2026-03-21,Wellness Forever,food_drink,104,INR,India - Feb 2026
+2026-03-21,Swiggy,food_drink,546,INR,India - Feb 2026
+2026-03-22,Crossword,shopping,499,INR,India - Feb 2026
+2026-03-23,Movie,entertainment,1743.6,INR,India - Feb 2026
+2026-03-23,Gym,health,2500,INR,India - Feb 2026
+2026-03-23,Wellness Forever,food_drink,130,INR,India - Feb 2026
+2026-03-23,Thermometer,health,250,INR,India - Feb 2026
+2026-03-23,Doctor,health,300,INR,India - Feb 2026
+2026-03-23,Medicine,health,750,INR,India - Feb 2026
+2026-03-24,Therapy,health,1950,INR,India - Feb 2026
+2026-03-25,Medicine,health,28,INR,India - Feb 2026
+2026-03-26,Ricci's,food_drink,1685,INR,India - Feb 2026
+2026-03-24,Rent,bills,596.67,CHF,Switzerland
+2026-03-26,Instamart,food_drink,561,INR,India - Feb 2026
+2026-03-27,Rickshaw,transport,42,INR,India - Feb 2026
+2026-03-27,Doctor,health,1800,INR,India - Feb 2026
+2026-03-27,Rickshaw,transport,38,INR,India - Feb 2026
+2026-03-27,[Train] Thane - Vashi,transport,63.05,INR,India - Feb 2026
+2026-03-27,McDonald's,food_drink,419.22,INR,India - Feb 2026
+2026-03-27,Snacks,food_drink,218.98,INR,India - Feb 2026
+2026-03-27,Pani Puri,food_drink,110,INR,India - Feb 2026
+2026-03-27,Essentials,shopping,276,INR,India - Feb 2026
+2026-03-27,Scooter Fuel,transport,480,INR,India - Feb 2026
+2026-03-27,Instamart,food_drink,271,INR,India - Feb 2026
+2026-03-28,Rickshaw,transport,120,INR,India - Feb 2026
+2026-03-28,Foo,food_drink,1443,INR,India - Feb 2026
+2026-03-28,Movie Food,food_drink,780,INR,India - Feb 2026
+2026-03-28,Mr DIY,shopping,54,INR,India - Feb 2026
+2026-03-28,Viviana Food Court,food_drink,463.38,INR,India - Feb 2026
+2026-03-28,Rickshaw,transport,150,INR,India - Feb 2026
+2026-03-28,Skincare,shopping,150,INR,India - Feb 2026
+2026-03-29,Blood Test,health,905,INR,India - Feb 2026
+2026-03-29,Bean Theory Cafe,food_drink,1220,INR,India - Feb 2026
+2026-03-30,Rickshaw,transport,79,INR,India - Feb 2026
+2026-03-30,Therapy,health,1950,INR,India - Feb 2026
+2026-03-31,Swiggy,food_drink,329,INR,India - Feb 2026
+2026-03-31,Electrolyte Drink,food_drink,50,INR,India - Feb 2026
+2026-03-31,Amazon,shopping,364,INR,India - Feb 2026
+2026-04-01,Kinder Joy,food_drink,45,INR,India - Feb 2026
+2026-04-01,Starbucks,food_drink,1549,INR,India - Feb 2026
+2026-04-01,Snack,food_drink,40,INR,India - Feb 2026
+2026-04-02,Swiggy,food_drink,723,INR,India - Feb 2026
+2026-04-02,Instamart,groceries,340,INR,India - Feb 2026
+2026-04-02,Swiggy,groceries,205,INR,India - Feb 2026
+2026-04-02,Scooter Parking,transport,30,INR,India - Feb 2026
+2026-04-02,[Train] Thane - Vashi,transport,63.05,INR,India - Feb 2026
+2026-04-02,Rickshaw,transport,89,INR,India - Feb 2026
+2026-04-02,T Shirt,shopping,1000,INR,India - Feb 2026
+2026-04-02,Makeup,gifts,718,INR,India - Feb 2026
+2026-04-02,Flowers,shopping,30,INR,India - Feb 2026
+2026-04-02,Cafe Anecdote,food_drink,1275,INR,India - Feb 2026
+2026-04-03,Scooter Parking,transport,20,INR,India - Feb 2026
+2026-04-03,Movie,entertainment,1006.2,INR,India - Feb 2026
+2026-04-03,Asahi Ramen,food_drink,1869,INR,India - Feb 2026
+2026-04-03,Food Ordering In,food_drink,1404.16,INR,India - Feb 2026
+2026-04-03,Rickshaw,transport,75,INR,India - Feb 2026
+2026-04-03,Swype,bills,19.95,CHF,Switzerland
+2026-04-04,Scooter Parking,transport,30,INR,India - Feb 2026
+2026-04-04,Movie Food,food_drink,2050,INR,India - Feb 2026
+2026-04-04,Funcity,entertainment,1600,INR,India - Feb 2026
+2026-04-04,Burger King,food_drink,177.44,INR,India - Feb 2026
+2026-04-04,Scooter Fuel,transport,300,INR,India - Feb 2026
+2026-04-04,Fruits,groceries,250,INR,India - Feb 2026
+2026-04-04,Instamart,food_drink,180,INR,India - Feb 2026
+2026-04-04,Galaxus Internet,bills,11.33,CHF,Switzerland
+2026-04-05,Swiggy,food_drink,279,INR,India - Feb 2026
+2026-04-06,Starbucks,food_drink,1334,INR,India - Feb 2026
+2026-04-06,Miniso,gifts,1000,INR,India - Feb 2026
+2026-04-06,Third Place Brew,food_drink,299,INR,India - Feb 2026
+2026-04-06,Twisties,food_drink,760,INR,India - Feb 2026
+2026-04-06,Scooter Parking,transport,30,INR,India - Feb 2026
+2026-04-06,Cabin Bag,shopping,4800,INR,India - Feb 2026
+2026-04-06,Medicine,health,395,INR,India - Feb 2026
+2026-04-06,Zepto,shopping,502,INR,India - Feb 2026
+2026-04-07,ETH Fees,bills,819,CHF,Switzerland
+2026-04-07,[Cab] Thane - Mumbai,transport,660,INR,India - Feb 2026
+2026-04-07,Book,shopping,599,INR,India - Feb 2026
+2026-04-07,Harajuku Cafe,food_drink,5104,INR,India - Feb 2026
+2026-04-07,Book Cafe,food_drink,700,INR,India - Feb 2026
+2026-04-07,Books,shopping,2711,INR,India - Feb 2026
+2026-04-07,Cab,transport,360,INR,India - Feb 2026
+2026-04-07,Cab,transport,139.93,INR,India - Feb 2026
+2026-04-07,China Bistro,food_drink,1145,INR,India - Feb 2026
+2026-04-07,Cab,transport,888,INR,India - Feb 2026
+2026-04-07,Power Bank,shopping,1654,INR,India - Feb 2026
+2026-04-08,[Cab] Thane - Airport,transport,824.39,INR,India - Feb 2026
+2026-04-08,Ice Cream,food_drink,100,INR,India - Feb 2026
+2026-04-07,South Indian Airport Food,food_drink,550,INR,India - Feb 2026
+2026-04-07,McDonald's,food_drink,265.07,INR,India - Feb 2026
+2026-04-08,Water,food_drink,65,INR,India - Feb 2026
+2026-04-08,In-flight WiFi,travel,7.11,CHF,India - Feb 2026
+2026-04-08,Lunch - Istanbul Airport,food_drink,18.28,CHF,India - Feb 2026
+2026-04-08,In-flight WiFi,travel,3.95,CHF,India - Feb 2026
+2026-04-08,Airport - Zurich,transport,2.475,CHF,Switzerland
+2026-04-08,Dinner - Burger King,food_drink,13.6,CHF,Switzerland
+2026-04-09,Lidl,groceries,32.5,CHF,Switzerland
+2026-04-10,Commute,transport,8.55,CHF,Switzerland
+2026-04-10,Lidl,groceries,7.75,CHF,Switzerland
+2026-04-10,Coop,groceries,20,CHF,Switzerland
+2026-04-11,Art of Food,groceries,19.25,CHF,Switzerland
+2026-04-11,Lidl,food_drink,10.2,CHF,Switzerland
+2026-04-12,Dinner - Burger King,food_drink,12.4,CHF,Switzerland
+2026-04-13,Lidl,groceries,14.35,CHF,Switzerland
+2026-04-14,Google One,bills,17.22,CHF,Switzerland
+2026-04-14,Spotify,entertainment,149,INR,Switzerland
+2026-04-14,Coop,groceries,2,CHF,Switzerland
+2026-04-15,Commute,transport,8.55,CHF,Switzerland
+2026-04-15,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-04-15,Night GA,transport,74.25,CHF,Switzerland
+2026-04-15,Denner Snack,food_drink,1.1,CHF,Switzerland
+2026-04-15,Lidl Germany,groceries,37.65,CHF,Switzerland
+2026-04-16,ETH Beer Tasting,food_drink,24,CHF,Switzerland
+2026-04-16,Dinner - Döner,food_drink,13,CHF,Switzerland
+2026-04-17,Commute,transport,8.55,CHF,Switzerland
+2026-04-17,Snack,food_drink,1,CHF,Switzerland
+2026-04-17,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-04-17,Snacks,food_drink,1.78,CHF,Switzerland
+2026-04-17,Art of Food,groceries,5.55,CHF,Switzerland
+2026-04-17,Steam,entertainment,960,INR,Switzerland
+2026-04-18,Dinner - Burger King,food_drink,17.9,CHF,Switzerland
+2026-04-19,Windscribe VPN,entertainment,2.35,CHF,Switzerland
+2026-04-19,Therapy,health,16.53,CHF,Switzerland
+2026-04-19,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-04-20,Lidl,groceries,12.8,CHF,Switzerland
+2026-04-20,Coop,groceries,5.6,CHF,Switzerland
+2026-04-21,Mate,food_drink,0.99,CHF,Switzerland
+2026-04-21,Lidl,food_drink,2.08,CHF,Switzerland
+2026-04-21,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-04-22,Lunch - Belimo,food_drink,8.45,CHF,Switzerland
+2026-04-22,Commute,transport,8.55,CHF,Switzerland
+2026-04-22,Lidl,groceries,3.87,CHF,Switzerland
+2026-04-22,Dinner - Burger King,food_drink,12.6,CHF,Switzerland
+2026-04-23,Commute,transport,8.55,CHF,Switzerland
+2026-04-23,Snack,food_drink,2.1,CHF,Switzerland
+2026-04-23,Lunch - Belimo,food_drink,10.95,CHF,Switzerland
+2026-04-23,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-04-24,Rent,bills,596.67,CHF,Switzerland
+2026-04-24,Lunch - Mensa,food_drink,6.1,CHF,Switzerland
+2026-04-24,Dinner - Burger King,food_drink,13.6,CHF,Switzerland
+2026-04-25,Shower Filter Refill,shopping,21.38,CHF,Switzerland
+2026-04-26,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-04-27,Lunch,food_drink,4.55,CHF,Switzerland
+2026-04-27,Therapy,health,16.31,CHF,Switzerland
+2026-04-27,Lidl,food_drink,5.27,CHF,Switzerland
+2026-04-28,Coop,groceries,2.5,CHF,Switzerland
+2026-04-29,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-04-29,Commute,transport,8.55,CHF,Switzerland
+2026-04-29,Lunch - Belimo,food_drink,9.05,CHF,Switzerland
+2026-04-29,Lidl,groceries,10.1,CHF,Switzerland
+2026-04-30,Coop,food_drink,1.25,CHF,Switzerland
+2026-04-30,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-04-30,Commute,transport,4.275,CHF,Switzerland
+2026-04-30,Energy Drink,food_drink,1.69,CHF,Switzerland
+2026-05-01,Spotify,entertainment,149,INR,Switzerland
+2026-05-01,Dinner - Holy Cow,food_drink,15.9,CHF,Switzerland
+2026-05-02,Lunch - Rice Up,food_drink,14.9,CHF,Switzerland
+2026-05-02,Dinner - Burger King,food_drink,8.9,CHF,Switzerland
+2026-05-03,Migros,food_drink,21.55,CHF,Switzerland
+2026-05-03,Coop,groceries,9.65,CHF,Switzerland
+2026-05-04,Lidl,food_drink,6.62,CHF,Switzerland
+2026-05-04,Coop,food_drink,1,CHF,Switzerland
+2026-05-04,Lidl,food_drink,2.54,CHF,Switzerland
+2026-05-04,Flowers and Chocolate,gifts,862,INR,Switzerland
+2026-05-05,Lunch - Mensa,food_drink,6.1,CHF,Switzerland
+2026-05-05,Mate,food_drink,0.99,CHF,Switzerland
+2026-05-05,Coop,food_drink,24.15,CHF,Switzerland
+2026-05-06,Commute,transport,8.55,CHF,Switzerland
+2026-05-06,Snack,food_drink,2.1,CHF,Switzerland
+2026-05-06,Galaxus Internet,bills,11.33,CHF,Switzerland
+2026-05-06,Lunch - Belimo,food_drink,10.7,CHF,Switzerland
+2026-05-06,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-05-07,Lunch - Shawarma,food_drink,15,CHF,Switzerland
+2026-05-08,Lunch - Latte Stories,food_drink,18,CHF,Switzerland
+2026-05-08,Coffee,food_drink,6,CHF,Switzerland
+2026-05-08,Energy Drink,food_drink,0.4,CHF,Switzerland
+2026-05-09,Portable Fan,gifts,1604,INR,Switzerland
+2026-05-09,Coop,groceries,1.6,CHF,Switzerland
+2026-05-09,Lidl,groceries,2.47,CHF,Switzerland
+2026-05-10,Lunch - Holy Cow,food_drink,12.4,CHF,Switzerland
+2026-05-11,Therapy,health,16,CHF,Switzerland
+2026-05-11,Yoghurt Drink,food_drink,1.95,CHF,Switzerland
+2026-05-12,Lidl,food_drink,3.55,CHF,Switzerland
+2026-05-13,Lunch - Simply Soup,food_drink,18.9,CHF,Switzerland
+2026-05-13,Cough Syrup,health,5.95,CHF,Switzerland
+2026-05-13,Ginger Tea,groceries,3.15,CHF,Switzerland
+2026-05-16,Lidl,groceries,17.79,CHF,Switzerland
+2026-05-16,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-05-17,Energy Drinks,food_drink,4.4,CHF,Switzerland
+2026-05-17,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-05-18,Lunch,food_drink,3.77,CHF,Switzerland
+2026-05-19,Coop,shopping,24.7,CHF,Switzerland
+2026-05-18,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-05-18,[Flight] Basel - London - Basel,transport,195.8,CHF,London - Jun 2026
+2026-05-19,[Train] Zurich - Basel,transport,12.75,CHF,London - Jun 2026
+2026-05-19,Lunch - Mensa,food_drink,9,CHF,Switzerland
+2026-05-19,Lidl,groceries,8.65,CHF,Switzerland
+2026-05-19,VPN,bills,2.38,CHF,Switzerland
+2026-05-19,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-05-20,Lidl,groceries,5.69,CHF,Switzerland
+2026-05-20,Therapy,health,15.94,CHF,Switzerland
+2026-05-21,Commute,transport,8.55,CHF,Switzerland
+2026-05-21,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-05-21,Energy Drink,food_drink,0.39,CHF,Switzerland
+2026-05-21,Dinner - Burger King,food_drink,9.9,CHF,Switzerland
+2026-05-22,Commute,food_drink,8.55,CHF,Switzerland
+2026-05-22,Belimo Card Top-up,food_drink,10,CHF,Switzerland
+2026-05-22,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-05-22,Energy Drink,food_drink,0.39,CHF,Switzerland
+2026-05-23,Lunch - Rice Up,food_drink,14.9,CHF,Switzerland
+2026-05-23,Coop,groceries,2.95,CHF,Switzerland
+2026-05-23,Starbucks,food_drink,6.9,CHF,Switzerland
+2026-05-24,Rent,bills,596.67,CHF,Switzerland
+2026-05-25,Lunch - Rice Up,food_drink,14.9,CHF,Switzerland
+2026-05-26,Lidl,groceries,3.75,CHF,Switzerland
+2026-05-26,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-05-27,Commute,transport,8.55,CHF,Switzerland
+2026-05-27,Lunch - Belimo,food_drink,10.05,CHF,Switzerland
+2026-05-28,Lidl,groceries,6,CHF,Switzerland
+2026-05-28,Lidl,food_drink,6.73,CHF,Switzerland
+2026-05-28,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-05-29,Commute,transport,8.55,CHF,Switzerland
+2026-05-29,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-05-29,Lidl,groceries,7.83,CHF,Switzerland
+2026-05-29,Protein Drink,food_drink,2.1,CHF,Switzerland
+2026-05-29,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-05-30,Lunch - Rice Up,food_drink,14.9,CHF,Switzerland
+2026-05-30,Mate,food_drink,0.99,CHF,Switzerland
+2026-05-31,McDonald's,food_drink,10.75,CHF,Switzerland
+2026-05-31,Therapy,health,16.1,CHF,Switzerland
+2026-06-01,Spotify,entertainment,149,INR,Switzerland
+2026-06-01,Lunch - Rice Up,food_drink,14.9,CHF,Switzerland
+2026-06-01,Lidl,groceries,2.76,CHF,Switzerland
+2026-06-01,Coop,groceries,2.65,CHF,Switzerland
+2026-06-01,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-06-02,Lunch - Rice Up,food_drink,14.9,CHF,Switzerland
+2026-06-02,Energy Drink,food_drink,0.39,CHF,Switzerland
+2026-06-02,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-06-03,Commute,transport,8.55,CHF,Switzerland
+2026-06-03,Lunch - Belimo,food_drink,8.3,CHF,Switzerland
+2026-06-03,Lidl,groceries,4.23,CHF,Switzerland
+2026-06-04,UK ETA,travel,22.13,CHF,London - Jun 2026
+2026-06-04,Ricardo Fees,other,5.4,CHF,Switzerland
+2026-06-04,Commute,transport,8.55,CHF,Switzerland
+2026-06-04,Lunch - Belimo,food_drink,8.05,CHF,Switzerland
+2026-06-04,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-06-05,Swype Roaming,travel,3,CHF,London - Jun 2026
+2026-06-05,Breakfast,food_drink,2.75,CHF,London - Jun 2026
+2026-06-05,Lunch - Frankfurt Airport,food_drink,10.33,CHF,London - Jun 2026
+2026-06-05,Dinner - Portobello,food_drink,11.11,GBP,London - Jun 2026
+2026-06-05,London Airbnb,housing,94.84,GBP,London - Jun 2026
+2026-06-06,London Transport,transport,16.3,GBP,London - Jun 2026
+2026-06-06,Umbrella,shopping,4.99,GBP,London - Jun 2026
+2026-06-06,Lunch - Terry's Cafe,food_drink,50,GBP,London - Jun 2026
+2026-06-06,Dinner - Mala Hot Pot,food_drink,18.66,GBP,London - Jun 2026
+2026-06-06,Energy Drink,food_drink,2,GBP,London - Jun 2026
+2026-06-06,Gay Bar,food_drink,4.4,GBP,London - Jun 2026
+2026-06-06,Leto Cafe,food_drink,3.51,GBP,London - Jun 2026
+2026-06-06,Snacks,food_drink,4.93,GBP,London - Jun 2026
+2026-06-07,Gregg's,food_drink,3.4,GBP,London - Jun 2026
+2026-06-07,Sainsbury's,food_drink,0.87,GBP,London - Jun 2026
+2026-06-07,Rhum Tavern,food_drink,17.63,GBP,London - Jun 2026
+2026-06-07,Snacks,food_drink,11.2,GBP,London - Jun 2026
+2026-06-07,London Transport,transport,8.9,GBP,London - Jun 2026
+2026-06-07,Lunch - Brick Lane Market,food_drink,6,GBP,London - Jun 2026
+2026-06-07,Earrings,gifts,15,GBP,London - Jun 2026
+2026-06-07,Postcards,shopping,2,GBP,London - Jun 2026
+2026-06-07,Dinner - Rosa's Thai,food_drink,24.56,GBP,London - Jun 2026
+2026-06-07,Tequila Shot,food_drink,5,GBP,London - Jun 2026
+2026-06-07,Bar,food_drink,3.17,GBP,London - Jun 2026
+2026-06-07,Mango Cocktail,food_drink,2.34,GBP,London - Jun 2026
+2026-06-07,Earrings,shopping,10,GBP,London - Jun 2026
+2026-06-07,Fridge Magnet,shopping,6.6,GBP,London - Jun 2026
+2026-06-07,Mango Milkshake,food_drink,1.67,GBP,London - Jun 2026
+2026-06-08,[Flight] London - Milan,transport,32.07,GBP,London - Jun 2026
+2026-06-08,Hostel,housing,20.24,GBP,London - Jun 2026
+2026-06-08,London Transport,transport,8.9,GBP,London - Jun 2026
+2026-06-08,Flight Refund,transport,-58,CHF,London - Jun 2026
+2026-06-08,Lunch - St. James Cafe,food_drink,21,GBP,London - Jun 2026
+2026-06-08,Postcard,shopping,1,GBP,London - Jun 2026
+2026-06-08,Souvenirs,shopping,6.98,GBP,London - Jun 2026
+2026-06-08,Miffy Store,gifts,22,GBP,London - Jun 2026
+2026-06-08,Miniso,gifts,21.98,GBP,London - Jun 2026
+2026-06-08,Vape,shopping,7.99,GBP,London - Jun 2026
+2026-06-08,Dinner - Thunderbird Fried Chicken,food_drink,21.49,GBP,London - Jun 2026
+2026-06-09,London Transport,transport,8.35,GBP,London - Jun 2026
+2026-06-09,[Bus] London - Stansted Airport,transport,14.99,GBP,London - Jun 2026
+2026-06-09,Lunch - Borough Market,food_drink,13.5,GBP,London - Jun 2026
+2026-06-09,Drink,food_drink,3.9,CHF,London - Jun 2026
+2026-06-09,Dinner - Burger King,food_drink,8.9,CHF,Switzerland
+2026-06-09,[Train] Saronno - Chiasso,transport,3.3,CHF,London - Jun 2026
+2026-06-09,Swype Roaming - 5 days,travel,15,CHF,London - Jun 2026
+2026-06-10,London Transport,transport,6.7,GBP,London - Jun 2026
+2026-06-10,[Train] Malpensa Airport - Saronno,transport,13.87,CHF,London - Jun 2026
+2026-06-10,Coop,food_drink,1.1,CHF,Switzerland
+2026-06-10,Lunch - Belimo,food_drink,8.65,CHF,Switzerland
+2026-06-10,Lidl,groceries,4.43,CHF,Switzerland
+2026-06-10,Coop,food_drink,1.95,CHF,Switzerland
+2026-06-10,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-06-10,Commute,transport,6.975,CHF,Switzerland
+2026-06-10,Shrey Gift,gifts,11.7,CHF,Switzerland
+2026-06-11,Lunch - Mensa,food_drink,7.5,CHF,Switzerland
+2026-06-11,Lidl,groceries,3.49,CHF,Switzerland
+2026-06-11,Coop,groceries,2.5,CHF,Switzerland
+2026-06-11,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-06-12,Lunch - Mensa,food_drink,7.5,CHF,Switzerland
+2026-06-12,Lidl,groceries,2.59,CHF,Switzerland
+2026-06-12,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-06-13,[Flight] Milan - Mumbai,transport,402.1,CHF,Switzerland
+2026-06-13,Coop,groceries,10.4,CHF,Switzerland
+2026-06-13,Friend's Day Pass,transport,15,CHF,Switzerland
+2026-06-13,Cable Car to Ebenalp,transport,18,CHF,Switzerland
+2026-06-13,Food at Ebenalp,food_drink,12,CHF,Switzerland
+2026-06-13,Dinner - Peking Garden,food_drink,24,CHF,Switzerland
+2026-06-13,Snacks,food_drink,2.95,CHF,Switzerland
+2026-06-15,Lunch - Rice Up,food_drink,14.9,CHF,Switzerland
+2026-06-15,Lidl,groceries,8.43,CHF,Switzerland
+2026-06-15,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-06-15,Therapy,health,16.4,CHF,Switzerland
+2026-06-15,Art of Food,groceries,1.35,CHF,Switzerland
+2026-06-16,Lunch - Lidl,food_drink,5.81,CHF,Switzerland
+2026-06-17,Steam,entertainment,2197,INR,Switzerland
+2026-06-17,Commute,transport,8.55,CHF,Switzerland
+2026-06-17,Snack,food_drink,1.1,CHF,Switzerland
+2026-06-17,Lunch - Belimo,food_drink,8.75,CHF,Switzerland
+2026-06-17,Shubham Gift,gifts,10,CHF,Switzerland
+2026-06-17,Lidl,groceries,1.98,CHF,Switzerland
+2026-06-18,Coop Snacks,food_drink,10.5,CHF,Switzerland
+2026-06-18,Restaurant on Rigi,food_drink,8.5,CHF,Switzerland
+2026-06-18,Coop,food_drink,4.6,CHF,Switzerland
+2026-06-18,Day Trip,transport,43.5,CHF,Switzerland
+2026-06-19,Commute,transport,8.55,CHF,Switzerland
+2026-06-19,Lunch - Belimo,food_drink,8.5,CHF,Switzerland
+2026-06-19,Windscribe VPN,bills,2.43,CHF,Switzerland
+2026-06-20,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-06-20,Recycling Center,other,11.35,CHF,Switzerland
+2026-06-20,Coop,food_drink,41.6,CHF,Switzerland
+2026-06-22,Dinner - Burger King,food_drink,18.9,CHF,Switzerland
+2026-06-23,Lunch - Shawarma,food_drink,12,CHF,Switzerland
+2026-06-23,Migros,groceries,1.9,CHF,Switzerland
+2026-06-24,Commute,transport,8.55,CHF,Switzerland
+2026-06-24,Lunch - Belimo,food_drink,7.05,CHF,Switzerland
+2026-06-24,Lidl,groceries,2.97,CHF,Switzerland
+2026-06-25,Commute,transport,8.55,CHF,Switzerland
+2026-06-25,Coop,food_drink,2.1,CHF,Switzerland
+2026-06-25,Drink,food_drink,3.8,CHF,Switzerland
+2026-06-26,Dinner - Burger King,food_drink,11.1,CHF,Switzerland
+2026-06-26,Drink,food_drink,1.95,CHF,Switzerland
+2026-06-26,ETH Makerspace,gifts,4,CHF,Switzerland
+2026-06-27,Dinner - Burger King,food_drink,10.1,CHF,Switzerland
+2026-06-27,Cleaning Supplies,shopping,2.18,CHF,Switzerland
+2026-06-28,Dinner - Burger King,food_drink,21.6,CHF,Switzerland
+2026-06-29,Replacement Bulb,other,4.95,CHF,Switzerland
+2026-06-29,Lidl,food_drink,3.24,CHF,Switzerland
+2026-06-29,Dinner - Rice Up,food_drink,14.9,CHF,Switzerland
+2026-06-29,Bbq,shopping,60,CHF,Switzerland
+2026-06-30,Lunch - Burger King,food_drink,11.1,CHF,Switzerland
+2026-06-30,Air India Extra Luggage,transport,81.2,CHF,Switzerland
