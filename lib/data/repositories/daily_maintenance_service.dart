@@ -29,10 +29,21 @@ class DailyMaintenanceService {
     }
 
     final existingIds = await _readDailyIds();
+    final coverage = _derivedCoverage(
+      startDate: fallbackStart,
+      endDate: endDate,
+      existingIds: existingIds,
+    );
+    if (coverage.hasMiddleGap) {
+      return rebuild(yesterday: endDate);
+    }
+    final appendStart = coverage.firstMissingDate;
+    if (appendStart == null) return;
+
     final rates = <ExchangeRate>[...data.exchangeRates];
     final missingRates = <ExchangeRate>[];
     for (
-      var date = fallbackStart;
+      var date = appendStart;
       !date.isAfter(endDate);
       date = date.add(const Duration(days: 1))
     ) {
@@ -57,7 +68,7 @@ class DailyMaintenanceService {
     }
 
     final balances = _balancesThrough(
-      startDate: fallbackStart,
+      startDate: appendStart,
       endDate: endDate,
       rates: rates,
     );
@@ -75,12 +86,12 @@ class DailyMaintenanceService {
       balance,
     ) {
       final date = _dateOnly(balance.date);
-      return !date.isBefore(fallbackStart) && !date.isAfter(endDate);
+      return !date.isBefore(appendStart) && !date.isAfter(endDate);
     });
     final netWorths = _netWorthThrough(
       allBalances,
       rates: rates,
-      startDate: fallbackStart,
+      startDate: appendStart,
       endDate: endDate,
     );
     final missingNetWorths = [
@@ -191,6 +202,52 @@ class DailyMaintenanceService {
           ],
       ],
     });
+  }
+
+  _DerivedCoverage _derivedCoverage({
+    required DateTime startDate,
+    required DateTime endDate,
+    required Map<String, Set<String>> existingIds,
+  }) {
+    DateTime? firstMissingDate;
+    for (
+      var date = startDate;
+      !date.isAfter(endDate);
+      date = date.add(const Duration(days: 1))
+    ) {
+      final complete = _hasDerivedDataForDate(date, existingIds);
+      if (!complete) {
+        firstMissingDate ??= date;
+      } else if (firstMissingDate != null) {
+        return const _DerivedCoverage.middleGap();
+      }
+    }
+    return _DerivedCoverage.tail(firstMissingDate);
+  }
+
+  bool _hasDerivedDataForDate(
+    DateTime date,
+    Map<String, Set<String>> existingIds,
+  ) {
+    final normalized = _dateOnly(date);
+    if (!existingIds['netWorth']!.contains('${_dateString(normalized)}-net')) {
+      return false;
+    }
+    for (final currency in _currenciesWithOpenAccounts(normalized)) {
+      if (!existingIds['rates']!.contains(
+        '${_dateString(normalized)}-${currency.id}',
+      )) {
+        return false;
+      }
+    }
+    for (final account in _openLedgerAccountsOn(normalized)) {
+      if (!existingIds['balances']!.contains(
+        '${_dateString(normalized)}-${account.id}',
+      )) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Future<Map<String, Set<String>>> _readDailyIds() async {
@@ -477,4 +534,15 @@ class DailyMaintenanceService {
       '${value.year.toString().padLeft(4, '0')}-'
       '${value.month.toString().padLeft(2, '0')}-'
       '${value.day.toString().padLeft(2, '0')}';
+}
+
+class _DerivedCoverage {
+  const _DerivedCoverage.tail(this.firstMissingDate) : hasMiddleGap = false;
+
+  const _DerivedCoverage.middleGap()
+    : firstMissingDate = null,
+      hasMiddleGap = true;
+
+  final DateTime? firstMissingDate;
+  final bool hasMiddleGap;
 }

@@ -170,6 +170,81 @@ void main() {
     expect(client.appendedRows, isEmpty);
   });
 
+  test('rebuilds when a derived date is missing in the middle', () async {
+    final data = await AssetAppDataRepository().load();
+    final client = _FakeSheetsClient({
+      'DailyExchangeRates!A:A': [
+        ['rate_id'],
+        for (final rate in data.exchangeRates) [rate.id],
+        ['2026-10-12-INR'],
+      ],
+      'DailyAccountBalances!A:A': [
+        ['balance_id'],
+        for (final balance in data.dailyAccountBalances) [balance.id],
+      ],
+      'DailyNetWorth!A:A': [
+        ['net_worth_id'],
+        for (final value in data.dailyNetWorth)
+          if (value.date == DateTime.utc(2026, 10, 10) ||
+              value.date == DateTime.utc(2026, 10, 12))
+            [value.id],
+      ],
+    });
+
+    await DailyMaintenanceService(
+      client: client,
+      data: data,
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'rates': {'INR': 96.4},
+          }),
+          200,
+        ),
+      ),
+    ).catchUp(yesterday: DateTime.utc(2026, 10, 12));
+
+    expect(
+      client.replacedRanges.keys,
+      contains(GoogleSheetsRanges.dailyNetWorth),
+    );
+    expect(client.appendedRows, isEmpty);
+  });
+
+  test('appends only the missing tail dates', () async {
+    final data = await AssetAppDataRepository().load();
+    final client = _FakeSheetsClient({
+      'DailyExchangeRates!A:A': [
+        ['rate_id'],
+        for (final rate in data.exchangeRates) [rate.id],
+      ],
+      'DailyAccountBalances!A:A': [
+        ['balance_id'],
+        for (final balance in data.dailyAccountBalances) [balance.id],
+      ],
+      'DailyNetWorth!A:A': [
+        ['net_worth_id'],
+        for (final value in data.dailyNetWorth) [value.id],
+      ],
+    });
+
+    await DailyMaintenanceService(
+      client: client,
+      data: data,
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'rates': {'INR': 96.4},
+          }),
+          200,
+        ),
+      ),
+    ).catchUp(yesterday: DateTime.utc(2026, 10, 13));
+
+    expect(client.replacedRanges, isEmpty);
+    expect(client.appendedRows, isNotEmpty);
+  });
+
   test('rebuild replaces all three derived tables', () async {
     final data = await AssetAppDataRepository().load();
     final client = _FakeSheetsClient({});
