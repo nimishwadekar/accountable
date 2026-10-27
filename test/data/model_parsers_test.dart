@@ -237,6 +237,38 @@ expense-1,2026-10-10,Invalid,salary,expense,40,checking,,,missing-tag,2026-10-09
     );
   });
 
+  test('rejects transactions that reference unknown tags', () {
+    final currencies = {
+      for (final currency in ModelParsers.parseCurrencies(currenciesCsv))
+        currency.id: currency,
+    };
+    final accounts = {
+      for (final account in ModelParsers.parseAccounts(accountsCsv, currencies))
+        account.id: account,
+    };
+    const source = '''
+transaction_id,date,description,category,transaction_type,source_amount,source_account_id,dest_amount,dest_account_id,tag,created_at
+expense-1,2026-10-10,Invalid,food,expense,40,checking,,,missing-tag,2026-10-09T11:03:04Z
+''';
+
+    expect(
+      () => ModelParsers.parseTransactions(
+        source,
+        accounts: accounts,
+        currencies: currencies,
+        categories: {
+          'food': const Category(
+            id: 'food',
+            name: 'Food',
+            allowedTransactionTypes: {TransactionType.expense},
+          ),
+        },
+        tags: const {},
+      ),
+      throwsFormatException,
+    );
+  });
+
   test('rejects transaction sides that do not match their type', () {
     final currencies = {
       for (final currency in ModelParsers.parseCurrencies(currenciesCsv))

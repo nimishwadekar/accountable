@@ -287,52 +287,73 @@ class ModelParsers {
   }) {
     final table = CsvTable.parse(source, tableName: 'IncomeAllocations');
     final allocations = table.rows.map((row) {
-        final incomeAccountId = requiredValue(row, 'income_account_id');
-        final transferCategoryId = requiredValue(row, 'transfer_category_id');
-        final incomeAccount = accounts[incomeAccountId];
-        if (incomeAccount == null) {
-          throw FormatException('Income allocation references an unknown income account.');
-        }
-        final incomeCategory = categories[requiredValue(row, 'income_category_id')];
-        if (incomeCategory == null ||
-            !incomeCategory.allowedTransactionTypes.contains(
-              TransactionType.income,
-            )) {
-          throw FormatException('Income allocation income category must allow income.');
-        }
-        final transferCategory = categories[transferCategoryId];
-        if (transferCategory == null ||
-            !transferCategory.allowedTransactionTypes.contains(
-              TransactionType.transfer,
-            )) {
-          throw FormatException(
-            'Income allocation transfer category must allow transfers.',
-          );
-        }
-        return IncomeAllocation(
-          id: requiredValue(row, 'allocation_id'),
-          name: requiredValue(row, 'name'),
-          incomeCategoryId: requiredValue(row, 'income_category_id'),
-          incomeAccountId: incomeAccountId,
-          transferCategoryId: transferCategoryId,
-          expectedAmountPerIncome: Money.fromMajorUnits(
-            value: requiredValue(row, 'expected_amount_per_income'),
-            currency: _currency(currencies, incomeAccount.currencyId),
-          ),
-          startDate: parseDateOnly(requiredValue(row, 'start_date'), fieldName: 'start_date'),
-          endDate: _optionalDate(row, 'end_date'),
-          createdAt: parseUtcTimestamp(requiredValue(row, 'created_at'), fieldName: 'created_at'),
-          updatedAt: parseUtcTimestamp(requiredValue(row, 'updated_at'), fieldName: 'updated_at'),
+      final incomeAccountId = requiredValue(row, 'income_account_id');
+      final transferCategoryId = requiredValue(row, 'transfer_category_id');
+      final incomeAccount = accounts[incomeAccountId];
+      if (incomeAccount == null) {
+        throw FormatException(
+          'Income allocation references an unknown income account.',
         );
-      }).toList();
+      }
+      final incomeCategory =
+          categories[requiredValue(row, 'income_category_id')];
+      if (incomeCategory == null ||
+          !incomeCategory.allowedTransactionTypes.contains(
+            TransactionType.income,
+          )) {
+        throw FormatException(
+          'Income allocation income category must allow income.',
+        );
+      }
+      final transferCategory = categories[transferCategoryId];
+      if (transferCategory == null ||
+          !transferCategory.allowedTransactionTypes.contains(
+            TransactionType.transfer,
+          )) {
+        throw FormatException(
+          'Income allocation transfer category must allow transfers.',
+        );
+      }
+      return IncomeAllocation(
+        id: requiredValue(row, 'allocation_id'),
+        name: requiredValue(row, 'name'),
+        incomeCategoryId: requiredValue(row, 'income_category_id'),
+        incomeAccountId: incomeAccountId,
+        transferCategoryId: transferCategoryId,
+        expectedAmountPerIncome: Money.fromMajorUnits(
+          value: requiredValue(row, 'expected_amount_per_income'),
+          currency: _currency(currencies, incomeAccount.currencyId),
+        ),
+        startDate: parseDateOnly(
+          requiredValue(row, 'start_date'),
+          fieldName: 'start_date',
+        ),
+        endDate: _optionalDate(row, 'end_date'),
+        createdAt: parseUtcTimestamp(
+          requiredValue(row, 'created_at'),
+          fieldName: 'created_at',
+        ),
+        updatedAt: parseUtcTimestamp(
+          requiredValue(row, 'updated_at'),
+          fieldName: 'updated_at',
+        ),
+      );
+    }).toList();
     final keys = <String>{};
     for (final allocation in allocations) {
-      final key = '${allocation.incomeCategoryId}:${allocation.incomeAccountId}:${allocation.transferCategoryId}';
+      final key =
+          '${allocation.incomeCategoryId}:${allocation.incomeAccountId}:${allocation.transferCategoryId}';
       if (!keys.add(key)) {
-        throw FormatException('Duplicate income allocation transfer category for $key.');
+        throw FormatException(
+          'Duplicate income allocation transfer category for $key.',
+        );
       }
     }
-    return _uniqueById(allocations, (allocation) => allocation.id, table.tableName);
+    return _uniqueById(
+      allocations,
+      (allocation) => allocation.id,
+      table.tableName,
+    );
   }
 
   static List<TransactionTemplate> parseTransactionTemplates(
@@ -348,13 +369,16 @@ class ModelParsers {
           if (raw == null || accountId == null) return null;
           final account = accounts[accountId];
           if (account == null) {
-            throw FormatException('Template references unknown account: $accountId.');
+            throw FormatException(
+              'Template references unknown account: $accountId.',
+            );
           }
           return Money.fromMajorUnits(
             value: raw,
             currency: _currency(currencies, account.currencyId),
           );
         }
+
         final sourceAccountId = optionalValue(row, 'source_account_id');
         final destinationAccountId = optionalValue(row, 'dest_account_id');
         final createdAt = parseUtcTimestamp(
@@ -447,6 +471,11 @@ class ModelParsers {
               '${transaction.type.wireValue} transactions.',
             );
           }
+        }
+        if (tags != null &&
+            transaction.tagId != null &&
+            !tags.containsKey(transaction.tagId)) {
+          validationErrors.add('Unknown tag: ${transaction.tagId}.');
         }
         for (final accountId in [
           transaction.sourceAccountId,
@@ -552,28 +581,28 @@ class ModelParsers {
   }) {
     final table = CsvTable.parse(source, tableName: 'DailyManualValuations');
     final valuations = table.rows.map((row) {
-        final accountId = requiredValue(row, 'account_id');
-        final account = accounts[accountId];
-        if (account == null) {
-          throw FormatException(
-            'DailyManualValuations references unknown account: $accountId.',
-          );
-        }
-        if (!account.isValuationAccount) {
-          throw FormatException(
-            'DailyManualValuations references non-valuation account: $accountId.',
-          );
-        }
-        return DailyManualValuation(
-          id: requiredValue(row, 'valuation_id'),
-          date: parseDateOnly(requiredValue(row, 'date'), fieldName: 'date'),
-          accountId: accountId,
-          value: Money.fromMajorUnits(
-            value: requiredValue(row, 'value'),
-            currency: _currency(currencies, account.currencyId),
-          ),
+      final accountId = requiredValue(row, 'account_id');
+      final account = accounts[accountId];
+      if (account == null) {
+        throw FormatException(
+          'DailyManualValuations references unknown account: $accountId.',
         );
-      }).toList();
+      }
+      if (!account.isValuationAccount) {
+        throw FormatException(
+          'DailyManualValuations references non-valuation account: $accountId.',
+        );
+      }
+      return DailyManualValuation(
+        id: requiredValue(row, 'valuation_id'),
+        date: parseDateOnly(requiredValue(row, 'date'), fieldName: 'date'),
+        accountId: accountId,
+        value: Money.fromMajorUnits(
+          value: requiredValue(row, 'value'),
+          currency: _currency(currencies, account.currencyId),
+        ),
+      );
+    }).toList();
     final accountDates = <String>{};
     for (final valuation in valuations) {
       final key = '${valuation.accountId}:${_dateString(valuation.date)}';
