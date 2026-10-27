@@ -30,4 +30,43 @@ void main() {
       );
     },
   );
+
+  test(
+    'missing historical FX is reported instead of counted as zero',
+    () async {
+      final source = await AssetAppDataRepository().load();
+      final withoutInrRates = AppDataSnapshot(
+        accounts: source.accounts,
+        categories: source.categories,
+        currencies: source.currencies,
+        tags: source.tags,
+        transactions: source.transactions,
+        exchangeRates: source.exchangeRates
+            .where((rate) => rate.currencyId != 'INR')
+            .toList(),
+        dailyAccountBalances: source.dailyAccountBalances,
+        dailyNetWorth: source.dailyNetWorth,
+        dailyManualValuations: source.dailyManualValuations,
+      );
+
+      expect(
+        () =>
+            CategoryAnalysisCalculator(withoutInrRates)
+                .spending(month: DateTime.utc(2026, 10)),
+        throwsA(
+          isA<MissingExchangeRateException>().having(
+            (error) => error.missingRates,
+            'missingRates',
+            contains(
+              isA<MissingExchangeRate>().having(
+                (rate) => rate.currencyId,
+                'currencyId',
+                'INR',
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }

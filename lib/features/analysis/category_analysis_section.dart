@@ -244,9 +244,7 @@ class CategoryAnalysisSection extends StatelessWidget {
                 Icon(
                   Icons.subdirectory_arrow_right,
                   size: 20,
-                  color: item.missingRateDates.isEmpty
-                      ? AppColors.teal
-                      : AppColors.warning,
+                  color: AppColors.teal,
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
@@ -264,15 +262,15 @@ class CategoryAnalysisSection extends StatelessWidget {
                         borderRadius: BorderRadius.circular(AppRadii.pill),
                         child: LinearProgressIndicator(
                           minHeight: 5,
-                          value: item.expectedUsdMinorUnits <= 0
+                          value: item.expectedAmount.minorUnits <= 0
                               ? 0
-                              : (item.actualUsdMinorUnits /
-                                        item.expectedUsdMinorUnits)
+                              : (item.actualAmount.minorUnits /
+                                        item.expectedAmount.minorUnits)
                                     .clamp(0.0, 1.0),
                           backgroundColor: AppColors.border,
                           valueColor: AlwaysStoppedAnimation(
-                            item.actualUsdMinorUnits >=
-                                    item.expectedUsdMinorUnits
+                            item.actualAmount.minorUnits >=
+                                    item.expectedAmount.minorUnits
                                 ? AppColors.success
                                 : AppColors.teal,
                           ),
@@ -286,8 +284,8 @@ class CategoryAnalysisSection extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '${_formatCategoryAmount(item.actualUsdMinorUnits, data.currenciesById['USD'])} / '
-                      '${_formatCategoryAmount(item.expectedUsdMinorUnits, data.currenciesById['USD'])}',
+                      '${formatMoney(item.actualAmount, data.currenciesById)} / '
+                      '${formatMoney(item.expectedAmount, data.currenciesById)}',
                       style: Theme.of(context).textTheme.bodyMedium
                           ?.copyWith(fontWeight: FontWeight.w700),
                     ),
@@ -302,18 +300,6 @@ class CategoryAnalysisSection extends StatelessWidget {
                       ),
                   ],
                 ),
-                if (item.missingRateDates.isNotEmpty)
-                  Tooltip(
-                    message:
-                        'Exchange rate unavailable for ${item.missingRateDates.map(formatDate).join(', ')}',
-                    child: const Padding(
-                      padding: EdgeInsets.only(left: AppSpacing.sm),
-                      child: Icon(
-                        Icons.warning_amber_rounded,
-                        color: AppColors.warning,
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),

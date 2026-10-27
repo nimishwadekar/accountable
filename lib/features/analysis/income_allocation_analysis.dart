@@ -3,19 +3,17 @@ import '../../data/data.dart';
 class IncomeAllocationProgress {
   const IncomeAllocationProgress({
     required this.allocation,
-    required this.expectedUsdMinorUnits,
-    required this.actualUsdMinorUnits,
-    required this.missingRateDates,
+    required this.expectedAmount,
+    required this.actualAmount,
   });
 
   final IncomeAllocation allocation;
-  final int expectedUsdMinorUnits;
-  final int actualUsdMinorUnits;
-  final List<DateTime> missingRateDates;
+  final Money expectedAmount;
+  final Money actualAmount;
 
-  double? get percentage => expectedUsdMinorUnits == 0
+  double? get percentage => expectedAmount.minorUnits == 0
       ? null
-      : actualUsdMinorUnits / expectedUsdMinorUnits * 100;
+      : actualAmount.minorUnits / expectedAmount.minorUnits * 100;
 }
 
 class IncomeAllocationAnalyzer {
@@ -54,10 +52,9 @@ class IncomeAllocationAnalyzer {
     DateTime month,
     int incomeCount,
   ) {
-    final expected =
+    final expectedMinorUnits =
         allocation.expectedAmountPerIncome.minorUnits * incomeCount;
-    final missingDates = <DateTime>[];
-    var actual = 0;
+    var actualMinorUnits = 0;
     for (final transaction in _transactionsInMonth(month)) {
       final transactionDate = _dateOnly(transaction.date);
       if (transaction.type != TransactionType.transfer ||
@@ -70,13 +67,18 @@ class IncomeAllocationAnalyzer {
       }
       final amount = transaction.sourceAmount;
       if (amount == null) continue;
-      actual += amount.minorUnits;
+      actualMinorUnits += amount.minorUnits;
     }
     return IncomeAllocationProgress(
       allocation: allocation,
-      expectedUsdMinorUnits: expected,
-      actualUsdMinorUnits: actual,
-      missingRateDates: missingDates.toSet().toList(),
+      expectedAmount: Money(
+        minorUnits: expectedMinorUnits,
+        currencyId: allocation.expectedAmountPerIncome.currencyId,
+      ),
+      actualAmount: Money(
+        minorUnits: actualMinorUnits,
+        currencyId: allocation.expectedAmountPerIncome.currencyId,
+      ),
     );
   }
 

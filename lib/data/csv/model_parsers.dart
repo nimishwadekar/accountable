@@ -14,17 +14,35 @@ class ModelParsers {
     String source, {
     required String tableName,
     required T Function(String rowSource) parseRow,
+    required Iterable<String> Function(T value) keysOf,
   }) {
     final table = CsvTable.parse(source, tableName: tableName);
     final values = <T>[];
     final issues = <DataValidationIssue>[];
+    final firstRowByKey = <String, int>{};
     for (var index = 0; index < table.rows.length; index++) {
       try {
-        values.add(
-          parseRow(
-            csv.encode([table.headers, table.rows[index].values.toList()]),
-          ),
+        final value = parseRow(
+          csv.encode([table.headers, table.rows[index].values.toList()]),
         );
+        for (final key in keysOf(value)) {
+          final firstRow = firstRowByKey[key];
+          if (firstRow != null) {
+            issues.add(
+              DataValidationIssue(
+                table: tableName,
+                row: table.rowNumbers[index],
+                field: 'key',
+                message: 'Duplicate key in $tableName: $key.',
+                technicalDetails:
+                    'Duplicate key "$key" on rows $firstRow and ${table.rowNumbers[index]}.',
+              ),
+            );
+          } else {
+            firstRowByKey[key] = table.rowNumbers[index];
+          }
+        }
+        values.add(value);
       } catch (error) {
         issues.add(
           DataValidationIssue(
@@ -51,6 +69,7 @@ class ModelParsers {
     source,
     tableName: 'Currencies',
     parseRow: (row) => parseCurrencies(row).single,
+    keysOf: (value) => ['id:${value.id}'],
   );
 
   static ModelParseResult<Account> parseAccountsWithIssues(
@@ -60,6 +79,7 @@ class ModelParsers {
     source,
     tableName: 'Accounts',
     parseRow: (row) => parseAccounts(row, currencies).single,
+    keysOf: (value) => ['id:${value.id}'],
   );
 
   static ModelParseResult<Category> parseCategoriesWithIssues(String source) =>
@@ -67,12 +87,14 @@ class ModelParsers {
         source,
         tableName: 'Categories',
         parseRow: (row) => parseCategories(row).single,
+        keysOf: (value) => ['id:${value.id}'],
       );
 
   static ModelParseResult<Tag> parseTagsWithIssues(String source) => _parseRows(
     source,
     tableName: 'Tags',
     parseRow: (row) => parseTags(row).single,
+    keysOf: (value) => ['id:${value.id}'],
   );
 
   static ModelParseResult<DisplayPreference> parseDisplayPreferencesWithIssues(
@@ -81,6 +103,7 @@ class ModelParsers {
     source,
     tableName: 'DisplayPreferences',
     parseRow: (row) => parseDisplayPreferences(row).single,
+    keysOf: (value) => ['${value.entityType}:${value.entityId}'],
   );
 
   static ModelParseResult<Transaction> parseTransactionsWithIssues(
@@ -99,6 +122,7 @@ class ModelParsers {
       categories: categories,
       tags: tags,
     ).single,
+    keysOf: (value) => ['id:${value.id}'],
   );
 
   static ModelParseResult<ExchangeRate> parseExchangeRatesWithIssues(
@@ -107,6 +131,7 @@ class ModelParsers {
     source,
     tableName: 'DailyExchangeRates',
     parseRow: (row) => parseExchangeRates(row).single,
+    keysOf: (value) => ['id:${value.id}'],
   );
 
   static ModelParseResult<DailyAccountBalance>
@@ -122,6 +147,7 @@ class ModelParsers {
       accounts: accounts,
       currencies: currencies,
     ).single,
+    keysOf: (value) => ['id:${value.id}'],
   );
 
   static ModelParseResult<DailyNetWorth> parseDailyNetWorthWithIssues(
@@ -131,6 +157,7 @@ class ModelParsers {
     source,
     tableName: 'DailyNetWorth',
     parseRow: (row) => parseDailyNetWorth(row, currencies).single,
+    keysOf: (value) => ['id:${value.id}'],
   );
 
   static ModelParseResult<DailyManualValuation>
@@ -146,6 +173,10 @@ class ModelParsers {
       accounts: accounts,
       currencies: currencies,
     ).single,
+    keysOf: (value) => [
+      'id:${value.id}',
+      'account-date:${value.accountId}:${_dateString(value.date)}',
+    ],
   );
 
   static List<CurrencyDefinition> parseCurrencies(String source) {

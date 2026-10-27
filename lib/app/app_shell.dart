@@ -75,6 +75,7 @@ class AppShell extends StatefulWidget {
     this.onTransactionFormActiveChanged,
     this.migrationAssistance = false,
     this.onRebuildDailyTables,
+    this.onReconcileDailyTables,
     this.onRebuildNetWorth,
     this.onReloadData,
     this.textScale = 1,
@@ -89,6 +90,7 @@ class AppShell extends StatefulWidget {
   final ValueChanged<bool>? onTransactionFormActiveChanged;
   final bool migrationAssistance;
   final Future<void> Function()? onRebuildDailyTables;
+  final Future<void> Function()? onReconcileDailyTables;
   final Future<void> Function(DateTime startDate)? onRebuildNetWorth;
   final Future<void> Function()? onReloadData;
   final double textScale;
@@ -105,6 +107,8 @@ class _AppShellState extends State<AppShell> {
   AppSection _selectedSection = AppSection.overview;
   final Set<AppSection> _visitedSections = {};
   final Map<AppSection, Widget> _pageCache = {};
+  final TransactionWriteCoordinator _writeCoordinator =
+      const TransactionWriteCoordinator();
 
   @override
   void initState() {
@@ -321,6 +325,7 @@ class _AppShellState extends State<AppShell> {
       AppSection.analysis => AnalysisPage(
         data: data,
         onIncomeAllocationAdded: _handleIncomeAllocationAdded,
+        onRebuildDailyTables: _rebuildAndReloadDailyTables,
       ),
       AppSection.assetsLiabilities => AssetsLiabilitiesPage(
         data: data,
@@ -332,7 +337,9 @@ class _AppShellState extends State<AppShell> {
         onSaveDisplayPreferences: _saveDisplayPreferences,
         onUpdateTemplate: _updateTemplate,
         onDeleteTemplate: _deleteTemplate,
-        onRebuildDailyTables: widget.onRebuildDailyTables,
+        onRebuildDailyTables: widget.onRebuildDailyTables == null
+            ? null
+            : _rebuildAndReloadDailyTables,
         onReloadData: widget.onReloadData ?? _reloadData,
         textScale: widget.textScale,
         onTextScaleChanged: widget.onTextScaleChanged,
@@ -402,6 +409,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _reloadData() async {
+    await widget.onReconcileDailyTables?.call();
     final future = widget.dataRepository.reload();
     _pageCache.clear();
     setState(() {
@@ -410,10 +418,17 @@ class _AppShellState extends State<AppShell> {
     await future;
   }
 
+  Future<void> _rebuildAndReloadDailyTables() async {
+    await widget.onRebuildDailyTables?.call();
+    await _reloadData();
+  }
+
   Future<void> _handleValuationsAdded(
     List<DailyManualValuation> valuations,
   ) async {
-    final future = widget.dataRepository.addManualValuations(valuations);
+    final future = _writeCoordinator.run(
+      () => widget.dataRepository.addManualValuations(valuations),
+    );
     _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
@@ -430,7 +445,9 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _updateTemplate(TransactionTemplate template) async {
-    final future = widget.dataRepository.updateTransactionTemplate(template);
+    final future = _writeCoordinator.run(
+      () => widget.dataRepository.updateTransactionTemplate(template),
+    );
     _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
@@ -439,7 +456,9 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _deleteTemplate(String templateId) async {
-    final future = widget.dataRepository.deleteTransactionTemplate(templateId);
+    final future = _writeCoordinator.run(
+      () => widget.dataRepository.deleteTransactionTemplate(templateId),
+    );
     _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
@@ -450,7 +469,9 @@ class _AppShellState extends State<AppShell> {
   Future<void> _saveDisplayPreferences(
     List<DisplayPreference> preferences,
   ) async {
-    final future = widget.dataRepository.saveDisplayPreferences(preferences);
+    final future = _writeCoordinator.run(
+      () => widget.dataRepository.saveDisplayPreferences(preferences),
+    );
     _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
@@ -459,7 +480,9 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _handleIncomeAllocationAdded(IncomeAllocation allocation) async {
-    final future = widget.dataRepository.addIncomeAllocation(allocation);
+    final future = _writeCoordinator.run(
+      () => widget.dataRepository.addIncomeAllocation(allocation),
+    );
     _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
@@ -468,7 +491,9 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _handleTemplateAdded(TransactionTemplate template) async {
-    final future = widget.dataRepository.addTransactionTemplate(template);
+    final future = _writeCoordinator.run(
+      () => widget.dataRepository.addTransactionTemplate(template),
+    );
     _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
@@ -477,20 +502,65 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _handleTransactionsAdded(List<Transaction> transactions) async {
-    final future = widget.dataRepository.addTransactions(transactions);
-    _pageCache.clear();
-    setState(() {
-      _snapshotFuture = future;
-    });
-    await future;
+    var saved = false;
+    try {
+      Future<void> write() async {
+        await widget.dataRepository.reload();
+        final future = widget.dataRepository.addTransactions(transactions);
+        _pageCache.clear();
+        setState(() => _snapshotFuture = future);
+        await future;
+      }
+
+      if (widget.restrictedStartup) {
+        await write();
+        return;
+      }
+      await _writeCoordinator.run(write);
+      saved = true;
+      await widget.onReconcileDailyTables?.call();
+      await _reloadDataWithoutReconciliation();
+    } catch (error) {
+      if (error is TransactionSavedHistoryRepairException) rethrow;
+      if (saved && widget.onReconcileDailyTables != null) {
+        throw TransactionSavedHistoryRepairException(error);
+      }
+      rethrow;
+    }
   }
 
   Future<void> _handleTransactionAdded(Transaction transaction) async {
-    final future = widget.dataRepository.addTransaction(transaction);
+    var saved = false;
+    try {
+      Future<void> write() async {
+        await widget.dataRepository.reload();
+        final future = widget.dataRepository.addTransaction(transaction);
+        _pageCache.clear();
+        setState(() => _snapshotFuture = future);
+        await future;
+      }
+
+      if (widget.restrictedStartup) {
+        await write();
+        return;
+      }
+      await _writeCoordinator.run(write);
+      saved = true;
+      await widget.onReconcileDailyTables?.call();
+      await _reloadDataWithoutReconciliation();
+    } catch (error) {
+      if (error is TransactionSavedHistoryRepairException) rethrow;
+      if (saved && widget.onReconcileDailyTables != null) {
+        throw TransactionSavedHistoryRepairException(error);
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _reloadDataWithoutReconciliation() async {
+    final future = widget.dataRepository.reload();
     _pageCache.clear();
-    setState(() {
-      _snapshotFuture = future;
-    });
+    setState(() => _snapshotFuture = future);
     await future;
   }
 }

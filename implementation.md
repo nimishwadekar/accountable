@@ -392,9 +392,9 @@ The Assets & liabilities page, DailyManualValuations model/parser/repositories, 
 - Use distinct UI states for restoring session, signing in, granting Sheets access, loading data, unauthorized account, configuration errors, restricted startup, pending local uploads, and uncertain uploads.
 - Expired-token retry remains a follow-up integration task.
 
-## Planned startup transaction outbox
+## Startup transaction outbox — implemented
 
-See the detailed specification in [`FUNCTIONAL_SPEC.md`](./FUNCTIONAL_SPEC.md). The planned flow uses a browser-persisted form snapshot containing only Accounts, Categories, Currencies, Tags, TransactionTemplates, and DisplayPreferences. It uses a separate transaction outbox for entries made before authentication and full synchronization complete. The outbox is flushed in atomic batches after initialization, with manual recovery for ambiguous upload failures.
+See the behavior in [`FUNCTIONAL_SPEC.md`](./FUNCTIONAL_SPEC.md). The browser-persisted form snapshot contains only Accounts, Categories, Currencies, Tags, TransactionTemplates, and DisplayPreferences. A separate transaction outbox stores entries made before authentication and full synchronization complete. Batches are verified against freshly loaded Sheets rows before removal; ambiguous uploads require explicit recovery. Web Locks serialize writes across tabs in the same browser origin; other devices are not coordinated.
 
 ## Future Apps Script backend option
 

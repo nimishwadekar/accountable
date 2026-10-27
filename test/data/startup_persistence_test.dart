@@ -13,7 +13,7 @@ void main() {
   final transaction = Transaction(
     id: 'tx-1',
     createdAt: DateTime.utc(2026, 1, 2, 3, 4),
-    date: DateTime.utc(2026, 1, 2),
+    date: DateTime.utc(2026, 10, 10),
     type: TransactionType.expense,
     sourceAmount: const Money(minorUnits: 1250, currencyId: 'USD'),
     sourceAccountId: 'chase_checking',

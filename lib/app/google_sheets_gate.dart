@@ -56,7 +56,16 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       SharedPreferencesTransactionOutboxStore();
   Future<void> Function()? _rebuildDailyTables;
   Future<void> Function(DateTime startDate)? _rebuildNetWorth;
+  Future<void> Function()? _reconcileDailyTables;
+  final TransactionWriteCoordinator _writeCoordinator =
+      const TransactionWriteCoordinator();
+  late final TransactionOutboxSynchronizer _outboxSynchronizer =
+      TransactionOutboxSynchronizer(
+        outbox: _outboxStore,
+        writeCoordinator: _writeCoordinator,
+      );
   bool _connectionInProgress = false;
+  bool _onlineTransitionRequested = false;
   bool _transactionFormActive = false;
   int _connectionGeneration = 0;
   final Stopwatch _startupStopwatch = Stopwatch()..start();
@@ -115,6 +124,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         dataRepository: _repository!,
         migrationAssistance: widget.config.migrationAssistance,
         onRebuildDailyTables: _rebuildDailyTables,
+        onReconcileDailyTables: _reconcileDailyTables,
         onRebuildNetWorth: _rebuildNetWorth,
         textScale: widget.textScale,
         onTextScaleChanged: widget.onTextScaleChanged,
@@ -141,6 +151,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         onTransactionFormActiveChanged: _handleTransactionFormActiveChanged,
         migrationAssistance: widget.config.migrationAssistance,
         onRebuildDailyTables: _rebuildDailyTables,
+        onReconcileDailyTables: _reconcileDailyTables,
         onRebuildNetWorth: _rebuildNetWorth,
         textScale: widget.textScale,
         onTextScaleChanged: widget.onTextScaleChanged,
@@ -433,6 +444,14 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         api,
         migrationAssistance: widget.config.migrationAssistance,
       );
+      _reconcileDailyTables = () => _writeCoordinator.run(() async {
+        final latestData = await repository.reload();
+        await DailyMaintenanceService(
+          client: api,
+          data: latestData,
+        ).reconcile();
+        await repository.reload();
+      });
       _logTiming('loading initial Sheets snapshot');
       final initialData = await repository.load();
       if (!_isCurrentConnection(generation)) return;
@@ -449,57 +468,40 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         data: initialData,
       );
       final today = DateTime.now();
-      _logTiming('starting daily catch-up');
-      await maintenance.catchUp(
-        yesterday: today.subtract(const Duration(days: 1)),
+      _logTiming('starting daily-table reconciliation');
+      await _writeCoordinator.run(
+        () => maintenance.reconcile(
+          yesterday: today.subtract(const Duration(days: 1)),
+        ),
       );
       if (!_isCurrentConnection(generation)) return;
-      _logTiming('daily catch-up completed; reloading snapshot');
-      var finalData = await repository.reload();
+      _logTiming('daily-table reconciliation completed; reloading snapshot');
+      await repository.reload();
       if (!_isCurrentConnection(generation)) return;
       _logTiming('final Sheets snapshot loaded');
       _pendingOnlineRepository = repository;
-      if (!_transactionFormActive) {
-        await _flushPendingTransactions(repository);
-        if (!_isCurrentConnection(generation)) return;
-        finalData = await repository.reload();
-        if (!_isCurrentConnection(generation)) return;
-        await _formSnapshotStore.write(
-          FormSnapshot.fromData(finalData, dataSource: 'sheets'),
-        );
-        if (!_isCurrentConnection(generation)) return;
-      }
-      if (!_isCurrentConnection(generation)) return;
-      _rebuildDailyTables = () async {
+      _rebuildDailyTables = () => _writeCoordinator.run(() async {
         final latestData = await repository.reload();
-        final latestMaintenance = DailyMaintenanceService(
+        await DailyMaintenanceService(client: api, data: latestData).rebuild();
+        await repository.reload();
+      });
+      _rebuildNetWorth = (startDate) => _writeCoordinator.run(() async {
+        final latestData = await repository.reload();
+        await DailyMaintenanceService(
           client: api,
           data: latestData,
-        );
-        await latestMaintenance.rebuild();
+        ).rebuildNetWorth(startDate: startDate);
         await repository.reload();
-      };
-      _rebuildNetWorth = (startDate) async {
-        final latestData = await repository.reload();
-        final latestMaintenance = DailyMaintenanceService(
-          client: api,
-          data: latestData,
-        );
-        await latestMaintenance.rebuildNetWorth(startDate: startDate);
-        await repository.reload();
-      };
-      if (!_isCurrentConnection(generation)) return;
+      });
+      var transitionedOnline = false;
       if (!_transactionFormActive) {
-        setState(() {
-          _repository = repository;
-          _pendingOnlineRepository = null;
-          _startupRepository = null;
-          _outboxError = null;
-          _state = _GateState.ready;
-        });
-      } else {
-        setState(() => _state = _GateState.ready);
+        transitionedOnline = await _synchronizeOutboxAndTransition(
+          repository,
+          generation: generation,
+        );
       }
+      if (!_isCurrentConnection(generation)) return;
+      if (!transitionedOnline) setState(() => _state = _GateState.ready);
       _logTiming('app startup finished');
     } on SheetsAuthorizationRequiredException {
       if (!_isCurrentConnection(generation)) return;
@@ -522,48 +524,88 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     } finally {
       if (generation == _connectionGeneration) {
         _connectionInProgress = false;
+        _resumeRequestedOnlineTransition();
       }
     }
   }
 
-  Future<void> _flushPendingTransactions(AppDataRepository repository) async {
-    final pending = await _outboxStore.read();
-    final batches = <String, List<Transaction>>{};
-    for (final item in pending) {
-      batches.putIfAbsent(item.batchId, () => []).add(item.transaction);
-    }
-    for (final entry in batches.entries) {
-      await _outboxStore.updateBatch(
-        entry.key,
-        TransactionOutboxStatus.uploading,
-        lastError: null,
-      );
-      try {
-        final current = await repository.load();
-        final missing = entry.value
-            .where((item) => !current.transactionsById.containsKey(item.id))
-            .toList();
-        if (missing.isNotEmpty) {
-          await repository.addTransactions(missing);
-        }
-        await _outboxStore.removeBatch(entry.key);
-      } catch (error) {
-        await _outboxStore.updateBatch(
-          entry.key,
-          TransactionOutboxStatus.uncertain,
-          lastError: error.toString(),
-        );
-        rethrow;
-      }
-    }
-  }
+  Future<void> _flushPendingTransactions(
+    AppDataRepository repository, {
+    bool allowUncertainRetry = false,
+  }) => _outboxSynchronizer.flush(
+    repository,
+    allowUncertainRetry: allowUncertainRetry,
+  );
 
   void _handleTransactionFormActiveChanged(bool active) {
     if (!mounted) return;
     setState(() => _transactionFormActive = active);
     if (!active && _pendingOnlineRepository != null && _repository == null) {
+      if (_connectionInProgress) {
+        _onlineTransitionRequested = true;
+        return;
+      }
       unawaited(_completeOnlineTransition());
     }
+  }
+
+  void _resumeRequestedOnlineTransition() {
+    if (!_onlineTransitionRequested) return;
+    _onlineTransitionRequested = false;
+    if (_pendingOnlineRepository != null &&
+        _repository == null &&
+        !_transactionFormActive) {
+      unawaited(_completeOnlineTransition());
+    }
+  }
+
+  Future<bool> _synchronizeOutboxAndTransition(
+    AppDataRepository repository, {
+    required int generation,
+    bool allowUncertainRetry = false,
+  }) async {
+    while (_isCurrentConnection(generation) && !_transactionFormActive) {
+      await _flushPendingTransactions(
+        repository,
+        allowUncertainRetry: allowUncertainRetry,
+      );
+      if (!_isCurrentConnection(generation) || _transactionFormActive) {
+        return false;
+      }
+      await _reconcileDailyTables?.call();
+      if (!_isCurrentConnection(generation) || _transactionFormActive) {
+        return false;
+      }
+      final data = await repository.reload();
+      if (!_isCurrentConnection(generation) || _transactionFormActive) {
+        return false;
+      }
+      await _formSnapshotStore.write(
+        FormSnapshot.fromData(data, dataSource: 'sheets'),
+      );
+      if (!_isCurrentConnection(generation) || _transactionFormActive) {
+        return false;
+      }
+      final transitioned = await _writeCoordinator.run(() async {
+        if (!_isCurrentConnection(generation) || _transactionFormActive) {
+          return false;
+        }
+        final pending = await _outboxStore.read();
+        if (pending.isNotEmpty || _transactionFormActive) return false;
+        setState(() {
+          _repository = repository;
+          _pendingOnlineRepository = null;
+          _startupRepository = null;
+          _outboxError = null;
+          _state = _GateState.ready;
+        });
+        return true;
+      });
+      if (transitioned || _transactionFormActive) return transitioned;
+      // A transaction was queued while synchronization was in flight.
+      // Re-read and upload it before switching the shell to online data.
+    }
+    return false;
   }
 
   Future<void> _completeOnlineTransition() async {
@@ -574,77 +616,39 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     final generation = _connectionGeneration;
     _connectionInProgress = true;
     try {
-      await _flushPendingTransactions(repository);
-      if (!_isCurrentConnection(generation) ||
-          !identical(_pendingOnlineRepository, repository)) {
-        return;
-      }
-      final finalData = await repository.reload();
-      if (!_isCurrentConnection(generation) ||
-          !identical(_pendingOnlineRepository, repository)) {
-        return;
-      }
-      await _formSnapshotStore.write(
-        FormSnapshot.fromData(finalData, dataSource: 'sheets'),
-      );
-      if (!_isCurrentConnection(generation) ||
-          !identical(_pendingOnlineRepository, repository)) {
-        return;
-      }
-      setState(() {
-        _repository = repository;
-        _pendingOnlineRepository = null;
-        _startupRepository = null;
-        _outboxError = null;
-        _state = _GateState.ready;
-      });
+      await _synchronizeOutboxAndTransition(repository, generation: generation);
     } catch (error) {
       if (!_isCurrentConnection(generation)) return;
       setState(() => _outboxError = error.toString());
     } finally {
       if (generation == _connectionGeneration) {
         _connectionInProgress = false;
+        _resumeRequestedOnlineTransition();
       }
     }
   }
 
   Future<void> _retryOutbox() async {
     final repository = _pendingOnlineRepository;
-    if (repository == null || _connectionInProgress || _transactionFormActive) return;
+    if (repository == null || _connectionInProgress || _transactionFormActive) {
+      return;
+    }
     final generation = _connectionGeneration;
     setState(() => _outboxError = null);
     try {
       _connectionInProgress = true;
-      await _flushPendingTransactions(repository);
-      if (!_isCurrentConnection(generation) ||
-          !identical(_pendingOnlineRepository, repository)) {
-        return;
-      }
-      final finalData = await repository.reload();
-      if (!_isCurrentConnection(generation) ||
-          !identical(_pendingOnlineRepository, repository)) {
-        return;
-      }
-      await _formSnapshotStore.write(
-        FormSnapshot.fromData(finalData, dataSource: 'sheets'),
+      await _synchronizeOutboxAndTransition(
+        repository,
+        generation: generation,
+        allowUncertainRetry: true,
       );
-      if (!_isCurrentConnection(generation) ||
-          !identical(_pendingOnlineRepository, repository)) {
-        return;
-      }
-      setState(() {
-        _repository = repository;
-        _pendingOnlineRepository = null;
-        _startupRepository = null;
-        _outboxError = null;
-        _state = _GateState.ready;
-      });
     } catch (error) {
       if (!_isCurrentConnection(generation)) return;
       setState(() => _outboxError = error.toString());
     } finally {
       if (generation == _connectionGeneration) {
         _connectionInProgress = false;
+        _resumeRequestedOnlineTransition();
       }
     }
   }
@@ -655,6 +659,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     _pendingOnlineRepository = null;
     _rebuildDailyTables = null;
     _rebuildNetWorth = null;
+    _reconcileDailyTables = null;
     await _authService.signOut();
     if (!mounted) return;
     setState(() {

@@ -286,9 +286,11 @@ class _TransactionsPageState extends State<TransactionsPage> {
           .showSnackBar(const SnackBar(content: Text('Transaction added.')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not add transaction: $error')),
-      );
+      final message = error is TransactionSavedHistoryRepairException
+          ? error.toString()
+          : 'Could not add transaction: $error';
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 

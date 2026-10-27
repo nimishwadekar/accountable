@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:csv/csv.dart';
 import 'package:decimal/decimal.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -103,6 +104,224 @@ void main() {
     );
     expect(updated[2], isNot(oldNetWorth));
   });
+
+  test(
+    'partial catch-up does not count an existing tail balance twice',
+    () async {
+      final source = await AssetAppDataRepository().load();
+      final day13 = DateTime.utc(2026, 10, 13);
+      final rates = [
+        ...source.exchangeRates.where((rate) => rate.date.isBefore(day13)),
+        ExchangeRate(
+          id: '2026-10-12-INR',
+          date: DateTime.utc(2026, 10, 12),
+          currencyId: 'INR',
+          rateToUsd: Decimal.parse('0.01'),
+          sourceRateDate: DateTime.utc(2026, 10, 12),
+          retrievedAt: DateTime.utc(2026, 10, 14),
+        ),
+        ExchangeRate(
+          id: '2026-10-13-USD',
+          date: day13,
+          currencyId: 'USD',
+          rateToUsd: Decimal.one,
+          sourceRateDate: day13,
+          retrievedAt: DateTime.utc(2026, 10, 14),
+        ),
+        ExchangeRate(
+          id: '2026-10-13-INR',
+          date: day13,
+          currencyId: 'INR',
+          rateToUsd: Decimal.parse('0.01'),
+          sourceRateDate: day13,
+          retrievedAt: DateTime.utc(2026, 10, 14),
+        ),
+      ];
+      final existingTailBalance = DailyAccountBalance(
+        id: '2026-10-13-chase_checking',
+        date: day13,
+        accountId: 'chase_checking',
+        balance: source.ledgerBalances['chase_checking']!,
+        balanceUsd: source.ledgerBalances['chase_checking']!,
+        retrievedAt: DateTime.utc(2026, 10, 14),
+      );
+
+      Future<String> rebuildExpectedAmount({
+        required bool partialBalance,
+      }) async {
+        final data = _copySnapshot(
+          source,
+          exchangeRates: rates,
+          dailyAccountBalances: [
+            ...source.dailyAccountBalances,
+            if (partialBalance) existingTailBalance,
+          ],
+        );
+        final client = _FakeSheetsClient({
+          'DailyExchangeRates!A:A': [
+            ['rate_id'],
+            for (final rate in rates) [rate.id],
+          ],
+          'DailyAccountBalances!A:A': [
+            ['balance_id'],
+            for (final balance in data.dailyAccountBalances) [balance.id],
+          ],
+          'DailyNetWorth!A:A': [
+            ['net_worth_id'],
+            for (final value in source.dailyNetWorth) [value.id],
+          ],
+        });
+        await DailyMaintenanceService(
+          client: client,
+          data: data,
+        ).catchUp(yesterday: day13);
+        final row = client.appendedRows.singleWhere(
+          (item) => item.first == '2026-10-13-net',
+        );
+        expect(
+          client.appendedRows.any(
+            (item) => item.first == existingTailBalance.id,
+          ),
+          !partialBalance,
+        );
+        return row[2];
+      }
+
+      final completeCalculation = await rebuildExpectedAmount(
+        partialBalance: false,
+      );
+      final recoveredCalculation = await rebuildExpectedAmount(
+        partialBalance: true,
+      );
+      expect(recoveredCalculation, completeCalculation);
+    },
+  );
+
+  test(
+    'reconciliation repairs historical edits and clears empty-ledger history',
+    () async {
+      final source = await AssetAppDataRepository().load();
+      final original = source.transactions.first;
+      final edited = Transaction(
+        id: original.id,
+        createdAt: original.createdAt,
+        date: original.date,
+        type: original.type,
+        sourceAmount: Money(
+          minorUnits: original.sourceAmount!.minorUnits + 500,
+          currencyId: original.sourceAmount!.currencyId,
+        ),
+        sourceAccountId: original.sourceAccountId,
+        destinationAmount: original.destinationAmount,
+        destinationAccountId: original.destinationAccountId,
+        categoryId: original.categoryId,
+        tagId: original.tagId,
+        description: original.description,
+      );
+      final changedData = _copySnapshot(
+        source,
+        transactions: [edited, ...source.transactions.skip(1)],
+      );
+      final changedClient = _FakeSheetsClient({});
+      var httpRequests = 0;
+      await DailyMaintenanceService(
+        client: changedClient,
+        data: changedData,
+        httpClient: MockClient((_) async {
+          httpRequests++;
+          return http.Response(
+            jsonEncode({
+              'rates': {'INR': 96.4},
+            }),
+            200,
+          );
+        }),
+      ).reconcile(yesterday: DateTime.utc(2026, 10, 12));
+
+      expect(httpRequests, 1, reason: 'only the missing INR rate is fetched');
+      expect(
+        changedClient.replacedRanges.keys,
+        containsAll([
+          GoogleSheetsRanges.dailyAccountBalances,
+          GoogleSheetsRanges.dailyNetWorth,
+        ]),
+      );
+
+      final emptyLedger = _copySnapshot(source, transactions: const []);
+      final clearedClient = _FakeSheetsClient({});
+      await DailyMaintenanceService(
+        client: clearedClient,
+        data: emptyLedger,
+      ).reconcile(yesterday: DateTime.utc(2026, 10, 12));
+
+      expect(
+        clearedClient.replacedRanges[GoogleSheetsRanges.dailyExchangeRates],
+        [RuntimeTableSchemas.dailyExchangeRates.headers],
+      );
+      expect(
+        clearedClient.replacedRanges[GoogleSheetsRanges.dailyAccountBalances],
+        [RuntimeTableSchemas.dailyAccountBalances.headers],
+      );
+      expect(clearedClient.replacedRanges[GoogleSheetsRanges.dailyNetWorth], [
+        RuntimeTableSchemas.dailyNetWorth.headers,
+      ]);
+    },
+  );
+
+  test(
+    'reconciliation skips writes when stored derived values are current',
+    () async {
+      final source = await AssetAppDataRepository().load();
+      final rebuildClient = _FakeSheetsClient({});
+      await DailyMaintenanceService(
+        client: rebuildClient,
+        data: source,
+        httpClient: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'rates': {'INR': 96.4},
+            }),
+            200,
+          ),
+        ),
+      ).rebuild(yesterday: DateTime.utc(2026, 10, 12));
+
+      final currencies = source.currenciesById;
+      final rates = ModelParsers.parseExchangeRates(
+        csv.encode(
+          rebuildClient.replacedRanges[GoogleSheetsRanges.dailyExchangeRates]!,
+        ),
+      );
+      final balances = ModelParsers.parseDailyAccountBalances(
+        csv.encode(
+          rebuildClient.replacedRanges[GoogleSheetsRanges
+              .dailyAccountBalances]!,
+        ),
+        accounts: source.accountsById,
+        currencies: currencies,
+      );
+      final netWorth = ModelParsers.parseDailyNetWorth(
+        csv.encode(
+          rebuildClient.replacedRanges[GoogleSheetsRanges.dailyNetWorth]!,
+        ),
+        currencies,
+      );
+      final currentData = _copySnapshot(
+        source,
+        exchangeRates: rates,
+        dailyAccountBalances: balances,
+        dailyNetWorth: netWorth,
+      );
+      final reconcileClient = _FakeSheetsClient({});
+
+      await DailyMaintenanceService(
+        client: reconcileClient,
+        data: currentData,
+      ).reconcile(yesterday: DateTime.utc(2026, 10, 12));
+
+      expect(reconcileClient.replacedRanges, isEmpty);
+    },
+  );
 
   test('idempotent catch-up skips rows whose IDs already exist', () async {
     final data = await AssetAppDataRepository().load();
@@ -439,6 +658,28 @@ void main() {
     },
   );
 }
+
+AppDataSnapshot _copySnapshot(
+  AppDataSnapshot source, {
+  List<Transaction>? transactions,
+  List<ExchangeRate>? exchangeRates,
+  List<DailyAccountBalance>? dailyAccountBalances,
+  List<DailyNetWorth>? dailyNetWorth,
+}) => AppDataSnapshot(
+  accounts: source.accounts,
+  categories: source.categories,
+  currencies: source.currencies,
+  tags: source.tags,
+  transactions: transactions ?? source.transactions,
+  transactionsToMigrate: source.transactionsToMigrate,
+  exchangeRates: exchangeRates ?? source.exchangeRates,
+  dailyAccountBalances: dailyAccountBalances ?? source.dailyAccountBalances,
+  dailyNetWorth: dailyNetWorth ?? source.dailyNetWorth,
+  dailyManualValuations: source.dailyManualValuations,
+  displayPreferences: source.displayPreferences,
+  transactionTemplates: source.transactionTemplates,
+  incomeAllocations: source.incomeAllocations,
+);
 
 class _ResumableSheetsClient extends SheetsTableClient {
   final Map<String, List<List<String>>> tables = {

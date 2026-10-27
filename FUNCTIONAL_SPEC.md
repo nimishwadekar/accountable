@@ -130,6 +130,8 @@ An income allocation identifies:
 
 Matching allocation transfers must be `transfer` transactions whose source account is `income_account_id` and whose category is `transfer_category_id`. The transfer source amount is the allocated amount; destination accounts and descriptions are not used for matching. Intermediate or terminal transfers should remain uncategorized to avoid double-counting.
 
+Income-allocation expected and actual amounts are displayed in the income account's native currency. They are not USD-converted.
+
 A transfer category is mandatory for every transfer transaction and must allow `transfer`. Two allocations may not reuse the same transfer category for the same `(income_category_id, income_account_id)` pair.
 
 ### Supported transaction types
@@ -150,7 +152,7 @@ The rules are extensible so future transaction types can define their own requir
 | Expense | Required | Empty | Required |
 | Income | Empty | Required | Required |
 | Reimbursement | Empty | Required | Required |
-| Transfer | Required | Required | Empty |
+| Transfer | Required | Required | Required |
 
 Missing values are represented as `null` in Dart. A numeric zero remains distinct from a missing value.
 
@@ -163,6 +165,7 @@ New transactions entered through the app require:
 - A selected tag.
 - Valid required account and amount sides.
 - A valid category when required by the transaction type.
+- Every referenced account must be active on the transaction date; opening and closing boundaries are inclusive.
 
 Existing legacy rows may have blank descriptions or tags while migration is pending. Parsing legacy data is less strict than validating new entries.
 
@@ -313,6 +316,9 @@ The first Analysis page contains:
 - Inclusive calendar-date ranges.
 - Missing-data warnings above affected charts.
 - Interactive line charts using `fl_chart`.
+- Monthly spending and income category breakdowns, including a tag filter.
+- An error replacing the entire Analysis page when category conversion lacks historical FX data; the error lists missing currency/date pairs and offers a daily-table rebuild.
+- Income-allocation progress shown in the income account's native currency.
 
 Analysis uses daily tables, never current ledger calculations, for historical charts.
 
@@ -328,12 +334,12 @@ Settings currently contains:
 
 - A confirmed full rebuild action for derived daily tables when connected to Google Sheets.
 - Rebuild progress and success/error feedback.
+- A Refresh data action that reloads source data and reconciles derived daily tables.
 
 Future Settings work:
 
 - Google account status and sign-out.
 - Data-source status.
-- Manual reload actions.
 
 ## Algorithms and business rules
 
@@ -420,9 +426,9 @@ Label intervals adapt to chart width and date span using sensible day intervals 
 
 The goal is readable labels without repeated or overcrowded dates.
 
-### Spending — planned
+### Monthly category analysis — implemented
 
-Spending will be defined as:
+Spending is defined as:
 
 ```text
 expenses - reimbursements
@@ -430,11 +436,11 @@ expenses - reimbursements
 
 Reimbursements are not a separate headline metric.
 
-Detailed current-month totals, income totals, category breakdowns, and period comparisons are deferred until their currency-conversion and presentation rules are finalized.
+The Analysis page presents monthly spending and income category breakdowns with a tag filter. Reimbursements reduce net spending and are not a separate headline metric. Current-month Overview cards and period comparisons remain deferred.
 
-### Currency conversion — planned for detailed analysis
+### Currency conversion — implemented for monthly category analysis
 
-The intended rule is to convert each transaction using the exchange rate for its transaction date. The full rate is preserved and only the final display amount is rounded.
+Monthly spending and income analysis converts each transaction using the latest exchange rate on or before its transaction date. The full rate is preserved and only the final USD amount is rounded. Income allocations are the exception: expected and actual amounts are displayed in the income account's native currency.
 
 Missing-rate fallback:
 
@@ -442,9 +448,11 @@ Missing-rate fallback:
 2. If unavailable, use the most recent prior available rate.
 3. Keep the requested sequential date on the generated daily row.
 
+When no rate exists on or before a transaction date, the entire Analysis page shows an error with the missing currency/date pairs and suggests rebuilding the daily tables. Partial category totals are not presented as complete.
+
 ## Google Sheets startup lifecycle — implemented
 
-OAuth configuration, account gating, the Sheets-backed runtime repository, and daily catch-up are implemented.
+OAuth configuration, account gating, the Sheets-backed runtime repository, and daily-table reconciliation are implemented.
 
 ### Authentication refinement — implemented
 
@@ -462,13 +470,10 @@ Normal production startup will be:
 2. If needed, show interactive Google sign-in/consent.
 3. Validate the returned account against the configured allowed email.
 4. Reject unauthorized accounts before any Sheets request.
-5. Query only daily date columns using a batch request.
-6. Compare stored daily dates with yesterday in the user's local calendar.
-7. If current through yesterday, skip catch-up writes.
-8. Otherwise catch up sequentially:
-   - DailyExchangeRates
-   - DailyAccountBalances
-   - DailyNetWorth
+5. Load and validate source and daily tables.
+6. Reconcile daily exchange rates, account balances, and net worth against the loaded source snapshot through yesterday.
+7. Reuse existing rates and fetch only rates needed for missing dates.
+8. If all daily values match, skip derived-table writes; otherwise replace all three derived tables together.
 9. Reload the runtime tables.
 10. Show the main app only after the initial snapshot is consistent.
 
@@ -476,14 +481,20 @@ Catch-up is idempotent:
 
 - Daily row IDs are deterministic.
 - Existing IDs are checked before insertion, not only the latest date.
-- Concurrent startup connection/catch-up attempts are guarded so only one runs per app instance.
-- If a failure occurs partway through, completed rows remain and the next launch retries from each table's latest date.
+- Reconciliation compares calculated values, so direct transaction additions, edits, and deletions are detected.
+- Transaction writes, outbox recovery, and daily-table writes use a same-origin cross-tab lock. Other devices are not coordinated.
+- If reconciliation fails, source transactions remain unchanged and the next startup or refresh retries the derived-data repair.
 - UTC is used for retrieval timestamps; daily dates use the user's local calendar date.
+
+If no transactions remain, reconciliation clears the three derived daily tables while preserving source tables and manual valuations.
+
+After source data loads, startup reconciles expected daily tables against current transactions, accounts, and manual valuations. Existing historical rates are reused and only missing required rates are fetched. If derived values differ, all three daily tables are replaced together. The same reconciliation runs after app transaction writes and explicit data refreshes, detecting direct Sheets additions, edits, and deletions. If no transactions remain, derived tables are cleared while source tables and manual valuations are preserved.
 
 ## Google Sheets writes — partially implemented
 
 - New transactions append one row through the Sheets-backed repository.
 - After appending, the repository reloads the full Transactions table as the initial strategy.
+- Write validation enforces account lifetime boundaries before any transaction rows are written.
 - Editing and deletion are deferred.
 - Manual full rebuild is available from Settings after explicit confirmation.
 - Full rebuild replaces all rows in `DailyExchangeRates`, `DailyAccountBalances`, and `DailyNetWorth` with freshly calculated results.
@@ -534,7 +545,7 @@ Changing the base currency will require:
 9. Record the active base currency and rebuild timestamp with derived data.
 10. Add migration and regression tests for changing between supported currencies, missing historical rates, failed rebuilds, and repeated changes.
 
-`IncomeAllocations.expected_amount_per_income` currently assumes USD and must be migrated to an explicit currency or explicitly defined as using the active base currency before this feature is implemented.
+Income-allocation amounts remain in the referenced income account's native currency; only their category-analysis progress display changes if a configurable base currency is introduced.
 
 Historical exchange-rate provider revisions or unavailable dates may cause rebuilt derived values to differ from prior materialized values.
 
@@ -573,6 +584,8 @@ The normal responsive shell remains visible while initialization is pending:
 
 Transactions entered before initialization are saved to a separate browser outbox. Each item includes its transaction ID, transaction data, batch ID, creation time, status, and last error. Transfer-plus-fee transactions share a batch ID and remain atomic.
 
+Outbox upload and recovery use a same-origin cross-tab write lock. Concurrent writes from other devices are not coordinated and are outside the supported single-writer model.
+
 The outbox lifecycle is:
 
 ```text
@@ -582,6 +595,10 @@ validate locally → save atomically → show Pending upload → authenticate �
 New IDs are generated before queueing and never changed. Items are removed only after the write is confirmed and the source data contains the submitted IDs.
 
 Ambiguous network failures are not retried automatically. The UI marks the batch `Upload uncertain`; manual recovery reloads Transactions, removes IDs already present, and retries only confirmed-absent IDs.
+
+Recovery compares canonical transaction contents as well as IDs. Matching rows are acknowledged; a same-ID row with different contents is reported as a conflict and never overwritten. An `uploading` batch found after restart is treated as uncertain. A batch is removed only after a fresh reload confirms every row.
+
+Recovery compares canonical transaction contents as well as IDs. A matching row is acknowledged, a same-ID row with different contents is reported as a conflict, and only confirmed-absent rows may be retried by explicit user action. An `uploading` batch found after restart is treated as uncertain. A batch is removed only after a fresh reload confirms all rows.
 
 ### Initialization concurrency
 
@@ -646,6 +663,7 @@ A dependent table is not parsed when any dependency has validation errors. Valid
 ## Data validation failure behavior
 
 - Validation runs at the repository/data boundary for every initial load and refresh.
+- Duplicate IDs and natural keys are checked across whole tables, including row-by-row error collection; duplicate rows block snapshot loading.
 - The app does not remain usable with validation errors.
 - A full-screen validation page replaces the current content immediately when a refresh fails.
 - Errors are grouped by table with concise messages and table/row/field locations.

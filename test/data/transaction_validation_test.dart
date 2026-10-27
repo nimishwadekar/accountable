@@ -21,11 +21,12 @@ void main() {
     String? categoryId,
     String? tagId,
     String description = 'Valid',
+    DateTime? date,
   }) {
     return Transaction(
       id: 'test',
       createdAt: DateTime.utc(2026, 1, 1),
-      date: DateTime.utc(2026, 1, 1),
+      date: date ?? DateTime.utc(2026, 1, 1),
       type: type,
       sourceAmount: sourceAmount,
       sourceAccountId: sourceAccountId,
@@ -117,6 +118,27 @@ void main() {
     expect(errors, contains('Unknown tag: missing-tag.'));
     expect(errors, contains('Duplicate transaction ID: test.'));
   });
+
+  test(
+    'write validation rejects transaction dates outside account lifetime',
+    () async {
+      final data = await AssetAppDataRepository().load();
+      final inr = data.currenciesById['INR']!;
+      final transaction = build(
+        type: TransactionType.expense,
+        sourceAmount: Money.fromMajorUnits(value: '10', currency: inr),
+        sourceAccountId: 'sbi_nro',
+        categoryId: 'groceries',
+        tagId: 'boston',
+        date: DateTime.utc(2026, 10, 12),
+      );
+
+      expect(
+        validateTransactionForWrite(transaction, data),
+        contains('Transaction date is outside account sbi_nro lifetime.'),
+      );
+    },
+  );
 
   test(
     'transaction rows preserve optional sides and reject unknown currencies',

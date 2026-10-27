@@ -80,6 +80,49 @@ checking,Checking,cash,USD,1000,2026-10-01,,FALSE
     expect(rates.single.sourceRateDate, DateTime.utc(2026, 10, 10));
   });
 
+  test('issue-collecting parsers reject duplicate IDs across rows', () {
+    final result = ModelParsers.parseCurrenciesWithIssues(
+      'currency_id,currency_symbol,decimal_places\nUSD,USD,2\nUSD,USD,2',
+    );
+
+    expect(result.values, hasLength(2));
+    expect(result.issues, hasLength(1));
+    expect(result.issues.single.row, 3);
+    expect(result.issues.single.message, contains('Duplicate key'));
+  });
+
+  test('issue-collecting valuation parser rejects duplicate account dates', () {
+    final currencies = {
+      for (final currency in ModelParsers.parseCurrencies(currenciesCsv))
+        currency.id: currency,
+    };
+    final accounts = {
+      for (final account in ModelParsers.parseAccounts(
+        accountsCsv
+            .replaceFirst(
+              'checking,Checking,cash,USD,1000',
+              'checking,Checking,asset,USD,0',
+            )
+            .replaceFirst('2026-10-01,,FALSE', '2026-10-01,,TRUE'),
+        currencies,
+      ))
+        account.id: account,
+    };
+    final result = ModelParsers.parseDailyManualValuationsWithIssues(
+      'valuation_id,date,account_id,value\n'
+      'one,2026-10-10,checking,10\n'
+      'two,2026-10-10,checking,20',
+      accounts: accounts,
+      currencies: currencies,
+    );
+
+    expect(result.issues, hasLength(1));
+    expect(
+      result.issues.single.message,
+      contains('account-date:checking:2026-10-10'),
+    );
+  });
+
   test('rejects unsupported account types', () {
     expect(
       () => ModelParsers.parseAccounts(

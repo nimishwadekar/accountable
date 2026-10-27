@@ -83,16 +83,26 @@ void main() {
         .analyze(month: DateTime.utc(2026, 10, 1), incomeCategoryId: 'salary')
         .single;
 
-    expect(progress.expectedUsdMinorUnits, 10000);
-    expect(progress.actualUsdMinorUnits, 10000);
+    expect(progress.expectedAmount.minorUnits, 10000);
+    expect(progress.actualAmount.minorUnits, 10000);
   });
 
-  test('uses configured USD decimal precision for converted transfers', () async {
+  test('keeps allocation amounts in the income account currency', () async {
     final source = await AssetAppDataRepository().load();
-    const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 3);
-    final checking = source.accountsById['chase_checking']!;
-    final incomeAmount = Money.fromMajorUnits(value: '1', currency: usd);
-    final transferAmount = Money.fromMajorUnits(value: '1', currency: usd);
+    const chf = CurrencyDefinition(id: 'CHF', symbol: 'CHF', decimalPlaces: 2);
+    final originalChecking = source.accountsById['chase_checking']!;
+    final checking = Account(
+      id: originalChecking.id,
+      name: originalChecking.name,
+      accountType: originalChecking.accountType,
+      currencyId: chf.id,
+      openingBalance: Money.zero(chf),
+      openingDate: originalChecking.openingDate,
+      closingDate: originalChecking.closingDate,
+      usesManualValuations: originalChecking.usesManualValuations,
+    );
+    final incomeAmount = Money.fromMajorUnits(value: '1', currency: chf);
+    final transferAmount = Money.fromMajorUnits(value: '1', currency: chf);
     final date = DateTime.utc(2026, 10, 10);
     final allocation = IncomeAllocation(
       id: 'precision-allocation',
@@ -107,9 +117,12 @@ void main() {
       updatedAt: date,
     );
     final data = AppDataSnapshot(
-      accounts: source.accounts,
+      accounts: [
+        for (final account in source.accounts)
+          account.id == checking.id ? checking : account,
+      ],
       categories: source.categories,
-      currencies: [usd],
+      currencies: [...source.currencies, chf],
       tags: source.tags,
       transactions: [
         Transaction(
@@ -146,11 +159,12 @@ void main() {
       incomeAllocations: [allocation],
     );
 
-    final progress = IncomeAllocationAnalyzer(data).analyze(
-      month: DateTime.utc(2026, 10, 1),
-      incomeCategoryId: 'salary',
-    ).single;
+    final progress = IncomeAllocationAnalyzer(data)
+        .analyze(month: DateTime.utc(2026, 10, 1), incomeCategoryId: 'salary')
+        .single;
 
-    expect(progress.actualUsdMinorUnits, 1000);
+    expect(progress.actualAmount.minorUnits, 100);
+    expect(progress.expectedAmount.minorUnits, 100);
+    expect(progress.actualAmount.currencyId, 'CHF');
   });
 }

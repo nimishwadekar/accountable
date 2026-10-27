@@ -31,11 +31,13 @@ class AnalysisPage extends StatefulWidget {
     super.key,
     required this.data,
     this.onIncomeAllocationAdded,
+    this.onRebuildDailyTables,
   });
 
   final AppDataSnapshot data;
   final Future<void> Function(IncomeAllocation allocation)?
   onIncomeAllocationAdded;
+  final Future<void> Function()? onRebuildDailyTables;
 
   @override
   State<AnalysisPage> createState() => _AnalysisPageState();
@@ -54,6 +56,8 @@ class _AnalysisPageState extends State<AnalysisPage> {
   late CategoryAnalysisCalculator _categoryCalculator;
   late DateTime _categoryMonth;
   String? _categoryTagId;
+  bool _rebuildingDailyTables = false;
+  String? _rebuildError;
 
   @override
   void initState() {
@@ -101,6 +105,33 @@ class _AnalysisPageState extends State<AnalysisPage> {
 
   @override
   Widget build(BuildContext context) {
+    CategoryAnalysisResult? spending;
+    CategoryAnalysisResult? income;
+    MissingExchangeRateException? missingRates;
+    try {
+      spending = _cached(
+        'spending:${_categoryMonth.toIso8601String()}:${_categoryTagId ?? ''}',
+        () => _categoryCalculator.spending(
+          month: _categoryMonth,
+          tagId: _categoryTagId,
+        ),
+      );
+    } on MissingExchangeRateException catch (error) {
+      missingRates = error;
+    }
+    try {
+      income = _cached(
+        'income:${_categoryMonth.toIso8601String()}:${_categoryTagId ?? ''}',
+        () => _categoryCalculator.income(
+          month: _categoryMonth,
+          tagId: _categoryTagId,
+        ),
+      );
+    } on MissingExchangeRateException catch (error) {
+      missingRates = missingRates == null ? error : missingRates.merge(error);
+    }
+    if (missingRates != null) return _buildMissingRatesError(missingRates);
+
     final netWorthRange = _netWorthRange;
     final accountRangeSelection = _accountRange;
     final netWorthSeries = netWorthRange == null
@@ -128,21 +159,6 @@ class _AnalysisPageState extends State<AnalysisPage> {
               range: accountRange,
             ),
           );
-    final spending = _cached(
-      'spending:${_categoryMonth.toIso8601String()}:${_categoryTagId ?? ''}',
-      () => _categoryCalculator.spending(
-        month: _categoryMonth,
-        tagId: _categoryTagId,
-      ),
-    );
-    final income = _cached(
-      'income:${_categoryMonth.toIso8601String()}:${_categoryTagId ?? ''}',
-      () => _categoryCalculator.income(
-        month: _categoryMonth,
-        tagId: _categoryTagId,
-      ),
-    );
-
     return AppPageFrame(
       title: 'Analysis',
       subtitle: 'Explore daily valuation history.',
@@ -163,10 +179,98 @@ class _AnalysisPageState extends State<AnalysisPage> {
               ),
           ],
           const SizedBox(height: AppSpacing.xl),
-          _buildCategoryAnalysis(spending: spending, income: income),
+          _buildCategoryAnalysis(spending: spending!, income: income!),
         ],
       ),
     );
+  }
+
+  Widget _buildMissingRatesError(MissingExchangeRateException failure) {
+    final missing = [...failure.missingRates]
+      ..sort((a, b) {
+        final currency = a.currencyId.compareTo(b.currencyId);
+        return currency == 0 ? a.date.compareTo(b.date) : currency;
+      });
+    return AppPageFrame(
+      title: 'Analysis',
+      subtitle: 'Historical analysis needs complete exchange-rate data.',
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: Theme.of(context).colorScheme.error,
+                size: 36,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                'Historical exchange rates unavailable',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              const Text(
+                'Analysis is hidden rather than showing incomplete or misleading totals. '
+                'Try rebuilding the daily tables from Settings.',
+              ),
+              const SizedBox(height: AppSpacing.md),
+              for (final item in missing)
+                Text('${item.currencyId} · ${formatDate(item.date)}'),
+              if (_rebuildError != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  'Rebuild failed: $_rebuildError',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              if (widget.onRebuildDailyTables != null) ...[
+                const SizedBox(height: AppSpacing.lg),
+                FilledButton.icon(
+                  onPressed: _rebuildingDailyTables
+                      ? null
+                      : _rebuildDailyTables,
+                  icon: _rebuildingDailyTables
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
+                  label: Text(
+                    _rebuildingDailyTables
+                        ? 'Rebuilding daily tables…'
+                        : 'Rebuild daily tables',
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: AppSpacing.md),
+                const Text(
+                  'When connected to Google Sheets, use Settings → Rebuild daily tables.',
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _rebuildDailyTables() async {
+    final rebuild = widget.onRebuildDailyTables;
+    if (rebuild == null || _rebuildingDailyTables) return;
+    setState(() {
+      _rebuildingDailyTables = true;
+      _rebuildError = null;
+    });
+    try {
+      await rebuild();
+    } catch (error) {
+      if (mounted) setState(() => _rebuildError = error.toString());
+    } finally {
+      if (mounted) setState(() => _rebuildingDailyTables = false);
+    }
   }
 
   Widget _buildRangeSelector({

@@ -27,6 +27,9 @@ List<String> validateTransactionForWrite(
     if (amount != null && amount.minorUnits < 0) {
       errors.add('$side amount cannot be negative.');
     }
+    if (!_accountIsActiveOn(account, transaction.date)) {
+      errors.add('Transaction date is outside account ${account.id} lifetime.');
+    }
   }
 
   validateSide(
@@ -58,6 +61,19 @@ List<String> validateTransactionForWrite(
 
   return errors;
 }
+
+bool _accountIsActiveOn(Account account, DateTime date) {
+  final transactionDate = _dateOnly(date);
+  final openingDate = _dateOnly(account.openingDate);
+  final closingDate = account.closingDate == null
+      ? null
+      : _dateOnly(account.closingDate!);
+  return !transactionDate.isBefore(openingDate) &&
+      (closingDate == null || !transactionDate.isAfter(closingDate));
+}
+
+DateTime _dateOnly(DateTime value) =>
+    DateTime.utc(value.year, value.month, value.day);
 
 List<String> validateTransactionsForWrite(
   Iterable<Transaction> transactions,

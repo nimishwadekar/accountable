@@ -2,6 +2,35 @@ import 'package:decimal/decimal.dart';
 
 import '../../data/data.dart';
 
+class MissingExchangeRate {
+  const MissingExchangeRate({required this.currencyId, required this.date});
+
+  final String currencyId;
+  final DateTime date;
+}
+
+class MissingExchangeRateException implements Exception {
+  const MissingExchangeRateException(this.missingRates);
+
+  final List<MissingExchangeRate> missingRates;
+
+  MissingExchangeRateException merge(MissingExchangeRateException other) {
+    final byKey = <String, MissingExchangeRate>{
+      for (final item in [...missingRates, ...other.missingRates])
+        '${item.currencyId}:${_missingRateDateKey(item.date)}': item,
+    };
+    return MissingExchangeRateException(List.unmodifiable(byKey.values));
+  }
+
+  @override
+  String toString() => 'Missing historical exchange rates.';
+}
+
+String _missingRateDateKey(DateTime value) =>
+    '${value.year.toString().padLeft(4, '0')}-'
+    '${value.month.toString().padLeft(2, '0')}-'
+    '${value.day.toString().padLeft(2, '0')}';
+
 class CategoryAnalysisValue {
   const CategoryAnalysisValue({
     required this.categoryId,
@@ -36,6 +65,7 @@ class CategoryAnalysisCalculator {
 
   CategoryAnalysisResult spending({required DateTime month, String? tagId}) {
     final totals = <String?, int>{};
+    final missingRates = <String, MissingExchangeRate>{};
     for (final transaction in _transactionsInMonth(month)) {
       if (!_inMonth(transaction.date, month)) continue;
       if (transaction.type != TransactionType.expense &&
@@ -54,16 +84,27 @@ class CategoryAnalysisCalculator {
           ? null
           : data.accountsById[selectedAccount];
       if (amount == null || account == null) continue;
-      final usdMinor = _toUsd(amount, account.currencyId, transaction.date);
+      final usdMinor = _toUsd(
+        amount,
+        account.currencyId,
+        transaction.date,
+        missingRates,
+      );
       final signed = usesSource ? usdMinor : -usdMinor;
       totals[transaction.categoryId] =
           (totals[transaction.categoryId] ?? 0) + signed;
+    }
+    if (missingRates.isNotEmpty) {
+      throw MissingExchangeRateException(
+        List.unmodifiable(missingRates.values),
+      );
     }
     return CategoryAnalysisResult(values: _values(totals));
   }
 
   CategoryAnalysisResult income({required DateTime month, String? tagId}) {
     final totals = <String?, int>{};
+    final missingRates = <String, MissingExchangeRate>{};
     for (final transaction in _transactionsInMonth(month)) {
       if (transaction.type != TransactionType.income ||
           !_inMonth(transaction.date, month)) {
@@ -76,9 +117,19 @@ class CategoryAnalysisCalculator {
           ? null
           : data.accountsById[selectedAccount];
       if (amount == null || account == null) continue;
-      final usdMinor = _toUsd(amount, account.currencyId, transaction.date);
+      final usdMinor = _toUsd(
+        amount,
+        account.currencyId,
+        transaction.date,
+        missingRates,
+      );
       totals[transaction.categoryId] =
           (totals[transaction.categoryId] ?? 0) + usdMinor;
+    }
+    if (missingRates.isNotEmpty) {
+      throw MissingExchangeRateException(
+        List.unmodifiable(missingRates.values),
+      );
     }
     return CategoryAnalysisResult(values: _values(totals));
   }
@@ -88,16 +139,29 @@ class CategoryAnalysisCalculator {
         const <Transaction>[];
   }
 
-  int _toUsd(Money amount, String currencyId, DateTime date) {
+  int _toUsd(
+    Money amount,
+    String currencyId,
+    DateTime date,
+    Map<String, MissingExchangeRate> missingRates,
+  ) {
     final usd = data.currenciesById['USD'];
     if (usd == null || currencyId == usd.id) return amount.minorUnits;
     ExchangeRate? latest;
-    for (final rate in data.exchangeRatesByCurrencyId[currencyId] ??
-        const <ExchangeRate>[]) {
+    for (final rate
+        in data.exchangeRatesByCurrencyId[currencyId] ??
+            const <ExchangeRate>[]) {
       if (_dateOnly(rate.date).isAfter(_dateOnly(date))) break;
       latest = rate;
     }
-    if (latest == null) return 0;
+    if (latest == null) {
+      final missing = MissingExchangeRate(
+        currencyId: currencyId,
+        date: _dateOnly(date),
+      );
+      missingRates['$currencyId:${_dateKey(date)}'] = missing;
+      return 0;
+    }
     return (amount.toMajorUnits(data.currenciesById[currencyId]!) *
             latest.rateToUsd *
             Decimal.fromInt(_powerOfTen(usd.decimalPlaces)))
@@ -122,6 +186,11 @@ class CategoryAnalysisCalculator {
 
   static DateTime _dateOnly(DateTime value) =>
       DateTime.utc(value.year, value.month, value.day);
+
+  static String _dateKey(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-'
+      '${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')}';
 
   static int _powerOfTen(int exponent) {
     var result = 1;

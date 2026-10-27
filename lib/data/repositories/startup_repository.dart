@@ -1,14 +1,20 @@
 import '../app_data_snapshot.dart';
 import '../models/models.dart';
 import '../sources/transaction_outbox_store.dart';
+import '../sources/transaction_write_coordinator.dart';
 import 'repositories.dart';
 import 'transaction_write_validator.dart';
 
 class StartupDataRepository implements AppDataRepository {
-  StartupDataRepository({required this.snapshot, required this.outbox});
+  StartupDataRepository({
+    required this.snapshot,
+    required this.outbox,
+    this.writeCoordinator = const TransactionWriteCoordinator(),
+  });
 
   AppDataSnapshot snapshot;
   final TransactionOutboxStore outbox;
+  final TransactionWriteCoordinator writeCoordinator;
 
   @override
   Future<AppDataSnapshot> load() async => snapshot;
@@ -21,16 +27,15 @@ class StartupDataRepository implements AppDataRepository {
       addTransactions([transaction]);
 
   @override
-  Future<AppDataSnapshot> addTransactions(
-    List<Transaction> transactions,
-  ) async {
-    final errors = validateTransactionsForWrite(transactions, snapshot);
-    if (errors.isNotEmpty) throw StateError(errors.join(' '));
-    final batchId = 'startup-${DateTime.now().microsecondsSinceEpoch}';
-    await outbox.enqueueBatch(batchId: batchId, transactions: transactions);
-    snapshot = withAdditionalTransactions(snapshot, transactions);
-    return snapshot;
-  }
+  Future<AppDataSnapshot> addTransactions(List<Transaction> transactions) =>
+      writeCoordinator.run(() async {
+        final errors = validateTransactionsForWrite(transactions, snapshot);
+        if (errors.isNotEmpty) throw StateError(errors.join(' '));
+        final batchId = 'startup-${DateTime.now().microsecondsSinceEpoch}';
+        await outbox.enqueueBatch(batchId: batchId, transactions: transactions);
+        snapshot = withAdditionalTransactions(snapshot, transactions);
+        return snapshot;
+      });
 
   @override
   Future<AppDataSnapshot> addManualValuation(DailyManualValuation valuation) =>
