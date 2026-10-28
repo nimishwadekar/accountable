@@ -30,6 +30,33 @@ void main() {
     expect(templates.single.sourceAmount?.minorUnits, 450);
     expect(templates.single.date, isNull);
     expect(templates.single.tagId, isNull);
+    expect(templates.single.isFavorite, isFalse);
+  });
+
+  test('parses a favorite flag and defaults a missing flag to false', () {
+    const currencies = {
+      'USD': CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2),
+    };
+    final accounts = {
+      'checking': Account(
+        id: 'checking',
+        name: 'Checking',
+        accountType: 'cash',
+        currencyId: 'USD',
+        openingBalance: Money.zero(currencies['USD']!),
+        openingDate: DateTime.utc(2026, 1, 1),
+        closingDate: null,
+        usesManualValuations: false,
+      ),
+    };
+    final template = ModelParsers.parseTransactionTemplates(
+      'template_id,name,transaction_type,date,description,category,tag,source_account_id,source_amount,dest_account_id,dest_amount,created_at,updated_at,is_favorite\n'
+      'favorite,Coffee,expense,,Coffee,food_drink,boston,checking,4.50,,,2026-10-20T00:00:00Z,2026-10-20T00:00:00Z,TRUE',
+      accounts: accounts,
+      currencies: currencies,
+    ).single;
+
+    expect(template.isFavorite, isTrue);
   });
 
   test('reports populated fields and updates template names', () {
@@ -56,5 +83,6 @@ void main() {
     expect(template.hasDestinationAccount, isFalse);
     expect(template.hasDestinationAmount, isFalse);
     expect(template.copyWith(name: 'Lunch').name, 'Lunch');
+    expect(template.copyWith(isFavorite: true).isFavorite, isTrue);
   });
 }

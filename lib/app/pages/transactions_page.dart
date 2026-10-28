@@ -6,7 +6,6 @@ import '../../data/data.dart';
 import '../formatters.dart';
 import '../theme/design_tokens.dart';
 import 'transaction_form.dart';
-import 'transaction_review_sheet.dart';
 import '../session_ui_preferences.dart';
 import 'transaction_list_widgets.dart';
 
@@ -28,6 +27,8 @@ class TransactionsPage extends StatefulWidget {
     required this.onTransactionAdded,
     required this.onTransactionsAdded,
     required this.onTemplateAdded,
+    required this.onTemplateUpdated,
+    this.allowTemplateManagement = true,
     this.restrictedStartup = false,
     this.onStartupSignIn,
     this.startupError,
@@ -40,6 +41,8 @@ class TransactionsPage extends StatefulWidget {
   final Future<void> Function(List<Transaction> transactions)
   onTransactionsAdded;
   final Future<void> Function(TransactionTemplate template) onTemplateAdded;
+  final Future<void> Function(TransactionTemplate template) onTemplateUpdated;
+  final bool allowTemplateManagement;
   final bool restrictedStartup;
   final Future<void> Function()? onStartupSignIn;
   final String? startupError;
@@ -229,41 +232,21 @@ class _TransactionsPageState extends State<TransactionsPage> {
     try {
       await _openAddTransactionFlow();
     } finally {
-      if (mounted) widget.onTransactionFormActiveChanged?.call(false);
+      // A data reload can replace this page while the dialog is open. Always
+      // release the gate's active-form flag, even if this State was disposed.
+      widget.onTransactionFormActiveChanged?.call(false);
     }
   }
 
   Future<void> _openAddTransactionFlow() async {
-    final choice = await _showTransactionDialog<AddTransactionChoice>(
-      TransactionTypeChooser(data: widget.data),
-    );
-    if (!mounted || choice == null) return;
-
-    AddTransactionChoice resolved = choice;
-    if (choice.createTemplate) {
-      resolved =
-          await _showTransactionDialog<AddTransactionChoice>(
-            const TransactionTypeChooser(createTemplate: true),
-          ) ??
-          choice;
-    }
-    if (!mounted || resolved.type == null) return;
     final result = await _showTransactionDialog<Object>(
-      TransactionFormSheet(
-        type: resolved.type!,
+      TransactionEntryFlowDialog(
         data: widget.data,
-        template: resolved.template,
-        createTemplate: choice.createTemplate,
+        onTemplateUpdated: widget.onTemplateUpdated,
+        allowTemplateManagement: widget.allowTemplateManagement,
       ),
     );
     if (!mounted || result == null) return;
-
-    if (result is Transaction && resolved.template != null) {
-      final reviewed = await _showTransactionDialog<bool>(
-        TransactionReviewSheet(transaction: result, data: widget.data),
-      );
-      if (reviewed != true) return;
-    }
 
     try {
       if (result is List<Transaction>) {

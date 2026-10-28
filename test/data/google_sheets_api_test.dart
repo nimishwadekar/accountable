@@ -77,4 +77,42 @@ void main() {
     expect(values.first[3], -2862922.00);
     expect(values.first[3], isA<num>());
   });
+
+  test('writes template favorite state as a Sheets boolean', () async {
+    Object? requestBody;
+    final client = MockClient((request) async {
+      requestBody = jsonDecode(request.body);
+      return http.Response(
+        '{}',
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final api = GoogleSheetsApi(
+      spreadsheetId: 'spreadsheet-id',
+      accessTokenProvider: ({forceRefresh = false}) async => 'token',
+      client: client,
+    );
+
+    await api.appendRow('TransactionTemplates!A:N', [
+      'template-id',
+      'Coffee',
+      'expense',
+      '',
+      'Coffee at {Merchant}',
+      'food_drink',
+      'boston',
+      'checking',
+      '4.50',
+      '',
+      '',
+      '2026-10-20T00:00:00Z',
+      '2026-10-20T00:00:00Z',
+      'TRUE',
+    ]);
+
+    final values = (requestBody as Map<String, dynamic>)['values'] as List;
+    expect(values.single[13], isTrue);
+    expect(values.single[13], isA<bool>());
+  });
 }

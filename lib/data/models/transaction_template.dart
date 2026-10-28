@@ -14,6 +14,7 @@ class TransactionTemplate {
     this.sourceAmount,
     this.destinationAccountId,
     this.destinationAmount,
+    this.isFavorite = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -29,6 +30,7 @@ class TransactionTemplate {
   final Money? sourceAmount;
   final String? destinationAccountId;
   final Money? destinationAmount;
+  final bool isFavorite;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -40,19 +42,21 @@ class TransactionTemplate {
   bool get hasDestinationAccount => destinationAccountId != null;
   bool get hasDestinationAmount => destinationAmount != null;
 
-  TransactionTemplate copyWith({String? name}) => TransactionTemplate(
-    id: id,
-    name: name ?? this.name,
-    type: type,
-    date: date,
-    description: description,
-    categoryId: categoryId,
-    tagId: tagId,
-    sourceAccountId: sourceAccountId,
-    sourceAmount: sourceAmount,
-    destinationAccountId: destinationAccountId,
-    destinationAmount: destinationAmount,
-    createdAt: createdAt,
-    updatedAt: DateTime.now().toUtc(),
-  );
+  TransactionTemplate copyWith({String? name, bool? isFavorite}) =>
+      TransactionTemplate(
+        id: id,
+        name: name ?? this.name,
+        type: type,
+        date: date,
+        description: description,
+        categoryId: categoryId,
+        tagId: tagId,
+        sourceAccountId: sourceAccountId,
+        sourceAmount: sourceAmount,
+        destinationAccountId: destinationAccountId,
+        destinationAmount: destinationAmount,
+        isFavorite: isFavorite ?? this.isFavorite,
+        createdAt: createdAt,
+        updatedAt: DateTime.now().toUtc(),
+      );
 }

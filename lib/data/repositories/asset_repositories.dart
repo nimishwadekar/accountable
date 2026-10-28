@@ -227,16 +227,18 @@ class AssetAppDataRepository implements AppDataRepository {
   }
 
   @override
-  Future<AppDataSnapshot> addManualValuation(
-    DailyManualValuation valuation,
-  ) => addManualValuations([valuation]);
+  Future<AppDataSnapshot> addManualValuation(DailyManualValuation valuation) =>
+      addManualValuations([valuation]);
 
   @override
   Future<AppDataSnapshot> addManualValuations(
     List<DailyManualValuation> valuations,
   ) async {
     final current = await load();
-    final validationErrors = validateManualValuationsForWrite(valuations, current);
+    final validationErrors = validateManualValuationsForWrite(
+      valuations,
+      current,
+    );
     if (validationErrors.isNotEmpty) {
       throw StateError(validationErrors.join(' '));
     }
@@ -245,15 +247,12 @@ class AssetAppDataRepository implements AppDataRepository {
     var table = tables[DataAssetPaths.dailyManualValuations]!;
     for (final valuation in valuations) {
       final currency = current.currenciesById[valuation.value.currencyId]!;
-      table = _appendCsvRow(
-        table,
-        {
-          'valuation_id': valuation.id,
-          'date': _dateString(valuation.date),
-          'account_id': valuation.accountId,
-          'value': valuation.value.toMajorUnitsString(currency),
-        },
-      );
+      table = _appendCsvRow(table, {
+        'valuation_id': valuation.id,
+        'date': _dateString(valuation.date),
+        'account_id': valuation.accountId,
+        'value': valuation.value.toMajorUnitsString(currency),
+      });
     }
     tables[DataAssetPaths.dailyManualValuations] = table;
     await store!.write(tables);
@@ -288,30 +287,84 @@ class AssetAppDataRepository implements AppDataRepository {
   @override
   @override
   Future<AppDataSnapshot> addIncomeAllocation(IncomeAllocation allocation) =>
-      throw StateError('Income allocations are not implemented in local assets mode.');
+      throw StateError(
+        'Income allocations are not implemented in local assets mode.',
+      );
 
   @override
   Future<AppDataSnapshot> addTransactionTemplate(
     TransactionTemplate template,
-  ) => throw StateError('Templates are not implemented in local assets mode.');
+  ) async {
+    final current = await load();
+    if (current.transactionTemplatesById.containsKey(template.id)) {
+      throw StateError('Template ${template.id} already exists.');
+    }
+    _validateAssetTemplateName(template, current.transactionTemplates);
+    return _saveTemplates([...current.transactionTemplates, template], current);
+  }
 
   @override
   Future<AppDataSnapshot> updateTransactionTemplate(
     TransactionTemplate template,
-  ) => throw StateError('Templates are not implemented in local assets mode.');
+  ) async {
+    final current = await load();
+    if (!current.transactionTemplatesById.containsKey(template.id)) {
+      throw StateError('Template ${template.id} does not exist.');
+    }
+    _validateAssetTemplateName(template, current.transactionTemplates);
+    return _saveTemplates([
+      for (final existing in current.transactionTemplates)
+        existing.id == template.id ? template : existing,
+    ], current);
+  }
 
   @override
-  Future<AppDataSnapshot> deleteTransactionTemplate(String templateId) =>
-      throw StateError('Templates are not implemented in local assets mode.');
+  Future<AppDataSnapshot> deleteTransactionTemplate(String templateId) async {
+    final current = await load();
+    if (!current.transactionTemplatesById.containsKey(templateId)) {
+      throw StateError('Template $templateId does not exist.');
+    }
+    return _saveTemplates(
+      current.transactionTemplates
+          .where((template) => template.id != templateId)
+          .toList(),
+      current,
+    );
+  }
+
+  Future<AppDataSnapshot> _saveTemplates(
+    List<TransactionTemplate> templates,
+    AppDataSnapshot current,
+  ) async {
+    if (store == null) throw StateError('This data source is read-only.');
+    final tables = await _readDataset();
+    tables[DataAssetPaths.transactionTemplates] = csv.encode([
+      RuntimeTableSchemas.transactionTemplates.headers,
+      for (final template in templates)
+        _assetTransactionTemplateRow(
+          template,
+          current.accountsById,
+          current.currenciesById,
+        ),
+    ]);
+    await store!.write(tables);
+    _cachedSnapshot = null;
+    return reload();
+  }
 
   @override
   Future<AppDataSnapshot> addTransaction(Transaction transaction) =>
       addTransactions([transaction]);
 
   @override
-  Future<AppDataSnapshot> addTransactions(List<Transaction> transactions) async {
+  Future<AppDataSnapshot> addTransactions(
+    List<Transaction> transactions,
+  ) async {
     final current = await load();
-    final validationErrors = validateTransactionsForWrite(transactions, current);
+    final validationErrors = validateTransactionsForWrite(
+      transactions,
+      current,
+    );
     if (validationErrors.isNotEmpty) {
       throw StateError(validationErrors.join(' '));
     }
@@ -454,23 +507,24 @@ class AssetAppDataRepository implements AppDataRepository {
 
   Future<Map<String, String>> _readDataset() async {
     final stored = await store?.read();
-    if (stored != null &&
-        _storedDatasetMatchesSchema(stored, migrationAssistance)) {
-      final tables = Map.of(stored);
-      for (final path in _runtimeAssetPaths(migrationAssistance)) {
-        if (tables.containsKey(path)) continue;
-        try {
-          tables[path] = await reader.readString(path);
-        } catch (error) {
-          throw DataLoadException(
-            tableName: _tableNameFromPath(path),
-            message: error.toString(),
-            cause: error,
-          );
+    if (stored != null) {
+      final tables = _migrateStoredDataset(stored);
+      if (_storedDatasetMatchesSchema(tables, migrationAssistance)) {
+        for (final path in _runtimeAssetPaths(migrationAssistance)) {
+          if (tables.containsKey(path)) continue;
+          try {
+            tables[path] = await reader.readString(path);
+          } catch (error) {
+            throw DataLoadException(
+              tableName: _tableNameFromPath(path),
+              message: error.toString(),
+              cause: error,
+            );
+          }
         }
+        if (store != null) await store!.write(tables);
+        return tables;
       }
-      if (store != null) await store!.write(tables);
-      return tables;
     }
 
     final tables = <String, String>{};
@@ -486,6 +540,41 @@ class AssetAppDataRepository implements AppDataRepository {
       }
     }
     if (store != null) await store!.write(tables);
+    return tables;
+  }
+
+  static Map<String, String> _migrateStoredDataset(Map<String, String> stored) {
+    final tables = Map.of(stored);
+    final path = DataAssetPaths.transactionTemplates;
+    final source = tables[path];
+    if (source == null) return tables;
+    final rows = csv.decode(source);
+    final schema = RuntimeTableSchemas.transactionTemplates;
+    final oldHeaders = schema.headers.take(schema.columnCount - 1).toList();
+    if (rows.isEmpty ||
+        rows.first.map((value) => value.toString()).toList().join(',') !=
+            oldHeaders.join(',')) {
+      return tables;
+    }
+    tables[path] = csv.encode([
+      schema.headers,
+      for (final rawRow in rows.skip(1))
+        if (rawRow.any((value) => value.toString().trim().isNotEmpty))
+          [
+            ...rawRow
+                .take(schema.columnCount - 1)
+                .map((value) => value.toString()),
+            for (
+              var index = rawRow.length < schema.columnCount - 1
+                  ? rawRow.length
+                  : schema.columnCount - 1;
+              index < schema.columnCount - 1;
+              index++
+            )
+              '',
+            'FALSE',
+          ],
+    ]);
     return tables;
   }
 
@@ -530,6 +619,51 @@ class AssetAppDataRepository implements AppDataRepository {
   }
 }
 
+void _validateAssetTemplateName(
+  TransactionTemplate template,
+  Iterable<TransactionTemplate> existing,
+) {
+  final name = template.name.trim().toLowerCase();
+  if (name.isEmpty) throw StateError('Template name cannot be empty.');
+  if (existing.any(
+    (item) => item.id != template.id && item.name.trim().toLowerCase() == name,
+  )) {
+    throw StateError('A template with this name already exists.');
+  }
+}
+
+List<String> _assetTransactionTemplateRow(
+  TransactionTemplate template,
+  Map<String, Account> accounts,
+  Map<String, CurrencyDefinition> currencies,
+) {
+  String amountFor(Money? amount, String? accountId) {
+    if (amount == null || accountId == null) return '';
+    final account = accounts[accountId];
+    if (account == null) {
+      throw StateError('Template references unknown account: $accountId.');
+    }
+    return amount.toMajorUnitsString(currencies[account.currencyId]!);
+  }
+
+  return [
+    template.id,
+    template.name,
+    template.type.wireValue,
+    template.date == null ? '' : _dateString(template.date!),
+    template.description ?? '',
+    template.categoryId ?? '',
+    template.tagId ?? '',
+    template.sourceAccountId ?? '',
+    amountFor(template.sourceAmount, template.sourceAccountId),
+    template.destinationAccountId ?? '',
+    amountFor(template.destinationAmount, template.destinationAccountId),
+    template.createdAt.toUtc().toIso8601String(),
+    template.updatedAt.toUtc().toIso8601String(),
+    template.isFavorite.toString().toUpperCase(),
+  ];
+}
+
 String _tableNameFromPath(String path) {
   final fileName = path.split('/').last;
   return fileName.endsWith('.csv')
@@ -538,13 +672,13 @@ String _tableNameFromPath(String path) {
 }
 
 final _runtimeHeaders = Map.unmodifiable({
-  for (final schema in RuntimeTableSchemas.all) schema.assetPath: schema.headers,
+  for (final schema in RuntimeTableSchemas.all)
+    schema.assetPath: schema.headers,
 });
 
 List<String> _runtimeAssetPaths(bool migrationAssistance) => [
   for (final schema in RuntimeTableSchemas.all)
-    if (schema != RuntimeTableSchemas.transactionsToMigrate)
-      schema.assetPath,
+    if (schema != RuntimeTableSchemas.transactionsToMigrate) schema.assetPath,
   if (migrationAssistance) RuntimeTableSchemas.transactionsToMigrate.assetPath,
 ];
 

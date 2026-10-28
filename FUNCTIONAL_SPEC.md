@@ -93,11 +93,13 @@ TransactionsToMigrate: transaction_id, date, description, category, transaction_
 DailyExchangeRates: rate_id, rate_date, currency, rate_to_usd, source_rate_date, retrieved_at
 DailyManualValuations: valuation_id, date, account_id, value
 DisplayPreferences: entity_type, entity_id, display_order, show_in_app, show_in_entry_forms
-TransactionTemplates: template_id, name, transaction_type, date, description, category, tag, source_account_id, source_amount, dest_account_id, dest_amount, created_at, updated_at
+TransactionTemplates: template_id, name, transaction_type, date, description, category, tag, source_account_id, source_amount, dest_account_id, dest_amount, created_at, updated_at, is_favorite
 IncomeAllocations: allocation_id, name, income_category_id, income_account_id, transfer_category_id, expected_amount_per_income, start_date, end_date, created_at, updated_at
 ```
 
 `source_rate_date` records the actual Frankfurter date used when the requested sequential rate date fell on a weekend or holiday. Legacy local data without this column is read compatibly by treating `rate_date` as the source date. Google Sheets serial-number dates are normalized to calendar dates before freshness checks and parsing.
+
+For the template browser, add `is_favorite` as column N of the `TransactionTemplates` sheet, after `updated_at`. Set existing rows to `FALSE`; new favorites use `TRUE`. The app reads legacy A:M template rows as non-favorites during migration.
 
 The runtime data snapshot contains:
 
@@ -276,6 +278,20 @@ The Overview page does not currently show current-month spending, income, catego
 - Local mode persists the complete test dataset in browser storage.
 
 Specialized quick-entry forms may later reuse the same transaction builder and validation rules.
+
+### Transaction templates — implemented
+
+- Add Transaction opens one searchable browser grouped by Expense, Income, Reimbursement, and Transfer.
+- Search is live and case-insensitive across template name, displayed category name, and transaction type.
+- Each row shows its category. Favorites appear first within each transaction type in sheet row order; other templates follow alphabetically.
+- Favorites can be toggled in the app. New templates can be created in the app; existing template definitions are edited directly in Sheets.
+- New Transaction opens the ordinary type chooser.
+- Template values are fixed and hidden as inputs during entry, and shown in a compact inline `Saved values` summary below the template name. Missing required values are requested, while an unset date defaults to today and remains editable.
+- Description patterns may include required `{Descriptive Label}` placeholders. Repeated labels share an input, inputs follow first-occurrence order, and `{{`/`}}` insert literal braces. The final composed description is previewed inline.
+- Malformed description patterns and missing fixed category/tag/account references make a template unavailable with an explanation.
+- Template use saves the resulting ordinary transaction directly; it does not show a separate review screen. Transfers retain the ordinary optional source/destination fee controls.
+- The `TransactionTemplates` Sheets header adds column N, `is_favorite`, after `updated_at`. Use `TRUE`/`FALSE`; existing rows should be initialized to `FALSE`. Legacy A:M rows are read as non-favorites.
+- No in-app editor for existing template definitions is provided; edit them in Sheets.
 
 ### Assets & liabilities — implemented
 
@@ -640,7 +656,6 @@ Scenarios are honored only in debug mode. Any non-`off` scenario in release mode
 - Spending and income category breakdowns.
 - Period comparisons.
 - Optional transaction-form defaults managed alongside display preferences.
-- Transaction templates: create a template by filling selected form fields, then show only the remaining unfilled fields when using the template.
 - Budget groups, monthly limits, and account-transfer goals.
 - Loans, investments, non-forex units, investment rates, and loan-interest modeling.
 - Detailed investment holdings and valuation.

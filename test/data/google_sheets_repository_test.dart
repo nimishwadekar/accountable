@@ -192,6 +192,36 @@ void main() {
     expect(row['description'], 'Sheets test');
     expect(client.appendedRows, isEmpty);
   });
+
+  test('reads legacy template sheets without the favorite column', () async {
+    final tables = await _fixtureTables();
+    final range = GoogleSheetsRanges.transactionTemplates;
+    final current = tables[range]!;
+    tables[range] = [
+      current.first.take(13).toList(),
+      [
+        'legacy-template',
+        'Coffee',
+        'expense',
+        '',
+        'Coffee at {Merchant}',
+        'food_drink',
+        'boston',
+        'chase_checking',
+        '4.50',
+        '',
+        '',
+        '2026-10-20T00:00:00Z',
+        '2026-10-20T00:00:00Z',
+      ],
+    ];
+    final snapshot = await GoogleSheetsAppDataRepository(
+      _FakeSheetsClient(tables),
+    ).load();
+
+    expect(snapshot.transactionTemplates.single.name, 'Coffee');
+    expect(snapshot.transactionTemplates.single.isFavorite, isFalse);
+  });
 }
 
 Future<Map<String, List<List<String>>>> _fixtureTables() async {

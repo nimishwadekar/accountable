@@ -11,3 +11,4 @@ export 'money.dart';
 export 'tag.dart';
 export 'transaction.dart';
 export 'transaction_template.dart';
+export 'transaction_description_pattern.dart';

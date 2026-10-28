@@ -36,10 +36,7 @@ abstract final class GoogleSheetsRanges {
 }
 
 class GoogleSheetsAppDataRepository implements AppDataRepository {
-  GoogleSheetsAppDataRepository(
-    this.api, {
-    this.migrationAssistance = false,
-  });
+  GoogleSheetsAppDataRepository(this.api, {this.migrationAssistance = false});
 
   final SheetsTableClient api;
   final bool migrationAssistance;
@@ -116,13 +113,20 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
     final current = await load();
     final incomeAccount = current.accountsById[allocation.incomeAccountId];
     final incomeCategory = current.categoriesById[allocation.incomeCategoryId];
-    final transferCategory = current.categoriesById[allocation.transferCategoryId];
+    final transferCategory =
+        current.categoriesById[allocation.transferCategoryId];
     if (incomeAccount == null ||
         incomeCategory == null ||
-        !incomeCategory.allowedTransactionTypes.contains(TransactionType.income) ||
+        !incomeCategory.allowedTransactionTypes.contains(
+          TransactionType.income,
+        ) ||
         transferCategory == null ||
-        !transferCategory.allowedTransactionTypes.contains(TransactionType.transfer)) {
-      throw StateError('Income allocation references invalid categories or account.');
+        !transferCategory.allowedTransactionTypes.contains(
+          TransactionType.transfer,
+        )) {
+      throw StateError(
+        'Income allocation references invalid categories or account.',
+      );
     }
     if (current.incomeAllocations.any(
       (item) =>
@@ -130,7 +134,9 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
           item.incomeAccountId == allocation.incomeAccountId &&
           item.transferCategoryId == allocation.transferCategoryId,
     )) {
-      throw StateError('An allocation with this category and income account already exists.');
+      throw StateError(
+        'An allocation with this category and income account already exists.',
+      );
     }
     await api.appendRow(
       GoogleSheetsRanges.incomeAllocations,
@@ -428,8 +434,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
             if (result.values.isEmpty)
               const DataValidationIssue(
                 table: 'TransactionsToMigrate',
-                message:
-                    'TransactionsToMigrate must contain at least one transaction.',
+                message: 'TransactionsToMigrate must contain at least one transaction.',
               ),
           ];
           recordIssues('TransactionsToMigrate', migrationIssues);
@@ -543,23 +548,43 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       for (final range in ranges)
         range: _padRows(
           response[range] ?? const [],
-          RuntimeTableSchemas.byRange(range).columnCount,
+          RuntimeTableSchemas.byRange(range),
         ),
     };
   }
 
   static List<List<String>> _padRows(
     List<List<String>> rows,
-    int expectedColumns,
+    RuntimeTableSchema schema,
   ) {
     return [
-      for (final row in rows)
-        [
-          ...row,
-          for (var index = row.length; index < expectedColumns; index++) '',
-        ],
+      for (var rowIndex = 0; rowIndex < rows.length; rowIndex++)
+        if (rowIndex == 0 && _matchesHeaderPrefix(rows[rowIndex], schema))
+          schema.headers
+        else
+          [
+            ...rows[rowIndex],
+            for (
+              var index = rows[rowIndex].length;
+              index < schema.columnCount;
+              index++
+            )
+              '',
+          ],
     ];
   }
+
+  static bool _matchesHeaderPrefix(
+    List<String> row,
+    RuntimeTableSchema schema,
+  ) =>
+      row.isNotEmpty &&
+      row.length <= schema.columnCount &&
+      row.asMap().entries.every(
+        (entry) =>
+            entry.value == schema.headers[entry.key] ||
+            (entry.key == schema.columnCount - 1 && entry.value.isEmpty),
+      );
 
   static String _encode(List<List<String>> rows) => csv.encode(rows);
 
@@ -610,6 +635,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       amountFor(template.destinationAmount, template.destinationAccountId),
       template.createdAt.toUtc().toIso8601String(),
       template.updatedAt.toUtc().toIso8601String(),
+      template.isFavorite.toString().toUpperCase(),
     ];
   }
 

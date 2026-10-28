@@ -60,6 +60,51 @@ void main() {
     expect(snapshot.tables['TransactionTemplates'], contains('template_id'));
   });
 
+  test('form snapshot preserves template favorite state', () async {
+    final source = await AssetAppDataRepository().load();
+    final now = DateTime.utc(2026, 10, 20);
+    final data = AppDataSnapshot(
+      accounts: source.accounts,
+      categories: source.categories,
+      currencies: source.currencies,
+      tags: source.tags,
+      transactions: source.transactions,
+      transactionsToMigrate: source.transactionsToMigrate,
+      exchangeRates: source.exchangeRates,
+      dailyAccountBalances: source.dailyAccountBalances,
+      dailyNetWorth: source.dailyNetWorth,
+      dailyManualValuations: source.dailyManualValuations,
+      displayPreferences: source.displayPreferences,
+      transactionTemplates: [
+        TransactionTemplate(
+          id: 'favorite-template',
+          name: 'Coffee',
+          type: TransactionType.expense,
+          description: 'Coffee at {Merchant}',
+          isFavorite: true,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ],
+      incomeAllocations: source.incomeAllocations,
+    );
+    final formSnapshot = FormSnapshot.fromData(
+      data,
+      dataSource: 'sheets',
+      savedAt: now,
+    );
+
+    expect(
+      formSnapshot.tables['TransactionTemplates'],
+      contains('is_favorite'),
+    );
+    expect(formSnapshot.tables['TransactionTemplates'], contains('TRUE'));
+    expect(
+      formSnapshot.toDataSnapshot().transactionTemplates.single.isFavorite,
+      isTrue,
+    );
+  });
+
   test('shared-preferences form snapshot survives and clears', () async {
     final preferences = SharedPreferencesAsync();
     final store = SharedPreferencesFormSnapshotStore(preferences: preferences);

@@ -76,6 +76,7 @@ class AppShell extends StatefulWidget {
     this.migrationAssistance = false,
     this.onRebuildDailyTables,
     this.onReconcileDailyTables,
+    this.onRefreshFormSnapshot,
     this.onRebuildNetWorth,
     this.onReloadData,
     this.textScale = 1,
@@ -91,6 +92,7 @@ class AppShell extends StatefulWidget {
   final bool migrationAssistance;
   final Future<void> Function()? onRebuildDailyTables;
   final Future<void> Function()? onReconcileDailyTables;
+  final Future<void> Function()? onRefreshFormSnapshot;
   final Future<void> Function(DateTime startDate)? onRebuildNetWorth;
   final Future<void> Function()? onReloadData;
   final double textScale;
@@ -315,6 +317,8 @@ class _AppShellState extends State<AppShell> {
         onTransactionAdded: _handleTransactionAdded,
         onTransactionsAdded: _handleTransactionsAdded,
         onTemplateAdded: _handleTemplateAdded,
+        onTemplateUpdated: _updateTemplate,
+        allowTemplateManagement: !widget.restrictedStartup,
         restrictedStartup: widget.restrictedStartup,
         onStartupSignIn: widget.onStartupSignIn,
         startupError: widget.startupError,
@@ -335,8 +339,6 @@ class _AppShellState extends State<AppShell> {
       AppSection.settings => SettingsPage(
         data: data,
         onSaveDisplayPreferences: _saveDisplayPreferences,
-        onUpdateTemplate: _updateTemplate,
-        onDeleteTemplate: _deleteTemplate,
         onRebuildDailyTables: widget.onRebuildDailyTables == null
             ? null
             : _rebuildAndReloadDailyTables,
@@ -445,25 +447,22 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _updateTemplate(TransactionTemplate template) async {
-    final future = _writeCoordinator.run(
-      () => widget.dataRepository.updateTransactionTemplate(template),
-    );
+    final future = _writeCoordinator.run(() async {
+      final current = await widget.dataRepository.reload();
+      final latest = current.transactionTemplatesById[template.id];
+      if (latest == null) {
+        throw StateError('Template ${template.id} no longer exists.');
+      }
+      return widget.dataRepository.updateTransactionTemplate(
+        latest.copyWith(isFavorite: template.isFavorite),
+      );
+    });
     _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
     });
     await future;
-  }
-
-  Future<void> _deleteTemplate(String templateId) async {
-    final future = _writeCoordinator.run(
-      () => widget.dataRepository.deleteTransactionTemplate(templateId),
-    );
-    _pageCache.clear();
-    setState(() {
-      _snapshotFuture = future;
-    });
-    await future;
+    await widget.onRefreshFormSnapshot?.call();
   }
 
   Future<void> _saveDisplayPreferences(
@@ -491,14 +490,16 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _handleTemplateAdded(TransactionTemplate template) async {
-    final future = _writeCoordinator.run(
-      () => widget.dataRepository.addTransactionTemplate(template),
-    );
+    final future = _writeCoordinator.run(() async {
+      await widget.dataRepository.reload();
+      return widget.dataRepository.addTransactionTemplate(template);
+    });
     _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
     });
     await future;
+    await widget.onRefreshFormSnapshot?.call();
   }
 
   Future<void> _handleTransactionsAdded(List<Transaction> transactions) async {

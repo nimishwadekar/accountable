@@ -22,8 +22,6 @@ void main() {
             onReloadData: () async => refreshCount++,
             onRebuildDailyTables: () async => rebuildCount++,
             onSaveDisplayPreferences: (_) async {},
-            onUpdateTemplate: (_) async {},
-            onDeleteTemplate: (_) async {},
           ),
         ),
       ),

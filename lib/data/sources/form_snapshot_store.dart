@@ -50,6 +50,7 @@ class FormSnapshot {
       }
       return value.toMajorUnitsString(currency);
     }
+
     String date(DateTime value) =>
         '${value.year.toString().padLeft(4, '0')}-'
         '${value.month.toString().padLeft(2, '0')}-'
@@ -83,7 +84,9 @@ class FormSnapshot {
           [
             category.id,
             category.name,
-            category.allowedTransactionTypes.map((type) => type.wireValue).join(','),
+            category.allowedTransactionTypes
+                .map((type) => type.wireValue)
+                .join(','),
           ],
       ]),
       RuntimeTableSchemas.tags.name: csv.encode([
@@ -125,6 +128,7 @@ class FormSnapshot {
                   ),
             template.createdAt.toUtc().toIso8601String(),
             template.updatedAt.toUtc().toIso8601String(),
+            template.isFavorite.toString().toUpperCase(),
           ],
       ]),
     };
@@ -185,7 +189,9 @@ class FormSnapshot {
   factory FormSnapshot.fromJson(Map<String, dynamic> json) {
     final rawTables = json['tables'];
     if (rawTables is! Map) {
-      throw const FormatException('The form snapshot tables are not an object.');
+      throw const FormatException(
+        'The form snapshot tables are not an object.',
+      );
     }
     final schemaVersion = json['schema_version'];
     final savedAt = json['saved_at'];
@@ -197,12 +203,16 @@ class FormSnapshot {
     for (final entry in rawTables.entries) {
       if (!formSnapshotTableNames.contains(entry.key.toString()) ||
           entry.value is! String) {
-        throw const FormatException('The form snapshot contains invalid tables.');
+        throw const FormatException(
+          'The form snapshot contains invalid tables.',
+        );
       }
       tables[entry.key.toString()] = entry.value as String;
     }
     if (!formSnapshotTableNames.every(tables.containsKey)) {
-      throw const FormatException('The form snapshot is missing required tables.');
+      throw const FormatException(
+        'The form snapshot is missing required tables.',
+      );
     }
     return FormSnapshot(
       schemaVersion: schemaVersion,
@@ -227,7 +237,8 @@ class SharedPreferencesFormSnapshotStore implements FormSnapshotStore {
   static const storageKey = 'accountable.form_snapshot.v1';
   final SharedPreferencesAsync? preferences;
 
-  SharedPreferencesAsync get _preferences => preferences ?? SharedPreferencesAsync();
+  SharedPreferencesAsync get _preferences =>
+      preferences ?? SharedPreferencesAsync();
 
   @override
   Future<FormSnapshot?> read() async {

@@ -397,7 +397,12 @@ class ModelParsers {
       table.rows.map((row) {
         Money? amount(String field, String? accountId) {
           final raw = optionalValue(row, field);
-          if (raw == null || accountId == null) return null;
+          if (raw == null) return null;
+          if (accountId == null) {
+            throw FormatException(
+              '$field requires an account in TransactionTemplates.',
+            );
+          }
           final account = accounts[accountId];
           if (account == null) {
             throw FormatException(
@@ -430,6 +435,12 @@ class ModelParsers {
           sourceAmount: amount('source_amount', sourceAccountId),
           destinationAccountId: destinationAccountId,
           destinationAmount: amount('dest_amount', destinationAccountId),
+          isFavorite: optionalValue(row, 'is_favorite') == null
+              ? false
+              : _parseBoolean(
+                  requiredValue(row, 'is_favorite'),
+                  fieldName: 'is_favorite',
+                ),
           createdAt: createdAt,
           updatedAt: parseUtcTimestamp(
             requiredValue(row, 'updated_at'),

@@ -9,6 +9,10 @@ import 'package:accountable/data/data.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late AppDataSnapshot fixtureData;
+  setUpAll(() async {
+    fixtureData = await AssetAppDataRepository().load();
+  });
 
   testWidgets('type chooser displays all supported transaction types', (
     tester,
@@ -20,12 +24,133 @@ void main() {
       ),
     );
 
-    expect(find.text('Add Transaction'), findsOneWidget);
+    expect(find.text('New Transaction'), findsOneWidget);
     expect(find.byIcon(Icons.close), findsOneWidget);
     expect(find.text('Expense'), findsOneWidget);
     expect(find.text('Income'), findsOneWidget);
     expect(find.text('Reimbursement'), findsOneWidget);
     expect(find.text('Transfer'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'template browser groups, favorites, searches, and updates favorites',
+    (tester) async {
+      final source = fixtureData;
+      final now = DateTime.utc(2026, 10, 20);
+      TransactionTemplate template(
+        String id,
+        String name, {
+        String? categoryId,
+        TransactionType type = TransactionType.expense,
+        bool favorite = false,
+      }) => TransactionTemplate(
+        id: id,
+        name: name,
+        type: type,
+        categoryId: categoryId,
+        isFavorite: favorite,
+        createdAt: now,
+        updatedAt: now,
+      );
+      final data = AppDataSnapshot(
+        accounts: source.accounts,
+        categories: source.categories,
+        currencies: source.currencies,
+        tags: source.tags,
+        transactions: source.transactions,
+        exchangeRates: source.exchangeRates,
+        dailyAccountBalances: source.dailyAccountBalances,
+        dailyNetWorth: source.dailyNetWorth,
+        dailyManualValuations: source.dailyManualValuations,
+        transactionTemplates: [
+          template(
+            'favorite-z',
+            'Zebra',
+            categoryId: 'food_drink',
+            favorite: true,
+          ),
+          template('regular-a', 'Alpha', categoryId: 'groceries'),
+          template('favorite-b', 'Bravo', categoryId: 'bills', favorite: true),
+          template('income', 'Salary Template', type: TransactionType.income),
+        ],
+      );
+      TransactionTemplate? updatedTemplate;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: TransactionTemplateBrowser(
+              data: data,
+              onTemplateUpdated: (template) async {
+                updatedTemplate = template;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Dining'), findsOneWidget);
+      expect(find.text('INCOME'), findsOneWidget);
+      expect(find.text('New Transaction'), findsOneWidget);
+      expect(find.text('New Template'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Zebra')).dy,
+        lessThan(tester.getTopLeft(find.text('Bravo')).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('Bravo')).dy,
+        lessThan(tester.getTopLeft(find.text('Alpha')).dy),
+      );
+
+      await tester.tap(find.byTooltip('Add favorite').at(0));
+      await tester.pump();
+      expect(updatedTemplate?.id, 'regular-a');
+      expect(updatedTemplate?.isFavorite, isTrue);
+
+      await tester.enterText(find.byType(TextField), 'Groceries');
+      await tester.pump();
+      expect(find.text('Alpha'), findsOneWidget);
+      expect(find.text('Groceries'), findsNWidgets(2));
+      expect(find.text('Zebra'), findsNothing);
+      FocusManager.instance.primaryFocus?.unfocus();
+      tester.testTextInput.hide();
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('New Transaction advances to type and entry form in one dialog', (
+    tester,
+  ) async {
+    final data = fixtureData;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: Dialog(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560, maxHeight: 540),
+              child: TransactionEntryFlowDialog(
+                data: data,
+                onTemplateUpdated: (_) async {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'New Transaction'));
+    await tester.pump();
+    expect(find.text('Transaction Type'), findsOneWidget);
+
+    await tester.tap(find.text('Expense'));
+    await tester.pump();
+    expect(find.byType(TransactionEntryFlowDialog), findsOneWidget);
+    expect(find.text('Description'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -128,7 +253,10 @@ void main() {
       ),
       Icons.eco,
     );
-    expect(categoryColor(foodDrink), isNot(equals(categoryColor(personalCare))));
+    expect(
+      categoryColor(foodDrink),
+      isNot(equals(categoryColor(personalCare))),
+    );
     expect(
       categoryIcon(
         const Category(
@@ -236,7 +364,7 @@ void main() {
   testWidgets('expense form places description first and requires tag', (
     tester,
   ) async {
-    final data = await AssetAppDataRepository().load();
+    final data = fixtureData;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -257,4 +385,155 @@ void main() {
     expect(find.text('Tag (optional)'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('template entry hides fixed values and asks for placeholders', (
+    tester,
+  ) async {
+    final source = fixtureData;
+    final now = DateTime.utc(2026, 10, 20);
+    final template = TransactionTemplate(
+      id: 'coffee-template',
+      name: 'Coffee',
+      type: TransactionType.expense,
+      description: 'Coffee at {Merchant}',
+      categoryId: 'food_drink',
+      tagId: 'boston',
+      sourceAccountId: 'chase_checking',
+      sourceAmount: Money.fromMajorUnits(
+        value: '4.50',
+        currency: source.currenciesById['USD']!,
+      ),
+      isFavorite: true,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final data = AppDataSnapshot(
+      accounts: source.accounts,
+      categories: source.categories,
+      currencies: source.currencies,
+      tags: source.tags,
+      transactions: source.transactions,
+      exchangeRates: source.exchangeRates,
+      dailyAccountBalances: source.dailyAccountBalances,
+      dailyNetWorth: source.dailyNetWorth,
+      dailyManualValuations: source.dailyManualValuations,
+      transactionTemplates: [template],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: TransactionFormSheet(
+            type: template.type,
+            data: data,
+            template: template,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Coffee'), findsOneWidget);
+    expect(find.text('Account: Chase Checking'), findsOneWidget);
+    expect(find.textContaining('Amount:'), findsOneWidget);
+    expect(find.text('Merchant'), findsOneWidget);
+    expect(find.text('Description: Coffee at {Merchant}'), findsOneWidget);
+    expect(find.text('Account'), findsNothing);
+    expect(find.text('Amount'), findsNothing);
+    expect(find.text('Category'), findsNothing);
+    expect(find.text('Tag'), findsNothing);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Merchant'),
+      'Cafe Luna',
+    );
+    await tester.pump();
+    expect(find.text('Description: Coffee at Cafe Luna'), findsOneWidget);
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'same-currency transfer template preserves a saved destination amount',
+    (tester) async {
+      final source = fixtureData;
+      final now = DateTime.utc(2026, 10, 20);
+      final usd = source.currenciesById['USD']!;
+      final template = TransactionTemplate(
+        id: 'same-currency-transfer',
+        name: 'Card Payment',
+        type: TransactionType.transfer,
+        date: null,
+        description: 'Card payment',
+        categoryId: 'general',
+        tagId: 'boston',
+        sourceAccountId: 'chase_checking',
+        destinationAccountId: 'chase_freedom_rise',
+        destinationAmount: Money.fromMajorUnits(value: '50', currency: usd),
+        createdAt: now,
+        updatedAt: now,
+      );
+      final data = AppDataSnapshot(
+        accounts: source.accounts,
+        categories: source.categories,
+        currencies: source.currencies,
+        tags: source.tags,
+        transactions: source.transactions,
+        exchangeRates: source.exchangeRates,
+        dailyAccountBalances: source.dailyAccountBalances,
+        dailyNetWorth: source.dailyNetWorth,
+        dailyManualValuations: source.dailyManualValuations,
+      );
+      List<Transaction>? created;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: FilledButton(
+                onPressed: () async {
+                  final result = await showDialog<Object>(
+                    context: context,
+                    builder: (context) => Dialog(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 560),
+                        child: TransactionFormSheet(
+                          type: TransactionType.transfer,
+                          data: data,
+                          template: template,
+                        ),
+                      ),
+                    ),
+                  );
+                  if (result is List<Transaction>) created = result;
+                },
+                child: const Text('Open form'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open form'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Card Payment'), findsOneWidget);
+      expect(find.text('Source Amount'), findsNothing);
+      expect(find.text('Destination Amount'), findsNothing);
+      expect(find.text('Source Account'), findsNothing);
+      expect(find.text('Destination Account'), findsNothing);
+
+      await tester.ensureVisible(find.text('Add Transaction'));
+      await tester.tap(find.text('Add Transaction'));
+      await tester.pumpAndSettle();
+      expect(created, hasLength(1));
+      expect(created!.single.sourceAmount?.minorUnits, 5000);
+      expect(created!.single.destinationAmount?.minorUnits, 5000);
+      expect(created!.single.sourceAccountId, 'chase_checking');
+      expect(created!.single.destinationAccountId, 'chase_freedom_rise');
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }

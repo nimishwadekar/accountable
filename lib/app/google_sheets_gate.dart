@@ -57,6 +57,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   Future<void> Function()? _rebuildDailyTables;
   Future<void> Function(DateTime startDate)? _rebuildNetWorth;
   Future<void> Function()? _reconcileDailyTables;
+  Future<void> Function()? _refreshFormSnapshot;
   final TransactionWriteCoordinator _writeCoordinator =
       const TransactionWriteCoordinator();
   late final TransactionOutboxSynchronizer _outboxSynchronizer =
@@ -125,6 +126,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         migrationAssistance: widget.config.migrationAssistance,
         onRebuildDailyTables: _rebuildDailyTables,
         onReconcileDailyTables: _reconcileDailyTables,
+        onRefreshFormSnapshot: _refreshFormSnapshot,
         onRebuildNetWorth: _rebuildNetWorth,
         textScale: widget.textScale,
         onTextScaleChanged: widget.onTextScaleChanged,
@@ -152,6 +154,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         migrationAssistance: widget.config.migrationAssistance,
         onRebuildDailyTables: _rebuildDailyTables,
         onReconcileDailyTables: _reconcileDailyTables,
+        onRefreshFormSnapshot: _refreshFormSnapshot,
         onRebuildNetWorth: _rebuildNetWorth,
         textScale: widget.textScale,
         onTextScaleChanged: widget.onTextScaleChanged,
@@ -450,7 +453,16 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
           client: api,
           data: latestData,
         ).reconcile();
-        await repository.reload();
+        final reconciledData = await repository.reload();
+        await _formSnapshotStore.write(
+          FormSnapshot.fromData(reconciledData, dataSource: 'sheets'),
+        );
+      });
+      _refreshFormSnapshot = () => _writeCoordinator.run(() async {
+        final latestData = await repository.reload();
+        await _formSnapshotStore.write(
+          FormSnapshot.fromData(latestData, dataSource: 'sheets'),
+        );
       });
       _logTiming('loading initial Sheets snapshot');
       final initialData = await repository.load();
@@ -660,6 +672,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     _rebuildDailyTables = null;
     _rebuildNetWorth = null;
     _reconcileDailyTables = null;
+    _refreshFormSnapshot = null;
     await _authService.signOut();
     if (!mounted) return;
     setState(() {

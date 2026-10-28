@@ -136,9 +136,11 @@ abstract final class RuntimeTableSchemas {
       'dest_amount',
       'created_at',
       'updated_at',
+      'is_favorite',
     ],
-    range: 'TransactionTemplates!A:M',
+    range: 'TransactionTemplates!A:N',
     numericColumns: {8, 10},
+    booleanColumns: {13},
   );
   static const transactionsToMigrate = RuntimeTableSchema(
     name: 'TransactionsToMigrate',
