@@ -26,4 +26,14 @@ void main() {
 
     expect(order, ['first-start', 'first-end', 'second-start']);
   });
+
+  test('preserves the original write failure', () async {
+    const coordinator = TransactionWriteCoordinator();
+    final failure = StateError('write failed after append');
+
+    await expectLater(
+      coordinator.run<void>(() async => throw failure),
+      throwsA(same(failure)),
+    );
+  });
 }

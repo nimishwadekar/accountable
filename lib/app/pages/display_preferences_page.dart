@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
+import '../error_dialog.dart';
 import '../theme/design_tokens.dart';
 
 class DisplayPreferencesPage extends StatefulWidget {
@@ -144,8 +145,9 @@ class _DisplayPreferencesPageState extends State<DisplayPreferencesPage> {
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save display preferences: $error')),
+      showPersistentErrorDialog(
+        context,
+        'Could not save display preferences: $error',
       );
     } finally {
       if (mounted) setState(() => _saving = false);

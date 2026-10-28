@@ -590,7 +590,9 @@ class _AppShellState extends State<AppShell> {
         await widget.dataRepository.reload();
         final future = widget.dataRepository.addTransactions(transactions);
         _pageCache.clear();
-        setState(() => _snapshotFuture = _observeMilestoneState(future));
+        setState(() {
+          _snapshotFuture = _observeMilestoneState(future);
+        });
         await future;
       }
 
@@ -618,7 +620,9 @@ class _AppShellState extends State<AppShell> {
         await widget.dataRepository.reload();
         final future = widget.dataRepository.addTransaction(transaction);
         _pageCache.clear();
-        setState(() => _snapshotFuture = _observeMilestoneState(future));
+        setState(() {
+          _snapshotFuture = _observeMilestoneState(future);
+        });
         await future;
       }
 
@@ -642,7 +646,9 @@ class _AppShellState extends State<AppShell> {
   Future<void> _reloadDataWithoutReconciliation() async {
     final future = _loadSnapshotAndUpdateMilestones(reload: true);
     _pageCache.clear();
-    setState(() => _snapshotFuture = future);
+    setState(() {
+      _snapshotFuture = future;
+    });
     await future;
   }
 }

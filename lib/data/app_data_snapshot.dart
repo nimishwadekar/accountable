@@ -163,6 +163,25 @@ class AppDataSnapshot {
         achievementStartDate: achievementStartDate,
       );
 
+  AppDataSnapshot withAdditionalTransactions(List<Transaction> additional) =>
+      AppDataSnapshot(
+        accounts: accounts,
+        categories: categories,
+        currencies: currencies,
+        tags: tags,
+        transactions: [...transactions, ...additional],
+        transactionsToMigrate: transactionsToMigrate,
+        exchangeRates: exchangeRates,
+        dailyAccountBalances: dailyAccountBalances,
+        dailyNetWorth: dailyNetWorth,
+        dailyManualValuations: dailyManualValuations,
+        displayPreferences: displayPreferences,
+        transactionTemplates: transactionTemplates,
+        incomeAllocations: incomeAllocations,
+        achievements: achievements,
+        achievementStartDate: achievementStartDate,
+      );
+
   DisplayPreference? displayPreferenceFor(String entityType, String entityId) =>
       displayPreferencesByKey[_preferenceKey(entityType, entityId)];
 

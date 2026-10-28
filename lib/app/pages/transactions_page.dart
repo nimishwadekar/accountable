@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
+import '../error_dialog.dart';
 import '../formatters.dart';
 import '../theme/design_tokens.dart';
 import 'transaction_form.dart';
@@ -272,8 +273,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
       final message = error is TransactionSavedHistoryRepairException
           ? error.toString()
           : 'Could not add transaction: $error';
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      showPersistentErrorDialog(context, message);
     }
   }
 

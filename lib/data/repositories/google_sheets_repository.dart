@@ -273,7 +273,13 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
             )
             .toList(),
     ]);
-    return reload();
+    // The append succeeded; don't make that success depend on a second Sheets
+    // read. AppShell reconciles derived history and reloads after the write.
+    // Returning the updated snapshot also avoids reporting a false write
+    // failure if the follow-up read fails after the transaction was persisted.
+    final updated = current.withAdditionalTransactions(transactions);
+    _cachedSnapshot = updated;
+    return updated;
   }
 
   static void _validateTemplateName(

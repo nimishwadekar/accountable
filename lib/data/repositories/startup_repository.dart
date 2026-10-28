@@ -79,20 +79,4 @@ class StartupDataRepository implements AppDataRepository {
 AppDataSnapshot withAdditionalTransactions(
   AppDataSnapshot data,
   List<Transaction> additional,
-) => AppDataSnapshot(
-  accounts: data.accounts,
-  categories: data.categories,
-  currencies: data.currencies,
-  tags: data.tags,
-  transactions: [...data.transactions, ...additional],
-  transactionsToMigrate: data.transactionsToMigrate,
-  exchangeRates: data.exchangeRates,
-  dailyAccountBalances: data.dailyAccountBalances,
-  dailyNetWorth: data.dailyNetWorth,
-  dailyManualValuations: data.dailyManualValuations,
-  displayPreferences: data.displayPreferences,
-  transactionTemplates: data.transactionTemplates,
-  incomeAllocations: data.incomeAllocations,
-  achievements: data.achievements,
-  achievementStartDate: data.achievementStartDate,
-);
+) => data.withAdditionalTransactions(additional);

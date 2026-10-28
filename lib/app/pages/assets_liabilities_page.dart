@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
+import '../error_dialog.dart';
 import 'app_pages.dart';
 import 'account_visuals.dart';
 import '../formatters.dart';
@@ -199,9 +200,7 @@ class _AssetsLiabilitiesSectionState extends State<AssetsLiabilitiesSection> {
           .showSnackBar(const SnackBar(content: Text('Valuations added.')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not add valuations: $error')),
-      );
+      showPersistentErrorDialog(context, 'Could not add valuations: $error');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -221,6 +220,7 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
   final _formKey = GlobalKey<FormState>();
   late DateTime _date = defaultManualValuationDate(widget.data);
   final Map<String, TextEditingController> _controllers = {};
+  String? _formError;
 
   List<Account> get _eligibleAccounts =>
       eligibleManualValuationAccounts(widget.data, _date);
@@ -254,7 +254,9 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: AppSpacing.xs),
-              Text('For ${formatDate(_date)}'),
+              Text(
+                'For ${formatDate(_date)} · leave accounts blank to skip them.',
+              ),
               const SizedBox(height: AppSpacing.md),
               OutlinedButton.icon(
                 onPressed: _selectDate,
@@ -271,10 +273,17 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
                   _valuationField(account),
                   const SizedBox(height: AppSpacing.md),
                 ],
+              if (_formError != null) ...[
+                Text(
+                  _formError!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+              ],
               if (accounts.isNotEmpty)
                 FilledButton(
                   onPressed: _submit,
-                  child: const Text('Save Valuations'),
+                  child: const Text('Save entered valuations'),
                 ),
             ],
           ),
@@ -298,13 +307,13 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
             ? AppColors.danger.withValues(alpha: 0.06)
             : AppColors.success.withValues(alpha: 0.06),
         helperText:
-            '${_displayAccountType(account)} · ${currency?.id ?? account.currencyId}',
+            '${_displayAccountType(account)} · ${currency?.id ?? account.currencyId} · optional',
         suffixText: currency?.id,
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       validator: (value) {
         if (value == null || value.trim().isEmpty) {
-          return 'Enter a valuation.';
+          return null;
         }
         final parsed = num.tryParse(value.trim());
         return parsed == null || !parsed.isFinite || parsed < 0
@@ -329,8 +338,15 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
+    final accountsWithValues = _eligibleAccounts.where((account) {
+      return _controllers[account.id]!.text.trim().isNotEmpty;
+    }).toList();
+    if (accountsWithValues.isEmpty) {
+      setState(() => _formError = 'Enter at least one valuation to save.');
+      return;
+    }
     final valuations = <DailyManualValuation>[];
-    for (final account in _eligibleAccounts) {
+    for (final account in accountsWithValues) {
       final currency = widget.data.currenciesById[account.currencyId]!;
       final rawValue = _controllers[account.id]!.text.trim();
       final enteredValue = account.isLiability && !rawValue.startsWith('-')

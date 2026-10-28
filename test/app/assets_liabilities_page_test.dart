@@ -22,8 +22,18 @@ void main() {
       closingDate: null,
       usesManualValuations: true,
     );
+    final secondAccount = Account(
+      id: 'property',
+      name: 'Property',
+      accountType: 'asset',
+      currencyId: 'USD',
+      openingBalance: Money.zero(usd),
+      openingDate: DateTime.utc(2026, 1, 1),
+      closingDate: null,
+      usesManualValuations: true,
+    );
     final data = AppDataSnapshot(
-      accounts: [account],
+      accounts: [account, secondAccount],
       categories: const [],
       currencies: [usd],
       tags: const [],
@@ -33,12 +43,18 @@ void main() {
       dailyNetWorth: const [],
       dailyManualValuations: const [],
     );
+    List<DailyManualValuation>? savedValuations;
 
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
         home: Scaffold(
-          body: AccountsPage(data: data, onValuationsAdded: (_) async {}),
+          body: AccountsPage(
+            data: data,
+            onValuationsAdded: (valuations) async {
+              savedValuations = valuations;
+            },
+          ),
         ),
       ),
     );
@@ -48,10 +64,23 @@ void main() {
     expect(find.text('Cash Accounts'), findsOneWidget);
     expect(find.text('Assets & Liabilities'), findsOneWidget);
     await tester.tap(find.text('Add valuation'));
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
 
     expect(find.text('Add Daily Valuations'), findsOneWidget);
     expect(find.text('Brokerage'), findsWidgets);
-    expect(find.text('Save Valuations'), findsOneWidget);
+    expect(find.text('Property'), findsWidgets);
+    expect(find.text('Save entered valuations'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).first, '1234.56');
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(FilledButton).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FilledButton).last);
+    await tester.pumpAndSettle();
+
+    expect(savedValuations, hasLength(1));
+    expect(savedValuations!.single.accountId, 'brokerage');
+    expect(savedValuations!.single.value.minorUnits, 123456);
   });
 }

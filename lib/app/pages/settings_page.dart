@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
+import '../error_dialog.dart';
 import 'display_preferences_page.dart';
 import '../theme/design_tokens.dart';
 
@@ -263,9 +264,7 @@ class _SettingsPageState extends State<SettingsPage> {
           .showSnackBar(const SnackBar(content: Text('Data refreshed.')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not refresh data: $error')));
+      showPersistentErrorDialog(context, 'Could not refresh data: $error');
     } finally {
       if (mounted) setState(() => _refreshing = false);
     }
@@ -301,8 +300,9 @@ class _SettingsPageState extends State<SettingsPage> {
           .showSnackBar(const SnackBar(content: Text('Daily tables rebuilt.')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not rebuild daily tables: $error')),
+      showPersistentErrorDialog(
+        context,
+        'Could not rebuild daily tables: $error',
       );
     } finally {
       if (mounted) setState(() => _working = false);

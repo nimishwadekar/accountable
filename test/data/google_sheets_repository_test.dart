@@ -193,6 +193,37 @@ void main() {
     expect(client.appendedRows, isEmpty);
   });
 
+  test('returns the added transaction without rereading Sheets', () async {
+    final client = _FakeSheetsClient(await _fixtureTables());
+    final repository = GoogleSheetsAppDataRepository(client);
+    final current = await repository.load();
+    final account = current.accountsById['chase_checking']!;
+    final transaction = Transaction(
+      id: 'immediate-sheets-test',
+      createdAt: DateTime.utc(2026, 10, 14),
+      date: DateTime.utc(2026, 10, 14),
+      type: TransactionType.expense,
+      sourceAmount: Money.fromMajorUnits(
+        value: '3.25',
+        currency: current.currenciesById['USD']!,
+      ),
+      sourceAccountId: account.id,
+      destinationAmount: null,
+      destinationAccountId: null,
+      categoryId: 'food_drink',
+      tagId: 'boston',
+      description: 'Immediate reload test',
+    );
+
+    final updated = await repository.addTransaction(transaction);
+
+    expect(updated.transactionsById[transaction.id], same(transaction));
+    expect(
+      client.appendedRows.where((row) => row.first == transaction.id),
+      hasLength(1),
+    );
+  });
+
   test('reads legacy template sheets without the favorite column', () async {
     final tables = await _fixtureTables();
     final range = GoogleSheetsRanges.transactionTemplates;

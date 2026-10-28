@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../error_dialog.dart';
 import '../../data/data.dart';
 import '../formatters.dart';
 import '../theme/design_tokens.dart';
@@ -372,9 +373,7 @@ class _TransactionTemplateBrowserState
     } catch (error) {
       if (!mounted) return;
       setState(() => _templates[index] = template);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update favorite: $error')),
-      );
+      showPersistentErrorDialog(context, 'Could not update favorite: $error');
     } finally {
       if (mounted) setState(() => _updatingFavorite = false);
     }
@@ -922,8 +921,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     if (_descriptionPatternError != null) return;
 
     if (!widget.createTemplate && _date == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Select a date.')));
+      showPersistentErrorDialog(context, 'Select a date.');
       return;
     }
     final sourceAccount = _sourceAccountId == null
@@ -944,12 +942,9 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       if (sourceAmount != null &&
           transferDestinationAmount != null &&
           sourceAmount.minorUnits != transferDestinationAmount.minorUnits) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'This same-currency template has conflicting saved amounts. Fix it in Sheets.',
-            ),
-          ),
+        showPersistentErrorDialog(
+          context,
+          'This same-currency template has conflicting saved amounts. Fix it in Sheets.',
         );
         return;
       }
@@ -1025,8 +1020,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
             true,
       );
       if (!result.isValid) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(result.error!)));
+        showPersistentErrorDialog(context, result.error!);
         return;
       }
       Navigator.of(context).pop(result.transactions);
@@ -1048,8 +1042,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     );
     final errors = transaction.validateForEntry();
     if (errors.isNotEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(errors.join(' '))));
+      showPersistentErrorDialog(context, errors.join(' '));
       return;
     }
     Navigator.of(context).pop(transaction);

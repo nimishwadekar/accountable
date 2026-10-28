@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/error_dialog.dart';
 import '../../app/theme/design_tokens.dart';
 import '../../data/data.dart';
 
@@ -190,9 +191,7 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
     if (_endDate != null && _endDate!.isBefore(_startDate)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('End date must be after start date.')),
-      );
+      showPersistentErrorDialog(context, 'End date must be after start date.');
       return;
     }
     final now = DateTime.now().toUtc();

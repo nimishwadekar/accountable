@@ -103,6 +103,25 @@ void main() {
     },
   );
 
+  test('manual account history carries forward and converts to USD', () async {
+    final data = await AssetAppDataRepository().load();
+    final series = AnalysisCalculator(data).accountBalanceSeries(
+      accountId: 'hdfc-credila-loan',
+      range: DateTimeRange(
+        start: DateTime.utc(2026, 10, 14),
+        end: DateTime.utc(2026, 10, 15),
+      ),
+    );
+
+    expect(series.points, hasLength(2));
+    expect(series.points[1].nativeAmount, series.points[0].nativeAmount);
+    expect(series.points[0].usdAmount, isNotNull);
+    expect(
+      series.points[1].usdAmount!.minorUnits,
+      series.points[0].usdAmount!.minorUnits,
+    );
+  });
+
   test(
     'manual USD values are unavailable when exchange rates are missing',
     () async {

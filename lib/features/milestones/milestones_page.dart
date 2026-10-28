@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
+import '../../app/error_dialog.dart';
 import '../../app/formatters.dart';
 import '../../app/pages/app_pages.dart';
 import '../../app/theme/design_tokens.dart';
@@ -36,7 +37,6 @@ class _MilestonesPageState extends State<MilestonesPage> {
   Set<String> _locallyAcknowledgedIds = {};
   int _celebrationTotal = 0;
   bool _acknowledging = false;
-  String? _acknowledgementError;
 
   @override
   void initState() {
@@ -281,16 +281,6 @@ class _MilestonesPageState extends State<MilestonesPage> {
                               ?.copyWith(color: AppColors.mutedText),
                         ),
                       ],
-                      if (_acknowledgementError != null) ...[
-                        const SizedBox(height: AppSpacing.md),
-                        Text(
-                          'Could not save this acknowledgement: $_acknowledgementError',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
                       const SizedBox(height: AppSpacing.xl),
                       FilledButton.icon(
                         onPressed: _acknowledging ? null : _acknowledgeCurrent,
@@ -320,10 +310,7 @@ class _MilestonesPageState extends State<MilestonesPage> {
 
   Future<void> _acknowledgeCurrent() async {
     final id = _celebrationQueue.first;
-    setState(() {
-      _acknowledging = true;
-      _acknowledgementError = null;
-    });
+    setState(() => _acknowledging = true);
     try {
       await widget.onAchievementAcknowledged(id);
       if (!mounted) return;
@@ -345,10 +332,11 @@ class _MilestonesPageState extends State<MilestonesPage> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _acknowledging = false;
-        _acknowledgementError = error.toString();
-      });
+      setState(() => _acknowledging = false);
+      showPersistentErrorDialog(
+        context,
+        'Could not save this acknowledgement: $error',
+      );
     }
   }
 
