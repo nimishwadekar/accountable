@@ -57,11 +57,13 @@ void main() {
     expect(find.text('A stronger foundation'), findsNothing);
     expect(find.text('A new frontier'), findsNothing);
 
+    await tester.ensureVisible(find.text('Celebrate next'));
     await tester.tap(find.text('Celebrate next'));
     await tester.pump();
     expect(acknowledged, ['ACH001']);
     expect(find.text('A stronger foundation'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Continue'));
     await tester.tap(find.text('Continue'));
     await tester.pump();
     expect(acknowledged, ['ACH001', 'ACH002']);
@@ -70,7 +72,7 @@ void main() {
     expect(find.text('A fresh start'), findsOneWidget);
     expect(find.text('A stronger foundation'), findsOneWidget);
     expect(find.text('PROGRESS TOWARD'), findsOneWidget);
-    expect(find.text('A new frontier'), findsNWidgets(2));
+    expect(find.text('A new frontier'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

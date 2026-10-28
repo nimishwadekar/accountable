@@ -673,11 +673,37 @@ class _PulsingMilestoneIconState extends State<_PulsingMilestoneIcon>
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: _controller,
     builder: (context, child) =>
-        Transform.scale(scale: 0.9 + _controller.value * 0.2, child: child),
-    child: Badge(
-      smallSize: 8,
-      backgroundColor: AppColors.warning,
-      child: Icon(widget.icon, color: AppColors.teal),
+        Transform.scale(scale: 0.94 + _controller.value * 0.14, child: child),
+    child: Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFD166), Color(0xFFEF7D68)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.warning.withValues(alpha: 0.32),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Icon(widget.icon, color: Colors.white, size: 23),
+          const Positioned(
+            top: -2,
+            right: -3,
+            child: Icon(Icons.auto_awesome, color: AppColors.teal, size: 13),
+          ),
+        ],
+      ),
     ),
   );
 }
