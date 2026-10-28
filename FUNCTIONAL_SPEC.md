@@ -326,7 +326,8 @@ The previous `/assets-liabilities` route is replaced by `/accounts`.
 - The `earned` boolean records celebration acknowledgement: a `FALSE` row whose target qualifies waits for a celebration; the app writes `TRUE` after acknowledgment. The app derives earned months and averages from daily net-worth history rather than persisting those as separate Sheet columns.
 - Milestones qualify using completed calendar-month averages. Every daily snapshot in a month is required; missing history delays awards until reconciliation repairs it.
 - A mid-month start date skips that partial month. A start date before the first DailyNetWorth row is clamped to the first available daily value.
-- Progress uses the current month-to-date average, between the first eligible month's average and the next ascending target. Progress is provisional until month-end.
+- The page shows the latest completed calendar month's average only; it does not display a current or provisional month-to-date average. Progress is measured between the prior milestone (or first eligible month's average) and the next ascending target.
+- The Milestones page uses the app's navy/teal visual language with a more celebratory gradient panel, a prominent gold progress bar, and colorful earned-achievement cards.
 - Pending milestones pulse the Milestones navigation icon. Opening the section presents full-screen celebrations one at a time, in ascending target order. Acknowledging a celebration marks its Sheet row `TRUE`; unacknowledged milestones remain pending.
 - Historical qualifying milestones since the start date are celebrated retroactively. Multiple targets may qualify in the same month.
 - The page shows earned milestones and the current next milestone. Earned state is re-evaluated from the Sheet definitions and available DailyNetWorth history.
