@@ -72,8 +72,8 @@ bool isManualValuationDateAllowed({
   );
 }
 
-class AssetsLiabilitiesPage extends StatefulWidget {
-  const AssetsLiabilitiesPage({
+class AccountsPage extends StatelessWidget {
+  const AccountsPage({
     super.key,
     required this.data,
     required this.onValuationsAdded,
@@ -84,10 +84,40 @@ class AssetsLiabilitiesPage extends StatefulWidget {
   onValuationsAdded;
 
   @override
-  State<AssetsLiabilitiesPage> createState() => _AssetsLiabilitiesPageState();
+  Widget build(BuildContext context) => AppPageFrame(
+    title: 'Accounts',
+    subtitle: 'A complete view of your cash, assets, and liabilities.',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CashAccountsSection(data: data),
+        const SizedBox(height: AppSpacing.xl),
+        AssetsLiabilitiesSection(
+          data: data,
+          onValuationsAdded: onValuationsAdded,
+        ),
+      ],
+    ),
+  );
 }
 
-class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
+class AssetsLiabilitiesSection extends StatefulWidget {
+  const AssetsLiabilitiesSection({
+    super.key,
+    required this.data,
+    required this.onValuationsAdded,
+  });
+
+  final AppDataSnapshot data;
+  final Future<void> Function(List<DailyManualValuation> valuations)
+  onValuationsAdded;
+
+  @override
+  State<AssetsLiabilitiesSection> createState() =>
+      _AssetsLiabilitiesSectionState();
+}
+
+class _AssetsLiabilitiesSectionState extends State<AssetsLiabilitiesSection> {
   bool _submitting = false;
 
   List<Account> get _assetLiabilityAccounts => widget.data.visibleAccounts
@@ -96,44 +126,60 @@ class _AssetsLiabilitiesPageState extends State<AssetsLiabilitiesPage> {
 
   @override
   Widget build(BuildContext context) {
-    return AppPageFrame(
-      title: 'Assets & Liabilities',
-      subtitle: 'View current assets and liabilities; add manual valuations for accounts that use them.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.icon(
+    final latestDate = widget.data.dailyManualValuations.isEmpty
+        ? null
+        : widget.data.dailyManualValuations
+              .map((valuation) => valuation.date)
+              .reduce((a, b) => a.isAfter(b) ? a : b);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Assets & Liabilities',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            FilledButton.icon(
               onPressed: _submitting ? null : _openAddValuation,
               icon: const Icon(Icons.add),
               label: const Text('Add valuation'),
             ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          if (_assetLiabilityAccounts.isEmpty)
-            const EmptyState(message: 'No Asset or Liability accounts yet.')
-          else
-            Card(
-              clipBehavior: Clip.hardEdge,
-              child: Column(
-                children: [
-                  for (
-                    var index = 0;
-                    index < _assetLiabilityAccounts.length;
-                    index++
-                  ) ...[
-                    if (index > 0) const Divider(height: 1),
-                    _AssetLiabilityRow(
-                      account: _assetLiabilityAccounts[index],
-                      data: widget.data,
-                    ),
-                  ],
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          latestDate == null
+              ? 'No manual valuation available'
+              : 'Latest manual valuation: ${formatDate(latestDate)}',
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: AppColors.mutedText),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        if (_assetLiabilityAccounts.isEmpty)
+          const EmptyState(message: 'No Asset or Liability accounts yet.')
+        else
+          Card(
+            clipBehavior: Clip.hardEdge,
+            child: Column(
+              children: [
+                for (
+                  var index = 0;
+                  index < _assetLiabilityAccounts.length;
+                  index++
+                ) ...[
+                  if (index > 0) const Divider(height: 1),
+                  _AssetLiabilityRow(
+                    account: _assetLiabilityAccounts[index],
+                    data: widget.data,
+                  ),
                 ],
-              ),
+              ],
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -346,7 +392,10 @@ class _AssetLiabilityRow extends StatelessWidget {
         leading: CircleAvatar(
           backgroundColor: accountTypeColor(account).withValues(alpha: 0.14),
           foregroundColor: accountTypeColor(account),
-          child: AccountVisualIcon(account: account, currencies: data.currenciesById),
+          child: AccountVisualIcon(
+            account: account,
+            currencies: data.currenciesById,
+          ),
         ),
         title: Text(account.name),
         subtitle: Text(accountSubtitle(account, data.currenciesById)),

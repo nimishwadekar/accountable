@@ -7,6 +7,7 @@ const tableDependencies = <String, List<String>>{
   'DisplayPreferences': ['Accounts', 'Categories', 'Tags'],
   'TransactionTemplates': ['Accounts', 'Categories', 'Tags', 'Currencies'],
   'IncomeAllocations': ['Accounts', 'Categories', 'Currencies'],
+  'Achievements': ['Currencies', 'DailyNetWorth'],
 };
 
 bool hasCircularTableDependency(Map<String, List<String>> graph) {

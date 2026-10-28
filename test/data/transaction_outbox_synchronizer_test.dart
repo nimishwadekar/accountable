@@ -236,4 +236,10 @@ class _MemoryRepository implements AppDataRepository {
   @override
   Future<AppDataSnapshot> deleteTransactionTemplate(String templateId) =>
       throw UnimplementedError();
+
+  @override
+  Future<AppDataSnapshot> updateAchievementEarned(
+    String achievementId, {
+    required bool earned,
+  }) => throw UnimplementedError();
 }

@@ -50,7 +50,7 @@ For now:
 
 - `cash` accounts use transaction-derived balances.
 - `asset` and `liability` accounts use `DailyManualValuations`.
-- The Assets & liabilities app section lists only accounts with `uses_manual_valuations=TRUE`.
+- The Assets & Liabilities section within Accounts lists only accounts with `uses_manual_valuations=TRUE`.
 - `Accounts.account_type` values are `cash`, `liability`, or `asset`; `uses_manual_valuations=TRUE` is valid only for `asset` or `liability` accounts.
 - `uses_manual_valuations` accepts Google Sheets boolean output (`TRUE`/`FALSE`, including normalized casing) and rejects other values.
 - Valuation dates use the user's local calendar timezone for every account.
@@ -95,6 +95,8 @@ DailyManualValuations: valuation_id, date, account_id, value
 DisplayPreferences: entity_type, entity_id, display_order, show_in_app, show_in_entry_forms
 TransactionTemplates: template_id, name, transaction_type, date, description, category, tag, source_account_id, source_amount, dest_account_id, dest_amount, created_at, updated_at, is_favorite
 IncomeAllocations: allocation_id, name, income_category_id, income_account_id, transfer_category_id, expected_amount_per_income, start_date, end_date, created_at, updated_at
+Achievements!A:D: achievement_id, name, target_usd, earned
+Achievements!H1:H2: tracking_start_date
 ```
 
 `source_rate_date` records the actual Frankfurter date used when the requested sequential rate date fell on a weekend or holiday. Legacy local data without this column is read compatibly by treating `rate_date` as the source date. Google Sheets serial-number dates are normalized to calendar dates before freshness checks and parsing.
@@ -115,6 +117,7 @@ The runtime data snapshot contains:
 - DisplayPreferences
 - TransactionTemplates
 - IncomeAllocations
+- Achievements and its tracking-start-date range
 
 `TransactionTypes.csv` is not runtime data. Transaction types and their validation rules are defined in Dart.
 
@@ -295,7 +298,7 @@ Specialized quick-entry forms may later reuse the same transaction builder and v
 
 ### Assets & liabilities — implemented
 
-The Assets & liabilities page lists only `asset` and `liability` accounts and provides an Add valuation action.
+Assets and liabilities are shown as a separate section within Accounts. The section lists only `asset` and `liability` accounts and provides an Add valuation action.
 
 The form order is:
 
@@ -307,12 +310,27 @@ The date picker disables dates before opening, after closing, or already used fo
 
 ### Accounts — implemented
 
-Shows account rows with:
+The Accounts destination contains separate Cash Accounts and Assets & Liabilities sections. It shows account rows with:
 
 - Account name
 - Account type
 - Current ledger balance
 - Account currency formatting
+
+The previous `/assets-liabilities` route is replaced by `/accounts`.
+
+### Net worth milestones — implemented
+
+- The `Achievements` tab contains two ranges: milestone definitions in `A:D`, and one shared start date in `H1:H2` (header `tracking_start_date`, followed by one ISO date value).
+- Milestone rows use stable, user-entered IDs, custom names, unique ascending USD targets, and an `earned` boolean. All rows start as `FALSE`.
+- The `earned` boolean records celebration acknowledgement: a `FALSE` row whose target qualifies waits for a celebration; the app writes `TRUE` after acknowledgment. The app derives earned months and averages from daily net-worth history rather than persisting those as separate Sheet columns.
+- Milestones qualify using completed calendar-month averages. Every daily snapshot in a month is required; missing history delays awards until reconciliation repairs it.
+- A mid-month start date skips that partial month. A start date before the first DailyNetWorth row is clamped to the first available daily value.
+- Progress uses the current month-to-date average, between the first eligible month's average and the next ascending target. Progress is provisional until month-end.
+- Pending milestones pulse the Milestones navigation icon. Opening the section presents full-screen celebrations one at a time, in ascending target order. Acknowledging a celebration marks its Sheet row `TRUE`; unacknowledged milestones remain pending.
+- Historical qualifying milestones since the start date are celebrated retroactively. Multiple targets may qualify in the same month.
+- The page shows earned milestones and the current next milestone. Earned state is re-evaluated from the Sheet definitions and available DailyNetWorth history.
+- Validation errors in the Achievements ranges block the app, following the existing global data-validation behavior.
 
 ### Analysis — implemented
 
@@ -670,6 +688,7 @@ Current parser dependencies form a directed acyclic graph:
 Currencies → Accounts → Transactions
 Currencies → DailyAccountBalances
 Currencies → DailyNetWorth
+Currencies + DailyNetWorth → Achievements
 Accounts + Currencies → DailyManualValuations
 ```
 

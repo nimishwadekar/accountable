@@ -9,6 +9,7 @@ import 'pages/transactions_page.dart';
 import 'pages/settings_page.dart';
 import 'navigation_history.dart';
 import '../features/analysis/analysis_page.dart';
+import '../features/milestones/milestones_page.dart';
 import '../features/migration_assistance/migration_assistance_page.dart';
 import 'theme/design_tokens.dart';
 
@@ -16,8 +17,8 @@ enum AppSection {
   overview,
   transactions,
   analysis,
+  milestones,
   accounts,
-  assetsLiabilities,
   settings,
   migrationAssistance,
 }
@@ -26,9 +27,9 @@ extension AppSectionDetails on AppSection {
   String get label => switch (this) {
     AppSection.overview => 'Overview',
     AppSection.transactions => 'Transactions',
+    AppSection.milestones => 'Milestones',
     AppSection.accounts => 'Accounts',
     AppSection.analysis => 'Analysis',
-    AppSection.assetsLiabilities => 'Assets & Liabilities',
     AppSection.settings => 'Settings',
     AppSection.migrationAssistance => 'Migration Assistance',
   };
@@ -36,9 +37,9 @@ extension AppSectionDetails on AppSection {
   String get compactLabel => switch (this) {
     AppSection.overview => 'Overview',
     AppSection.transactions => 'Transactions',
+    AppSection.milestones => 'Milestones',
     AppSection.accounts => 'Accounts',
     AppSection.analysis => 'Analysis',
-    AppSection.assetsLiabilities => 'Assets',
     AppSection.settings => 'Settings',
     AppSection.migrationAssistance => 'Migration Assistance',
   };
@@ -46,9 +47,9 @@ extension AppSectionDetails on AppSection {
   IconData get icon => switch (this) {
     AppSection.overview => Icons.dashboard_outlined,
     AppSection.transactions => Icons.receipt_long_outlined,
+    AppSection.milestones => Icons.celebration_outlined,
     AppSection.accounts => Icons.account_balance_wallet_outlined,
     AppSection.analysis => Icons.insights_outlined,
-    AppSection.assetsLiabilities => Icons.account_balance_outlined,
     AppSection.settings => Icons.settings_outlined,
     AppSection.migrationAssistance => Icons.compare_arrows_outlined,
   };
@@ -56,9 +57,9 @@ extension AppSectionDetails on AppSection {
   IconData get selectedIcon => switch (this) {
     AppSection.overview => Icons.dashboard,
     AppSection.transactions => Icons.receipt_long,
+    AppSection.milestones => Icons.celebration,
     AppSection.accounts => Icons.account_balance_wallet,
     AppSection.analysis => Icons.insights,
-    AppSection.assetsLiabilities => Icons.account_balance,
     AppSection.settings => Icons.settings,
     AppSection.migrationAssistance => Icons.compare_arrows,
   };
@@ -108,6 +109,7 @@ class _AppShellState extends State<AppShell> {
   StreamSubscription<String>? _navigationSubscription;
   AppSection _selectedSection = AppSection.overview;
   final Set<AppSection> _visitedSections = {};
+  Set<String> _pendingAchievementIds = {};
   final Map<AppSection, Widget> _pageCache = {};
   final TransactionWriteCoordinator _writeCoordinator =
       const TransactionWriteCoordinator();
@@ -135,7 +137,7 @@ class _AppShellState extends State<AppShell> {
       _visitedSections.add(section);
       setState(() => _selectedSection = section);
     });
-    _snapshotFuture = widget.dataRepository.load();
+    _snapshotFuture = _loadSnapshotAndUpdateMilestones();
   }
 
   @override
@@ -144,7 +146,7 @@ class _AppShellState extends State<AppShell> {
     if (oldWidget.dataRepository != widget.dataRepository ||
         oldWidget.restrictedStartup != widget.restrictedStartup) {
       _pageCache.clear();
-      _snapshotFuture = widget.dataRepository.load();
+      _snapshotFuture = _loadSnapshotAndUpdateMilestones();
       if (oldWidget.restrictedStartup && !widget.restrictedStartup) {
         _selectedSection = AppSection.transactions;
         _navigationHistory.push(
@@ -176,6 +178,82 @@ class _AppShellState extends State<AppShell> {
 
   int get _selectedNavigationIndex =>
       _navigationSections.indexOf(_selectedSection);
+
+  Future<AppDataSnapshot> _loadSnapshotAndUpdateMilestones({
+    bool reload = false,
+  }) => _observeMilestoneState(
+    reload ? widget.dataRepository.reload() : widget.dataRepository.load(),
+  );
+
+  Future<AppDataSnapshot> _observeMilestoneState(
+    Future<AppDataSnapshot> source,
+  ) async {
+    var data = await source;
+    final startDate = data.achievementStartDate;
+    if (startDate == null) {
+      if (mounted) setState(() => _pendingAchievementIds = {});
+      return data;
+    }
+
+    var evaluation = NetWorthAchievementCalculator.evaluate(
+      dailyNetWorth: data.dailyNetWorth,
+      trackingStartDate: startDate,
+      achievements: data.achievements,
+    );
+    if (evaluation.validationErrors.isNotEmpty) {
+      throw DataValidationFailure([
+        for (final message in evaluation.validationErrors)
+          DataValidationIssue(table: 'Achievements', message: message),
+      ]);
+    }
+    for (final id in evaluation.earnedFlagsToReset) {
+      data = await _writeCoordinator.run(
+        () => widget.dataRepository.updateAchievementEarned(id, earned: false),
+      );
+    }
+    evaluation = NetWorthAchievementCalculator.evaluate(
+      dailyNetWorth: data.dailyNetWorth,
+      trackingStartDate: data.achievementStartDate ?? startDate,
+      achievements: data.achievements,
+    );
+    if (evaluation.validationErrors.isNotEmpty) {
+      throw DataValidationFailure([
+        for (final message in evaluation.validationErrors)
+          DataValidationIssue(table: 'Achievements', message: message),
+      ]);
+    }
+    if (mounted) {
+      final pending = {
+        for (final item in evaluation.pendingCelebrations) item.achievement.id,
+      };
+      if (!_setEquals(_pendingAchievementIds, pending)) {
+        setState(() => _pendingAchievementIds = pending);
+      }
+    }
+    return data;
+  }
+
+  static bool _setEquals(Set<String> a, Set<String> b) =>
+      a.length == b.length && a.containsAll(b);
+
+  Widget _sectionIcon(AppSection section, {required bool selected}) {
+    final icon = selected ? section.selectedIcon : section.icon;
+    if (section == AppSection.milestones && _pendingAchievementIds.isNotEmpty) {
+      return _PulsingMilestoneIcon(icon: icon);
+    }
+    return Icon(icon);
+  }
+
+  Future<void> _acknowledgeAchievement(String achievementId) async {
+    await _writeCoordinator.run(
+      () => widget.dataRepository.updateAchievementEarned(
+        achievementId,
+        earned: true,
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _pendingAchievementIds.remove(achievementId));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -237,8 +315,8 @@ class _AppShellState extends State<AppShell> {
         destinations: [
           for (final section in _navigationSections)
             NavigationRailDestination(
-              icon: Icon(section.icon),
-              selectedIcon: Icon(section.selectedIcon),
+              icon: _sectionIcon(section, selected: false),
+              selectedIcon: _sectionIcon(section, selected: true),
               label: Text(section.label),
               disabled:
                   widget.restrictedStartup &&
@@ -256,8 +334,8 @@ class _AppShellState extends State<AppShell> {
       destinations: [
         for (final section in _navigationSections)
           NavigationDestination(
-            icon: Icon(section.icon),
-            selectedIcon: Icon(section.selectedIcon),
+            icon: _sectionIcon(section, selected: false),
+            selectedIcon: _sectionIcon(section, selected: true),
             label: section.compactLabel,
             enabled:
                 !widget.restrictedStartup || section == AppSection.transactions,
@@ -325,15 +403,18 @@ class _AppShellState extends State<AppShell> {
         onRetryOutbox: widget.onRetryOutbox,
         onTransactionFormActiveChanged: widget.onTransactionFormActiveChanged,
       ),
-      AppSection.accounts => AccountsPage(data: data),
+      AppSection.accounts => AccountsPage(
+        data: data,
+        onValuationsAdded: _handleValuationsAdded,
+      ),
       AppSection.analysis => AnalysisPage(
         data: data,
         onIncomeAllocationAdded: _handleIncomeAllocationAdded,
         onRebuildDailyTables: _rebuildAndReloadDailyTables,
       ),
-      AppSection.assetsLiabilities => AssetsLiabilitiesPage(
+      AppSection.milestones => MilestonesPage(
         data: data,
-        onValuationsAdded: _handleValuationsAdded,
+        onAchievementAcknowledged: _acknowledgeAchievement,
       ),
       AppSection.migrationAssistance => MigrationAssistancePage(data: data),
       AppSection.settings => SettingsPage(
@@ -367,8 +448,8 @@ class _AppShellState extends State<AppShell> {
     return switch (segment) {
       'transactions' => AppSection.transactions,
       'analysis' => AppSection.analysis,
+      'milestones' => AppSection.milestones,
       'accounts' => AppSection.accounts,
-      'assets-liabilities' => AppSection.assetsLiabilities,
       'settings' => AppSection.settings,
       'migration-assistance' when widget.migrationAssistance =>
         AppSection.migrationAssistance,
@@ -382,8 +463,8 @@ class _AppShellState extends State<AppShell> {
     final knownSection = const {
       'transactions',
       'analysis',
+      'milestones',
       'accounts',
-      'assets-liabilities',
       'settings',
       'migration-assistance',
     }.contains(segments.isEmpty ? null : segments.last);
@@ -395,8 +476,8 @@ class _AppShellState extends State<AppShell> {
       AppSection.overview => '',
       AppSection.transactions => '/transactions',
       AppSection.analysis => '/analysis',
+      AppSection.milestones => '/milestones',
       AppSection.accounts => '/accounts',
-      AppSection.assetsLiabilities => '/assets-liabilities',
       AppSection.settings => '/settings',
       AppSection.migrationAssistance => '/migration-assistance',
     };
@@ -406,13 +487,13 @@ class _AppShellState extends State<AppShell> {
   void _reload() {
     _pageCache.clear();
     setState(() {
-      _snapshotFuture = widget.dataRepository.reload();
+      _snapshotFuture = _loadSnapshotAndUpdateMilestones(reload: true);
     });
   }
 
   Future<void> _reloadData() async {
     await widget.onReconcileDailyTables?.call();
-    final future = widget.dataRepository.reload();
+    final future = _loadSnapshotAndUpdateMilestones(reload: true);
     _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
@@ -433,7 +514,7 @@ class _AppShellState extends State<AppShell> {
     );
     _pageCache.clear();
     setState(() {
-      _snapshotFuture = future;
+      _snapshotFuture = _observeMilestoneState(future);
     });
     await future;
     final rebuildNetWorth = widget.onRebuildNetWorth;
@@ -459,7 +540,7 @@ class _AppShellState extends State<AppShell> {
     });
     _pageCache.clear();
     setState(() {
-      _snapshotFuture = future;
+      _snapshotFuture = _observeMilestoneState(future);
     });
     await future;
     await widget.onRefreshFormSnapshot?.call();
@@ -473,7 +554,7 @@ class _AppShellState extends State<AppShell> {
     );
     _pageCache.clear();
     setState(() {
-      _snapshotFuture = future;
+      _snapshotFuture = _observeMilestoneState(future);
     });
     await future;
   }
@@ -484,7 +565,7 @@ class _AppShellState extends State<AppShell> {
     );
     _pageCache.clear();
     setState(() {
-      _snapshotFuture = future;
+      _snapshotFuture = _observeMilestoneState(future);
     });
     await future;
   }
@@ -496,7 +577,7 @@ class _AppShellState extends State<AppShell> {
     });
     _pageCache.clear();
     setState(() {
-      _snapshotFuture = future;
+      _snapshotFuture = _observeMilestoneState(future);
     });
     await future;
     await widget.onRefreshFormSnapshot?.call();
@@ -509,7 +590,7 @@ class _AppShellState extends State<AppShell> {
         await widget.dataRepository.reload();
         final future = widget.dataRepository.addTransactions(transactions);
         _pageCache.clear();
-        setState(() => _snapshotFuture = future);
+        setState(() => _snapshotFuture = _observeMilestoneState(future));
         await future;
       }
 
@@ -537,7 +618,7 @@ class _AppShellState extends State<AppShell> {
         await widget.dataRepository.reload();
         final future = widget.dataRepository.addTransaction(transaction);
         _pageCache.clear();
-        setState(() => _snapshotFuture = future);
+        setState(() => _snapshotFuture = _observeMilestoneState(future));
         await future;
       }
 
@@ -559,9 +640,44 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _reloadDataWithoutReconciliation() async {
-    final future = widget.dataRepository.reload();
+    final future = _loadSnapshotAndUpdateMilestones(reload: true);
     _pageCache.clear();
     setState(() => _snapshotFuture = future);
     await future;
   }
+}
+
+class _PulsingMilestoneIcon extends StatefulWidget {
+  const _PulsingMilestoneIcon({required this.icon});
+
+  final IconData icon;
+
+  @override
+  State<_PulsingMilestoneIcon> createState() => _PulsingMilestoneIconState();
+}
+
+class _PulsingMilestoneIconState extends State<_PulsingMilestoneIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 850),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _controller,
+    builder: (context, child) =>
+        Transform.scale(scale: 0.9 + _controller.value * 0.2, child: child),
+    child: Badge(
+      smallSize: 8,
+      backgroundColor: AppColors.warning,
+      child: Icon(widget.icon, color: AppColors.teal),
+    ),
+  );
 }

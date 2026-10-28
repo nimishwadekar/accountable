@@ -374,33 +374,47 @@ class _NetWorthChange {
   final int baselineMinorUnits;
 }
 
-class AccountsPage extends StatelessWidget {
-  const AccountsPage({super.key, required this.data});
+class CashAccountsSection extends StatelessWidget {
+  const CashAccountsSection({super.key, required this.data});
 
   final AppDataSnapshot data;
 
   @override
   Widget build(BuildContext context) {
     final balances = data.ledgerBalances;
-    return AppPageFrame(
-      title: 'Accounts',
-      subtitle: 'Cash accounts and their current ledger balances.',
-      child: Card(
-        clipBehavior: Clip.hardEdge,
-        child: Column(
-          children: [
-            for (final account in data.visibleAccounts.where(
-              (account) => account.accountTypeKind == AccountType.cash,
-            )) ...[
-              _AccountRow(
-                account: account,
-                balance: balances[account.id]!,
-                currencies: data.currenciesById,
-              ),
-            ],
-          ],
+    final cashAccounts = data.visibleAccounts
+        .where((account) => account.accountTypeKind == AccountType.cash)
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Cash Accounts', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          'Cash account ledger balances through the latest transaction.',
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: AppColors.mutedText),
         ),
-      ),
+        const SizedBox(height: AppSpacing.sm),
+        if (cashAccounts.isEmpty)
+          const EmptyState(message: 'No Cash accounts yet.')
+        else
+          Card(
+            clipBehavior: Clip.hardEdge,
+            child: Column(
+              children: [
+                for (var index = 0; index < cashAccounts.length; index++) ...[
+                  if (index > 0) const Divider(height: 1),
+                  _AccountRow(
+                    account: cashAccounts[index],
+                    balance: balances[cashAccounts[index].id]!,
+                    currencies: data.currenciesById,
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

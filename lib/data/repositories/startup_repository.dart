@@ -68,6 +68,12 @@ class StartupDataRepository implements AppDataRepository {
   @override
   Future<AppDataSnapshot> deleteTransactionTemplate(String templateId) =>
       throw StateError('Settings are unavailable during startup.');
+
+  @override
+  Future<AppDataSnapshot> updateAchievementEarned(
+    String achievementId, {
+    required bool earned,
+  }) => throw StateError('Milestones are unavailable during startup.');
 }
 
 AppDataSnapshot withAdditionalTransactions(
@@ -87,4 +93,6 @@ AppDataSnapshot withAdditionalTransactions(
   displayPreferences: data.displayPreferences,
   transactionTemplates: data.transactionTemplates,
   incomeAllocations: data.incomeAllocations,
+  achievements: data.achievements,
+  achievementStartDate: data.achievementStartDate,
 );

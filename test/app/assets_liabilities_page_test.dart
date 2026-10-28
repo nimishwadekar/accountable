@@ -38,16 +38,15 @@ void main() {
       MaterialApp(
         theme: AppTheme.light(),
         home: Scaffold(
-          body: AssetsLiabilitiesPage(
-            data: data,
-            onValuationsAdded: (_) async {},
-          ),
+          body: AccountsPage(data: data, onValuationsAdded: (_) async {}),
         ),
       ),
     );
     await tester.pump();
 
     expect(find.text('Brokerage'), findsOneWidget);
+    expect(find.text('Cash Accounts'), findsOneWidget);
+    expect(find.text('Assets & Liabilities'), findsOneWidget);
     await tester.tap(find.text('Add valuation'));
     await tester.pump(const Duration(milliseconds: 300));
 

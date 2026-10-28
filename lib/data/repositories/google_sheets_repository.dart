@@ -3,6 +3,7 @@ import 'package:csv/csv.dart';
 import '../app_data_snapshot.dart';
 import '../csv/csv.dart';
 import '../models/models.dart';
+import '../net_worth_achievement_calculator.dart';
 import '../sources/google_sheets_api.dart';
 import '../table_schema.dart';
 import 'data_load_exception.dart';
@@ -31,6 +32,9 @@ abstract final class GoogleSheetsRanges {
   static final transactionTemplates =
       RuntimeTableSchemas.transactionTemplates.range;
   static final incomeAllocations = RuntimeTableSchemas.incomeAllocations.range;
+  static final achievements = RuntimeTableSchemas.achievements.range;
+  static final achievementSettings =
+      RuntimeTableSchemas.achievementSettings.range;
   static final transactionsToMigrate =
       RuntimeTableSchemas.transactionsToMigrate.range;
 }
@@ -213,6 +217,30 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
   }
 
   @override
+  Future<AppDataSnapshot> updateAchievementEarned(
+    String achievementId, {
+    required bool earned,
+  }) async {
+    final current = await load();
+    final achievement = current.achievementsById[achievementId];
+    if (achievement == null) {
+      throw StateError('Achievement $achievementId does not exist.');
+    }
+    if (achievement.earned == earned) return current;
+    final updatedAchievements = [
+      for (final item in current.achievements)
+        item.id == achievementId ? item.copyWith(earned: earned) : item,
+    ];
+    await api.replaceRange(GoogleSheetsRanges.achievements, [
+      RuntimeTableSchemas.achievements.headers,
+      for (final item in updatedAchievements)
+        _achievementRow(item, current.currenciesById['USD']!),
+    ]);
+    _cachedSnapshot = current.withAchievementEarned(achievementId, earned);
+    return _cachedSnapshot!;
+  }
+
+  @override
   Future<AppDataSnapshot> addTransaction(Transaction transaction) =>
       addTransactions([transaction]);
 
@@ -295,6 +323,8 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       List<DisplayPreference> displayPreferences = const [];
       List<TransactionTemplate> transactionTemplates = const [];
       List<IncomeAllocation> incomeAllocations = const [];
+      List<NetWorthAchievement> achievements = const [];
+      DateTime? achievementStartDate;
 
       try {
         final result = ModelParsers.parseCurrenciesWithIssues(
@@ -484,6 +514,28 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
           ]);
         }
       }
+      if (dependenciesAreValid('Achievements')) {
+        try {
+          final result = ModelParsers.parseAchievementsWithIssues(
+            _encode(tables[GoogleSheetsRanges.achievements]!),
+            currencies: currencyById,
+          );
+          achievements = result.values;
+          recordIssues('Achievements', result.issues);
+        } catch (error) {
+          recordIssues('Achievements', [issueFromError('Achievements', error)]);
+        }
+      }
+      try {
+        achievementStartDate = ModelParsers.parseAchievementSettings(
+          _encode(tables[GoogleSheetsRanges.achievementSettings]!),
+        ).trackingStartDate;
+        recordIssues('AchievementSettings', const []);
+      } catch (error) {
+        recordIssues('AchievementSettings', [
+          issueFromError('AchievementSettings', error),
+        ]);
+      }
       if (dependenciesAreValid('DailyManualValuations')) {
         try {
           final result = ModelParsers.parseDailyManualValuationsWithIssues(
@@ -501,7 +553,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       }
       if (issues.isNotEmpty) throw DataValidationFailure(issues);
 
-      return AppDataSnapshot(
+      final snapshot = AppDataSnapshot(
         accounts: accounts,
         categories: categories,
         currencies: currencies,
@@ -515,7 +567,35 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
         displayPreferences: displayPreferences,
         transactionTemplates: transactionTemplates,
         incomeAllocations: incomeAllocations,
+        achievements: achievements,
+        achievementStartDate: achievementStartDate,
       );
+      final achievementEvaluation = NetWorthAchievementCalculator.evaluate(
+        dailyNetWorth: dailyNetWorth,
+        trackingStartDate: achievementStartDate!,
+        achievements: achievements,
+      );
+      if (achievementEvaluation.validationErrors.isNotEmpty) {
+        throw DataValidationFailure([
+          for (final message in achievementEvaluation.validationErrors)
+            DataValidationIssue(table: 'Achievements', message: message),
+        ]);
+      }
+      if (achievementEvaluation.earnedFlagsToReset.isEmpty) return snapshot;
+
+      final resetIds = achievementEvaluation.earnedFlagsToReset.toSet();
+      final updatedAchievements = [
+        for (final achievement in achievements)
+          resetIds.contains(achievement.id)
+              ? achievement.copyWith(earned: false)
+              : achievement,
+      ];
+      await api.replaceRange(GoogleSheetsRanges.achievements, [
+        RuntimeTableSchemas.achievements.headers,
+        for (final achievement in updatedAchievements)
+          _achievementRow(achievement, currencyById['USD']!),
+      ]);
+      return snapshot.withAchievements(updatedAchievements);
     } on DataValidationFailure {
       rethrow;
     } catch (error) {
@@ -539,6 +619,8 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       GoogleSheetsRanges.displayPreferences,
       GoogleSheetsRanges.transactionTemplates,
       GoogleSheetsRanges.incomeAllocations,
+      GoogleSheetsRanges.achievements,
+      GoogleSheetsRanges.achievementSettings,
       GoogleSheetsRanges.tags,
       GoogleSheetsRanges.transactions,
       if (migrationAssistance) GoogleSheetsRanges.transactionsToMigrate,
@@ -638,6 +720,16 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       template.isFavorite.toString().toUpperCase(),
     ];
   }
+
+  static List<String> _achievementRow(
+    NetWorthAchievement achievement,
+    CurrencyDefinition usd,
+  ) => [
+    achievement.id,
+    achievement.name,
+    achievement.target.toMajorUnitsString(usd),
+    achievement.earned.toString().toUpperCase(),
+  ];
 
   static List<String> _displayPreferenceRow(DisplayPreference preference) => [
     preference.entityType,

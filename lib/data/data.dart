@@ -1,5 +1,6 @@
 export 'account_balance_calculator.dart';
 export 'app_data_snapshot.dart';
+export 'net_worth_achievement_calculator.dart';
 export 'table_schema.dart';
 export 'csv/csv.dart';
 export 'models/models.dart';

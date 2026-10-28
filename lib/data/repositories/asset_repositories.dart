@@ -5,6 +5,7 @@ import '../csv/csv.dart';
 import '../models/models.dart';
 import '../sources/asset_reader.dart';
 import '../sources/local_dataset_store.dart';
+import '../net_worth_achievement_calculator.dart';
 import '../table_schema.dart';
 import 'data_load_exception.dart';
 import 'display_preference_manager.dart';
@@ -34,6 +35,9 @@ abstract final class DataAssetPaths {
       RuntimeTableSchemas.transactionTemplates.assetPath;
   static final incomeAllocations =
       RuntimeTableSchemas.incomeAllocations.assetPath;
+  static final achievements = RuntimeTableSchemas.achievements.assetPath;
+  static final achievementSettings =
+      RuntimeTableSchemas.achievementSettings.assetPath;
 }
 
 class AssetCurrencyRepository implements CurrencyRepository {
@@ -332,6 +336,51 @@ class AssetAppDataRepository implements AppDataRepository {
     );
   }
 
+  @override
+  Future<AppDataSnapshot> updateAchievementEarned(
+    String achievementId, {
+    required bool earned,
+  }) async {
+    final current = await load();
+    final achievement = current.achievementsById[achievementId];
+    if (achievement == null) {
+      throw StateError('Achievement $achievementId does not exist.');
+    }
+    if (achievement.earned == earned) return current;
+    if (store == null) throw StateError('This data source is read-only.');
+
+    final tables = await _readDataset();
+    final rows = csv.decode(tables[DataAssetPaths.achievements]!);
+    if (rows.isEmpty) {
+      throw const FormatException('Achievements has no header.');
+    }
+    final headers = rows.first.map((value) => value.toString()).toList();
+    final idColumn = headers.indexOf('achievement_id');
+    final earnedColumn = headers.indexOf('earned');
+    if (idColumn < 0 || earnedColumn < 0) {
+      throw const FormatException('Achievements is missing required columns.');
+    }
+    var rowIndex = -1;
+    for (var index = 1; index < rows.length; index++) {
+      if (rows[index].length > idColumn &&
+          rows[index][idColumn].toString() == achievementId) {
+        rowIndex = index;
+        break;
+      }
+    }
+    if (rowIndex < 0) {
+      throw StateError('Achievement $achievementId is missing from the Sheet.');
+    }
+    while (rows[rowIndex].length <= earnedColumn) {
+      rows[rowIndex].add('');
+    }
+    rows[rowIndex][earnedColumn] = earned.toString().toUpperCase();
+    tables[DataAssetPaths.achievements] = csv.encode(rows);
+    await store!.write(tables);
+    _cachedSnapshot = current.withAchievementEarned(achievementId, earned);
+    return _cachedSnapshot!;
+  }
+
   Future<AppDataSnapshot> _saveTemplates(
     List<TransactionTemplate> templates,
     AppDataSnapshot current,
@@ -419,6 +468,13 @@ class AssetAppDataRepository implements AppDataRepository {
           for (final category in categoryList) category.id: category,
         },
       );
+      final achievementList = ModelParsers.parseAchievements(
+        tables[DataAssetPaths.achievements]!,
+        currencies: currencyById,
+      );
+      final achievementSettings = ModelParsers.parseAchievementSettings(
+        tables[DataAssetPaths.achievementSettings]!,
+      );
       final templateList = ModelParsers.parseTransactionTemplates(
         tables[DataAssetPaths.transactionTemplates]!,
         accounts: accountById,
@@ -483,7 +539,7 @@ class AssetAppDataRepository implements AppDataRepository {
         currencies: currencyById,
       );
 
-      return AppDataSnapshot(
+      final snapshot = AppDataSnapshot(
         accounts: accountList,
         categories: categoryList,
         currencies: currencyList,
@@ -497,7 +553,35 @@ class AssetAppDataRepository implements AppDataRepository {
         displayPreferences: synchronizedPreferences.preferences,
         transactionTemplates: templateList,
         incomeAllocations: allocationList,
+        achievements: achievementList,
+        achievementStartDate: achievementSettings.trackingStartDate,
       );
+      final achievementEvaluation = NetWorthAchievementCalculator.evaluate(
+        dailyNetWorth: dailyNetWorthList,
+        trackingStartDate: achievementSettings.trackingStartDate,
+        achievements: achievementList,
+      );
+      if (achievementEvaluation.validationErrors.isNotEmpty) {
+        throw DataValidationFailure([
+          for (final message in achievementEvaluation.validationErrors)
+            DataValidationIssue(table: 'Achievements', message: message),
+        ]);
+      }
+      if (achievementEvaluation.earnedFlagsToReset.isEmpty) return snapshot;
+
+      final resetIds = achievementEvaluation.earnedFlagsToReset.toSet();
+      final updatedAchievements = [
+        for (final achievement in achievementList)
+          resetIds.contains(achievement.id)
+              ? achievement.copyWith(earned: false)
+              : achievement,
+      ];
+      tables[DataAssetPaths.achievements] = _achievementsCsv(
+        updatedAchievements,
+        currencyById['USD']!,
+      );
+      if (store != null) await store!.write(tables);
+      return snapshot.withAchievements(updatedAchievements);
     } on DataValidationFailure {
       rethrow;
     } catch (error) {
@@ -509,7 +593,14 @@ class AssetAppDataRepository implements AppDataRepository {
     final stored = await store?.read();
     if (stored != null) {
       final tables = _migrateStoredDataset(stored);
-      if (_storedDatasetMatchesSchema(tables, migrationAssistance)) {
+      if (_storedDatasetMatchesSchema(
+        tables,
+        migrationAssistance,
+        allowMissing: {
+          DataAssetPaths.achievements,
+          DataAssetPaths.achievementSettings,
+        },
+      )) {
         for (final path in _runtimeAssetPaths(migrationAssistance)) {
           if (tables.containsKey(path)) continue;
           try {
@@ -580,12 +671,16 @@ class AssetAppDataRepository implements AppDataRepository {
 
   static bool _storedDatasetMatchesSchema(
     Map<String, String> tables,
-    bool migrationAssistance,
-  ) {
+    bool migrationAssistance, {
+    Set<String> allowMissing = const {},
+  }) {
     for (final path in _runtimeAssetPaths(migrationAssistance)) {
       final source = tables[path];
       final headers = _runtimeHeaders[path]!;
-      if (source == null) return false;
+      if (source == null) {
+        if (allowMissing.contains(path)) continue;
+        return false;
+      }
       final rows = csv.decode(source);
       if (rows.isEmpty ||
           rows.first.map((value) => value.toString()).join(',') !=
@@ -609,6 +704,20 @@ class AssetAppDataRepository implements AppDataRepository {
         ],
     ]);
   }
+
+  static String _achievementsCsv(
+    List<NetWorthAchievement> achievements,
+    CurrencyDefinition usd,
+  ) => csv.encode([
+    RuntimeTableSchemas.achievements.headers,
+    for (final achievement in achievements)
+      [
+        achievement.id,
+        achievement.name,
+        achievement.target.toMajorUnitsString(usd),
+        achievement.earned.toString().toUpperCase(),
+      ],
+  ]);
 
   static String _appendCsvRow(String source, Map<String, String> row) {
     final rows = csv.decode(source);

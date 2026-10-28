@@ -15,6 +15,8 @@ class AppDataSnapshot {
     List<DisplayPreference> displayPreferences = const [],
     List<TransactionTemplate> transactionTemplates = const [],
     List<IncomeAllocation> incomeAllocations = const [],
+    List<NetWorthAchievement> achievements = const [],
+    this.achievementStartDate,
   }) : accounts = List.unmodifiable(accounts),
        categories = List.unmodifiable(categories),
        currencies = List.unmodifiable(currencies),
@@ -88,6 +90,11 @@ class AppDataSnapshot {
        incomeAllocationsById = _indexById(
          incomeAllocations,
          (allocation) => allocation.id,
+       ),
+       achievements = List.unmodifiable(achievements),
+       achievementsById = _indexById(
+         achievements,
+         (achievement) => achievement.id,
        );
 
   final List<Account> accounts;
@@ -107,6 +114,8 @@ class AppDataSnapshot {
   final List<DisplayPreference> displayPreferences;
   final List<TransactionTemplate> transactionTemplates;
   final List<IncomeAllocation> incomeAllocations;
+  final List<NetWorthAchievement> achievements;
+  final DateTime? achievementStartDate;
 
   final Map<String, Account> accountsById;
   final Map<String, Category> categoriesById;
@@ -125,6 +134,34 @@ class AppDataSnapshot {
   final Map<String, DisplayPreference> displayPreferencesByKey;
   final Map<String, TransactionTemplate> transactionTemplatesById;
   final Map<String, IncomeAllocation> incomeAllocationsById;
+  final Map<String, NetWorthAchievement> achievementsById;
+
+  AppDataSnapshot withAchievementEarned(String achievementId, bool earned) =>
+      withAchievements([
+        for (final achievement in achievements)
+          achievement.id == achievementId
+              ? achievement.copyWith(earned: earned)
+              : achievement,
+      ]);
+
+  AppDataSnapshot withAchievements(List<NetWorthAchievement> value) =>
+      AppDataSnapshot(
+        accounts: accounts,
+        categories: categories,
+        currencies: currencies,
+        tags: tags,
+        transactions: transactions,
+        transactionsToMigrate: transactionsToMigrate,
+        exchangeRates: exchangeRates,
+        dailyAccountBalances: dailyAccountBalances,
+        dailyNetWorth: dailyNetWorth,
+        dailyManualValuations: dailyManualValuations,
+        displayPreferences: displayPreferences,
+        transactionTemplates: transactionTemplates,
+        incomeAllocations: incomeAllocations,
+        achievements: value,
+        achievementStartDate: achievementStartDate,
+      );
 
   DisplayPreference? displayPreferenceFor(String entityType, String entityId) =>
       displayPreferencesByKey[_preferenceKey(entityType, entityId)];

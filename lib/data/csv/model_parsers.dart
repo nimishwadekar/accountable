@@ -387,6 +387,100 @@ class ModelParsers {
     );
   }
 
+  static ModelParseResult<NetWorthAchievement> parseAchievementsWithIssues(
+    String source, {
+    required Map<String, CurrencyDefinition> currencies,
+  }) {
+    final table = CsvTable.parse(source, tableName: 'Achievements');
+    final result = _parseRows(
+      source,
+      tableName: 'Achievements',
+      parseRow: (rowSource) => _parseAchievementRow(
+        CsvTable.parse(rowSource, tableName: 'Achievements').rows.single,
+        currencies,
+      ),
+      keysOf: (achievement) => [
+        'id:${achievement.id}',
+        'target:${achievement.target.minorUnits}',
+      ],
+    );
+    final issues = [...result.issues];
+    int? previousTarget;
+    for (var index = 0; index < table.rows.length; index++) {
+      final row = table.rows[index];
+      final rawTarget = optionalValue(row, 'target_usd');
+      final parsedTarget = rawTarget == null ? null : num.tryParse(rawTarget);
+      if (parsedTarget == null) continue;
+      try {
+        final target = Money.fromMajorUnits(
+          value: rawTarget!,
+          currency: _currency(currencies, 'USD'),
+        );
+        if (previousTarget != null && target.minorUnits <= previousTarget) {
+          issues.add(
+            DataValidationIssue(
+              table: 'Achievements',
+              row: table.rowNumbers[index],
+              field: 'target_usd',
+              message: 'Achievement targets must be unique and ascending.',
+            ),
+          );
+        }
+        previousTarget = target.minorUnits;
+      } on FormatException {
+        // The row-level parse result already contains the precise parse issue.
+      }
+    }
+    return ModelParseResult(values: result.values, issues: issues);
+  }
+
+  static List<NetWorthAchievement> parseAchievements(
+    String source, {
+    required Map<String, CurrencyDefinition> currencies,
+  }) {
+    final result = parseAchievementsWithIssues(source, currencies: currencies);
+    if (result.issues.isNotEmpty) {
+      throw FormatException(
+        result.issues.map((issue) => issue.message).join(' '),
+      );
+    }
+    return result.values;
+  }
+
+  static NetWorthAchievement _parseAchievementRow(
+    Map<String, String> row,
+    Map<String, CurrencyDefinition> currencies,
+  ) => NetWorthAchievement(
+    id: requiredValue(row, 'achievement_id'),
+    name: requiredValue(row, 'name'),
+    target: Money.fromMajorUnits(
+      value: requiredValue(row, 'target_usd'),
+      currency: _currency(currencies, 'USD'),
+    ),
+    earned: _parseBoolean(requiredValue(row, 'earned'), fieldName: 'earned'),
+  );
+
+  static AchievementSettings parseAchievementSettings(String source) {
+    final table = CsvTable.parse(source, tableName: 'AchievementSettings');
+    if (table.headers.length != 1 ||
+        table.headers.single != 'tracking_start_date') {
+      throw const FormatException(
+        'AchievementSettings must have a tracking_start_date header.',
+      );
+    }
+    if (table.rows.length != 1) {
+      throw const FormatException(
+        'AchievementSettings must contain exactly one start-date row.',
+      );
+    }
+    return AchievementSettings(
+      trackingStartDate: parseDateOnly(
+        requiredValue(table.rows.single, 'tracking_start_date'),
+        fieldName: 'tracking_start_date',
+      ),
+    );
+  }
+
   static List<TransactionTemplate> parseTransactionTemplates(
     String source, {
     required Map<String, Account> accounts,

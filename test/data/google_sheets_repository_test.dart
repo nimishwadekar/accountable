@@ -222,6 +222,36 @@ void main() {
     expect(snapshot.transactionTemplates.single.name, 'Coffee');
     expect(snapshot.transactionTemplates.single.isFavorite, isFalse);
   });
+
+  test(
+    'loads achievements from adjacent ranges and acknowledges them',
+    () async {
+      final tables = await _fixtureTables();
+      tables[GoogleSheetsRanges.achievements] = [
+        RuntimeTableSchemas.achievements.headers,
+        ['ACH001', 'A fresh start', '-12000', 'FALSE'],
+      ];
+      tables[GoogleSheetsRanges.achievementSettings] = [
+        RuntimeTableSchemas.achievementSettings.headers,
+        ['2026-10-01'],
+      ];
+      final repository = GoogleSheetsAppDataRepository(
+        _FakeSheetsClient(tables),
+      );
+
+      final loaded = await repository.load();
+      expect(loaded.achievementStartDate, DateTime.utc(2026, 10, 1));
+      expect(loaded.achievements.single.target.minorUnits, -1200000);
+      expect(loaded.achievements.single.earned, isFalse);
+
+      final acknowledged = await repository.updateAchievementEarned(
+        'ACH001',
+        earned: true,
+      );
+      expect(acknowledged.achievements.single.earned, isTrue);
+      expect(tables[GoogleSheetsRanges.achievements]![1][3], 'TRUE');
+    },
+  );
 }
 
 Future<Map<String, List<List<String>>>> _fixtureTables() async {
@@ -241,6 +271,9 @@ Future<Map<String, List<List<String>>>> _fixtureTables() async {
     GoogleSheetsRanges.transactionTemplates:
         'test_sheets/TransactionTemplates.csv',
     GoogleSheetsRanges.incomeAllocations: 'test_sheets/IncomeAllocations.csv',
+    GoogleSheetsRanges.achievements: 'test_sheets/Achievements.csv',
+    GoogleSheetsRanges.achievementSettings:
+        'test_sheets/AchievementSettings.csv',
     GoogleSheetsRanges.transactions: 'test_sheets/Transactions.csv',
   }.entries) {
     tables[entry.key] = [

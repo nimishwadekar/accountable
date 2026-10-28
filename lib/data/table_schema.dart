@@ -165,6 +165,18 @@ abstract final class RuntimeTableSchemas {
     range: 'IncomeAllocations!A:J',
     numericColumns: {6},
   );
+  static const achievements = RuntimeTableSchema(
+    name: 'Achievements',
+    headers: ['achievement_id', 'name', 'target_usd', 'earned'],
+    range: 'Achievements!A:D',
+    numericColumns: {2},
+    booleanColumns: {3},
+  );
+  static const achievementSettings = RuntimeTableSchema(
+    name: 'AchievementSettings',
+    headers: ['tracking_start_date'],
+    range: 'Achievements!H1:H2',
+  );
 
   static const all = [
     currencies,
@@ -180,6 +192,8 @@ abstract final class RuntimeTableSchemas {
     displayPreferences,
     transactionTemplates,
     incomeAllocations,
+    achievements,
+    achievementSettings,
   ];
 
   static RuntimeTableSchema byName(String name) => all.firstWhere(

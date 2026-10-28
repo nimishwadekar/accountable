@@ -115,4 +115,42 @@ void main() {
     expect(values.single[13], isTrue);
     expect(values.single[13], isA<bool>());
   });
+
+  test('writes acknowledged achievement values as a Sheets boolean', () async {
+    Object? updateBody;
+    final client = MockClient((request) async {
+      if (request.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'values': [
+              ['achievement_id', 'name', 'target_usd', 'earned'],
+              ['ACH001', 'A fresh start', -12000, false],
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }
+      updateBody = jsonDecode(request.body);
+      return http.Response(
+        '{}',
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final api = GoogleSheetsApi(
+      spreadsheetId: 'spreadsheet-id',
+      accessTokenProvider: ({forceRefresh = false}) async => 'token',
+      client: client,
+    );
+
+    await api.replaceRange('Achievements!A:D', [
+      RuntimeTableSchemas.achievements.headers,
+      ['ACH001', 'A fresh start', '-12000', 'TRUE'],
+    ]);
+
+    final values = (updateBody as Map<String, dynamic>)['values'] as List;
+    expect(values[1][2], -12000);
+    expect(values[1][3], isTrue);
+  });
 }

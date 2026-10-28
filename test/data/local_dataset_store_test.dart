@@ -57,4 +57,53 @@ void main() {
     );
     expect(updated.transactionTemplates.single.isFavorite, isTrue);
   });
+
+  test(
+    'adds achievement fixtures when migrating an older local dataset',
+    () async {
+      final oldTables = <String, String>{
+        for (final schema in RuntimeTableSchemas.all)
+          if (schema != RuntimeTableSchemas.achievements &&
+              schema != RuntimeTableSchemas.achievementSettings)
+            schema.assetPath: await rootBundle.loadString(schema.assetPath),
+      };
+      final store = MemoryLocalDatasetStore(oldTables);
+      final repository = AssetAppDataRepository(store: store);
+
+      final loaded = await repository.load();
+      expect(loaded.transactions, hasLength(8));
+      expect(loaded.achievements, isEmpty);
+      expect(loaded.achievementStartDate, DateTime.utc(2026, 10, 1));
+      expect(
+        (await store.read())!.containsKey(DataAssetPaths.achievements),
+        isTrue,
+      );
+    },
+  );
+
+  test('persists achievement acknowledgement in local storage', () async {
+    final tables = <String, String>{
+      for (final schema in RuntimeTableSchemas.all)
+        schema.assetPath: await rootBundle.loadString(schema.assetPath),
+    };
+    tables[DataAssetPaths.achievements] = csv.encode([
+      RuntimeTableSchemas.achievements.headers,
+      ['ACH001', 'A fresh start', '-12000', 'FALSE'],
+    ]);
+    final store = MemoryLocalDatasetStore(tables);
+    final repository = AssetAppDataRepository(store: store);
+    final loaded = await repository.load();
+    expect(loaded.achievements.single.earned, isFalse);
+
+    final updated = await repository.updateAchievementEarned(
+      'ACH001',
+      earned: true,
+    );
+
+    expect(updated.achievements.single.earned, isTrue);
+    expect(
+      csv.decode((await store.read())![DataAssetPaths.achievements]!).last.last,
+      'TRUE',
+    );
+  });
 }

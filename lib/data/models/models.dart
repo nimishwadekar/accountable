@@ -12,3 +12,5 @@ export 'tag.dart';
 export 'transaction.dart';
 export 'transaction_template.dart';
 export 'transaction_description_pattern.dart';
+export 'net_worth_achievement.dart';
+export 'achievement_settings.dart';

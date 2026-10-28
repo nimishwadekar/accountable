@@ -69,6 +69,13 @@ abstract interface class AppDataRepository {
 
   Future<AppDataSnapshot> addIncomeAllocation(IncomeAllocation allocation);
   Future<AppDataSnapshot> addTransactionTemplate(TransactionTemplate template);
-  Future<AppDataSnapshot> updateTransactionTemplate(TransactionTemplate template);
+  Future<AppDataSnapshot> updateTransactionTemplate(
+    TransactionTemplate template,
+  );
   Future<AppDataSnapshot> deleteTransactionTemplate(String templateId);
+
+  Future<AppDataSnapshot> updateAchievementEarned(
+    String achievementId, {
+    required bool earned,
+  });
 }
