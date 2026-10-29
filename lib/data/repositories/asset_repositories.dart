@@ -248,17 +248,20 @@ class AssetAppDataRepository implements AppDataRepository {
     }
     if (store == null) throw StateError('This data source is read-only.');
     final tables = await _readDataset();
-    var table = tables[DataAssetPaths.dailyManualValuations]!;
-    for (final valuation in valuations) {
+    Map<String, String> rowFor(DailyManualValuation valuation) {
       final currency = current.currenciesById[valuation.value.currencyId]!;
-      table = _appendCsvRow(table, {
+      return {
         'valuation_id': valuation.id,
         'date': _dateString(valuation.date),
         'account_id': valuation.accountId,
         'value': valuation.value.toMajorUnitsString(currency),
-      });
+      };
     }
-    tables[DataAssetPaths.dailyManualValuations] = table;
+
+    tables[DataAssetPaths.dailyManualValuations] = _appendCsvRows(
+      tables[DataAssetPaths.dailyManualValuations]!,
+      valuations.map(rowFor),
+    );
     await store!.write(tables);
     _cachedSnapshot = null;
     return reload();
@@ -421,17 +424,17 @@ class AssetAppDataRepository implements AppDataRepository {
     final accountCurrencies = {
       for (final account in current.accounts) account.id: account.currencyId,
     };
-    for (final transaction in transactions) {
-      final row = transactionToRow(
-        transaction,
-        current.currenciesById,
-        accountCurrencies,
-      );
-      tables[DataAssetPaths.transactions] = _appendCsvRow(
-        tables[DataAssetPaths.transactions]!,
-        row,
-      );
-    }
+    tables[DataAssetPaths.transactions] = _appendCsvRows(
+      tables[DataAssetPaths.transactions]!,
+      [
+        for (final transaction in transactions)
+          transactionToRow(
+            transaction,
+            current.currenciesById,
+            accountCurrencies,
+          ),
+      ],
+    );
     if (store == null) {
       throw StateError('This data source is read-only.');
     }
@@ -607,7 +610,9 @@ class AssetAppDataRepository implements AppDataRepository {
             );
           }
         }
-        if (store != null) await store!.write(tables);
+        if (store != null && !_sameTables(stored, tables)) {
+          await store!.write(tables);
+        }
         return tables;
       }
     }
@@ -685,6 +690,14 @@ class AssetAppDataRepository implements AppDataRepository {
     return true;
   }
 
+  static bool _sameTables(
+    Map<String, String> first,
+    Map<String, String> second,
+  ) {
+    if (first.length != second.length) return false;
+    return first.entries.every((entry) => second[entry.key] == entry.value);
+  }
+
   static String _displayPreferencesCsv(List<DisplayPreference> preferences) {
     return csv.encode([
       _runtimeHeaders[DataAssetPaths.displayPreferences]!,
@@ -713,11 +726,16 @@ class AssetAppDataRepository implements AppDataRepository {
       ],
   ]);
 
-  static String _appendCsvRow(String source, Map<String, String> row) {
+  static String _appendCsvRows(
+    String source,
+    Iterable<Map<String, String>> newRows,
+  ) {
     final rows = csv.decode(source);
     if (rows.isEmpty) throw const FormatException('CSV has no header row.');
     final headers = rows.first.map((value) => value.toString()).toList();
-    rows.add([for (final header in headers) row[header] ?? '']);
+    for (final row in newRows) {
+      rows.add([for (final header in headers) row[header] ?? '']);
+    }
     return csv.encode(rows);
   }
 }

@@ -24,13 +24,23 @@ class DailyMaintenanceService {
     required this.client,
     required this.data,
     http.Client? httpClient,
-  }) : _httpClient = httpClient ?? http.Client();
+    this.httpRequestTimeout = const Duration(seconds: 20),
+  }) : _httpClient = httpClient ?? http.Client(),
+       _ownsHttpClient = httpClient == null;
 
   final SheetsTableClient client;
   final AppDataSnapshot data;
   final http.Client _httpClient;
+  final bool _ownsHttpClient;
+  final Duration httpRequestTimeout;
+  final Map<DateTime, Map<String, dynamic>> _rateResponsesByDate = {};
+
+  void close() {
+    if (_ownsHttpClient) _httpClient.close();
+  }
 
   Future<void> catchUp({required DateTime yesterday}) async {
+    _rateResponsesByDate.clear();
     final endDate = _dateOnly(yesterday);
     final fallbackStart = _earliestSourceDate ?? endDate;
     if (fallbackStart.isAfter(endDate)) return;
@@ -76,11 +86,12 @@ class DailyMaintenanceService {
         for (final rate in missingRates) _exchangeRateRow(rate),
       ]);
     }
+    final rateIndex = _ExactExchangeRateIndex(rates);
 
     final balances = _balancesThrough(
       startDate: appendStart,
       endDate: endDate,
-      rates: rates,
+      rates: rateIndex,
     );
     final missingBalances = [
       for (final balance in balances)
@@ -104,7 +115,7 @@ class DailyMaintenanceService {
     };
     final netWorths = _netWorthThrough(
       balancesById.values,
-      rates: rates,
+      rates: rateIndex,
       startDate: appendStart,
       endDate: endDate,
     );
@@ -136,7 +147,7 @@ class DailyMaintenanceService {
     });
     final recalculated = _netWorthThrough(
       balances,
-      rates: rates,
+      rates: _ExactExchangeRateIndex(rates),
       startDate: start,
       endDate: end,
     );
@@ -158,7 +169,8 @@ class DailyMaintenanceService {
   /// Reconciles materialized daily tables against the current source snapshot.
   /// Existing exchange rates are retained; only missing dates are requested
   /// from Frankfurter. This detects historical appends, edits, and deletions.
-  Future<void> reconcile({DateTime? yesterday}) async {
+  Future<bool> reconcile({DateTime? yesterday}) async {
+    _rateResponsesByDate.clear();
     final endDate = _dateOnly(
       yesterday ?? DateTime.now().subtract(const Duration(days: 1)),
     );
@@ -167,10 +179,10 @@ class DailyMaintenanceService {
       if (data.exchangeRates.isEmpty &&
           data.dailyAccountBalances.isEmpty &&
           data.dailyNetWorth.isEmpty) {
-        return;
+        return false;
       }
       await _clearDerivedTables();
-      return;
+      return true;
     }
 
     final existingRates = {
@@ -206,18 +218,19 @@ class DailyMaintenanceService {
       }
     }
 
+    final rateIndex = _ExactExchangeRateIndex(rates);
     final balances = _balancesThrough(
       startDate: startDate,
       endDate: endDate,
-      rates: rates,
+      rates: rateIndex,
     );
-    final netWorths = _netWorthThrough(balances, rates: rates);
+    final netWorths = _netWorthThrough(balances, rates: rateIndex);
     if (_sameDerivedValues(
       expectedRates: rates,
       expectedBalances: balances,
       expectedNetWorth: netWorths,
     )) {
-      return;
+      return false;
     }
 
     await client.replaceRanges({
@@ -234,6 +247,7 @@ class DailyMaintenanceService {
         for (final netWorth in netWorths) _netWorthRow(netWorth),
       ],
     });
+    return true;
   }
 
   bool _sameDerivedValues({
@@ -289,6 +303,7 @@ class DailyMaintenanceService {
   }
 
   Future<void> rebuild({DateTime? yesterday}) async {
+    _rateResponsesByDate.clear();
     final endDate = _dateOnly(
       yesterday ?? DateTime.now().subtract(const Duration(days: 1)),
     );
@@ -307,12 +322,13 @@ class DailyMaintenanceService {
       rates.addAll(await _ratesForDate(date));
     }
 
+    final rateIndex = _ExactExchangeRateIndex(rates);
     final balances = _balancesThrough(
       startDate: startDate,
       endDate: endDate,
-      rates: rates,
+      rates: rateIndex,
     );
-    final netWorths = _netWorthThrough(balances, rates: rates);
+    final netWorths = _netWorthThrough(balances, rates: rateIndex);
 
     await client.replaceRanges({
       GoogleSheetsRanges.dailyExchangeRates: [
@@ -428,14 +444,21 @@ class DailyMaintenanceService {
   Future<List<ExchangeRate>> _ratesForDate(DateTime date) async {
     for (var offset = 0; offset <= 30; offset++) {
       final queryDate = date.subtract(Duration(days: offset));
-      final uri = Uri.parse(
-        'https://api.frankfurter.dev/v1/${_dateString(queryDate)}?base=USD',
-      );
-      final response = await _httpClient.get(uri);
-      if (response.statusCode != 200) continue;
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      final rawRates = body['rates'];
-      if (rawRates is! Map<String, dynamic>) continue;
+      final normalizedQueryDate = _dateOnly(queryDate);
+      var rates = _rateResponsesByDate[normalizedQueryDate];
+      if (rates == null) {
+        final uri = Uri.parse(
+          'https://api.frankfurter.dev/v1/${_dateString(queryDate)}?base=USD',
+        );
+        final response = await _httpClient.get(uri).timeout(httpRequestTimeout);
+        if (response.statusCode != 200) continue;
+        final body = jsonDecode(response.body);
+        if (body is! Map<String, dynamic>) continue;
+        final rawRates = body['rates'];
+        if (rawRates is! Map<String, dynamic>) continue;
+        rates = rawRates;
+        _rateResponsesByDate[normalizedQueryDate] = rates;
+      }
       final retrievedAt = DateTime.now().toUtc();
       return [
         for (final currency in _currenciesWithOpenAccounts(date))
@@ -445,7 +468,7 @@ class DailyMaintenanceService {
             currencyId: currency.id,
             rateToUsd: currency.id == 'USD'
                 ? Decimal.one
-                : _rateToUsd(rawRates, currency.id),
+                : _rateToUsd(rates, currency.id),
             sourceRateDate: queryDate,
             retrievedAt: retrievedAt,
           ),
@@ -477,7 +500,7 @@ class DailyMaintenanceService {
   List<DailyAccountBalance> _balancesThrough({
     required DateTime startDate,
     required DateTime endDate,
-    required List<ExchangeRate> rates,
+    required _ExactExchangeRateIndex rates,
   }) {
     final result = <DailyAccountBalance>[];
     final balances = <String, Money>{
@@ -496,7 +519,7 @@ class DailyMaintenanceService {
       final retrievedAt = DateTime.now().toUtc();
       for (final account in _openLedgerAccountsOn(date)) {
         final balance = balances[account.id]!;
-        final usd = _toUsd(balance, rateFor(rates, account.currencyId, date));
+        final usd = _toUsd(balance, rates.rateFor(account.currencyId, date));
         result.add(
           DailyAccountBalance(
             id: '${_dateString(date)}-${account.id}',
@@ -514,7 +537,7 @@ class DailyMaintenanceService {
 
   List<DailyNetWorth> _netWorthThrough(
     Iterable<DailyAccountBalance> balances, {
-    required List<ExchangeRate> rates,
+    required _ExactExchangeRateIndex rates,
     DateTime? startDate,
     DateTime? endDate,
   }) {
@@ -523,7 +546,7 @@ class DailyMaintenanceService {
       final amount = balance.balanceUsd.minorUnits;
       byDate[balance.date] = (byDate[balance.date] ?? 0) + amount;
     }
-    for (final rate in rates) {
+    for (final rate in rates.values) {
       final date = _dateOnly(rate.date);
       if ((startDate != null && date.isBefore(_dateOnly(startDate))) ||
           (endDate != null && date.isAfter(_dateOnly(endDate)))) {
@@ -532,26 +555,48 @@ class DailyMaintenanceService {
       byDate.putIfAbsent(date, () => 0);
     }
     final dates = byDate.keys.toList()..sort();
+    final valuationAccounts = data.accounts
+        .where((account) => account.isValuationAccount)
+        .toList(growable: false);
+    final valuationIndexes = <String, int>{};
+    final latestValuations = <String, DailyManualValuation>{};
     for (final date in dates) {
-      for (final account in _openAccountsOn(
-        date,
-      ).where((account) => account.isValuationAccount)) {
-        final valuation = _latestValuation(account.id, date);
+      for (final account in valuationAccounts) {
+        final valuations =
+            data.manualValuationsByAccountId[account.id] ??
+            const <DailyManualValuation>[];
+        var index = valuationIndexes[account.id] ?? 0;
+        while (index < valuations.length &&
+            !_dateOnly(valuations[index].date).isAfter(date)) {
+          final valuation = valuations[index++];
+          if (!_dateOnly(valuation.date)
+              .isBefore(_dateOnly(account.openingDate))) {
+            latestValuations[account.id] = valuation;
+          }
+        }
+        valuationIndexes[account.id] = index;
+      }
+      for (final account in valuationAccounts) {
+        final opened = !_dateOnly(account.openingDate).isAfter(date);
+        final closed =
+            account.closingDate != null &&
+            _dateOnly(account.closingDate!).isBefore(date);
+        if (!opened || closed) continue;
+        final valuation = latestValuations[account.id];
         if (valuation == null) continue;
         final usd = _toUsd(
           valuation.value,
-          rateFor(rates, account.currencyId, date),
+          rates.rateFor(account.currencyId, date),
         );
         byDate[date] = (byDate[date] ?? 0) + usd.minorUnits;
       }
     }
     return [
-      for (final entry
-          in byDate.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))
+      for (final date in dates)
         DailyNetWorth(
-          id: '${_dateString(entry.key)}-net',
-          date: entry.key,
-          amount: Money(minorUnits: entry.value, currencyId: 'USD'),
+          id: '${_dateString(date)}-net',
+          date: date,
+          amount: Money(minorUnits: byDate[date]!, currencyId: 'USD'),
           retrievedAt: DateTime.now().toUtc(),
         ),
     ];
@@ -617,6 +662,8 @@ class DailyMaintenanceService {
     String currencyId,
     DateTime date,
   ) {
+    // Retained as a list-based utility for callers that have only one lookup.
+    // Historical calculations construct one index and reuse it instead.
     return rates.lastWhere(
       (rate) => rate.currencyId == currencyId && _dateOnly(rate.date) == date,
       orElse: () => throw StateError(
@@ -627,22 +674,6 @@ class DailyMaintenanceService {
 
   Iterable<Account> _openLedgerAccountsOn(DateTime date) {
     return _openAccountsOn(date).where((account) => account.isLedgerAccount);
-  }
-
-  DailyManualValuation? _latestValuation(String accountId, DateTime date) {
-    final account = data.accountsById[accountId];
-    if (account == null) return null;
-    final openingDate = _dateOnly(account.openingDate);
-    DailyManualValuation? latest;
-    for (final valuation
-        in data.manualValuationsByAccountId[accountId] ??
-            const <DailyManualValuation>[]) {
-      final valuationDate = _dateOnly(valuation.date);
-      if (valuationDate.isBefore(openingDate)) continue;
-      if (valuationDate.isAfter(date)) break;
-      latest = valuation;
-    }
-    return latest;
   }
 
   Iterable<Account> _openAccountsOn(DateTime date) {
@@ -707,4 +738,34 @@ class _DerivedCoverage {
 
   final DateTime? firstMissingDate;
   final bool hasMiddleGap;
+}
+
+/// Exact-date lookup used by daily maintenance. The analysis feature intentionally
+/// uses a different latest-on-or-before lookup for transaction-date conversion.
+class _ExactExchangeRateIndex {
+  _ExactExchangeRateIndex(Iterable<ExchangeRate> values)
+    : values = List.unmodifiable(values),
+      byDateAndCurrency = {
+        for (final rate in values)
+          (_dateOnly(rate.date), rate.currencyId): rate,
+      };
+
+  final List<ExchangeRate> values;
+  final Map<(DateTime, String), ExchangeRate> byDateAndCurrency;
+
+  ExchangeRate rateFor(String currencyId, DateTime date) {
+    final normalized = DateTime.utc(date.year, date.month, date.day);
+    return byDateAndCurrency[(normalized, currencyId)] ??
+        (throw StateError(
+          'No exchange rate for $currencyId on ${_formatDate(normalized)}.',
+        ));
+  }
+
+  static DateTime _dateOnly(DateTime value) =>
+      DateTime.utc(value.year, value.month, value.day);
+
+  static String _formatDate(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-'
+      '${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')}';
 }

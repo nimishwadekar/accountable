@@ -81,12 +81,33 @@ class MigrationAssistancePage extends StatefulWidget {
 
 class _MigrationAssistancePageState extends State<MigrationAssistancePage> {
   bool _working = false;
+  late AppDataSnapshot _calculatedFor;
+  late List<MigrationAccountChange> _changes;
+  late MigrationBatchStatus _status;
+
+  @override
+  void initState() {
+    super.initState();
+    _recalculate();
+  }
+
+  @override
+  void didUpdateWidget(covariant MigrationAssistancePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.data, widget.data)) _recalculate();
+  }
+
+  void _recalculate() {
+    _calculatedFor = widget.data;
+    _changes = calculateMigrationChanges(widget.data);
+    _status = MigrationBatchStatus.fromSnapshot(widget.data);
+  }
 
   @override
   Widget build(BuildContext context) {
     final data = widget.data;
-    final changes = calculateMigrationChanges(data);
-    final status = MigrationBatchStatus.fromSnapshot(data);
+    final changes = _changes;
+    final status = _status;
     final canWrite =
         widget.onFinalizeTransactions != null &&
         widget.onMigrateTransactions != null;
@@ -243,7 +264,9 @@ class _MigrationAssistancePageState extends State<MigrationAssistancePage> {
   Future<void> _confirmAndMigrate() async {
     final migrate = widget.onMigrateTransactions;
     if (migrate == null || _working) return;
-    final status = MigrationBatchStatus.fromSnapshot(widget.data);
+    final status = _calculatedFor == widget.data
+        ? _status
+        : MigrationBatchStatus.fromSnapshot(widget.data);
     if (!status.isFinalized ||
         status.isFullyMigrated ||
         status.isPartiallyMigrated) {

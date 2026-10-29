@@ -22,7 +22,6 @@ class AppDataSnapshot {
        currencies = List.unmodifiable(currencies),
        tags = List.unmodifiable(tags),
        transactions = List.unmodifiable(transactions),
-       transactionsByDisplayOrder = _sortTransactions(transactions),
        transactionsByDate = _indexTransactions(
          transactions,
          (date) => DateTime.utc(date.year, date.month, date.day),
@@ -74,9 +73,6 @@ class AppDataSnapshot {
          (rate) => rate.currencyId,
          (rate) => rate.date,
        ),
-       ledgerBalances = _calculateLedgerBalances(accounts, transactions),
-       balancesAfterTransactionByAccountId =
-           _calculateBalancesAfterTransactions(accounts, transactions),
        displayPreferences = List.unmodifiable(displayPreferences),
        displayPreferencesByKey = Map.unmodifiable({
          for (final preference in displayPreferences)
@@ -97,14 +93,19 @@ class AppDataSnapshot {
        achievementsById = _indexById(
          achievements,
          (achievement) => achievement.id,
-       );
+       ) {
+    final ledgerOrder = _sortTransactionsChronologically(this.transactions);
+    transactionsInLedgerOrder = List.unmodifiable(ledgerOrder);
+    transactionsByDisplayOrder = List.unmodifiable(ledgerOrder.reversed);
+  }
 
   final List<Account> accounts;
   final List<Category> categories;
   final List<CurrencyDefinition> currencies;
   final List<Tag> tags;
   final List<Transaction> transactions;
-  final List<Transaction> transactionsByDisplayOrder;
+  late final List<Transaction> transactionsInLedgerOrder;
+  late final List<Transaction> transactionsByDisplayOrder;
   final Map<DateTime, List<Transaction>> transactionsByDate;
   final Map<DateTime, List<Transaction>> transactionsByMonth;
   final DateTime? earliestTransactionDate;
@@ -132,8 +133,15 @@ class AppDataSnapshot {
   final Map<String, DailyManualValuation> dailyManualValuationsById;
   final Map<String, List<DailyManualValuation>> manualValuationsByAccountId;
   final Map<String, List<ExchangeRate>> exchangeRatesByCurrencyId;
-  final Map<String, Money> ledgerBalances;
-  final Map<String, Map<String, Money>> balancesAfterTransactionByAccountId;
+  late final Map<String, Money> ledgerBalances = _calculateLedgerBalances(
+    accounts,
+    transactions,
+  );
+  late final Map<String, Map<String, Money>>
+  balancesAfterTransactionByAccountId = _calculateBalancesAfterTransactions(
+    accounts,
+    transactionsInLedgerOrder,
+  );
   final Map<String, DisplayPreference> displayPreferencesByKey;
   final Map<String, TransactionTemplate> transactionTemplatesById;
   final Map<String, IncomeAllocation> incomeAllocationsById;
@@ -304,22 +312,13 @@ class AppDataSnapshot {
 
   static Map<String, Map<String, Money>> _calculateBalancesAfterTransactions(
     Iterable<Account> accounts,
-    Iterable<Transaction> transactions,
+    Iterable<Transaction> orderedTransactions,
   ) {
     final balances = <String, Money>{
       for (final account in accounts) account.id: account.openingBalance,
     };
-    final ordered = [...transactions]
-      ..sort((a, b) {
-        final dateComparison = _dateOnly(a.date).compareTo(_dateOnly(b.date));
-        if (dateComparison != 0) return dateComparison;
-        final createdAtComparison = a.createdAt.compareTo(b.createdAt);
-        return createdAtComparison == 0
-            ? a.id.compareTo(b.id)
-            : createdAtComparison;
-      });
     final result = <String, Map<String, Money>>{};
-    for (final transaction in ordered) {
+    for (final transaction in orderedTransactions) {
       final accountIds = <String>{};
       if (transaction.sourceAccountId != null &&
           transaction.sourceAmount != null) {
@@ -345,20 +344,23 @@ class AppDataSnapshot {
     });
   }
 
-  static DateTime _dateOnly(DateTime date) =>
-      DateTime.utc(date.year, date.month, date.day);
-
-  static List<Transaction> _sortTransactions(Iterable<Transaction> values) {
+  static List<Transaction> _sortTransactionsChronologically(
+    Iterable<Transaction> values,
+  ) {
     final sorted = [...values]
       ..sort((a, b) {
-        final dateComparison = b.date.compareTo(a.date);
+        final yearComparison = a.date.year.compareTo(b.date.year);
+        if (yearComparison != 0) return yearComparison;
+        final monthComparison = a.date.month.compareTo(b.date.month);
+        if (monthComparison != 0) return monthComparison;
+        final dateComparison = a.date.day.compareTo(b.date.day);
         if (dateComparison != 0) return dateComparison;
-        final createdAtComparison = b.createdAt.compareTo(a.createdAt);
+        final createdAtComparison = a.createdAt.compareTo(b.createdAt);
         return createdAtComparison == 0
-            ? b.id.compareTo(a.id)
+            ? a.id.compareTo(b.id)
             : createdAtComparison;
       });
-    return List<Transaction>.unmodifiable(sorted);
+    return sorted;
   }
 
   static Map<DateTime, List<Transaction>> _indexTransactions(

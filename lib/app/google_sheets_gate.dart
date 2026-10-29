@@ -54,9 +54,9 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       SharedPreferencesFormSnapshotStore();
   final TransactionOutboxStore _outboxStore =
       SharedPreferencesTransactionOutboxStore();
-  Future<void> Function()? _rebuildDailyTables;
-  Future<void> Function(DateTime startDate)? _rebuildNetWorth;
-  Future<void> Function()? _reconcileDailyTables;
+  Future<AppDataSnapshot> Function()? _rebuildDailyTables;
+  Future<AppDataSnapshot> Function(DateTime startDate)? _rebuildNetWorth;
+  Future<AppDataSnapshot> Function()? _reconcileDailyTables;
   Future<void> Function()? _refreshFormSnapshot;
   final TransactionWriteCoordinator _writeCoordinator =
       const TransactionWriteCoordinator();
@@ -455,14 +455,21 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       );
       _reconcileDailyTables = () => _writeCoordinator.run(() async {
         final latestData = await repository.reload();
-        await DailyMaintenanceService(
+        final maintenance = DailyMaintenanceService(
           client: api,
           data: latestData,
-        ).reconcile();
-        final reconciledData = await repository.reload();
+        );
+        final bool changed;
+        try {
+          changed = await maintenance.reconcile();
+        } finally {
+          maintenance.close();
+        }
+        final reconciledData = changed ? await repository.reload() : latestData;
         await _formSnapshotStore.write(
           FormSnapshot.fromData(reconciledData, dataSource: 'sheets'),
         );
+        return reconciledData;
       });
       _refreshFormSnapshot = () => _writeCoordinator.run(() async {
         final latestData = await repository.reload();
@@ -471,7 +478,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         );
       });
       _logTiming('loading initial Sheets snapshot');
-      final initialData = await repository.load();
+      await repository.load();
       if (!_isCurrentConnection(generation)) return;
       _logTiming('initial Sheets snapshot loaded');
       if (widget.config.debugStartupScenario ==
@@ -481,35 +488,35 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
           message: 'Debug startup scenario: data loading failed.',
         );
       }
-      final maintenance = DailyMaintenanceService(
-        client: api,
-        data: initialData,
+      _logTiming(
+        'initial Sheets snapshot validated; deferring reconciliation until synchronization',
       );
-      final today = DateTime.now();
-      _logTiming('starting daily-table reconciliation');
-      await _writeCoordinator.run(
-        () => maintenance.reconcile(
-          yesterday: today.subtract(const Duration(days: 1)),
-        ),
-      );
-      if (!_isCurrentConnection(generation)) return;
-      _logTiming('daily-table reconciliation completed; reloading snapshot');
-      await repository.reload();
-      if (!_isCurrentConnection(generation)) return;
-      _logTiming('final Sheets snapshot loaded');
       _pendingOnlineRepository = repository;
       _rebuildDailyTables = () => _writeCoordinator.run(() async {
         final latestData = await repository.reload();
-        await DailyMaintenanceService(client: api, data: latestData).rebuild();
-        await repository.reload();
+        final maintenance = DailyMaintenanceService(
+          client: api,
+          data: latestData,
+        );
+        try {
+          await maintenance.rebuild();
+        } finally {
+          maintenance.close();
+        }
+        return repository.reload();
       });
       _rebuildNetWorth = (startDate) => _writeCoordinator.run(() async {
         final latestData = await repository.reload();
-        await DailyMaintenanceService(
+        final maintenance = DailyMaintenanceService(
           client: api,
           data: latestData,
-        ).rebuildNetWorth(startDate: startDate);
-        await repository.reload();
+        );
+        try {
+          await maintenance.rebuildNetWorth(startDate: startDate);
+        } finally {
+          maintenance.close();
+        }
+        return repository.reload();
       });
       var transitionedOnline = false;
       if (!_transactionFormActive) {
@@ -608,17 +615,18 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       if (!_isCurrentConnection(generation) || _transactionFormActive) {
         return false;
       }
-      await _reconcileDailyTables?.call();
+      final reconcile = _reconcileDailyTables;
+      final data = reconcile == null
+          ? await repository.reload()
+          : await reconcile();
       if (!_isCurrentConnection(generation) || _transactionFormActive) {
         return false;
       }
-      final data = await repository.reload();
-      if (!_isCurrentConnection(generation) || _transactionFormActive) {
-        return false;
+      if (reconcile == null) {
+        await _formSnapshotStore.write(
+          FormSnapshot.fromData(data, dataSource: 'sheets'),
+        );
       }
-      await _formSnapshotStore.write(
-        FormSnapshot.fromData(data, dataSource: 'sheets'),
-      );
       if (!_isCurrentConnection(generation) || _transactionFormActive) {
         return false;
       }

@@ -153,7 +153,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
     final accountSeries = accountRange == null || _selectedAccountId == null
         ? null
         : _cached(
-            'account:${_selectedAccountId!}:${_accountChartUnit.name}:${_rangeKey(accountRange)}',
+            'account:${_selectedAccountId!}:${_rangeKey(accountRange)}',
             () => _calculator.accountBalanceSeries(
               accountId: _selectedAccountId!,
               range: accountRange,
@@ -356,13 +356,16 @@ class _AnalysisPageState extends State<AnalysisPage> {
 
   Widget _buildNetWorthSection(DailySeries<DailyNetWorthPoint> series) {
     final usd = widget.data.currenciesById['USD'];
-    final chartPoints = [
-      for (final point in series.points)
-        ChartPoint(
-          date: point.date,
-          value: usd == null ? 0 : point.amount.toMajorUnits(usd).toDouble(),
-        ),
-    ];
+    final chartPoints = _cached(
+      'net-worth-chart:${_rangeKey(_netWorthRange!)}',
+      () => [
+        for (final point in series.points)
+          ChartPoint(
+            date: point.date,
+            value: usd == null ? 0 : point.amount.toMajorUnits(usd).toDouble(),
+          ),
+      ],
+    );
     return AnalysisChartSection(
       title: 'Net Worth Trend (USD)',
       subtitle: null,
@@ -400,32 +403,36 @@ class _AnalysisPageState extends State<AnalysisPage> {
         (accountIsUsd || _accountChartUnit == AccountChartUnit.usd);
     final chartPoints = series == null
         ? const <ChartPoint>[]
-        : [
-            for (final point in series.points)
-              if (!useUsd || point.usdAmount != null)
-                ChartPoint(
-                  date: point.date,
-                  value: account?.isLiability == true
-                      ? (useUsd
-                                ? point.usdAmount
-                                          ?.toMajorUnits(usd)
-                                          .toDouble() ??
-                                      0
-                                : (currency == null
-                                      ? 0.0
-                                      : point.nativeAmount
-                                            .toMajorUnits(currency)
-                                            .toDouble()))
-                            .abs()
-                      : (useUsd
-                            ? point.usdAmount?.toMajorUnits(usd).toDouble() ?? 0
-                            : (currency == null
-                                  ? 0
-                                  : point.nativeAmount
-                                        .toMajorUnits(currency)
-                                        .toDouble())),
-                ),
-          ];
+        : _cached(
+            'account-chart:${account?.id ?? ''}:${_rangeKey(accountRange!)}:${useUsd ? 'usd' : 'native'}',
+            () => [
+              for (final point in series.points)
+                if (!useUsd || point.usdAmount != null)
+                  ChartPoint(
+                    date: point.date,
+                    value: account?.isLiability == true
+                        ? (useUsd
+                                  ? point.usdAmount
+                                            ?.toMajorUnits(usd)
+                                            .toDouble() ??
+                                        0
+                                  : (currency == null
+                                        ? 0.0
+                                        : point.nativeAmount
+                                              .toMajorUnits(currency)
+                                              .toDouble()))
+                              .abs()
+                        : (useUsd
+                              ? point.usdAmount?.toMajorUnits(usd).toDouble() ??
+                                    0
+                              : (currency == null
+                                    ? 0
+                                    : point.nativeAmount
+                                          .toMajorUnits(currency)
+                                          .toDouble())),
+                  ),
+            ],
+          );
 
     return AnalysisChartSection(
       title: 'Individual Account Valuation Trend',
@@ -731,7 +738,18 @@ class _AnalysisPageState extends State<AnalysisPage> {
   }
 
   T _cached<T>(String key, T Function() compute) {
-    return (_calculationCache[key] ??= compute() as Object) as T;
+    final existing = _calculationCache.remove(key);
+    if (existing != null) {
+      _calculationCache[key] = existing;
+      return existing as T;
+    }
+    final value = compute();
+    const maximumCachedCalculations = 24;
+    if (_calculationCache.length >= maximumCachedCalculations) {
+      _calculationCache.remove(_calculationCache.keys.first);
+    }
+    _calculationCache[key] = value as Object;
+    return value;
   }
 
   String _rangeKey(DateTimeRange range) =>

@@ -538,11 +538,11 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
               tagIds: tags.map((item) => item.id).toSet(),
             );
             displayPreferences = synchronized.preferences;
-            for (final preference in synchronized.missing) {
-              await api.appendRow(
-                GoogleSheetsRanges.displayPreferences,
-                _displayPreferenceRow(preference),
-              );
+            if (synchronized.missing.isNotEmpty) {
+              await api.appendRows(GoogleSheetsRanges.displayPreferences, [
+                for (final preference in synchronized.missing)
+                  _displayPreferenceRow(preference),
+              ]);
             }
             recordIssues('DisplayPreferences', const []);
           }

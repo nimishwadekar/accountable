@@ -147,13 +147,20 @@ class CategoryAnalysisCalculator {
   ) {
     final usd = data.currenciesById['USD'];
     if (usd == null || currencyId == usd.id) return amount.minorUnits;
-    ExchangeRate? latest;
-    for (final rate
-        in data.exchangeRatesByCurrencyId[currencyId] ??
-            const <ExchangeRate>[]) {
-      if (_dateOnly(rate.date).isAfter(_dateOnly(date))) break;
-      latest = rate;
+    final rates =
+        data.exchangeRatesByCurrencyId[currencyId] ?? const <ExchangeRate>[];
+    final targetDate = _dateOnly(date);
+    var low = 0;
+    var high = rates.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (!_dateOnly(rates[middle].date).isAfter(targetDate)) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
     }
+    final latest = low == 0 ? null : rates[low - 1];
     if (latest == null) {
       final missing = MissingExchangeRate(
         currencyId: currencyId,

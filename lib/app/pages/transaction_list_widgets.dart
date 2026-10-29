@@ -170,7 +170,7 @@ class TransactionListRow extends StatelessWidget {
     required String prefix,
     required Color color,
   }) {
-    final balance = _balanceAfter(accountId);
+    final balance = showAccountBalances ? _balanceAfter(accountId) : null;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,

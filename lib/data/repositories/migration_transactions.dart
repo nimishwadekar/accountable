@@ -42,16 +42,23 @@ class MigrationBatchStatus {
 
   factory MigrationBatchStatus.fromSnapshot(AppDataSnapshot data) {
     final migration = data.transactionsToMigrate;
-    final migrationDates = migration.map(_dateOnly).toList()..sort();
     final currentMigrationIds = migration.map((item) => item.id).toSet();
-    final mainDates =
-        data.transactions
-            .where(
-              (transaction) => !currentMigrationIds.contains(transaction.id),
-            )
-            .map(_dateOnly)
-            .toList()
-          ..sort();
+    DateTime? latestMigrationDate;
+    for (final transaction in migration) {
+      final date = _dateOnly(transaction);
+      if (latestMigrationDate == null || date.isAfter(latestMigrationDate)) {
+        latestMigrationDate = date;
+      }
+    }
+    DateTime? oldestMainTransactionDate;
+    for (final transaction in data.transactions) {
+      if (currentMigrationIds.contains(transaction.id)) continue;
+      final date = _dateOnly(transaction);
+      if (oldestMainTransactionDate == null ||
+          date.isBefore(oldestMainTransactionDate)) {
+        oldestMainTransactionDate = date;
+      }
+    }
     var migratedCount = 0;
     var conflictingMigratedCount = 0;
     final accountCurrencies = {
@@ -109,8 +116,8 @@ class MigrationBatchStatus {
       transactionCount: migration.length,
       isFinalized: finalized,
       batchToken: finalized ? token : null,
-      latestMigrationDate: migrationDates.isEmpty ? null : migrationDates.last,
-      oldestMainTransactionDate: mainDates.isEmpty ? null : mainDates.first,
+      latestMigrationDate: latestMigrationDate,
+      oldestMainTransactionDate: oldestMainTransactionDate,
       alreadyMigratedCount: migratedCount,
       conflictingMigratedCount: conflictingMigratedCount,
     );

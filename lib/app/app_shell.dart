@@ -93,13 +93,13 @@ class AppShell extends StatefulWidget {
   final Future<void> Function()? onRetryOutbox;
   final ValueChanged<bool>? onTransactionFormActiveChanged;
   final bool migrationAssistance;
-  final Future<void> Function()? onRebuildDailyTables;
-  final Future<void> Function()? onReconcileDailyTables;
+  final Future<AppDataSnapshot> Function()? onRebuildDailyTables;
+  final Future<AppDataSnapshot> Function()? onReconcileDailyTables;
   final Future<MigrationBatchStatus> Function()?
   onFinalizeMigrationTransactions;
   final Future<MigrationExecutionResult> Function()? onMigrateTransactions;
   final Future<void> Function()? onRefreshFormSnapshot;
-  final Future<void> Function(DateTime startDate)? onRebuildNetWorth;
+  final Future<AppDataSnapshot> Function(DateTime startDate)? onRebuildNetWorth;
   final Future<void> Function()? onReloadData;
   final double textScale;
   final ValueChanged<double>? onTextScaleChanged;
@@ -115,7 +115,8 @@ class _AppShellState extends State<AppShell> {
   AppSection _selectedSection = AppSection.overview;
   final Set<AppSection> _visitedSections = {};
   Set<String> _pendingAchievementIds = {};
-  final Map<AppSection, Widget> _pageCache = {};
+  final Map<AppSection, Widget> _pageWidgets = {};
+  AppDataSnapshot? _pageWidgetData;
   final TransactionWriteCoordinator _writeCoordinator =
       const TransactionWriteCoordinator();
 
@@ -148,9 +149,10 @@ class _AppShellState extends State<AppShell> {
   @override
   void didUpdateWidget(covariant AppShell oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _pageWidgets.clear();
+    _pageWidgetData = null;
     if (oldWidget.dataRepository != widget.dataRepository ||
         oldWidget.restrictedStartup != widget.restrictedStartup) {
-      _pageCache.clear();
       _snapshotFuture = _loadSnapshotAndUpdateMilestones();
       if (oldWidget.restrictedStartup && !widget.restrictedStartup) {
         _selectedSection = AppSection.transactions;
@@ -211,21 +213,25 @@ class _AppShellState extends State<AppShell> {
           DataValidationIssue(table: 'Achievements', message: message),
       ]);
     }
-    for (final id in evaluation.earnedFlagsToReset) {
-      data = await _writeCoordinator.run(
-        () => widget.dataRepository.updateAchievementEarned(id, earned: false),
+    final resetIds = evaluation.earnedFlagsToReset;
+    if (resetIds.isNotEmpty) {
+      for (final id in resetIds) {
+        data = await _writeCoordinator.run(
+          () =>
+              widget.dataRepository.updateAchievementEarned(id, earned: false),
+        );
+      }
+      evaluation = NetWorthAchievementCalculator.evaluate(
+        dailyNetWorth: data.dailyNetWorth,
+        trackingStartDate: data.achievementStartDate ?? startDate,
+        achievements: data.achievements,
       );
-    }
-    evaluation = NetWorthAchievementCalculator.evaluate(
-      dailyNetWorth: data.dailyNetWorth,
-      trackingStartDate: data.achievementStartDate ?? startDate,
-      achievements: data.achievements,
-    );
-    if (evaluation.validationErrors.isNotEmpty) {
-      throw DataValidationFailure([
-        for (final message in evaluation.validationErrors)
-          DataValidationIssue(table: 'Achievements', message: message),
-      ]);
+      if (evaluation.validationErrors.isNotEmpty) {
+        throw DataValidationFailure([
+          for (final message in evaluation.validationErrors)
+            DataValidationIssue(table: 'Achievements', message: message),
+        ]);
+      }
     }
     if (mounted) {
       final pending = {
@@ -350,9 +356,6 @@ class _AppShellState extends State<AppShell> {
   }
 
   Widget _buildContent(AsyncSnapshot<AppDataSnapshot> snapshot) {
-    if (snapshot.connectionState == ConnectionState.waiting) {
-      return const AppLoadingPage();
-    }
     if (snapshot.hasError) {
       final error = snapshot.error!;
       if (error is DataValidationFailure) {
@@ -362,40 +365,64 @@ class _AppShellState extends State<AppShell> {
     }
 
     final data = snapshot.data;
-    if (data == null) {
-      return AppErrorPage(
-        error: StateError('The data snapshot was empty.'),
-        onReload: _reload,
-      );
+    if (data == null || snapshot.connectionState == ConnectionState.waiting) {
+      if (data != null) return _buildReadyContent(data, refreshing: true);
+      return const AppLoadingPage();
     }
+    return _buildReadyContent(data);
+  }
+
+  Widget _buildReadyContent(AppDataSnapshot data, {bool refreshing = false}) {
     if (widget.restrictedStartup &&
         _selectedSection != AppSection.transactions) {
       return const AppLoadingPage();
     }
-
     final sections = _navigationSections;
-    return IndexedStack(
-      index: sections.indexOf(_selectedSection),
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        for (final section in sections)
-          _visitedSections.contains(section)
-              ? _cachedSection(section, data)
-              : const SizedBox.shrink(),
+        IndexedStack(
+          index: sections.indexOf(_selectedSection),
+          children: [
+            for (final section in sections)
+              TickerMode(
+                enabled: section == _selectedSection,
+                child: _visitedSections.contains(section)
+                    ? _cachedSection(section, data)
+                    : const SizedBox.shrink(),
+              ),
+          ],
+        ),
+        if (refreshing)
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(child: LinearProgressIndicator()),
+          ),
       ],
     );
   }
 
   Widget _cachedSection(AppSection section, AppDataSnapshot data) {
-    if (widget.restrictedStartup && section == AppSection.transactions) {
-      return _createSection(section, data);
+    if (!identical(_pageWidgetData, data)) {
+      _pageWidgets.clear();
+      _pageWidgetData = data;
     }
-    return _pageCache.putIfAbsent(section, () => _createSection(section, data));
+    return _pageWidgets.putIfAbsent(
+      section,
+      () => _createSection(section, data),
+    );
   }
 
   Widget _createSection(AppSection section, AppDataSnapshot data) {
     return switch (section) {
-      AppSection.overview => OverviewPage(data: data),
+      AppSection.overview => OverviewPage(
+        key: ValueKey<AppSection>(section),
+        data: data,
+      ),
       AppSection.transactions => TransactionsPage(
+        key: ValueKey<AppSection>(section),
         data: data,
         onTransactionAdded: _handleTransactionAdded,
         onTransactionsAdded: _handleTransactionsAdded,
@@ -409,19 +436,23 @@ class _AppShellState extends State<AppShell> {
         onTransactionFormActiveChanged: widget.onTransactionFormActiveChanged,
       ),
       AppSection.accounts => AccountsPage(
+        key: ValueKey<AppSection>(section),
         data: data,
         onValuationsAdded: _handleValuationsAdded,
       ),
       AppSection.analysis => AnalysisPage(
+        key: ValueKey<AppSection>(section),
         data: data,
         onIncomeAllocationAdded: _handleIncomeAllocationAdded,
         onRebuildDailyTables: _rebuildAndReloadDailyTables,
       ),
       AppSection.milestones => MilestonesPage(
+        key: ValueKey<AppSection>(section),
         data: data,
         onAchievementAcknowledged: _acknowledgeAchievement,
       ),
       AppSection.migrationAssistance => MigrationAssistancePage(
+        key: ValueKey<AppSection>(section),
         data: data,
         onFinalizeTransactions: widget.onFinalizeMigrationTransactions == null
             ? null
@@ -431,6 +462,7 @@ class _AppShellState extends State<AppShell> {
             : _migrateTransactions,
       ),
       AppSection.settings => SettingsPage(
+        key: ValueKey<AppSection>(section),
         data: data,
         onSaveDisplayPreferences: _saveDisplayPreferences,
         onRebuildDailyTables: widget.onRebuildDailyTables == null
@@ -498,16 +530,16 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _reload() {
-    _pageCache.clear();
     setState(() {
       _snapshotFuture = _loadSnapshotAndUpdateMilestones(reload: true);
     });
   }
 
   Future<void> _reloadData() async {
-    await widget.onReconcileDailyTables?.call();
-    final future = _loadSnapshotAndUpdateMilestones(reload: true);
-    _pageCache.clear();
+    final reconcile = widget.onReconcileDailyTables;
+    final future = _observeMilestoneState(
+      reconcile == null ? widget.dataRepository.reload() : reconcile(),
+    );
     setState(() {
       _snapshotFuture = future;
     });
@@ -515,8 +547,14 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _rebuildAndReloadDailyTables() async {
-    await widget.onRebuildDailyTables?.call();
-    await _reloadData();
+    final rebuild = widget.onRebuildDailyTables;
+    if (rebuild == null) {
+      await _reloadData();
+      return;
+    }
+    final future = _observeMilestoneState(rebuild());
+    setState(() => _snapshotFuture = future);
+    await future;
   }
 
   Future<void> _handleValuationsAdded(
@@ -525,18 +563,19 @@ class _AppShellState extends State<AppShell> {
     final future = _writeCoordinator.run(
       () => widget.dataRepository.addManualValuations(valuations),
     );
-    _pageCache.clear();
     setState(() {
       _snapshotFuture = _observeMilestoneState(future);
     });
     await future;
+    if (!mounted) return;
     final rebuildNetWorth = widget.onRebuildNetWorth;
     if (rebuildNetWorth != null && valuations.isNotEmpty) {
       final earliest = valuations
           .map((valuation) => valuation.date)
           .reduce((a, b) => a.isBefore(b) ? a : b);
-      await rebuildNetWorth(earliest);
-      await _reloadData();
+      final rebuilt = _observeMilestoneState(rebuildNetWorth(earliest));
+      setState(() => _snapshotFuture = rebuilt);
+      await rebuilt;
     }
   }
 
@@ -551,7 +590,6 @@ class _AppShellState extends State<AppShell> {
         latest.copyWith(isFavorite: template.isFavorite),
       );
     });
-    _pageCache.clear();
     setState(() {
       _snapshotFuture = _observeMilestoneState(future);
     });
@@ -565,7 +603,6 @@ class _AppShellState extends State<AppShell> {
     final future = _writeCoordinator.run(
       () => widget.dataRepository.saveDisplayPreferences(preferences),
     );
-    _pageCache.clear();
     setState(() {
       _snapshotFuture = _observeMilestoneState(future);
     });
@@ -576,7 +613,6 @@ class _AppShellState extends State<AppShell> {
     final future = _writeCoordinator.run(
       () => widget.dataRepository.addIncomeAllocation(allocation),
     );
-    _pageCache.clear();
     setState(() {
       _snapshotFuture = _observeMilestoneState(future);
     });
@@ -588,7 +624,6 @@ class _AppShellState extends State<AppShell> {
       await widget.dataRepository.reload();
       return widget.dataRepository.addTransactionTemplate(template);
     });
-    _pageCache.clear();
     setState(() {
       _snapshotFuture = _observeMilestoneState(future);
     });
@@ -599,24 +634,25 @@ class _AppShellState extends State<AppShell> {
   Future<void> _handleTransactionsAdded(List<Transaction> transactions) async {
     var saved = false;
     try {
-      Future<void> write() async {
+      Future<AppDataSnapshot> write() async {
         await widget.dataRepository.reload();
-        final future = widget.dataRepository.addTransactions(transactions);
-        _pageCache.clear();
-        setState(() {
-          _snapshotFuture = _observeMilestoneState(future);
-        });
-        await future;
+        return widget.dataRepository.addTransactions(transactions);
       }
 
-      if (widget.restrictedStartup) {
-        await write();
-        return;
-      }
-      await _writeCoordinator.run(write);
+      final savedSnapshot = widget.restrictedStartup
+          ? await write()
+          : await _writeCoordinator.run(write);
       saved = true;
-      await widget.onReconcileDailyTables?.call();
-      await _reloadDataWithoutReconciliation();
+      final reconcile = widget.onReconcileDailyTables;
+      final finalSnapshot = widget.restrictedStartup || reconcile == null
+          ? savedSnapshot
+          : await reconcile();
+      if (!mounted) return;
+      setState(() {
+        _snapshotFuture = _observeMilestoneState(
+          Future<AppDataSnapshot>.value(finalSnapshot),
+        );
+      });
     } catch (error) {
       if (error is TransactionSavedHistoryRepairException) rethrow;
       if (saved && widget.onReconcileDailyTables != null) {
@@ -629,24 +665,25 @@ class _AppShellState extends State<AppShell> {
   Future<void> _handleTransactionAdded(Transaction transaction) async {
     var saved = false;
     try {
-      Future<void> write() async {
+      Future<AppDataSnapshot> write() async {
         await widget.dataRepository.reload();
-        final future = widget.dataRepository.addTransaction(transaction);
-        _pageCache.clear();
-        setState(() {
-          _snapshotFuture = _observeMilestoneState(future);
-        });
-        await future;
+        return widget.dataRepository.addTransaction(transaction);
       }
 
-      if (widget.restrictedStartup) {
-        await write();
-        return;
-      }
-      await _writeCoordinator.run(write);
+      final savedSnapshot = widget.restrictedStartup
+          ? await write()
+          : await _writeCoordinator.run(write);
       saved = true;
-      await widget.onReconcileDailyTables?.call();
-      await _reloadDataWithoutReconciliation();
+      final reconcile = widget.onReconcileDailyTables;
+      final finalSnapshot = widget.restrictedStartup || reconcile == null
+          ? savedSnapshot
+          : await reconcile();
+      if (!mounted) return;
+      setState(() {
+        _snapshotFuture = _observeMilestoneState(
+          Future<AppDataSnapshot>.value(finalSnapshot),
+        );
+      });
     } catch (error) {
       if (error is TransactionSavedHistoryRepairException) rethrow;
       if (saved && widget.onReconcileDailyTables != null) {
@@ -658,7 +695,6 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _reloadDataWithoutReconciliation() async {
     final future = _loadSnapshotAndUpdateMilestones(reload: true);
-    _pageCache.clear();
     setState(() {
       _snapshotFuture = future;
     });
@@ -676,8 +712,12 @@ class _AppShellState extends State<AppShell> {
     try {
       final result = await widget.onMigrateTransactions!.call();
       migrated = !result.wasAlreadyMigrated;
-      await widget.onReconcileDailyTables?.call();
-      await _reloadDataWithoutReconciliation();
+      final reconcile = widget.onReconcileDailyTables;
+      final future = reconcile == null
+          ? _loadSnapshotAndUpdateMilestones(reload: true)
+          : _observeMilestoneState(reconcile());
+      setState(() => _snapshotFuture = future);
+      await future;
       return result;
     } catch (error) {
       if (migrated) throw MigrationHistoryRepairException(error);

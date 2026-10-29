@@ -106,7 +106,8 @@ class AnalysisCalculator {
     }
 
     final values =
-        (data.dailyBalancesByAccountId[accountId] ?? const <DailyAccountBalance>[])
+        (data.dailyBalancesByAccountId[accountId] ??
+                const <DailyAccountBalance>[])
             .where((value) => _inRange(value.date, range))
             .map(
               (value) => AccountBalancePoint(
@@ -137,27 +138,36 @@ class AnalysisCalculator {
       date = date.add(const Duration(days: 1));
     }
     final openingDate = _dateOnly(account.openingDate);
-    final valuations = (data.manualValuationsByAccountId[account.id] ??
-            const <DailyManualValuation>[])
-        .where(
-          (valuation) =>
-              !_dateOnly(valuation.date).isBefore(openingDate),
-        )
-        .toList();
+    final valuations =
+        data.manualValuationsByAccountId[account.id] ??
+        const <DailyManualValuation>[];
+    final rates =
+        data.exchangeRatesByCurrencyId[account.currencyId] ??
+        const <ExchangeRate>[];
     final currency = data.currenciesById[account.currencyId]!;
     final usd = data.currenciesById['USD']!;
     final points = <AccountBalancePoint>[];
     final unavailableDates = <DateTime>[];
+    var valuationIndex = 0;
+    DailyManualValuation? latestValuation;
+    var rateIndex = 0;
+    ExchangeRate? latestRate;
     for (final date in dates) {
-      DailyManualValuation? latest;
-      for (final valuation in valuations) {
-        if (!_dateOnly(valuation.date).isAfter(date)) latest = valuation;
+      while (valuationIndex < valuations.length &&
+          !_dateOnly(valuations[valuationIndex].date).isAfter(date)) {
+        final valuation = valuations[valuationIndex++];
+        if (!_dateOnly(valuation.date).isBefore(openingDate)) {
+          latestValuation = valuation;
+        }
       }
-      final value = latest?.value ?? Money.zero(currency);
-      final rate = _latestRate(account.currencyId, date);
-      final usdValue = rate == null
+      while (rateIndex < rates.length &&
+          !_dateOnly(rates[rateIndex].date).isAfter(date)) {
+        latestRate = rates[rateIndex++];
+      }
+      final value = latestValuation?.value ?? Money.zero(currency);
+      final usdValue = latestRate == null
           ? null
-          : _convertToUsd(value, currency, rate, usd);
+          : _convertToUsd(value, currency, latestRate, usd);
       if (usdValue == null) unavailableDates.add(date);
       points.add(
         AccountBalancePoint(
@@ -172,16 +182,6 @@ class AnalysisCalculator {
       missingDates: const [],
       unavailableDates: List.unmodifiable(unavailableDates),
     );
-  }
-
-  ExchangeRate? _latestRate(String currencyId, DateTime date) {
-    ExchangeRate? latest;
-    for (final rate in data.exchangeRatesByCurrencyId[currencyId] ??
-        const <ExchangeRate>[]) {
-      if (_dateOnly(rate.date).isAfter(date)) break;
-      latest = rate;
-    }
-    return latest;
   }
 
   Money _convertToUsd(

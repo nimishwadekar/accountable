@@ -131,6 +131,9 @@ class LineChartWidget extends StatefulWidget {
 
 class _LineChartWidgetState extends State<LineChartWidget> {
   final ValueNotifier<double?> _selectedX = ValueNotifier(null);
+  List<ChartPoint>? _cachedSourcePoints;
+  List<FlSpot>? _cachedSpots;
+  (double minimum, double maximum)? _cachedExtrema;
 
   @override
   void dispose() {
@@ -143,9 +146,27 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     final points = widget.points;
     final color = widget.color;
     final currency = widget.currency;
-    final values = points.map((point) => point.value).toList();
-    final minimum = values.reduce((a, b) => a < b ? a : b);
-    final maximum = values.reduce((a, b) => a > b ? a : b);
+    if (!identical(_cachedSourcePoints, points)) {
+      var minimum = points.first.value;
+      var maximum = minimum;
+      final firstDate = points.first.date;
+      _cachedSpots = [
+        for (final point in points)
+          FlSpot(
+            point.date.difference(firstDate).inDays.toDouble(),
+            point.value,
+          ),
+      ];
+      for (final point in points.skip(1)) {
+        if (point.value < minimum) minimum = point.value;
+        if (point.value > maximum) maximum = point.value;
+      }
+      _cachedExtrema = (minimum, maximum);
+      _cachedSourcePoints = points;
+    }
+    final extrema = _cachedExtrema!;
+    final minimum = extrema.$1;
+    final maximum = extrema.$2;
     final difference = maximum - minimum;
     final padding = difference == 0
         ? (maximum.abs() * 0.1).clamp(1, double.infinity)
@@ -393,13 +414,16 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                               return;
                             }
                             final spots = response?.lineBarSpots;
-                            _selectedX.value = spots == null || spots.isEmpty
+                            final nextX = spots == null || spots.isEmpty
                                 ? points.last.date
                                       .difference(firstDate)
                                       .inDays
                                       .toDouble()
                                 : spots.first.x;
-                            setState(() {});
+                            if (_selectedX.value != nextX) {
+                              _selectedX.value = nextX;
+                              setState(() {});
+                            }
                           },
                         ),
                         titlesData: FlTitlesData(
@@ -439,11 +463,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                             ),
                           ),
                         ),
-                        lineBarsData: _lineBars(
-                          points,
-                          firstDate,
-                          selectedX: selectedX,
-                        ),
+                        lineBarsData: _lineBars(selectedX: selectedX),
                       ),
                     ),
                   ),
@@ -501,9 +521,9 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                                 alignment: Alignment.centerLeft,
                                 child: Text(
                                   _formatAxisValue(
-                                value,
-                                compact: compactAxisLabels,
-                              ),
+                                    value,
+                                    compact: compactAxisLabels,
+                                  ),
                                   maxLines: 1,
                                   softWrap: false,
                                   overflow: TextOverflow.clip,
@@ -617,25 +637,42 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     DateTime firstDate,
     double x,
   ) {
-    for (var index = 0; index < points.length; index++) {
-      final pointX = points[index].date.difference(firstDate).inDays.toDouble();
-      if (pointX >= x) return index;
+    var low = 0;
+    var high = points.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      final pointX = points[middle].date
+          .difference(firstDate)
+          .inDays
+          .toDouble();
+      if (pointX < x) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
     }
-    return points.length - 1;
+    return low == points.length ? points.length - 1 : low;
   }
 
   int _pointIndexForX(List<ChartPoint> points, DateTime firstDate, double x) {
-    var closestIndex = 0;
-    var closestDistance = double.infinity;
-    for (var index = 0; index < points.length; index++) {
-      final distance = (points[index].date.difference(firstDate).inDays - x)
-          .abs();
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestIndex = index;
+    var low = 0;
+    var high = points.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      final pointX = points[middle].date.difference(firstDate).inDays;
+      if (pointX < x) {
+        low = middle + 1;
+      } else {
+        high = middle;
       }
     }
-    return closestIndex;
+    if (low == 0) return 0;
+    if (low == points.length) return points.length - 1;
+    final beforeDistance =
+        (points[low - 1].date.difference(firstDate).inDays - x).abs();
+    final afterDistance = (points[low].date.difference(firstDate).inDays - x)
+        .abs();
+    return beforeDistance <= afterDistance ? low - 1 : low;
   }
 
   double _xPosition(
@@ -735,10 +772,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     return width + 2;
   }
 
-  static String _formatAxisValue(
-    double value, {
-    required bool compact,
-  }) {
+  static String _formatAxisValue(double value, {required bool compact}) {
     if (!compact) {
       final rounded = value.roundToDouble();
       return (value - rounded).abs() < 0.000001
@@ -772,20 +806,10 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     return '$trimmed$suffix';
   }
 
-  List<LineChartBarData> _lineBars(
-    List<ChartPoint> points,
-    DateTime firstDate, {
-    double? selectedX,
-  }) {
+  List<LineChartBarData> _lineBars({double? selectedX}) {
     return [
       LineChartBarData(
-        spots: [
-          for (final point in points)
-            FlSpot(
-              point.date.difference(firstDate).inDays.toDouble(),
-              point.value,
-            ),
-        ],
+        spots: _cachedSpots!,
         color: widget.color,
         barWidth: 3,
         isCurved: false,

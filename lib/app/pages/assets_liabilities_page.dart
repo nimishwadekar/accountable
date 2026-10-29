@@ -17,16 +17,17 @@ String _displayAccountType(Account account) {
 }
 
 DateTime defaultManualValuationDate(AppDataSnapshot data) {
-  final dates =
-      data.dailyManualValuationsById.values
-          .map((valuation) => valuation.date)
-          .toList()
-        ..sort();
-  final latest = dates.isEmpty ? DateTime.now() : dates.last;
+  DateTime? latest;
+  for (final valuation in data.dailyManualValuations) {
+    if (latest == null || valuation.date.isAfter(latest)) {
+      latest = valuation.date;
+    }
+  }
+  final latestDate = latest ?? DateTime.now();
   return DateTime.utc(
-    latest.year,
-    latest.month,
-    latest.day,
+    latestDate.year,
+    latestDate.month,
+    latestDate.day,
   ).add(const Duration(days: 1));
 }
 
@@ -34,16 +35,17 @@ List<Account> eligibleManualValuationAccounts(
   AppDataSnapshot data,
   DateTime date,
 ) {
+  final valuedAccountIds = {
+    for (final valuation in data.dailyManualValuations)
+      if (_sameDate(valuation.date, date)) valuation.accountId,
+  };
   return data.visibleAccounts.where((account) {
     if (!account.isValuationAccount) return false;
     if (date.isBefore(account.openingDate)) return false;
     if (account.closingDate != null && date.isAfter(account.closingDate!)) {
       return false;
     }
-    return !data.dailyManualValuationsById.values.any(
-      (valuation) =>
-          valuation.accountId == account.id && _sameDate(valuation.date, date),
-    );
+    return !valuedAccountIds.contains(account.id);
   }).toList();
 }
 
@@ -128,6 +130,7 @@ class _AssetsLiabilitiesSectionState extends State<AssetsLiabilitiesSection> {
 
   @override
   Widget build(BuildContext context) {
+    final assetLiabilityAccounts = _assetLiabilityAccounts;
     final latestDate = widget.data.dailyManualValuations.isEmpty
         ? null
         : widget.data.dailyManualValuations
@@ -160,7 +163,7 @@ class _AssetsLiabilitiesSectionState extends State<AssetsLiabilitiesSection> {
               ?.copyWith(color: AppColors.mutedText),
         ),
         const SizedBox(height: AppSpacing.sm),
-        if (_assetLiabilityAccounts.isEmpty)
+        if (assetLiabilityAccounts.isEmpty)
           const EmptyState(message: 'No Asset or Liability accounts yet.')
         else
           Card(
@@ -169,12 +172,12 @@ class _AssetsLiabilitiesSectionState extends State<AssetsLiabilitiesSection> {
               children: [
                 for (
                   var index = 0;
-                  index < _assetLiabilityAccounts.length;
+                  index < assetLiabilityAccounts.length;
                   index++
                 ) ...[
                   if (index > 0) const Divider(height: 1),
                   _AssetLiabilityRow(
-                    account: _assetLiabilityAccounts[index],
+                    account: assetLiabilityAccounts[index],
                     data: widget.data,
                   ),
                 ],
@@ -380,15 +383,10 @@ class _AssetLiabilityRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final balances = data.ledgerBalances;
-    final latest = data.dailyManualValuationsById.values
-        .where((valuation) => valuation.accountId == account.id)
-        .fold<DailyManualValuation?>(
-          null,
-          (current, valuation) =>
-              current == null || valuation.date.isAfter(current.date)
-              ? valuation
-              : current,
-        );
+    final accountValuations = data.manualValuationsByAccountId[account.id];
+    final latest = accountValuations == null || accountValuations.isEmpty
+        ? null
+        : accountValuations.last;
     final currency = data.currenciesById[account.currencyId];
     final value = account.isValuationAccount
         ? latest?.value

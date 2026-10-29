@@ -1,4 +1,3 @@
-import 'package:csv/csv.dart';
 import 'package:decimal/decimal.dart';
 
 import '../models/models.dart';
@@ -13,8 +12,8 @@ class ModelParsers {
   static ModelParseResult<T> _parseRows<T>(
     String source, {
     required String tableName,
-    required T Function(String rowSource) parseRow,
-    T Function(String rowSource, int rowNumber)? parseRowWithRowNumber,
+    required T Function(Map<String, String> row) parseRow,
+    T Function(Map<String, String> row, int rowNumber)? parseRowWithRowNumber,
     required Iterable<String> Function(T value) keysOf,
   }) {
     final table = CsvTable.parse(source, tableName: tableName);
@@ -23,13 +22,9 @@ class ModelParsers {
     final firstRowByKey = <String, int>{};
     for (var index = 0; index < table.rows.length; index++) {
       try {
-        final rowSource = csv.encode([
-          table.headers,
-          table.rows[index].values.toList(),
-        ]);
         final value = parseRowWithRowNumber == null
-            ? parseRow(rowSource)
-            : parseRowWithRowNumber(rowSource, table.rowNumbers[index]);
+            ? parseRow(table.rows[index])
+            : parseRowWithRowNumber(table.rows[index], table.rowNumbers[index]);
         for (final key in keysOf(value)) {
           final firstRow = firstRowByKey[key];
           if (firstRow != null) {
@@ -73,7 +68,7 @@ class ModelParsers {
   ) => _parseRows(
     source,
     tableName: 'Currencies',
-    parseRow: (row) => parseCurrencies(row).single,
+    parseRow: CurrencyDefinition.fromRow,
     keysOf: (value) => ['id:${value.id}'],
   );
 
@@ -83,7 +78,7 @@ class ModelParsers {
   ) => _parseRows(
     source,
     tableName: 'Accounts',
-    parseRow: (row) => parseAccounts(row, currencies).single,
+    parseRow: (row) => _parseAccountRow(row, currencies),
     keysOf: (value) => ['id:${value.id}'],
   );
 
@@ -91,14 +86,14 @@ class ModelParsers {
       _parseRows(
         source,
         tableName: 'Categories',
-        parseRow: (row) => parseCategories(row).single,
+        parseRow: _parseCategoryRow,
         keysOf: (value) => ['id:${value.id}'],
       );
 
   static ModelParseResult<Tag> parseTagsWithIssues(String source) => _parseRows(
     source,
     tableName: 'Tags',
-    parseRow: (row) => parseTags(row).single,
+    parseRow: _parseTagRow,
     keysOf: (value) => ['id:${value.id}'],
   );
 
@@ -107,7 +102,7 @@ class ModelParsers {
   ) => _parseRows(
     source,
     tableName: 'DisplayPreferences',
-    parseRow: (row) => parseDisplayPreferences(row).single,
+    parseRow: _parseDisplayPreferenceRow,
     keysOf: (value) => ['${value.entityType}:${value.entityId}'],
   );
 
@@ -120,13 +115,13 @@ class ModelParsers {
   }) => _parseRows(
     source,
     tableName: 'Transactions',
-    parseRow: (row) => parseTransactions(
+    parseRow: (row) => _parseTransactionRow(
       row,
       accounts: accounts,
       currencies: currencies,
       categories: categories,
       tags: tags,
-    ).single,
+    ),
     keysOf: (value) => ['id:${value.id}'],
   );
 
@@ -139,7 +134,7 @@ class ModelParsers {
   }) => _parseRows(
     source,
     tableName: 'TransactionsToMigrate',
-    parseRow: (row) => parseTransactions(
+    parseRow: (row) => _parseTransactionRow(
       row,
       accounts: accounts,
       currencies: currencies,
@@ -147,8 +142,8 @@ class ModelParsers {
       tags: tags,
       tableName: 'TransactionsToMigrate',
       migrationRowNumber: 1,
-    ).single,
-    parseRowWithRowNumber: (row, rowNumber) => parseTransactions(
+    ),
+    parseRowWithRowNumber: (row, rowNumber) => _parseTransactionRow(
       row,
       accounts: accounts,
       currencies: currencies,
@@ -156,7 +151,7 @@ class ModelParsers {
       tags: tags,
       tableName: 'TransactionsToMigrate',
       migrationRowNumber: rowNumber,
-    ).single,
+    ),
     keysOf: (value) => ['id:${value.id}'],
   );
 
@@ -170,8 +165,8 @@ class ModelParsers {
     final table = CsvTable.parse(source, tableName: 'TransactionsToMigrate');
     return [
       for (var index = 0; index < table.rows.length; index++)
-        ...parseTransactions(
-          csv.encode([table.headers, table.rows[index].values.toList()]),
+        _parseTransactionRow(
+          table.rows[index],
           accounts: accounts,
           currencies: currencies,
           categories: categories,
@@ -187,7 +182,7 @@ class ModelParsers {
   ) => _parseRows(
     source,
     tableName: 'DailyExchangeRates',
-    parseRow: (row) => parseExchangeRates(row).single,
+    parseRow: _parseExchangeRateRow,
     keysOf: (value) => ['id:${value.id}'],
   );
 
@@ -199,11 +194,11 @@ class ModelParsers {
   }) => _parseRows(
     source,
     tableName: 'DailyAccountBalances',
-    parseRow: (row) => parseDailyAccountBalances(
+    parseRow: (row) => _parseDailyAccountBalanceRow(
       row,
       accounts: accounts,
       currencies: currencies,
-    ).single,
+    ),
     keysOf: (value) => ['id:${value.id}'],
   );
 
@@ -213,7 +208,7 @@ class ModelParsers {
   ) => _parseRows(
     source,
     tableName: 'DailyNetWorth',
-    parseRow: (row) => parseDailyNetWorth(row, currencies).single,
+    parseRow: (row) => _parseDailyNetWorthRow(row, currencies),
     keysOf: (value) => ['id:${value.id}'],
   );
 
@@ -225,11 +220,11 @@ class ModelParsers {
   }) => _parseRows(
     source,
     tableName: 'DailyManualValuations',
-    parseRow: (row) => parseDailyManualValuations(
+    parseRow: (row) => _parseDailyManualValuationRow(
       row,
       accounts: accounts,
       currencies: currencies,
-    ).single,
+    ),
     keysOf: (value) => [
       'id:${value.id}',
       'account-date:${value.accountId}:${_dateString(value.date)}',
@@ -251,50 +246,7 @@ class ModelParsers {
   ) {
     final table = CsvTable.parse(source, tableName: 'Accounts');
     return _uniqueById(
-      table.rows.map((row) {
-        final currencyId = requiredValue(row, 'currency');
-        final currency = _currency(currencies, currencyId);
-        final accountType = requiredValue(row, 'account_type');
-        final accountTypeKind = AccountType.parse(accountType);
-        final usesManualValuations = _parseBoolean(
-          requiredValue(row, 'uses_manual_valuations'),
-          fieldName: 'uses_manual_valuations',
-        );
-        if (usesManualValuations &&
-            accountTypeKind != AccountType.asset &&
-            accountTypeKind != AccountType.liability) {
-          throw FormatException(
-            'Only asset and liability accounts can use manual valuations.',
-          );
-        }
-        final openingBalance = Money.fromMajorUnits(
-          value: requiredValue(row, 'opening_balance'),
-          currency: currency,
-        );
-        final openingDate = parseDateOnly(
-          requiredValue(row, 'opening_date'),
-          fieldName: 'opening_date',
-        );
-        final closingDate = _optionalDate(row, 'closing_date');
-        if (closingDate != null && closingDate.isBefore(openingDate)) {
-          throw FormatException('closing_date cannot be before opening_date.');
-        }
-        if (usesManualValuations && openingBalance.minorUnits != 0) {
-          throw FormatException(
-            'Manual valuation accounts must have opening_balance 0.',
-          );
-        }
-        return Account(
-          id: requiredValue(row, 'account_id'),
-          name: requiredValue(row, 'name'),
-          accountType: accountType,
-          currencyId: currencyId,
-          openingBalance: openingBalance,
-          openingDate: openingDate,
-          closingDate: closingDate,
-          usesManualValuations: usesManualValuations,
-        );
-      }),
+      table.rows.map((row) => _parseAccountRow(row, currencies)),
       (account) => account.id,
       table.tableName,
     );
@@ -304,19 +256,7 @@ class ModelParsers {
     final table = CsvTable.parse(source, tableName: 'Categories');
     return _uniqueById(
       table.rows.map((row) {
-        final rawTypes = optionalValue(row, 'allowed_transaction_types');
-        final types = rawTypes == null
-            ? <TransactionType>{}
-            : rawTypes
-                  .split(',')
-                  .where((value) => value.trim().isNotEmpty)
-                  .map(TransactionTypeWireValue.parse)
-                  .toSet();
-        return Category(
-          id: requiredValue(row, 'category_id'),
-          name: requiredValue(row, 'category_name'),
-          allowedTransactionTypes: Set.unmodifiable(types),
-        );
+        return _parseCategoryRow(row);
       }),
       (category) => category.id,
       table.tableName,
@@ -326,12 +266,7 @@ class ModelParsers {
   static List<Tag> parseTags(String source) {
     final table = CsvTable.parse(source, tableName: 'Tags');
     return _uniqueById(
-      table.rows.map(
-        (row) => Tag(
-          id: requiredValue(row, 'tag_id'),
-          name: requiredValue(row, 'tag_name'),
-        ),
-      ),
+      table.rows.map(_parseTagRow),
       (tag) => tag.id,
       table.tableName,
     );
@@ -339,32 +274,7 @@ class ModelParsers {
 
   static List<DisplayPreference> parseDisplayPreferences(String source) {
     final table = CsvTable.parse(source, tableName: 'DisplayPreferences');
-    return table.rows.map((row) {
-      final showInApp = _parseBoolean(
-        requiredValue(row, 'show_in_app'),
-        fieldName: 'show_in_app',
-      );
-      final showInEntryForms = _parseBoolean(
-        requiredValue(row, 'show_in_entry_forms'),
-        fieldName: 'show_in_entry_forms',
-      );
-      if (!showInApp && showInEntryForms) {
-        throw FormatException(
-          'show_in_entry_forms cannot be TRUE when show_in_app is FALSE.',
-        );
-      }
-      final entityType = requiredValue(row, 'entity_type');
-      if (!const {'account', 'category', 'tag'}.contains(entityType)) {
-        throw FormatException('Unsupported entity_type: $entityType.');
-      }
-      return DisplayPreference(
-        entityType: entityType,
-        entityId: requiredValue(row, 'entity_id'),
-        displayOrder: int.parse(requiredValue(row, 'display_order')),
-        showInApp: showInApp,
-        showInEntryForms: showInEntryForms,
-      );
-    }).toList();
+    return table.rows.map(_parseDisplayPreferenceRow).toList();
   }
 
   static List<IncomeAllocation> parseIncomeAllocations(
@@ -452,10 +362,7 @@ class ModelParsers {
     final result = _parseRows(
       source,
       tableName: 'Achievements',
-      parseRow: (rowSource) => _parseAchievementRow(
-        CsvTable.parse(rowSource, tableName: 'Achievements').rows.single,
-        currencies,
-      ),
+      parseRow: (row) => _parseAchievementRow(row, currencies),
       keysOf: (achievement) => [
         'id:${achievement.id}',
         'target:${achievement.target.minorUnits}',
@@ -615,96 +522,17 @@ class ModelParsers {
   }) {
     final table = CsvTable.parse(source, tableName: tableName);
     return _uniqueById(
-      table.rows.map((row) {
-        final sourceAccountId = optionalValue(row, 'source_account_id');
-        final destinationAccountId = optionalValue(row, 'dest_account_id');
-        final sourceAmount = _optionalAmount(
+      table.rows.map(
+        (row) => _parseTransactionRow(
           row,
-          amountField: 'source_amount',
-          accountId: sourceAccountId,
           accounts: accounts,
           currencies: currencies,
-        );
-        final destinationAmount = _optionalAmount(
-          row,
-          amountField: 'dest_amount',
-          accountId: destinationAccountId,
-          accounts: accounts,
-          currencies: currencies,
-        );
-        final date = parseDateOnly(
-          requiredValue(row, 'date'),
-          fieldName: 'date',
-        );
-        final optionalId = optionalValue(row, 'transaction_id');
-        final optionalCreatedAt = optionalValue(row, 'created_at');
-        final migrationRow = tableName == 'TransactionsToMigrate';
-        final transaction = Transaction(
-          id:
-              optionalId ??
-              (migrationRow
-                  ? 'migration-pending-$migrationRowNumber'
-                  : requiredValue(row, 'transaction_id')),
-          createdAt: optionalCreatedAt == null && migrationRow
-              ? date.add(Duration(microseconds: migrationRowNumber))
-              : parseUtcTimestamp(
-                  optionalCreatedAt ?? requiredValue(row, 'created_at'),
-                  fieldName: 'created_at',
-                ),
-          date: date,
-          type: TransactionTypeWireValue.parse(
-            requiredValue(row, 'transaction_type'),
-          ),
-          sourceAmount: sourceAmount,
-          sourceAccountId: sourceAccountId,
-          destinationAmount: destinationAmount,
-          destinationAccountId: destinationAccountId,
-          categoryId: optionalValue(row, 'category'),
-          tagId: optionalValue(row, 'tag'),
-          description: optionalValue(row, 'description') ?? '',
-        );
-        final validationErrors = transaction.validate();
-        if (categories != null && transaction.categoryId != null) {
-          final category = categories[transaction.categoryId];
-          if (category == null) {
-            validationErrors.add(
-              'Unknown category: ${transaction.categoryId}.',
-            );
-          } else if (!category.allowedTransactionTypes.contains(
-            transaction.type,
-          )) {
-            validationErrors.add(
-              'Category ${transaction.categoryId} is not allowed for '
-              '${transaction.type.wireValue} transactions.',
-            );
-          }
-        }
-        if (tags != null &&
-            transaction.tagId != null &&
-            !tags.containsKey(transaction.tagId)) {
-          validationErrors.add('Unknown tag: ${transaction.tagId}.');
-        }
-        for (final accountId in [
-          transaction.sourceAccountId,
-          transaction.destinationAccountId,
-        ]) {
-          if (accountId == null) continue;
-          final account = accounts[accountId];
-          if (account == null) continue;
-          if (!_accountIsActiveOn(account, transaction.date)) {
-            validationErrors.add(
-              'Transaction date is outside account $accountId lifetime.',
-            );
-          }
-        }
-        if (validationErrors.isNotEmpty) {
-          throw FormatException(
-            'Invalid transaction ${transaction.id}: '
-            '${validationErrors.join(' ')}',
-          );
-        }
-        return transaction;
-      }),
+          categories: categories,
+          tags: tags,
+          tableName: tableName,
+          migrationRowNumber: migrationRowNumber,
+        ),
+      ),
       (transaction) => transaction.id,
       table.tableName,
     );
@@ -713,26 +541,7 @@ class ModelParsers {
   static List<ExchangeRate> parseExchangeRates(String source) {
     final table = CsvTable.parse(source, tableName: 'DailyExchangeRates');
     return _uniqueById(
-      table.rows.map(
-        (row) => ExchangeRate(
-          id: requiredValue(row, 'rate_id'),
-          date: parseDateOnly(
-            requiredValue(row, 'rate_date'),
-            fieldName: 'rate_date',
-          ),
-          currencyId: requiredValue(row, 'currency'),
-          rateToUsd: Decimal.parse(requiredValue(row, 'rate_to_usd')),
-          sourceRateDate: parseDateOnly(
-            optionalValue(row, 'source_rate_date') ??
-                requiredValue(row, 'rate_date'),
-            fieldName: 'source_rate_date',
-          ),
-          retrievedAt: parseUtcTimestamp(
-            requiredValue(row, 'retrieved_at'),
-            fieldName: 'retrieved_at',
-          ),
-        ),
-      ),
+      table.rows.map(_parseExchangeRateRow),
       (rate) => rate.id,
       table.tableName,
     );
@@ -744,38 +553,14 @@ class ModelParsers {
     required Map<String, CurrencyDefinition> currencies,
   }) {
     final table = CsvTable.parse(source, tableName: 'DailyAccountBalances');
-    final usd = _currency(currencies, 'USD');
     return _uniqueById(
-      table.rows.map((row) {
-        final accountId = requiredValue(row, 'account_id');
-        final account = accounts[accountId];
-        if (account == null) {
-          throw FormatException(
-            'DailyAccountBalances references unknown account: $accountId.',
-          );
-        }
-        final accountCurrency = _currency(currencies, account.currencyId);
-        return DailyAccountBalance(
-          id: requiredValue(row, 'balance_id'),
-          date: parseDateOnly(
-            requiredValue(row, 'balance_date'),
-            fieldName: 'balance_date',
-          ),
-          accountId: accountId,
-          balance: Money.fromMajorUnits(
-            value: requiredValue(row, 'balance'),
-            currency: accountCurrency,
-          ),
-          balanceUsd: Money.fromMajorUnits(
-            value: requiredValue(row, 'balance_usd'),
-            currency: usd,
-          ),
-          retrievedAt: parseUtcTimestamp(
-            requiredValue(row, 'retrieved_at'),
-            fieldName: 'retrieved_at',
-          ),
-        );
-      }),
+      table.rows.map(
+        (row) => _parseDailyAccountBalanceRow(
+          row,
+          accounts: accounts,
+          currencies: currencies,
+        ),
+      ),
       (balance) => balance.id,
       table.tableName,
     );
@@ -787,29 +572,15 @@ class ModelParsers {
     required Map<String, CurrencyDefinition> currencies,
   }) {
     final table = CsvTable.parse(source, tableName: 'DailyManualValuations');
-    final valuations = table.rows.map((row) {
-      final accountId = requiredValue(row, 'account_id');
-      final account = accounts[accountId];
-      if (account == null) {
-        throw FormatException(
-          'DailyManualValuations references unknown account: $accountId.',
-        );
-      }
-      if (!account.isValuationAccount) {
-        throw FormatException(
-          'DailyManualValuations references non-valuation account: $accountId.',
-        );
-      }
-      return DailyManualValuation(
-        id: requiredValue(row, 'valuation_id'),
-        date: parseDateOnly(requiredValue(row, 'date'), fieldName: 'date'),
-        accountId: accountId,
-        value: Money.fromMajorUnits(
-          value: requiredValue(row, 'value'),
-          currency: _currency(currencies, account.currencyId),
-        ),
-      );
-    }).toList();
+    final valuations = table.rows
+        .map(
+          (row) => _parseDailyManualValuationRow(
+            row,
+            accounts: accounts,
+            currencies: currencies,
+          ),
+        )
+        .toList();
     final accountDates = <String>{};
     for (final valuation in valuations) {
       final key = '${valuation.accountId}:${_dateString(valuation.date)}';
@@ -832,29 +603,299 @@ class ModelParsers {
     Map<String, CurrencyDefinition> currencies,
   ) {
     final table = CsvTable.parse(source, tableName: 'DailyNetWorth');
-    final usd = _currency(currencies, 'USD');
     return _uniqueById(
-      table.rows.map(
-        (row) => DailyNetWorth(
-          id: requiredValue(row, 'net_worth_id'),
-          date: parseDateOnly(
-            requiredValue(row, 'net_worth_date'),
-            fieldName: 'net_worth_date',
-          ),
-          amount: Money.fromMajorUnits(
-            value: requiredValue(row, 'amount'),
-            currency: usd,
-          ),
-          retrievedAt: parseUtcTimestamp(
-            requiredValue(row, 'retrieved_at'),
-            fieldName: 'retrieved_at',
-          ),
-        ),
-      ),
+      table.rows.map((row) => _parseDailyNetWorthRow(row, currencies)),
       (netWorth) => netWorth.id,
       table.tableName,
     );
   }
+
+  static Account _parseAccountRow(
+    Map<String, String> row,
+    Map<String, CurrencyDefinition> currencies,
+  ) {
+    final currencyId = requiredValue(row, 'currency');
+    final currency = _currency(currencies, currencyId);
+    final accountType = requiredValue(row, 'account_type');
+    final accountTypeKind = AccountType.parse(accountType);
+    final usesManualValuations = _parseBoolean(
+      requiredValue(row, 'uses_manual_valuations'),
+      fieldName: 'uses_manual_valuations',
+    );
+    if (usesManualValuations &&
+        accountTypeKind != AccountType.asset &&
+        accountTypeKind != AccountType.liability) {
+      throw FormatException(
+        'Only asset and liability accounts can use manual valuations.',
+      );
+    }
+    final openingBalance = Money.fromMajorUnits(
+      value: requiredValue(row, 'opening_balance'),
+      currency: currency,
+    );
+    final openingDate = parseDateOnly(
+      requiredValue(row, 'opening_date'),
+      fieldName: 'opening_date',
+    );
+    final closingDate = _optionalDate(row, 'closing_date');
+    if (closingDate != null && closingDate.isBefore(openingDate)) {
+      throw FormatException('closing_date cannot be before opening_date.');
+    }
+    if (usesManualValuations && openingBalance.minorUnits != 0) {
+      throw FormatException(
+        'Manual valuation accounts must have opening_balance 0.',
+      );
+    }
+    return Account(
+      id: requiredValue(row, 'account_id'),
+      name: requiredValue(row, 'name'),
+      accountType: accountType,
+      currencyId: currencyId,
+      openingBalance: openingBalance,
+      openingDate: openingDate,
+      closingDate: closingDate,
+      usesManualValuations: usesManualValuations,
+    );
+  }
+
+  static Category _parseCategoryRow(Map<String, String> row) {
+    final rawTypes = optionalValue(row, 'allowed_transaction_types');
+    final types = rawTypes == null
+        ? <TransactionType>{}
+        : rawTypes
+              .split(',')
+              .where((value) => value.trim().isNotEmpty)
+              .map(TransactionTypeWireValue.parse)
+              .toSet();
+    return Category(
+      id: requiredValue(row, 'category_id'),
+      name: requiredValue(row, 'category_name'),
+      allowedTransactionTypes: Set.unmodifiable(types),
+    );
+  }
+
+  static Tag _parseTagRow(Map<String, String> row) => Tag(
+    id: requiredValue(row, 'tag_id'),
+    name: requiredValue(row, 'tag_name'),
+  );
+
+  static DisplayPreference _parseDisplayPreferenceRow(Map<String, String> row) {
+    final showInApp = _parseBoolean(
+      requiredValue(row, 'show_in_app'),
+      fieldName: 'show_in_app',
+    );
+    final showInEntryForms = _parseBoolean(
+      requiredValue(row, 'show_in_entry_forms'),
+      fieldName: 'show_in_entry_forms',
+    );
+    if (!showInApp && showInEntryForms) {
+      throw FormatException(
+        'show_in_entry_forms cannot be TRUE when show_in_app is FALSE.',
+      );
+    }
+    final entityType = requiredValue(row, 'entity_type');
+    if (!const {'account', 'category', 'tag'}.contains(entityType)) {
+      throw FormatException('Unsupported entity_type: $entityType.');
+    }
+    return DisplayPreference(
+      entityType: entityType,
+      entityId: requiredValue(row, 'entity_id'),
+      displayOrder: int.parse(requiredValue(row, 'display_order')),
+      showInApp: showInApp,
+      showInEntryForms: showInEntryForms,
+    );
+  }
+
+  static Transaction _parseTransactionRow(
+    Map<String, String> row, {
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+    Map<String, Category>? categories,
+    Map<String, Tag>? tags,
+    String tableName = 'Transactions',
+    int migrationRowNumber = 0,
+  }) {
+    final sourceAccountId = optionalValue(row, 'source_account_id');
+    final destinationAccountId = optionalValue(row, 'dest_account_id');
+    final sourceAmount = _optionalAmount(
+      row,
+      amountField: 'source_amount',
+      accountId: sourceAccountId,
+      accounts: accounts,
+      currencies: currencies,
+    );
+    final destinationAmount = _optionalAmount(
+      row,
+      amountField: 'dest_amount',
+      accountId: destinationAccountId,
+      accounts: accounts,
+      currencies: currencies,
+    );
+    final date = parseDateOnly(requiredValue(row, 'date'), fieldName: 'date');
+    final optionalId = optionalValue(row, 'transaction_id');
+    final optionalCreatedAt = optionalValue(row, 'created_at');
+    final migrationRow = tableName == 'TransactionsToMigrate';
+    final transaction = Transaction(
+      id:
+          optionalId ??
+          (migrationRow
+              ? 'migration-pending-$migrationRowNumber'
+              : requiredValue(row, 'transaction_id')),
+      createdAt: optionalCreatedAt == null && migrationRow
+          ? date.add(Duration(microseconds: migrationRowNumber))
+          : parseUtcTimestamp(
+              optionalCreatedAt ?? requiredValue(row, 'created_at'),
+              fieldName: 'created_at',
+            ),
+      date: date,
+      type: TransactionTypeWireValue.parse(
+        requiredValue(row, 'transaction_type'),
+      ),
+      sourceAmount: sourceAmount,
+      sourceAccountId: sourceAccountId,
+      destinationAmount: destinationAmount,
+      destinationAccountId: destinationAccountId,
+      categoryId: optionalValue(row, 'category'),
+      tagId: optionalValue(row, 'tag'),
+      description: optionalValue(row, 'description') ?? '',
+    );
+    final validationErrors = transaction.validate();
+    if (categories != null && transaction.categoryId != null) {
+      final category = categories[transaction.categoryId];
+      if (category == null) {
+        validationErrors.add('Unknown category: ${transaction.categoryId}.');
+      } else if (!category.allowedTransactionTypes.contains(transaction.type)) {
+        validationErrors.add(
+          'Category ${transaction.categoryId} is not allowed for '
+          '${transaction.type.wireValue} transactions.',
+        );
+      }
+    }
+    if (tags != null &&
+        transaction.tagId != null &&
+        !tags.containsKey(transaction.tagId)) {
+      validationErrors.add('Unknown tag: ${transaction.tagId}.');
+    }
+    for (final accountId in [
+      transaction.sourceAccountId,
+      transaction.destinationAccountId,
+    ]) {
+      if (accountId == null) continue;
+      final account = accounts[accountId];
+      if (account != null && !_accountIsActiveOn(account, transaction.date)) {
+        validationErrors.add(
+          'Transaction date is outside account $accountId lifetime.',
+        );
+      }
+    }
+    if (validationErrors.isNotEmpty) {
+      throw FormatException(
+        'Invalid transaction ${transaction.id}: ${validationErrors.join(' ')}',
+      );
+    }
+    return transaction;
+  }
+
+  static ExchangeRate _parseExchangeRateRow(Map<String, String> row) =>
+      ExchangeRate(
+        id: requiredValue(row, 'rate_id'),
+        date: parseDateOnly(
+          requiredValue(row, 'rate_date'),
+          fieldName: 'rate_date',
+        ),
+        currencyId: requiredValue(row, 'currency'),
+        rateToUsd: Decimal.parse(requiredValue(row, 'rate_to_usd')),
+        sourceRateDate: parseDateOnly(
+          optionalValue(row, 'source_rate_date') ??
+              requiredValue(row, 'rate_date'),
+          fieldName: 'source_rate_date',
+        ),
+        retrievedAt: parseUtcTimestamp(
+          requiredValue(row, 'retrieved_at'),
+          fieldName: 'retrieved_at',
+        ),
+      );
+
+  static DailyAccountBalance _parseDailyAccountBalanceRow(
+    Map<String, String> row, {
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+  }) {
+    final accountId = requiredValue(row, 'account_id');
+    final account = accounts[accountId];
+    if (account == null) {
+      throw FormatException(
+        'DailyAccountBalances references unknown account: $accountId.',
+      );
+    }
+    return DailyAccountBalance(
+      id: requiredValue(row, 'balance_id'),
+      date: parseDateOnly(
+        requiredValue(row, 'balance_date'),
+        fieldName: 'balance_date',
+      ),
+      accountId: accountId,
+      balance: Money.fromMajorUnits(
+        value: requiredValue(row, 'balance'),
+        currency: _currency(currencies, account.currencyId),
+      ),
+      balanceUsd: Money.fromMajorUnits(
+        value: requiredValue(row, 'balance_usd'),
+        currency: _currency(currencies, 'USD'),
+      ),
+      retrievedAt: parseUtcTimestamp(
+        requiredValue(row, 'retrieved_at'),
+        fieldName: 'retrieved_at',
+      ),
+    );
+  }
+
+  static DailyManualValuation _parseDailyManualValuationRow(
+    Map<String, String> row, {
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+  }) {
+    final accountId = requiredValue(row, 'account_id');
+    final account = accounts[accountId];
+    if (account == null) {
+      throw FormatException(
+        'DailyManualValuations references unknown account: $accountId.',
+      );
+    }
+    if (!account.isValuationAccount) {
+      throw FormatException(
+        'DailyManualValuations references non-valuation account: $accountId.',
+      );
+    }
+    return DailyManualValuation(
+      id: requiredValue(row, 'valuation_id'),
+      date: parseDateOnly(requiredValue(row, 'date'), fieldName: 'date'),
+      accountId: accountId,
+      value: Money.fromMajorUnits(
+        value: requiredValue(row, 'value'),
+        currency: _currency(currencies, account.currencyId),
+      ),
+    );
+  }
+
+  static DailyNetWorth _parseDailyNetWorthRow(
+    Map<String, String> row,
+    Map<String, CurrencyDefinition> currencies,
+  ) => DailyNetWorth(
+    id: requiredValue(row, 'net_worth_id'),
+    date: parseDateOnly(
+      requiredValue(row, 'net_worth_date'),
+      fieldName: 'net_worth_date',
+    ),
+    amount: Money.fromMajorUnits(
+      value: requiredValue(row, 'amount'),
+      currency: _currency(currencies, 'USD'),
+    ),
+    retrievedAt: parseUtcTimestamp(
+      requiredValue(row, 'retrieved_at'),
+      fieldName: 'retrieved_at',
+    ),
+  );
 
   static Money? _optionalAmount(
     Map<String, String> row, {

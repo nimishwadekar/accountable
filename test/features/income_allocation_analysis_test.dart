@@ -167,4 +167,81 @@ void main() {
     expect(progress.expectedAmount.minorUnits, 100);
     expect(progress.actualAmount.currencyId, 'CHF');
   });
+
+  test('aggregates a month once for allocations across accounts', () async {
+    final source = await AssetAppDataRepository().load();
+    final usd = source.currenciesById['USD']!;
+    final checking = source.accountsById['chase_checking']!;
+    final savings = source.accountsById['chase_freedom_rise']!;
+    final date = DateTime.utc(2026, 10, 10);
+    final expectedPerIncome = Money.fromMajorUnits(value: '100', currency: usd);
+    IncomeAllocation allocation(String id, Account account) => IncomeAllocation(
+      id: id,
+      name: id,
+      incomeCategoryId: 'salary',
+      incomeAccountId: account.id,
+      transferCategoryId: 'general',
+      expectedAmountPerIncome: expectedPerIncome,
+      startDate: date,
+      endDate: null,
+      createdAt: date,
+      updatedAt: date,
+    );
+    Transaction income(String id, Account account) => Transaction(
+      id: id,
+      createdAt: date,
+      date: date,
+      type: TransactionType.income,
+      sourceAmount: null,
+      sourceAccountId: null,
+      destinationAmount: expectedPerIncome,
+      destinationAccountId: account.id,
+      categoryId: 'salary',
+      tagId: null,
+      description: id,
+    );
+    Transaction transfer(String id, Account account, String amount) =>
+        Transaction(
+          id: id,
+          createdAt: date.add(const Duration(minutes: 1)),
+          date: date,
+          type: TransactionType.transfer,
+          sourceAmount: Money.fromMajorUnits(value: amount, currency: usd),
+          sourceAccountId: account.id,
+          destinationAmount: Money.fromMajorUnits(value: amount, currency: usd),
+          destinationAccountId: checking.id,
+          categoryId: 'general',
+          tagId: null,
+          description: id,
+        );
+    final data = AppDataSnapshot(
+      accounts: source.accounts,
+      categories: source.categories,
+      currencies: source.currencies,
+      tags: source.tags,
+      transactions: [
+        income('income-checking', checking),
+        income('income-savings', savings),
+        transfer('transfer-checking', checking, '60'),
+        transfer('transfer-savings', savings, '40'),
+      ],
+      exchangeRates: source.exchangeRates,
+      dailyAccountBalances: source.dailyAccountBalances,
+      dailyNetWorth: source.dailyNetWorth,
+      dailyManualValuations: source.dailyManualValuations,
+      incomeAllocations: [
+        allocation('checking-allocation', checking),
+        allocation('savings-allocation', savings),
+      ],
+    );
+
+    final progress = IncomeAllocationAnalyzer(data)
+        .analyze(month: DateTime.utc(2026, 10, 1), incomeCategoryId: 'salary');
+
+    expect(progress.map((item) => item.expectedAmount.minorUnits), [
+      10000,
+      10000,
+    ]);
+    expect(progress.map((item) => item.actualAmount.minorUnits), [6000, 4000]);
+  });
 }

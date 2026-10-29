@@ -24,62 +24,106 @@ class IncomeAllocationAnalyzer {
   List<IncomeAllocationProgress> analyze({
     required DateTime month,
     required String incomeCategoryId,
+  }) =>
+      analyzeAll(
+        month: month,
+        incomeCategoryIds: {incomeCategoryId},
+      )[incomeCategoryId] ??
+      const [];
+
+  Map<String, List<IncomeAllocationProgress>> analyzeAll({
+    required DateTime month,
+    required Set<String> incomeCategoryIds,
   }) {
     final monthDate = _dateOnly(month);
-    return [
-      for (final allocation in data.incomeAllocations.where(
-        (allocation) => allocation.incomeCategoryId == incomeCategoryId,
-      ))
-        _progress(
-          allocation,
-          monthDate,
-          _transactionsInMonth(monthDate).where((transaction) {
-            final transactionDate = _dateOnly(transaction.date);
-            return transaction.type == TransactionType.income &&
-                transaction.categoryId == incomeCategoryId &&
-                transaction.destinationAccountId ==
-                    allocation.incomeAccountId &&
-                transactionDate.year == monthDate.year &&
-                transactionDate.month == monthDate.month &&
-                _isWithinAllocationPeriod(transactionDate, allocation);
-          }).length,
-        ),
-    ];
-  }
+    final allocationsByCategory = <String, List<IncomeAllocation>>{};
+    final byIncomeCategoryAndAccount =
+        <(String, String), List<IncomeAllocation>>{};
+    final byTransferCategoryAndSource =
+        <(String, String), List<IncomeAllocation>>{};
+    final incomeCounts = <String, int>{};
+    final transferTotals = <String, int>{};
+    for (final allocation in data.incomeAllocations) {
+      if (!incomeCategoryIds.contains(allocation.incomeCategoryId)) continue;
+      allocationsByCategory
+          .putIfAbsent(allocation.incomeCategoryId, () => [])
+          .add(allocation);
+      byIncomeCategoryAndAccount
+          .putIfAbsent((
+            allocation.incomeCategoryId,
+            allocation.incomeAccountId,
+          ), () => [])
+          .add(allocation);
+      byTransferCategoryAndSource
+          .putIfAbsent((
+            allocation.transferCategoryId,
+            allocation.incomeAccountId,
+          ), () => [])
+          .add(allocation);
+      incomeCounts[allocation.id] = 0;
+      transferTotals[allocation.id] = 0;
+    }
 
-  IncomeAllocationProgress _progress(
-    IncomeAllocation allocation,
-    DateTime month,
-    int incomeCount,
-  ) {
-    final expectedMinorUnits =
-        allocation.expectedAmountPerIncome.minorUnits * incomeCount;
-    var actualMinorUnits = 0;
-    for (final transaction in _transactionsInMonth(month)) {
+    for (final transaction in _transactionsInMonth(monthDate)) {
       final transactionDate = _dateOnly(transaction.date);
-      if (transaction.type != TransactionType.transfer ||
-          transaction.sourceAccountId != allocation.incomeAccountId ||
-          transaction.categoryId != allocation.transferCategoryId ||
-          transactionDate.year != month.year ||
-          transactionDate.month != month.month ||
-          !_isWithinAllocationPeriod(transactionDate, allocation)) {
+      if (transactionDate.year != monthDate.year ||
+          transactionDate.month != monthDate.month) {
         continue;
       }
-      final amount = transaction.sourceAmount;
-      if (amount == null) continue;
-      actualMinorUnits += amount.minorUnits;
+      if (transaction.type == TransactionType.income &&
+          transaction.categoryId != null &&
+          incomeCategoryIds.contains(transaction.categoryId)) {
+        final matchingAllocations =
+            byIncomeCategoryAndAccount[(
+              transaction.categoryId!,
+              transaction.destinationAccountId ?? '',
+            )] ??
+            const <IncomeAllocation>[];
+        for (final allocation in matchingAllocations) {
+          if (_isWithinAllocationPeriod(transactionDate, allocation)) {
+            incomeCounts[allocation.id] = incomeCounts[allocation.id]! + 1;
+          }
+        }
+      } else if (transaction.type == TransactionType.transfer &&
+          transaction.sourceAccountId != null &&
+          transaction.categoryId != null &&
+          transaction.sourceAmount != null) {
+        final matchingAllocations =
+            byTransferCategoryAndSource[(
+              transaction.categoryId!,
+              transaction.sourceAccountId!,
+            )] ??
+            const <IncomeAllocation>[];
+        for (final allocation in matchingAllocations) {
+          if (_isWithinAllocationPeriod(transactionDate, allocation)) {
+            transferTotals[allocation.id] =
+                transferTotals[allocation.id]! +
+                transaction.sourceAmount!.minorUnits;
+          }
+        }
+      }
     }
-    return IncomeAllocationProgress(
-      allocation: allocation,
-      expectedAmount: Money(
-        minorUnits: expectedMinorUnits,
-        currencyId: allocation.expectedAmountPerIncome.currencyId,
-      ),
-      actualAmount: Money(
-        minorUnits: actualMinorUnits,
-        currencyId: allocation.expectedAmountPerIncome.currencyId,
-      ),
-    );
+
+    return {
+      for (final categoryId in incomeCategoryIds)
+        categoryId: [
+          for (final allocation
+              in allocationsByCategory[categoryId] ?? const [])
+            IncomeAllocationProgress(
+              allocation: allocation,
+              expectedAmount: Money(
+                minorUnits:
+                    allocation.expectedAmountPerIncome.minorUnits *
+                    incomeCounts[allocation.id]!,
+                currencyId: allocation.expectedAmountPerIncome.currencyId,
+              ),
+              actualAmount: Money(
+                minorUnits: transferTotals[allocation.id]!,
+                currencyId: allocation.expectedAmountPerIncome.currencyId,
+              ),
+            ),
+        ],
+    };
   }
 
   Iterable<Transaction> _transactionsInMonth(DateTime month) {

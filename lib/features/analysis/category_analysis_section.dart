@@ -33,6 +33,16 @@ class CategoryAnalysisSection extends StatelessWidget {
 
   Widget _buildCategoryWidget(BuildContext context) {
     final total = result.totalPositive;
+    final allocationProgressByCategory =
+        month == null || result.positiveValues.isEmpty
+        ? const <String, List<IncomeAllocationProgress>>{}
+        : IncomeAllocationAnalyzer(data).analyzeAll(
+            month: month!,
+            incomeCategoryIds: {
+              for (final value in result.positiveValues)
+                if (value.categoryId != null) value.categoryId!,
+            },
+          );
     return AnalysisChartSection(
       title: title,
       subtitle: null,
@@ -139,8 +149,8 @@ class CategoryAnalysisSection extends StatelessWidget {
                       ),
                       if (month != null && value.categoryId != null)
                         ..._buildAllocationRows(
-                          value.categoryId!,
-                          month!,
+                          allocationProgressByCategory[value.categoryId!] ??
+                              const [],
                           context,
                         ),
                     ],
@@ -215,12 +225,9 @@ class CategoryAnalysisSection extends StatelessWidget {
   }
 
   List<Widget> _buildAllocationRows(
-    String categoryId,
-    DateTime month,
+    List<IncomeAllocationProgress> progress,
     BuildContext context,
   ) {
-    final progress = IncomeAllocationAnalyzer(data)
-        .analyze(month: month, incomeCategoryId: categoryId);
     return [
       for (final item in progress)
         Padding(

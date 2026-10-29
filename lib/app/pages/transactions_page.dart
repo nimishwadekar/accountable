@@ -62,8 +62,8 @@ class _TransactionsPageState extends State<TransactionsPage> {
   String? _categoryId;
   String? _tagId;
   DateTimeRange? _dateRange;
-  bool _showScrollToTop = false;
-  bool _showAccountBalances = false;
+  final ValueNotifier<bool> _showScrollToTop = ValueNotifier(false);
+  final ValueNotifier<bool> _showAccountBalances = ValueNotifier(false);
   AppDataSnapshot? _cachedFilterData;
   String? _cachedFilterKey;
   List<Transaction>? _cachedFilteredTransactions;
@@ -94,6 +94,22 @@ class _TransactionsPageState extends State<TransactionsPage> {
     _scrollController.addListener(_handleScroll);
   }
 
+  @override
+  void didUpdateWidget(covariant TransactionsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (identical(oldWidget.data, widget.data)) return;
+    if (!widget.data.accountsById.containsKey(_accountId)) _accountId = null;
+    if (!widget.data.categoriesById.containsKey(_categoryId)) {
+      _categoryId = null;
+    }
+    if (!widget.data.tagsById.containsKey(_tagId)) _tagId = null;
+    _cachedFilterData = null;
+    _cachedFilterKey = null;
+    _cachedFilteredTransactions = null;
+    _cachedListItems = null;
+    _cachedListSource = null;
+  }
+
   TransactionType? _transactionTypeFromName(String? value) {
     for (final type in TransactionType.values) {
       if (type.name == value) return type;
@@ -106,6 +122,8 @@ class _TransactionsPageState extends State<TransactionsPage> {
     _scrollController
       ..removeListener(_handleScroll)
       ..dispose();
+    _showScrollToTop.dispose();
+    _showAccountBalances.dispose();
     super.dispose();
   }
 
@@ -190,16 +208,20 @@ class _TransactionsPageState extends State<TransactionsPage> {
                               const EmptyTransactionsState()
                             else
                               _buildGroupedList(transactions),
-                            if (_showScrollToTop)
-                              Positioned(
-                                right: AppSpacing.md,
-                                bottom: AppSpacing.lg * 3,
-                                child: FloatingActionButton.small(
-                                  onPressed: _scrollToTop,
-                                  tooltip: 'Back to top',
-                                  child: const Icon(Icons.arrow_upward),
-                                ),
-                              ),
+                            ValueListenableBuilder<bool>(
+                              valueListenable: _showScrollToTop,
+                              builder: (context, visible, _) => visible
+                                  ? Positioned(
+                                      right: AppSpacing.md,
+                                      bottom: AppSpacing.lg * 3,
+                                      child: FloatingActionButton.small(
+                                        onPressed: _scrollToTop,
+                                        tooltip: 'Back to top',
+                                        child: const Icon(Icons.arrow_upward),
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
                           ],
                         ),
                       ),
@@ -382,15 +404,15 @@ class _TransactionsPageState extends State<TransactionsPage> {
     );
   }
 
-  Widget _buildBalanceVisibilityButton() => OutlinedButton.icon(
-    onPressed: () =>
-        setState(() => _showAccountBalances = !_showAccountBalances),
-    icon: Icon(
-      _showAccountBalances
-          ? Icons.visibility_off_outlined
-          : Icons.visibility_outlined,
+  Widget _buildBalanceVisibilityButton() => ValueListenableBuilder<bool>(
+    valueListenable: _showAccountBalances,
+    builder: (context, visible, _) => OutlinedButton.icon(
+      onPressed: () => _showAccountBalances.value = !visible,
+      icon: Icon(
+        visible ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+      ),
+      label: Text(visible ? 'Hide balances' : 'Show balances'),
     ),
-    label: Text(_showAccountBalances ? 'Hide balances' : 'Show balances'),
   );
 
   Widget _buildGroupedList(List<Transaction> transactions) {
@@ -403,11 +425,14 @@ class _TransactionsPageState extends State<TransactionsPage> {
       itemBuilder: (context, index) {
         final item = items[index];
         return item.date == null
-            ? TransactionListRow(
-                transaction: item.transaction!,
-                data: widget.data,
-                onTap: () => _showTransactionDetails(item.transaction!),
-                showAccountBalances: _showAccountBalances,
+            ? ValueListenableBuilder<bool>(
+                valueListenable: _showAccountBalances,
+                builder: (context, showBalances, _) => TransactionListRow(
+                  transaction: item.transaction!,
+                  data: widget.data,
+                  onTap: () => _showTransactionDetails(item.transaction!),
+                  showAccountBalances: showBalances,
+                ),
               )
             : TransactionDateHeader(date: item.date!);
       },
@@ -590,8 +615,8 @@ class _TransactionsPageState extends State<TransactionsPage> {
 
   void _handleScroll() {
     final shouldShow = _scrollController.offset > 300;
-    if (shouldShow != _showScrollToTop) {
-      setState(() => _showScrollToTop = shouldShow);
+    if (shouldShow != _showScrollToTop.value) {
+      _showScrollToTop.value = shouldShow;
     }
   }
 

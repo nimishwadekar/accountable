@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:csv/csv.dart';
 import 'package:decimal/decimal.dart';
@@ -60,6 +61,96 @@ void main() {
       client.appendedRows.any((row) => row.first == '2026-10-13-sbi_nro'),
       isFalse,
     );
+  });
+
+  test('reuses successful provider dates within a rebuild only', () async {
+    const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
+    const eur = CurrencyDefinition(id: 'EUR', symbol: '€', decimalPlaces: 2);
+    final account = Account(
+      id: 'euro-cash',
+      name: 'Euro cash',
+      accountType: 'cash',
+      currencyId: 'EUR',
+      openingBalance: Money.fromMajorUnits(value: '100', currency: eur),
+      openingDate: DateTime.utc(2026, 1, 1),
+      closingDate: null,
+      usesManualValuations: false,
+    );
+    final transaction = Transaction(
+      id: 'first-euro-expense',
+      createdAt: DateTime.utc(2026, 1, 2),
+      date: DateTime.utc(2026, 1, 2),
+      type: TransactionType.expense,
+      sourceAmount: Money.fromMajorUnits(value: '1', currency: eur),
+      sourceAccountId: account.id,
+      destinationAmount: null,
+      destinationAccountId: null,
+      categoryId: null,
+      tagId: null,
+      description: 'Expense',
+    );
+    final data = AppDataSnapshot(
+      accounts: [account],
+      categories: const [],
+      currencies: const [usd, eur],
+      tags: const [],
+      transactions: [transaction],
+      exchangeRates: const [],
+      dailyAccountBalances: const [],
+      dailyNetWorth: const [],
+      dailyManualValuations: const [],
+    );
+    final client = _FakeSheetsClient({});
+    var requests = 0;
+    final httpClient = MockClient((request) async {
+      requests++;
+      if (request.url.path.endsWith('2026-01-03') ||
+          request.url.path.endsWith('2026-01-04')) {
+        return http.Response('', 404);
+      }
+      return http.Response(
+        jsonEncode({
+          'rates': {'EUR': 0.9},
+        }),
+        200,
+      );
+    });
+    final service = DailyMaintenanceService(
+      client: client,
+      data: data,
+      httpClient: httpClient,
+    );
+
+    await service.rebuild(yesterday: DateTime.utc(2026, 1, 4));
+    expect(
+      requests,
+      4,
+      reason: 'the successful Friday source response is reused',
+    );
+    final rateRows =
+        client.replacedRanges[GoogleSheetsRanges.dailyExchangeRates]!;
+    expect(rateRows.skip(1).map((row) => row[4]), everyElement('2026-01-02'));
+
+    await service.rebuild(yesterday: DateTime.utc(2026, 1, 4));
+    expect(requests, 8, reason: 'a separate full rebuild fetches fresh rates');
+  });
+
+  test('historical rate requests have a finite configurable timeout', () async {
+    final source = await AssetAppDataRepository().load();
+    final withoutRates = _copySnapshot(source, exchangeRates: const []);
+    final client = _FakeSheetsClient({});
+    final pendingHttp = MockClient((_) => Completer<http.Response>().future);
+
+    await expectLater(
+      DailyMaintenanceService(
+        client: client,
+        data: withoutRates,
+        httpClient: pendingHttp,
+        httpRequestTimeout: const Duration(milliseconds: 1),
+      ).rebuild(yesterday: DateTime.utc(2026, 10, 12)),
+      throwsA(isA<TimeoutException>()),
+    );
+    expect(client.replacedRanges, isEmpty);
   });
 
   test('manual valuation changes replace an existing net-worth row', () async {
@@ -224,7 +315,7 @@ void main() {
       );
       final changedClient = _FakeSheetsClient({});
       var httpRequests = 0;
-      await DailyMaintenanceService(
+      final changed = await DailyMaintenanceService(
         client: changedClient,
         data: changedData,
         httpClient: MockClient((_) async {
@@ -238,6 +329,7 @@ void main() {
         }),
       ).reconcile(yesterday: DateTime.utc(2026, 10, 12));
 
+      expect(changed, isTrue);
       expect(httpRequests, 1, reason: 'only the missing INR rate is fetched');
       expect(
         changedClient.replacedRanges.keys,
@@ -314,11 +406,12 @@ void main() {
       );
       final reconcileClient = _FakeSheetsClient({});
 
-      await DailyMaintenanceService(
+      final changed = await DailyMaintenanceService(
         client: reconcileClient,
         data: currentData,
       ).reconcile(yesterday: DateTime.utc(2026, 10, 12));
 
+      expect(changed, isFalse);
       expect(reconcileClient.replacedRanges, isEmpty);
     },
   );

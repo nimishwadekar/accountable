@@ -127,11 +127,12 @@ class OverviewPage extends StatelessWidget {
                     (account) => account.accountTypeKind != AccountType.cash,
                   )
                   .toList();
-              final latestDate = data.dailyManualValuations.isEmpty
-                  ? null
-                  : data.dailyManualValuations
-                        .map((valuation) => valuation.date)
-                        .reduce((a, b) => a.isAfter(b) ? a : b);
+              DateTime? latestDate;
+              for (final valuation in data.dailyManualValuations) {
+                if (latestDate == null || valuation.date.isAfter(latestDate)) {
+                  latestDate = valuation.date;
+                }
+              }
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -746,15 +747,10 @@ class _ManualValuationRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final latest = data.dailyManualValuations
-        .where((valuation) => valuation.accountId == account.id)
-        .fold<DailyManualValuation?>(
-          null,
-          (current, valuation) =>
-              current == null || valuation.date.isAfter(current.date)
-              ? valuation
-              : current,
-        );
+    final accountValuations = data.manualValuationsByAccountId[account.id];
+    final latest = accountValuations == null || accountValuations.isEmpty
+        ? null
+        : accountValuations.last;
     final currency = data.currenciesById[account.currencyId];
     final value = account.isValuationAccount
         ? latest?.value

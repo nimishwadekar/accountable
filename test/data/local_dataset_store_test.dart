@@ -16,6 +16,18 @@ void main() {
     expect((await store.read())?['table'], 'updated');
   });
 
+  test('does not rewrite an unchanged local dataset during reload', () async {
+    final store = _CountingDatasetStore();
+    final repository = AssetAppDataRepository(store: store);
+    await repository.load();
+    final writesAfterInitialization = store.writeCount;
+    expect(writesAfterInitialization, greaterThan(0));
+
+    await repository.reload();
+
+    expect(store.writeCount, writesAfterInitialization);
+  });
+
   test('migrates local template rows and persists favorite changes', () async {
     final tables = <String, String>{
       for (final schema in RuntimeTableSchemas.all)
@@ -106,4 +118,19 @@ void main() {
       'TRUE',
     );
   });
+}
+
+class _CountingDatasetStore implements LocalDatasetStore {
+  Map<String, String>? _tables;
+  int writeCount = 0;
+
+  @override
+  Future<Map<String, String>?> read() async =>
+      _tables == null ? null : Map<String, String>.unmodifiable(_tables!);
+
+  @override
+  Future<void> write(Map<String, String> tables) async {
+    writeCount++;
+    _tables = Map.of(tables);
+  }
 }
