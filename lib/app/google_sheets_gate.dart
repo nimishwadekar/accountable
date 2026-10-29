@@ -124,6 +124,12 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       return AppShell(
         dataRepository: _repository!,
         migrationAssistance: widget.config.migrationAssistance,
+        onFinalizeMigrationTransactions: widget.config.migrationAssistance
+            ? _finalizeMigrationTransactions
+            : null,
+        onMigrateTransactions: widget.config.migrationAssistance
+            ? _migrateTransactions
+            : null,
         onRebuildDailyTables: _rebuildDailyTables,
         onReconcileDailyTables: _reconcileDailyTables,
         onRefreshFormSnapshot: _refreshFormSnapshot,
@@ -548,6 +554,24 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     repository,
     allowUncertainRetry: allowUncertainRetry,
   );
+
+  Future<MigrationBatchStatus> _finalizeMigrationTransactions() async {
+    final repository = _repository;
+    if (repository is! GoogleSheetsAppDataRepository) {
+      throw StateError('A writable Google Sheets connection is required.');
+    }
+    return _writeCoordinator.run(
+      () => repository.finalizeMigrationTransactions(),
+    );
+  }
+
+  Future<MigrationExecutionResult> _migrateTransactions() async {
+    final repository = _repository;
+    if (repository is! GoogleSheetsAppDataRepository) {
+      throw StateError('A writable Google Sheets connection is required.');
+    }
+    return _writeCoordinator.run(() => repository.migrateTransactionsToMain());
+  }
 
   void _handleTransactionFormActiveChanged(bool active) {
     if (!mounted) return;

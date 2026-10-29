@@ -77,6 +77,8 @@ class AppShell extends StatefulWidget {
     this.migrationAssistance = false,
     this.onRebuildDailyTables,
     this.onReconcileDailyTables,
+    this.onFinalizeMigrationTransactions,
+    this.onMigrateTransactions,
     this.onRefreshFormSnapshot,
     this.onRebuildNetWorth,
     this.onReloadData,
@@ -93,6 +95,9 @@ class AppShell extends StatefulWidget {
   final bool migrationAssistance;
   final Future<void> Function()? onRebuildDailyTables;
   final Future<void> Function()? onReconcileDailyTables;
+  final Future<MigrationBatchStatus> Function()?
+  onFinalizeMigrationTransactions;
+  final Future<MigrationExecutionResult> Function()? onMigrateTransactions;
   final Future<void> Function()? onRefreshFormSnapshot;
   final Future<void> Function(DateTime startDate)? onRebuildNetWorth;
   final Future<void> Function()? onReloadData;
@@ -416,7 +421,15 @@ class _AppShellState extends State<AppShell> {
         data: data,
         onAchievementAcknowledged: _acknowledgeAchievement,
       ),
-      AppSection.migrationAssistance => MigrationAssistancePage(data: data),
+      AppSection.migrationAssistance => MigrationAssistancePage(
+        data: data,
+        onFinalizeTransactions: widget.onFinalizeMigrationTransactions == null
+            ? null
+            : _finalizeMigrationTransactions,
+        onMigrateTransactions: widget.onMigrateTransactions == null
+            ? null
+            : _migrateTransactions,
+      ),
       AppSection.settings => SettingsPage(
         data: data,
         onSaveDisplayPreferences: _saveDisplayPreferences,
@@ -650,6 +663,26 @@ class _AppShellState extends State<AppShell> {
       _snapshotFuture = future;
     });
     await future;
+  }
+
+  Future<MigrationBatchStatus> _finalizeMigrationTransactions() async {
+    final result = await widget.onFinalizeMigrationTransactions!.call();
+    await _reloadDataWithoutReconciliation();
+    return result;
+  }
+
+  Future<MigrationExecutionResult> _migrateTransactions() async {
+    var migrated = false;
+    try {
+      final result = await widget.onMigrateTransactions!.call();
+      migrated = !result.wasAlreadyMigrated;
+      await widget.onReconcileDailyTables?.call();
+      await _reloadDataWithoutReconciliation();
+      return result;
+    } catch (error) {
+      if (migrated) throw MigrationHistoryRepairException(error);
+      rethrow;
+    }
   }
 }
 

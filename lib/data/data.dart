@@ -11,6 +11,7 @@ export 'repositories/data_validation_failure.dart';
 export 'repositories/table_dependencies.dart';
 export 'repositories/transaction_write_validator.dart';
 export 'repositories/manual_valuation_write_validator.dart';
+export 'repositories/migration_transactions.dart';
 export 'repositories/google_sheets_repository.dart';
 export 'repositories/daily_maintenance_service.dart';
 export 'repositories/display_preference_manager.dart';

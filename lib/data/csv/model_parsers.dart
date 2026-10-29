@@ -14,6 +14,7 @@ class ModelParsers {
     String source, {
     required String tableName,
     required T Function(String rowSource) parseRow,
+    T Function(String rowSource, int rowNumber)? parseRowWithRowNumber,
     required Iterable<String> Function(T value) keysOf,
   }) {
     final table = CsvTable.parse(source, tableName: tableName);
@@ -22,9 +23,13 @@ class ModelParsers {
     final firstRowByKey = <String, int>{};
     for (var index = 0; index < table.rows.length; index++) {
       try {
-        final value = parseRow(
-          csv.encode([table.headers, table.rows[index].values.toList()]),
-        );
+        final rowSource = csv.encode([
+          table.headers,
+          table.rows[index].values.toList(),
+        ]);
+        final value = parseRowWithRowNumber == null
+            ? parseRow(rowSource)
+            : parseRowWithRowNumber(rowSource, table.rowNumbers[index]);
         for (final key in keysOf(value)) {
           final firstRow = firstRowByKey[key];
           if (firstRow != null) {
@@ -124,6 +129,58 @@ class ModelParsers {
     ).single,
     keysOf: (value) => ['id:${value.id}'],
   );
+
+  static ModelParseResult<Transaction> parseMigrationTransactionsWithIssues(
+    String source, {
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+    Map<String, Category>? categories,
+    Map<String, Tag>? tags,
+  }) => _parseRows(
+    source,
+    tableName: 'TransactionsToMigrate',
+    parseRow: (row) => parseTransactions(
+      row,
+      accounts: accounts,
+      currencies: currencies,
+      categories: categories,
+      tags: tags,
+      tableName: 'TransactionsToMigrate',
+      migrationRowNumber: 1,
+    ).single,
+    parseRowWithRowNumber: (row, rowNumber) => parseTransactions(
+      row,
+      accounts: accounts,
+      currencies: currencies,
+      categories: categories,
+      tags: tags,
+      tableName: 'TransactionsToMigrate',
+      migrationRowNumber: rowNumber,
+    ).single,
+    keysOf: (value) => ['id:${value.id}'],
+  );
+
+  static List<Transaction> parseMigrationTransactions(
+    String source, {
+    required Map<String, Account> accounts,
+    required Map<String, CurrencyDefinition> currencies,
+    Map<String, Category>? categories,
+    Map<String, Tag>? tags,
+  }) {
+    final table = CsvTable.parse(source, tableName: 'TransactionsToMigrate');
+    return [
+      for (var index = 0; index < table.rows.length; index++)
+        ...parseTransactions(
+          csv.encode([table.headers, table.rows[index].values.toList()]),
+          accounts: accounts,
+          currencies: currencies,
+          categories: categories,
+          tags: tags,
+          tableName: 'TransactionsToMigrate',
+          migrationRowNumber: table.rowNumbers[index],
+        ),
+    ];
+  }
 
   static ModelParseResult<ExchangeRate> parseExchangeRatesWithIssues(
     String source,
@@ -554,6 +611,7 @@ class ModelParsers {
     Map<String, Category>? categories,
     Map<String, Tag>? tags,
     String tableName = 'Transactions',
+    int migrationRowNumber = 0,
   }) {
     final table = CsvTable.parse(source, tableName: tableName);
     return _uniqueById(
@@ -574,13 +632,26 @@ class ModelParsers {
           accounts: accounts,
           currencies: currencies,
         );
+        final date = parseDateOnly(
+          requiredValue(row, 'date'),
+          fieldName: 'date',
+        );
+        final optionalId = optionalValue(row, 'transaction_id');
+        final optionalCreatedAt = optionalValue(row, 'created_at');
+        final migrationRow = tableName == 'TransactionsToMigrate';
         final transaction = Transaction(
-          id: requiredValue(row, 'transaction_id'),
-          createdAt: parseUtcTimestamp(
-            requiredValue(row, 'created_at'),
-            fieldName: 'created_at',
-          ),
-          date: parseDateOnly(requiredValue(row, 'date'), fieldName: 'date'),
+          id:
+              optionalId ??
+              (migrationRow
+                  ? 'migration-pending-$migrationRowNumber'
+                  : requiredValue(row, 'transaction_id')),
+          createdAt: optionalCreatedAt == null && migrationRow
+              ? date.add(Duration(microseconds: migrationRowNumber))
+              : parseUtcTimestamp(
+                  optionalCreatedAt ?? requiredValue(row, 'created_at'),
+                  fieldName: 'created_at',
+                ),
+          date: date,
           type: TransactionTypeWireValue.parse(
             requiredValue(row, 'transaction_type'),
           ),

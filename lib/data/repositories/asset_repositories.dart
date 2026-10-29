@@ -505,7 +505,7 @@ class AssetAppDataRepository implements AppDataRepository {
         tags: {for (final tag in tagList) tag.id: tag},
       );
       final migrationTransactions = migrationAssistance
-          ? ModelParsers.parseTransactions(
+          ? ModelParsers.parseMigrationTransactions(
               tables[DataAssetPaths.transactionsToMigrate]!,
               accounts: accountById,
               currencies: currencyById,
@@ -513,14 +513,8 @@ class AssetAppDataRepository implements AppDataRepository {
                 for (final category in categoryList) category.id: category,
               },
               tags: {for (final tag in tagList) tag.id: tag},
-              tableName: 'TransactionsToMigrate',
             )
           : const <Transaction>[];
-      if (migrationAssistance && migrationTransactions.isEmpty) {
-        throw const FormatException(
-          'TransactionsToMigrate must contain at least one transaction.',
-        );
-      }
       final exchangeRateList = ModelParsers.parseExchangeRates(
         tables[DataAssetPaths.dailyExchangeRates]!,
       );

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:csv/csv.dart';
 
 import '../app_data_snapshot.dart';
@@ -11,8 +13,11 @@ import 'display_preference_manager.dart';
 import 'data_validation_failure.dart';
 import 'transaction_write_validator.dart';
 import 'manual_valuation_write_validator.dart';
+import 'migration_transactions.dart';
 import 'table_dependencies.dart';
 import 'repositories.dart';
+
+const _migrationIdAlphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 abstract final class GoogleSheetsRanges {
   static final accounts = RuntimeTableSchemas.accounts.range;
@@ -282,6 +287,148 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
     return updated;
   }
 
+  Future<MigrationBatchStatus> finalizeMigrationTransactions({
+    DateTime? now,
+    Random? random,
+  }) async {
+    _requireMigrationAssistance();
+    final current = await reload();
+    final migrations = current.transactionsToMigrate;
+    if (migrations.isEmpty) {
+      throw StateError('There are no transactions to finalize.');
+    }
+    if (migrations.length > maximumMigrationTransactionCount) {
+      throw StateError(
+        'Cannot finalize ${migrations.length} transactions. The maximum is '
+        '$maximumMigrationTransactionCount.',
+      );
+    }
+
+    final status = MigrationBatchStatus.fromSnapshot(current);
+    if (status.isFinalized) return status;
+
+    final generator = random ?? Random.secure();
+    final existingIds = current.transactionsById.keys.toSet();
+    String? token;
+    for (var attempt = 0; attempt < 100; attempt++) {
+      final candidate = List.generate(
+        6,
+        (_) =>
+            _migrationIdAlphabet[generator.nextInt(
+              _migrationIdAlphabet.length,
+            )],
+      ).join();
+      final collides = List.generate(
+        migrations.length,
+        (index) => 'MIG$candidate${(index + 1).toString().padLeft(4, '0')}',
+      ).any(existingIds.contains);
+      if (!collides) {
+        token = candidate;
+        break;
+      }
+    }
+    if (token == null) {
+      throw StateError('Could not generate a unique migration ID batch.');
+    }
+
+    final firstCreatedAt = (now ?? DateTime.now()).toUtc();
+    final firstSheetRow = 2;
+    final lastSheetRow = migrations.length + 1;
+    await api.updateRanges({
+      '${GoogleSheetsRanges.transactionsToMigrate.split('!').first}!A$firstSheetRow:A$lastSheetRow':
+          [
+            for (var index = 0; index < migrations.length; index++)
+              ['MIG$token${(index + 1).toString().padLeft(4, '0')}'],
+          ],
+      '${GoogleSheetsRanges.transactionsToMigrate.split('!').first}!K$firstSheetRow:K$lastSheetRow':
+          [
+            for (var index = 0; index < migrations.length; index++)
+              [
+                firstCreatedAt
+                    .add(Duration(seconds: index * 10))
+                    .toIso8601String(),
+              ],
+          ],
+    });
+
+    return MigrationBatchStatus.fromSnapshot(await reload());
+  }
+
+  Future<MigrationExecutionResult> migrateTransactionsToMain() async {
+    _requireMigrationAssistance();
+    final current = await reload();
+    final migrations = current.transactionsToMigrate;
+    final status = MigrationBatchStatus.fromSnapshot(current);
+    if (migrations.isEmpty) {
+      throw StateError('There are no transactions to migrate.');
+    }
+    if (!status.isFinalized) {
+      throw StateError(
+        'Finalize migration transactions before migrating them.',
+      );
+    }
+    if (status.alreadyMigratedCount == migrations.length) {
+      for (final migration in migrations) {
+        final existing = current.transactionsById[migration.id]!;
+        if (!_sameTransactionData(migration, existing, current)) {
+          throw StateError(
+            'Migration transaction ${migration.id} already exists in '
+            'Transactions with different data.',
+          );
+        }
+      }
+      return MigrationExecutionResult(
+        transactionCount: migrations.length,
+        wasAlreadyMigrated: true,
+      );
+    }
+    if (status.alreadyMigratedCount > 0) {
+      throw StateError(
+        'Some migration transaction IDs already exist in Transactions. '
+        'No rows were added; review the sheet before retrying.',
+      );
+    }
+
+    await api.insertRowsAndCopyValues(
+      sourceSheetName: 'TransactionsToMigrate',
+      destinationSheetName: 'Transactions',
+      rowCount: migrations.length,
+      columnCount: RuntimeTableSchemas.transactions.columnCount,
+    );
+    _cachedSnapshot = null;
+    return MigrationExecutionResult(
+      transactionCount: migrations.length,
+      wasAlreadyMigrated: false,
+    );
+  }
+
+  void _requireMigrationAssistance() {
+    if (!migrationAssistance) {
+      throw StateError('Migration assistance is not enabled.');
+    }
+  }
+
+  bool _sameTransactionData(
+    Transaction expected,
+    Transaction actual,
+    AppDataSnapshot data,
+  ) {
+    final accountCurrencies = {
+      for (final account in data.accounts) account.id: account.currencyId,
+    };
+    final expectedRow = transactionToRow(
+      expected,
+      data.currenciesById,
+      accountCurrencies,
+    );
+    final actualRow = transactionToRow(
+      actual,
+      data.currenciesById,
+      accountCurrencies,
+    );
+    return expectedRow.keys.every((key) => expectedRow[key] == actualRow[key]);
+  }
+
   static void _validateTemplateName(
     TransactionTemplate template,
     Iterable<TransactionTemplate> existing,
@@ -455,7 +602,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       }
       if (migrationAssistance) {
         try {
-          final result = ModelParsers.parseTransactionsWithIssues(
+          final result = ModelParsers.parseMigrationTransactionsWithIssues(
             _encode(tables[GoogleSheetsRanges.transactionsToMigrate]!),
             accounts: accountById,
             currencies: currencyById,
@@ -465,15 +612,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
             tags: {for (final tag in tags) tag.id: tag},
           );
           transactionsToMigrate = result.values;
-          final migrationIssues = [
-            ...result.issues,
-            if (result.values.isEmpty)
-              const DataValidationIssue(
-                table: 'TransactionsToMigrate',
-                message: 'TransactionsToMigrate must contain at least one transaction.',
-              ),
-          ];
-          recordIssues('TransactionsToMigrate', migrationIssues);
+          recordIssues('TransactionsToMigrate', result.issues);
         } catch (error) {
           recordIssues('TransactionsToMigrate', [
             issueFromError('TransactionsToMigrate', error),

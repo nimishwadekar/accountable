@@ -24,6 +24,23 @@ abstract class SheetsTableClient {
       await replaceRange(entry.key, entry.value);
     }
   }
+
+  /// Updates multiple explicit A1 ranges in a single values batch request.
+  Future<void> updateRanges(Map<String, List<List<String>>> ranges) async {
+    for (final entry in ranges.entries) {
+      await replaceRange(entry.key, entry.value);
+    }
+  }
+
+  /// Inserts rows beneath a header and copies values from another sheet.
+  Future<void> insertRowsAndCopyValues({
+    required String sourceSheetName,
+    required String destinationSheetName,
+    required int rowCount,
+    required int columnCount,
+  }) => throw UnsupportedError(
+    'This Sheets client cannot insert and copy spreadsheet rows.',
+  );
 }
 
 class GoogleSheetsApi implements SheetsTableClient {
@@ -144,7 +161,96 @@ class GoogleSheetsApi implements SheetsTableClient {
       updates.add(sheets.ValueRange(range: entry.key, values: rows));
     }
     await _sheetsApi.spreadsheets.values.batchUpdate(
-      sheets.BatchUpdateValuesRequest(valueInputOption: 'USER_ENTERED', data: updates),
+      sheets.BatchUpdateValuesRequest(
+        valueInputOption: 'USER_ENTERED',
+        data: updates,
+      ),
+      spreadsheetId,
+    );
+  }
+
+  @override
+  Future<void> updateRanges(Map<String, List<List<String>>> ranges) async {
+    if (ranges.isEmpty) return;
+    await _sheetsApi.spreadsheets.values.batchUpdate(
+      sheets.BatchUpdateValuesRequest(
+        valueInputOption: 'USER_ENTERED',
+        data: [
+          for (final entry in ranges.entries)
+            sheets.ValueRange(
+              range: entry.key,
+              values: [
+                for (final row in entry.value) _coerceValues(entry.key, row),
+              ],
+            ),
+        ],
+      ),
+      spreadsheetId,
+    );
+  }
+
+  @override
+  Future<void> insertRowsAndCopyValues({
+    required String sourceSheetName,
+    required String destinationSheetName,
+    required int rowCount,
+    required int columnCount,
+  }) async {
+    if (rowCount <= 0 || columnCount <= 0) {
+      throw ArgumentError('Row and column counts must be positive.');
+    }
+    final spreadsheet = await _sheetsApi.spreadsheets.get(
+      spreadsheetId,
+      $fields: 'sheets(properties(sheetId,title))',
+    );
+    int sheetIdFor(String title) {
+      for (final sheet in spreadsheet.sheets ?? const <sheets.Sheet>[]) {
+        final properties = sheet.properties;
+        if (properties?.title == title && properties?.sheetId != null) {
+          return properties!.sheetId!;
+        }
+      }
+      throw StateError('Spreadsheet sheet "$title" was not found.');
+    }
+
+    final sourceSheetId = sheetIdFor(sourceSheetName);
+    final destinationSheetId = sheetIdFor(destinationSheetName);
+    await _sheetsApi.spreadsheets.batchUpdate(
+      sheets.BatchUpdateSpreadsheetRequest(
+        requests: [
+          sheets.Request(
+            insertDimension: sheets.InsertDimensionRequest(
+              range: sheets.DimensionRange(
+                sheetId: destinationSheetId,
+                dimension: 'ROWS',
+                startIndex: 1,
+                endIndex: rowCount + 1,
+              ),
+              inheritFromBefore: false,
+            ),
+          ),
+          sheets.Request(
+            copyPaste: sheets.CopyPasteRequest(
+              source: sheets.GridRange(
+                sheetId: sourceSheetId,
+                startRowIndex: 1,
+                endRowIndex: rowCount + 1,
+                startColumnIndex: 0,
+                endColumnIndex: columnCount,
+              ),
+              destination: sheets.GridRange(
+                sheetId: destinationSheetId,
+                startRowIndex: 1,
+                endRowIndex: rowCount + 1,
+                startColumnIndex: 0,
+                endColumnIndex: columnCount,
+              ),
+              pasteType: 'PASTE_VALUES',
+              pasteOrientation: 'NORMAL',
+            ),
+          ),
+        ],
+      ),
       spreadsheetId,
     );
   }

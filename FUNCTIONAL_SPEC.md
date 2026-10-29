@@ -206,7 +206,7 @@ Existing legacy rows may have blank descriptions or tags while migration is pend
 
 ## Migration Assistance — implemented when enabled
 
-When `assets/config.json` contains `migration_assistance: true`, the normal app remains available and a read-only **Migration Assistance** tab is appended to the main navigation. The tab loads `TransactionsToMigrate` using the same A:K schema and strict validation as `Transactions`.
+When `assets/config.json` contains `migration_assistance: true`, the normal app remains available and a **Migration Assistance** tab is appended to the main navigation. `TransactionsToMigrate` uses the same A:K headers as `Transactions`, but `transaction_id` and `created_at` may be blank until finalization. All other transaction data is validated normally. Migration write actions are available only with a writable Google Sheets connection; local and offline views remain read-only.
 
 It displays every account from `Accounts`, including accounts without migration activity:
 
@@ -218,7 +218,11 @@ It displays every account from `Accounts`, including accounts without migration 
 pre-migration balance = active opening balance - migration net change
 ```
 
-Source amounts decrease source accounts; destination amounts increase destination accounts. The migration table is required and must contain at least one valid transaction when the option is enabled. No migration data is written back.
+Source amounts decrease source accounts; destination amounts increase destination accounts.
+
+**Finalize Transactions** rejects batches over 9,999 rows. In sheet row order, it assigns each row an ID of `MIG` + a shared six-character uppercase alphanumeric batch token + a four-digit sequence (`0001`–`9999`). It assigns UTC ISO-8601 `created_at` timestamps beginning at the current time and increasing by ten seconds per row. Finalization writes these values to the migration sheet and is idempotent.
+
+After finalization, the page reports whether every migration date is strictly earlier than the oldest pre-migration date in `Transactions`. On later reloads, rows whose IDs match the current migration batch are excluded from that baseline so the imported dates do not change the comparison. If the dates are not strictly earlier, the page warns that the main transaction sheet must be manually organized, and a separate warning dialog with Cancel/Continue appears before migration. **Migrate Transactions** also requires confirmation, including a reminder to manually update account opening balances and dates. It inserts rows immediately below the main Transactions header and copies the finalized migration values into them. The migration sheet remains intact; generated IDs prevent duplicate imports on retry. A single Sheets structural batch performs the row insertion and copy, and successful migration triggers daily-history reconciliation. The migration sheet may be empty while migration assistance is enabled.
 
 ## Navigation and screen behavior
 

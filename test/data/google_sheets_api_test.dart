@@ -78,6 +78,66 @@ void main() {
     expect(values.first[3], isA<num>());
   });
 
+  test(
+    'inserts rows and copies migration values in one spreadsheet batch',
+    () async {
+      final requests = <http.Request>[];
+      final client = MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'sheets': [
+                {
+                  'properties': {'sheetId': 11, 'title': 'Transactions'},
+                },
+                {
+                  'properties': {
+                    'sheetId': 22,
+                    'title': 'TransactionsToMigrate',
+                  },
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        return http.Response(
+          '{}',
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      final api = GoogleSheetsApi(
+        spreadsheetId: 'spreadsheet-id',
+        accessTokenProvider: ({forceRefresh = false}) async => 'token',
+        client: client,
+      );
+
+      await api.insertRowsAndCopyValues(
+        sourceSheetName: 'TransactionsToMigrate',
+        destinationSheetName: 'Transactions',
+        rowCount: 2,
+        columnCount: 11,
+      );
+
+      expect(requests.map((request) => request.method), ['GET', 'POST']);
+      final body = jsonDecode(requests.last.body) as Map<String, dynamic>;
+      final batchRequests = body['requests'] as List;
+      expect(batchRequests, hasLength(2));
+      expect(batchRequests[0]['insertDimension']['range'], {
+        'dimension': 'ROWS',
+        'endIndex': 3,
+        'sheetId': 11,
+        'startIndex': 1,
+      });
+      expect(batchRequests[1]['copyPaste']['pasteType'], 'PASTE_VALUES');
+      expect(batchRequests[1]['copyPaste']['source']['sheetId'], 22);
+      expect(batchRequests[1]['copyPaste']['destination']['sheetId'], 11);
+    },
+  );
+
   test('writes template favorite state as a Sheets boolean', () async {
     Object? requestBody;
     final client = MockClient((request) async {

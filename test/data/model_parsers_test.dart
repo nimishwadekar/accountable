@@ -218,6 +218,39 @@ expense-1,2026-10-10,Lunch,groceries,expense,40,checking,,,,2026-10-09 11:03:04
     );
   });
 
+  test('migration parsing allows blank IDs and timestamps only', () {
+    final currencies = {
+      for (final currency in ModelParsers.parseCurrencies(currenciesCsv))
+        currency.id: currency,
+    };
+    final accounts = {
+      for (final account in ModelParsers.parseAccounts(accountsCsv, currencies))
+        account.id: account,
+    };
+    const source = '''
+transaction_id,date,description,category,transaction_type,source_amount,source_account_id,dest_amount,dest_account_id,tag,created_at
+,2026-10-05,Old transaction,food,expense,5,checking,,,,
+''';
+
+    final migrations = ModelParsers.parseMigrationTransactionsWithIssues(
+      source,
+      accounts: accounts,
+      currencies: currencies,
+    );
+
+    expect(migrations.issues, isEmpty);
+    expect(migrations.values.single.id, 'migration-pending-2');
+    expect(migrations.values.single.createdAt, DateTime.utc(2026, 10, 5, 0, 0, 0, 0, 2));
+    expect(
+      () => ModelParsers.parseTransactions(
+        source,
+        accounts: accounts,
+        currencies: currencies,
+      ),
+      throwsFormatException,
+    );
+  });
+
   test('rejects transactions outside account lifetimes', () {
     final currencies = {
       for (final currency in ModelParsers.parseCurrencies(currenciesCsv))
