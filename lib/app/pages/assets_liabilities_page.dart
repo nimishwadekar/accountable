@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../amount_input_formatter.dart';
 import '../../data/data.dart';
 import '../error_dialog.dart';
 import 'app_pages.dart';
@@ -311,11 +312,12 @@ class _DailyValuationsFormState extends State<_DailyValuationsForm> {
         suffixText: currency?.id,
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: const [ThousandsSeparatorInputFormatter()],
       validator: (value) {
         if (value == null || value.trim().isEmpty) {
           return null;
         }
-        final parsed = num.tryParse(value.trim());
+        final parsed = num.tryParse(value.trim().replaceAll(',', ''));
         return parsed == null || !parsed.isFinite || parsed < 0
             ? 'Enter a non-negative valuation.'
             : null;

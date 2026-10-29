@@ -386,6 +386,29 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('groups large transaction amounts while typing', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: TransactionFormSheet(
+            type: TransactionType.expense,
+            data: fixtureData,
+          ),
+        ),
+      ),
+    );
+
+    final amountField = find.widgetWithText(TextFormField, 'Amount');
+    await tester.enterText(amountField, '1234567.89');
+
+    expect(
+      tester.widget<TextFormField>(amountField).controller!.text,
+      '1,234,567.89',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('template entry hides fixed values and asks for placeholders', (
     tester,
   ) async {

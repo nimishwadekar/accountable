@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../amount_input_formatter.dart';
 import '../error_dialog.dart';
 import '../../data/data.dart';
 import '../formatters.dart';
@@ -860,6 +861,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
         ),
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: const [ThousandsSeparatorInputFormatter()],
       validator: (value) {
         if (widget.createTemplate &&
             value != null &&
@@ -873,7 +875,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
         if (value == null || value.trim().isEmpty) {
           return 'Enter an amount.';
         }
-        final parsed = num.tryParse(value.trim());
+        final parsed = num.tryParse(value.trim().replaceAll(',', ''));
         if (parsed == null || parsed < 0) return 'Enter a valid amount.';
         return null;
       },

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/amount_input_formatter.dart';
 import '../../app/error_dialog.dart';
 import '../../app/theme/design_tokens.dart';
 import '../../data/data.dart';
@@ -90,6 +91,7 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
+                  inputFormatters: const [ThousandsSeparatorInputFormatter()],
                   validator: _amountValidator,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -184,7 +186,7 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
 
   String? _amountValidator(String? value) {
     if (_required(value) != null) return _required(value);
-    final parsed = num.tryParse(value!.trim());
+    final parsed = num.tryParse(value!.trim().replaceAll(',', ''));
     return parsed == null || parsed <= 0 ? 'Enter a positive amount.' : null;
   }
 
