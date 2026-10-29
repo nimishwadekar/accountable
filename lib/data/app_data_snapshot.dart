@@ -75,6 +75,8 @@ class AppDataSnapshot {
          (rate) => rate.date,
        ),
        ledgerBalances = _calculateLedgerBalances(accounts, transactions),
+       balancesAfterTransactionByAccountId =
+           _calculateBalancesAfterTransactions(accounts, transactions),
        displayPreferences = List.unmodifiable(displayPreferences),
        displayPreferencesByKey = Map.unmodifiable({
          for (final preference in displayPreferences)
@@ -131,6 +133,7 @@ class AppDataSnapshot {
   final Map<String, List<DailyManualValuation>> manualValuationsByAccountId;
   final Map<String, List<ExchangeRate>> exchangeRatesByCurrencyId;
   final Map<String, Money> ledgerBalances;
+  final Map<String, Map<String, Money>> balancesAfterTransactionByAccountId;
   final Map<String, DisplayPreference> displayPreferencesByKey;
   final Map<String, TransactionTemplate> transactionTemplatesById;
   final Map<String, IncomeAllocation> incomeAllocationsById;
@@ -184,6 +187,9 @@ class AppDataSnapshot {
 
   DisplayPreference? displayPreferenceFor(String entityType, String entityId) =>
       displayPreferencesByKey[_preferenceKey(entityType, entityId)];
+
+  Money? balanceAfterTransaction(String accountId, String transactionId) =>
+      balancesAfterTransactionByAccountId[accountId]?[transactionId];
 
   late final List<Account> _orderedAccounts = _ordered(
     accounts,
@@ -296,13 +302,61 @@ class AppDataSnapshot {
     return Map.unmodifiable(balances);
   }
 
+  static Map<String, Map<String, Money>> _calculateBalancesAfterTransactions(
+    Iterable<Account> accounts,
+    Iterable<Transaction> transactions,
+  ) {
+    final balances = <String, Money>{
+      for (final account in accounts) account.id: account.openingBalance,
+    };
+    final ordered = [...transactions]
+      ..sort((a, b) {
+        final dateComparison = _dateOnly(a.date).compareTo(_dateOnly(b.date));
+        if (dateComparison != 0) return dateComparison;
+        final createdAtComparison = a.createdAt.compareTo(b.createdAt);
+        return createdAtComparison == 0
+            ? a.id.compareTo(b.id)
+            : createdAtComparison;
+      });
+    final result = <String, Map<String, Money>>{};
+    for (final transaction in ordered) {
+      final accountIds = <String>{};
+      if (transaction.sourceAccountId != null &&
+          transaction.sourceAmount != null) {
+        final accountId = transaction.sourceAccountId!;
+        balances[accountId] = balances[accountId]! - transaction.sourceAmount!;
+        accountIds.add(accountId);
+      }
+      if (transaction.destinationAccountId != null &&
+          transaction.destinationAmount != null) {
+        final accountId = transaction.destinationAccountId!;
+        balances[accountId] =
+            balances[accountId]! + transaction.destinationAmount!;
+        accountIds.add(accountId);
+      }
+      for (final accountId in accountIds) {
+        result.putIfAbsent(accountId, () => {})[transaction.id] =
+            balances[accountId]!;
+      }
+    }
+    return Map.unmodifiable({
+      for (final entry in result.entries)
+        entry.key: Map<String, Money>.unmodifiable(entry.value),
+    });
+  }
+
+  static DateTime _dateOnly(DateTime date) =>
+      DateTime.utc(date.year, date.month, date.day);
+
   static List<Transaction> _sortTransactions(Iterable<Transaction> values) {
     final sorted = [...values]
       ..sort((a, b) {
         final dateComparison = b.date.compareTo(a.date);
-        return dateComparison == 0
-            ? b.createdAt.compareTo(a.createdAt)
-            : dateComparison;
+        if (dateComparison != 0) return dateComparison;
+        final createdAtComparison = b.createdAt.compareTo(a.createdAt);
+        return createdAtComparison == 0
+            ? b.id.compareTo(a.id)
+            : createdAtComparison;
       });
     return List<Transaction>.unmodifiable(sorted);
   }

@@ -63,6 +63,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
   String? _tagId;
   DateTimeRange? _dateRange;
   bool _showScrollToTop = false;
+  bool _showAccountBalances = false;
   AppDataSnapshot? _cachedFilterData;
   String? _cachedFilterKey;
   List<Transaction>? _cachedFilteredTransactions;
@@ -192,7 +193,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                             if (_showScrollToTop)
                               Positioned(
                                 right: AppSpacing.md,
-                                bottom: AppSpacing.md,
+                                bottom: AppSpacing.lg * 3,
                                 child: FloatingActionButton.small(
                                   onPressed: _scrollToTop,
                                   tooltip: 'Back to top',
@@ -334,17 +335,19 @@ class _TransactionsPageState extends State<TransactionsPage> {
   }
 
   Widget _buildCompactFilterButton(BuildContext context) {
-    return Row(
+    return Wrap(
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.sm,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         OutlinedButton.icon(
           onPressed: _openFilterSheet,
           icon: const Icon(Icons.filter_list),
           label: Text(_filterButtonLabel),
         ),
-        if (_hasFilters) ...[
-          const SizedBox(width: AppSpacing.sm),
+        _buildBalanceVisibilityButton(),
+        if (_hasFilters)
           TextButton(onPressed: _clearFilters, child: const Text('Clear')),
-        ],
       ],
     );
   }
@@ -372,11 +375,23 @@ class _TransactionsPageState extends State<TransactionsPage> {
                 onPressed: _clearFilters,
                 child: const Text('Clear Filters'),
               ),
+            _buildBalanceVisibilityButton(),
           ],
         ),
       ),
     );
   }
+
+  Widget _buildBalanceVisibilityButton() => OutlinedButton.icon(
+    onPressed: () =>
+        setState(() => _showAccountBalances = !_showAccountBalances),
+    icon: Icon(
+      _showAccountBalances
+          ? Icons.visibility_off_outlined
+          : Icons.visibility_outlined,
+    ),
+    label: Text(_showAccountBalances ? 'Hide balances' : 'Show balances'),
+  );
 
   Widget _buildGroupedList(List<Transaction> transactions) {
     final items = _listItemsFor(transactions);
@@ -392,6 +407,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                 transaction: item.transaction!,
                 data: widget.data,
                 onTap: () => _showTransactionDetails(item.transaction!),
+                showAccountBalances: _showAccountBalances,
               )
             : TransactionDateHeader(date: item.date!);
       },

@@ -30,11 +30,13 @@ class TransactionListRow extends StatelessWidget {
     required this.transaction,
     required this.data,
     required this.onTap,
+    this.showAccountBalances = false,
   });
 
   final Transaction transaction;
   final AppDataSnapshot data;
   final VoidCallback onTap;
+  final bool showAccountBalances;
 
   @override
   Widget build(BuildContext context) {
@@ -65,33 +67,53 @@ class TransactionListRow extends StatelessWidget {
 
     return Card(
       clipBehavior: Clip.hardEdge,
-      child: ListTile(
+      child: InkWell(
         onTap: onTap,
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: compact ? AppSpacing.sm : AppSpacing.md,
-          vertical: compact ? AppSpacing.xs / 2 : AppSpacing.xs,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? AppSpacing.sm : AppSpacing.md,
+            vertical: compact ? AppSpacing.xs / 2 : AppSpacing.xs,
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: compact ? 56 : 64),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: compact ? 18 : 20,
+                  backgroundColor: _backgroundColor(context),
+                  foregroundColor: _foregroundColor(context),
+                  child: Icon(_icon),
+                ),
+                SizedBox(width: compact ? AppSpacing.sm : AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        transaction.description.isEmpty
+                            ? transactionTypeLabel(transaction.type)
+                            : transaction.description,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: AppSpacing.xs / 2),
+                      Text(
+                        detailParts.isEmpty
+                            ? transactionTypeLabel(transaction.type)
+                            : detailParts.join(' · '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: compact ? AppSpacing.xs : AppSpacing.sm),
+                _buildAmount(context),
+              ],
+            ),
+          ),
         ),
-        leading: CircleAvatar(
-          radius: compact ? 18 : 20,
-          backgroundColor: _backgroundColor(context),
-          foregroundColor: _foregroundColor(context),
-          child: Icon(_icon),
-        ),
-        title: Text(
-          transaction.description.isEmpty
-              ? transactionTypeLabel(transaction.type)
-              : transaction.description,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Text(
-          detailParts.isEmpty
-              ? transactionTypeLabel(transaction.type)
-              : detailParts.join(' · '),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: _buildAmount(context),
       ),
     );
   }
@@ -100,23 +122,25 @@ class TransactionListRow extends StatelessWidget {
     if (transaction.type == TransactionType.transfer &&
         transaction.sourceAmount != null &&
         transaction.destinationAmount != null) {
-      final amountStyle = Theme.of(context).textTheme.titleMedium
-          ?.copyWith(fontWeight: FontWeight.w700);
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '-${formatMoney(transaction.sourceAmount!, data.currenciesById)}',
-            textAlign: TextAlign.right,
-            style: amountStyle?.copyWith(
-              color: Theme.of(context).colorScheme.error,
-            ),
+          _amountWithBalance(
+            context,
+            amount: transaction.sourceAmount!,
+            accountId: transaction.sourceAccountId,
+            prefix: '-',
+            color: Theme.of(context).colorScheme.error,
           ),
-          Text(
-            '+${formatMoney(transaction.destinationAmount!, data.currenciesById)}',
-            textAlign: TextAlign.right,
-            style: amountStyle?.copyWith(color: AppColors.success),
+          const SizedBox(height: AppSpacing.xs),
+          _amountWithBalance(
+            context,
+            amount: transaction.destinationAmount!,
+            accountId: transaction.destinationAccountId,
+            prefix: '+',
+            color: AppColors.success,
           ),
         ],
       );
@@ -125,16 +149,59 @@ class TransactionListRow extends StatelessWidget {
     final amount = transaction.sourceAmount ?? transaction.destinationAmount;
     if (amount == null) return const Text('—');
     final isExpense = transaction.type == TransactionType.expense;
-    final prefix = isExpense ? '-' : '+';
-    return Text(
-      '$prefix${formatMoney(amount, data.currenciesById)}',
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-        color: isExpense
-            ? Theme.of(context).colorScheme.error
-            : AppColors.success,
-        fontWeight: FontWeight.w700,
-      ),
+    final accountId = transaction.sourceAmount != null
+        ? transaction.sourceAccountId
+        : transaction.destinationAccountId;
+    return _amountWithBalance(
+      context,
+      amount: amount,
+      accountId: accountId,
+      prefix: isExpense ? '-' : '+',
+      color: isExpense
+          ? Theme.of(context).colorScheme.error
+          : AppColors.success,
     );
+  }
+
+  Widget _amountWithBalance(
+    BuildContext context, {
+    required Money amount,
+    required String? accountId,
+    required String prefix,
+    required Color color,
+  }) {
+    final balance = _balanceAfter(accountId);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          '$prefix${formatMoney(amount, data.currenciesById)}',
+          textAlign: TextAlign.right,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(color: color, fontWeight: FontWeight.w700),
+        ),
+        if (showAccountBalances && balance != null)
+          Text(
+            'Balance: ${formatMoney(balance, data.currenciesById)}',
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: AppColors.mutedText),
+          ),
+      ],
+    );
+  }
+
+  Money? _balanceAfter(String? accountId) {
+    if (accountId == null ||
+        data.accountsById[accountId]?.isLedgerAccount != true) {
+      return null;
+    }
+    return data.balanceAfterTransaction(accountId, transaction.id);
   }
 
   Color _backgroundColor(BuildContext context) {

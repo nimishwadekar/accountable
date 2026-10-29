@@ -11,9 +11,11 @@ void main() {
     final expectedTransactions = [...data.transactions]
       ..sort((a, b) {
         final dateComparison = b.date.compareTo(a.date);
-        return dateComparison == 0
-            ? b.createdAt.compareTo(a.createdAt)
-            : dateComparison;
+        if (dateComparison != 0) return dateComparison;
+        final createdAtComparison = b.createdAt.compareTo(a.createdAt);
+        return createdAtComparison == 0
+            ? b.id.compareTo(a.id)
+            : createdAtComparison;
       });
 
     expect(data.transactionsByDisplayOrder, expectedTransactions);
@@ -54,8 +56,63 @@ void main() {
       transactions: data.transactions,
     );
     for (final entry in expectedBalances.entries) {
-      expect(data.ledgerBalances[entry.key]?.minorUnits, entry.value.minorUnits);
-      expect(data.ledgerBalances[entry.key]?.currencyId, entry.value.currencyId);
+      expect(
+        data.ledgerBalances[entry.key]?.minorUnits,
+        entry.value.minorUnits,
+      );
+      expect(
+        data.ledgerBalances[entry.key]?.currencyId,
+        entry.value.currencyId,
+      );
     }
+  });
+
+  test('indexes account balances immediately after each transaction', () {
+    const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
+    final checking = Account(
+      id: 'checking',
+      name: 'Checking',
+      accountType: 'cash',
+      currencyId: usd.id,
+      openingBalance: Money.fromMajorUnits(value: '1000', currency: usd),
+      openingDate: DateTime.utc(2026, 1, 1),
+      closingDate: null,
+      usesManualValuations: false,
+    );
+    Transaction expense(String id, DateTime date, String amount) => Transaction(
+      id: id,
+      createdAt: date,
+      date: date,
+      type: TransactionType.expense,
+      sourceAmount: Money.fromMajorUnits(value: amount, currency: usd),
+      sourceAccountId: checking.id,
+      destinationAmount: null,
+      destinationAccountId: null,
+      categoryId: null,
+      tagId: null,
+      description: id,
+    );
+    final later = expense('later', DateTime.utc(2026, 1, 2), '20');
+    final earlier = expense('earlier', DateTime.utc(2026, 1, 1), '10');
+    final data = AppDataSnapshot(
+      accounts: [checking],
+      categories: const [],
+      currencies: [usd],
+      tags: const [],
+      transactions: [later, earlier],
+      exchangeRates: const [],
+      dailyAccountBalances: const [],
+      dailyNetWorth: const [],
+      dailyManualValuations: const [],
+    );
+
+    expect(
+      data.balanceAfterTransaction(checking.id, earlier.id)?.minorUnits,
+      99000,
+    );
+    expect(
+      data.balanceAfterTransaction(checking.id, later.id)?.minorUnits,
+      97000,
+    );
   });
 }
