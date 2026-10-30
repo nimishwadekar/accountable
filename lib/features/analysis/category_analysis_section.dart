@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
@@ -61,6 +63,7 @@ class CategoryAnalysisSection extends StatelessWidget {
           final trailingWidth = (constraints.maxWidth * 0.42)
               .clamp(112.0, 180.0)
               .toDouble();
+          final pieSize = math.min(248.0, constraints.maxWidth);
           return result.positiveValues.isEmpty
               ? const EmptyState(
                   message: 'No categorized values for this month.',
@@ -68,13 +71,19 @@ class CategoryAnalysisSection extends StatelessWidget {
               : Column(
                   children: [
                     SizedBox(
-                      height: 220,
+                      width: pieSize,
+                      height: pieSize,
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
                           PieChart(
                             PieChartData(
-                              centerSpaceRadius: 48,
+                              // fl_chart paints sections to
+                              // centerSpaceRadius + section.radius. Keep that
+                              // radius within the square chart viewport so the
+                              // circle cannot cross the card edge on compact
+                              // screens.
+                              centerSpaceRadius: pieSize * 0.20,
                               sectionsSpace: 2,
                               sections: [
                                 for (final value in result.positiveValues)
@@ -82,7 +91,7 @@ class CategoryAnalysisSection extends StatelessWidget {
                                     value: value.amountUsdMinorUnits.toDouble(),
                                     color: _categoryColor(value.categoryId),
                                     title: '',
-                                    radius: 72,
+                                    radius: pieSize * 0.28,
                                   ),
                               ],
                             ),

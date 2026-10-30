@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 import 'package:accountable/app/theme/app_theme.dart';
 import 'package:accountable/data/data.dart';
@@ -103,4 +104,83 @@ void main() {
       expect(find.text('Ended in September'), findsNothing);
     },
   );
+
+  testWidgets('compact pie paint stays inside the chart card border', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
+    final checking = Account(
+      id: 'checking',
+      name: 'Checking',
+      accountType: 'cash',
+      currencyId: 'USD',
+      openingBalance: Money.zero(usd),
+      openingDate: DateTime.utc(2026, 1, 1),
+      closingDate: null,
+      usesManualValuations: false,
+    );
+    final data = AppDataSnapshot(
+      accounts: [checking],
+      categories: const [
+        Category(
+          id: 'salary',
+          name: 'Salary',
+          allowedTransactionTypes: {TransactionType.income},
+        ),
+      ],
+      currencies: const [usd],
+      tags: const [],
+      transactions: const [],
+      exchangeRates: const [],
+      dailyAccountBalances: const [],
+      dailyNetWorth: const [],
+      dailyManualValuations: const [],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(12),
+            child: CategoryAnalysisSection(
+              title: 'Income by Category',
+              result: const CategoryAnalysisResult(
+                values: [
+                  CategoryAnalysisValue(
+                    categoryId: 'salary',
+                    amountUsdMinorUnits: 10000,
+                  ),
+                ],
+              ),
+              usd: usd,
+              data: data,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final pieFinder = find.byType(PieChart);
+    final pie = tester.widget<PieChart>(pieFinder);
+    final pieSize = tester.getSize(pieFinder);
+    final outerRadius =
+        pie.data.centerSpaceRadius +
+        pie.data.sections.fold<double>(
+          0,
+          (largest, section) =>
+              section.radius > largest ? section.radius : largest,
+        );
+    final cardRect = tester.getRect(find.byType(Card));
+    final pieRect = tester.getRect(pieFinder);
+    final paintedTop = pieRect.center.dy - outerRadius;
+    final paintedBottom = pieRect.center.dy + outerRadius;
+
+    expect(pieSize.width, pieSize.height);
+    expect(outerRadius, lessThanOrEqualTo(pieSize.shortestSide / 2));
+    expect(paintedTop, greaterThanOrEqualTo(cardRect.top));
+    expect(paintedBottom, lessThanOrEqualTo(cardRect.bottom));
+  });
 }
