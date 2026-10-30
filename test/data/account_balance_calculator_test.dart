@@ -69,11 +69,52 @@ void main() {
     );
 
     expect(
-      () => const AccountBalanceCalculator().calculate(
+      () => AccountBalanceCalculator().calculate(
         accounts: const [],
         transactions: [transaction],
       ),
       throwsStateError,
+    );
+  });
+
+  test('rejects a transfer referencing an unknown destination account', () {
+    const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
+    final checking = Account(
+      id: 'checking',
+      name: 'Checking',
+      accountType: 'cash',
+      currencyId: 'USD',
+      openingBalance: Money.zero(usd),
+      openingDate: DateTime.utc(2026, 1, 1),
+      closingDate: null,
+      usesManualValuations: false,
+    );
+    final transfer = Transaction(
+      id: 'transfer-with-missing-destination',
+      createdAt: DateTime.utc(2026, 1, 2),
+      date: DateTime.utc(2026, 1, 2),
+      type: TransactionType.transfer,
+      sourceAmount: Money(minorUnits: 500, currencyId: 'USD'),
+      sourceAccountId: 'checking',
+      destinationAmount: Money(minorUnits: 500, currencyId: 'USD'),
+      destinationAccountId: 'missing',
+      categoryId: 'transfer',
+      tagId: 'tag',
+      description: 'Transfer to a deleted account',
+    );
+
+    expect(
+      () => const AccountBalanceCalculator().calculate(
+        accounts: [checking],
+        transactions: [transfer],
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'Unknown destination account: missing.',
+        ),
+      ),
     );
   });
 }

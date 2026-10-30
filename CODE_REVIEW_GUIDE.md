@@ -44,6 +44,7 @@ Run:
 /Users/nwadekar/flutter/bin/flutter analyze
 /Users/nwadekar/flutter/bin/flutter test --coverage --concurrency=1
 LOGIC_MIN=80 FINANCIAL_MIN=90 FLUTTER_BIN=/Users/nwadekar/flutter/bin/flutter ./tool/check_coverage.sh
+COVERAGE_OUTPUT_DIR=coverage/financial_flows FLUTTER_BIN=/Users/nwadekar/flutter/bin/flutter ./tool/analyze_financial_coverage.sh
 /Users/nwadekar/flutter/bin/flutter build web --release --base-href /accountable/
 ```
 
@@ -52,7 +53,7 @@ Record:
 - Analyzer errors and warnings.
 - Full test count and failures.
 - Application-logic coverage.
-- Financial-logic coverage.
+- Per-feature/per-flow financial line coverage (95% minimum per target file) and branch coverage diagnostics.
 - Web build status.
 
 Use targeted tests during implementation, then rerun the complete suite before declaring the review complete.

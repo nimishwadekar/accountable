@@ -718,8 +718,8 @@ A dependent table is not parsed when any dependency has validation errors. Valid
 - Google Sheets API calls are tested through deterministic fake clients.
 - Rebuild and catch-up tests include partial-write failures and retry behavior.
 - Every production bug must add a regression test before the fix is considered complete.
-- Run [`tool/check_coverage.sh`](./tool/check_coverage.sh) regularly.
-- Current coverage policy: at least 80% application-logic line coverage and at least 90% for financial logic files. Application-logic coverage excludes UI composition, visual theme code, OAuth UI, and low-level external HTTP adapters; those areas use widget/manual smoke tests.
+- Run [`tool/check_coverage.sh`](./tool/check_coverage.sh) regularly for the aggregate application gate and its explicitly listed per-file financial gate (80% application logic; 90% for those selected financial files).
+- Run [`tool/analyze_financial_coverage.sh`](./tool/analyze_financial_coverage.sh) to measure isolated transactions, history/valuation, analysis, milestones, migration, and persistence/outbox flows. It enforces 95% line coverage per financial target file and shared financial adapter, never one blended percentage; branch coverage is reported separately. Relevant workflow UI sources are shown separately from the financial-logic floor.
 
 ## Verification checklist
 

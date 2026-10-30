@@ -664,10 +664,12 @@ class DailyMaintenanceService {
   ) {
     // Retained as a list-based utility for callers that have only one lookup.
     // Historical calculations construct one index and reuse it instead.
+    final targetDate = _dateOnly(date);
     return rates.lastWhere(
-      (rate) => rate.currencyId == currencyId && _dateOnly(rate.date) == date,
+      (rate) =>
+          rate.currencyId == currencyId && _dateOnly(rate.date) == targetDate,
       orElse: () => throw StateError(
-        'No exchange rate for $currencyId on ${_dateString(date)}.',
+        'No exchange rate for $currencyId on ${_dateString(targetDate)}.',
       ),
     );
   }

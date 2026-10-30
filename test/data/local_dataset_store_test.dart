@@ -1,11 +1,18 @@
 import 'package:csv/csv.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import 'package:accountable/data/data.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
+  });
 
   test('memory dataset store copies values', () async {
     final store = MemoryLocalDatasetStore({'table': 'initial'});
@@ -14,6 +21,35 @@ void main() {
 
     await store.write({'table': 'updated'});
     expect((await store.read())?['table'], 'updated');
+  });
+
+  test(
+    'shared-preferences dataset survives a new store and isolates reads',
+    () async {
+      final first = SharedPreferencesLocalDatasetStore();
+      await first.write({
+        'Transactions': 'transaction_id,amount\ntx-1,12.34',
+        'Accounts': 'account_id,currency\nchecking,USD',
+      });
+
+      final second = SharedPreferencesLocalDatasetStore();
+      final loaded = await second.read();
+      expect(loaded, {
+        'Transactions': 'transaction_id,amount\ntx-1,12.34',
+        'Accounts': 'account_id,currency\nchecking,USD',
+      });
+
+      loaded!['Transactions'] = 'corrupted by caller';
+      expect((await first.read())!['Transactions'], contains('tx-1,12.34'));
+    },
+  );
+
+  test('shared-preferences dataset rejects corrupt non-object JSON', () async {
+    final preferences = SharedPreferencesAsync();
+    await preferences.setString('accountable.local_dataset', '[]');
+    final store = SharedPreferencesLocalDatasetStore();
+
+    await expectLater(store.read(), throwsFormatException);
   });
 
   test('does not rewrite an unchanged local dataset during reload', () async {

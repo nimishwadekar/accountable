@@ -26,6 +26,14 @@ void main() {
     expect(() => dollars - rupees, throwsArgumentError);
   });
 
+  test('refuses to format an amount using a different currency', () {
+    final dollars = Money.fromMajorUnits(value: '12.34', currency: usd);
+
+    expect(() => dollars.toMajorUnits(inr), throwsArgumentError);
+    expect(() => dollars.toMajorUnitsString(inr), throwsArgumentError);
+    expect(dollars.toMajorUnitsString(usd), '12.34');
+  });
+
   test('creates zero and negates balances', () {
     final zero = Money.zero(usd);
     final one = Money.fromMajorUnits(value: '1', currency: usd);

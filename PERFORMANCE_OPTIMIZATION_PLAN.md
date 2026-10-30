@@ -583,8 +583,11 @@ For every implementation change:
 1. All existing tests plus new differential, workflow, and regression tests pass.
 2. `flutter analyze` and formatting/diff checks pass.
 3. Run `tool/check_coverage.sh`: retain at least 80% application logic coverage
-   and 90% per currently gated financial file; add explicit coverage expectations
-   for extracted financial modules rather than moving them outside the gate.
+   and 90% on its explicitly gated financial files. Also run
+   `tool/analyze_financial_coverage.sh`: retain at least 95% line coverage per
+   financial source file in each isolated feature/flow and the shared financial
+   adapters; report branch coverage separately. Do not move financial logic out
+   of a measured scope to improve its score.
 4. Run the opt-in VM/Chrome benchmark on identical fixtures, including construction,
    allocations, and peak memory—not just isolated lookup speedups.
 5. Compare deterministic operation/read/write counts. Keep wall-clock timing out

@@ -244,4 +244,50 @@ void main() {
     ]);
     expect(progress.map((item) => item.actualAmount.minorUnits), [6000, 4000]);
   });
+
+  test('zero expected amount has no percentage rather than a false ratio', () {
+    const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
+    final account = Account(
+      id: 'checking',
+      name: 'Checking',
+      accountType: 'cash',
+      currencyId: 'USD',
+      openingBalance: Money.zero(usd),
+      openingDate: DateTime.utc(2026, 1, 1),
+      closingDate: null,
+      usesManualValuations: false,
+    );
+    final allocation = IncomeAllocation(
+      id: 'zero-target',
+      name: 'No expected income',
+      incomeCategoryId: 'salary',
+      incomeAccountId: account.id,
+      transferCategoryId: 'transfer',
+      expectedAmountPerIncome: Money.zero(usd),
+      startDate: DateTime.utc(2026, 10, 1),
+      endDate: null,
+      createdAt: DateTime.utc(2026, 10, 1),
+      updatedAt: DateTime.utc(2026, 10, 1),
+    );
+    final data = AppDataSnapshot(
+      accounts: [account],
+      categories: const [],
+      currencies: const [usd],
+      tags: const [],
+      transactions: const [],
+      exchangeRates: const [],
+      dailyAccountBalances: const [],
+      dailyNetWorth: const [],
+      dailyManualValuations: const [],
+      incomeAllocations: [allocation],
+    );
+
+    final progress = IncomeAllocationAnalyzer(data)
+        .analyze(month: DateTime.utc(2026, 10), incomeCategoryId: 'salary')
+        .single;
+
+    expect(progress.expectedAmount.minorUnits, 0);
+    expect(progress.actualAmount.minorUnits, 0);
+    expect(progress.percentage, isNull);
+  });
 }

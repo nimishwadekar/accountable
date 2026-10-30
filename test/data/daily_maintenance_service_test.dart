@@ -63,6 +63,110 @@ void main() {
     );
   });
 
+  test(
+    'rejects a zero provider FX quote instead of writing invalid history',
+    () async {
+      final source = await AssetAppDataRepository().load();
+      final client = _FakeSheetsClient({});
+      final service = DailyMaintenanceService(
+        client: client,
+        data: _copySnapshot(source, exchangeRates: const []),
+        httpClient: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'rates': {'INR': 0},
+            }),
+            200,
+          ),
+        ),
+      );
+
+      await expectLater(
+        service.rebuild(yesterday: DateTime.utc(2026, 10, 12)),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('Frankfurter returned a zero rate for INR.'),
+          ),
+        ),
+      );
+      expect(client.replacedRanges, isEmpty);
+    },
+  );
+
+  test(
+    'fails closed when historical FX remains unavailable through fallback',
+    () async {
+      final source = await AssetAppDataRepository().load();
+      final client = _FakeSheetsClient({});
+      var requests = 0;
+      final service = DailyMaintenanceService(
+        client: client,
+        data: _copySnapshot(source, exchangeRates: const []),
+        httpClient: MockClient((_) async {
+          requests++;
+          return http.Response('', 404);
+        }),
+      );
+
+      await expectLater(
+        service.rebuild(yesterday: DateTime.utc(2026, 10, 12)),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('No Frankfurter rate available for'),
+          ),
+        ),
+      );
+      expect(requests, 31);
+      expect(client.replacedRanges, isEmpty);
+    },
+  );
+
+  test(
+    'daily maintenance rate lookup requires the exact requested date',
+    () async {
+      final data = await AssetAppDataRepository().load();
+      final service = DailyMaintenanceService(
+        client: _FakeSheetsClient({}),
+        data: data,
+      );
+      final rate = service.rateFor(
+        data.exchangeRates,
+        'USD',
+        DateTime.utc(2026, 10, 10, 1),
+      );
+
+      expect(rate.currencyId, 'USD');
+      expect(rate.date, DateTime.utc(2026, 10, 10));
+      expect(
+        () => service.rateFor(
+          data.exchangeRates,
+          'USD',
+          DateTime.utc(2026, 10, 14),
+        ),
+        throwsStateError,
+      );
+    },
+  );
+
+  test(
+    'does not replace history for an inverted net-worth date window',
+    () async {
+      final data = await AssetAppDataRepository().load();
+      final client = _FakeSheetsClient({});
+
+      await DailyMaintenanceService(client: client, data: data).rebuildNetWorth(
+        startDate: DateTime.utc(2026, 10, 14),
+        yesterday: DateTime.utc(2026, 10, 13),
+      );
+
+      expect(client.replacedRanges, isEmpty);
+    },
+  );
+
   test('reuses successful provider dates within a rebuild only', () async {
     const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
     const eur = CurrencyDefinition(id: 'EUR', symbol: '€', decimalPlaces: 2);

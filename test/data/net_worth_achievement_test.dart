@@ -127,6 +127,134 @@ void main() {
     expect(complete.earnedFlagsToReset, ['target']);
     expect(incomplete.earnedFlagsToReset, isEmpty);
   });
+
+  test('flags duplicate daily snapshots after normalizing their dates', () {
+    final points = _month(2025, 1, 1200000)
+      ..add(
+        DailyNetWorth(
+          id: 'duplicate-date',
+          date: DateTime.utc(2025, 1, 1, 18),
+          amount: Money(minorUnits: 1200000, currencyId: 'USD'),
+          retrievedAt: DateTime.utc(2025, 1, 2),
+        ),
+      );
+
+    final result = NetWorthAchievementCalculator.evaluate(
+      dailyNetWorth: points,
+      trackingStartDate: DateTime.utc(2025, 1, 1),
+      achievements: [_achievement('target', 5000)],
+      today: DateTime.utc(2025, 2, 1),
+    );
+
+    expect(
+      result.validationErrors,
+      contains(
+        'Daily net worth contains more than one snapshot for 2025-01-01.',
+      ),
+    );
+  });
+
+  test('validates USD targets, ascending target order, and unique IDs', () {
+    final nonUsd = NetWorthAchievement(
+      id: 'duplicate-id',
+      name: 'Euro target',
+      target: const Money(minorUnits: 1000, currencyId: 'EUR'),
+      earned: false,
+    );
+    final sameId = _achievement('duplicate-id', 2000);
+    final descending = _achievement('lower-second', 1000);
+
+    final result = NetWorthAchievementCalculator.evaluate(
+      dailyNetWorth: _month(2025, 1, 0),
+      trackingStartDate: DateTime.utc(2025, 1, 1),
+      achievements: [nonUsd, sameId, descending],
+      today: DateTime.utc(2025, 2, 1),
+    );
+
+    expect(
+      result.validationErrors,
+      contains('Achievement duplicate-id must have a USD target.'),
+    );
+    expect(
+      result.validationErrors,
+      contains('Achievement targets must be unique and in ascending order.'),
+    );
+    expect(
+      result.validationErrors,
+      contains('Achievement IDs must be unique.'),
+    );
+  });
+
+  test('does not report a higher target as reached before a lower target', () {
+    final lowerTargetQualifiesFirst = NetWorthAchievementCalculator.evaluate(
+      dailyNetWorth: _month(2025, 1, 7500000),
+      trackingStartDate: DateTime.utc(2025, 1, 1),
+      achievements: [
+        _achievement('higher', 100000),
+        _achievement('lower', 50000),
+      ],
+      today: DateTime.utc(2025, 2, 1),
+    );
+
+    expect(
+      lowerTargetQualifiesFirst.validationErrors,
+      contains('A higher achievement target qualifies before a lower target.'),
+    );
+
+    final points = <DailyNetWorth>[
+      ..._month(2025, 1, 7500000),
+      ..._month(2025, 2, 10000000),
+    ];
+    final nonChronological = NetWorthAchievementCalculator.evaluate(
+      dailyNetWorth: points,
+      trackingStartDate: DateTime.utc(2025, 1, 1),
+      achievements: [
+        _achievement('higher-first', 100000),
+        _achievement('lower-second', 50000),
+      ],
+      today: DateTime.utc(2025, 3, 1),
+    );
+    expect(
+      nonChronological.validationErrors,
+      contains('Achievements must be reached in chronological target order.'),
+    );
+  });
+
+  test('reports month-to-date gaps and handles an empty history', () {
+    final points = <DailyNetWorth>[
+      ..._month(2025, 1, 1000000),
+      DailyNetWorth(
+        id: '2025-02-01-net',
+        date: DateTime.utc(2025, 2, 1),
+        amount: Money(minorUnits: 1000000, currencyId: 'USD'),
+        retrievedAt: DateTime.utc(2025, 2, 1),
+      ),
+      DailyNetWorth(
+        id: '2025-02-03-net',
+        date: DateTime.utc(2025, 2, 3),
+        amount: Money(minorUnits: 1000000, currencyId: 'USD'),
+        retrievedAt: DateTime.utc(2025, 2, 3),
+      ),
+    ];
+    final incompleteMonth = NetWorthAchievementCalculator.evaluate(
+      dailyNetWorth: points,
+      trackingStartDate: DateTime.utc(2025, 1, 1),
+      achievements: [_achievement('target', 5000)],
+      today: DateTime.utc(2025, 2, 3),
+    );
+    final emptyHistory = NetWorthAchievementCalculator.evaluate(
+      dailyNetWorth: const [],
+      trackingStartDate: DateTime.utc(2025, 1, 1),
+      achievements: const [],
+      today: DateTime.utc(2025, 2, 3),
+    );
+
+    expect(incompleteMonth.monthToDateSnapshotCount, 2);
+    expect(incompleteMonth.monthToDateExpectedSnapshotCount, 3);
+    expect(incompleteMonth.hasMonthToDateGaps, isTrue);
+    expect(emptyHistory.firstEligibleMonth, isNull);
+    expect(emptyHistory.hasMonthToDateGaps, isFalse);
+  });
 }
 
 NetWorthAchievement _achievement(

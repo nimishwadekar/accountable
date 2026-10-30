@@ -65,7 +65,9 @@ void main() {
         data: data,
         httpClient: MockClient(
           (_) async => http.Response(
-            jsonEncode({'rates': {'INR': 96.4}}),
+            jsonEncode({
+              'rates': {'INR': 96.4},
+            }),
             200,
           ),
         ),
@@ -136,6 +138,90 @@ void main() {
         (row) => row.first == '2026-10-10-net',
       );
       expect(netWorthRow[2], '1757.47');
+    },
+  );
+
+  test(
+    'manual assets contribute through the inclusive closing day only',
+    () async {
+      const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
+      final checking = Account(
+        id: 'checking',
+        name: 'Checking',
+        accountType: 'cash',
+        currencyId: 'USD',
+        openingBalance: Money.fromMajorUnits(value: '1000', currency: usd),
+        openingDate: DateTime.utc(2026, 1, 1),
+        closingDate: null,
+        usesManualValuations: false,
+      );
+      final brokerage = Account(
+        id: 'brokerage',
+        name: 'Brokerage',
+        accountType: 'asset',
+        currencyId: 'USD',
+        openingBalance: Money.zero(usd),
+        openingDate: DateTime.utc(2026, 1, 1),
+        closingDate: DateTime.utc(2026, 1, 2),
+        usesManualValuations: true,
+      );
+      final transaction = Transaction(
+        id: 'jan-1-expense',
+        createdAt: DateTime.utc(2026, 1, 1),
+        date: DateTime.utc(2026, 1, 1),
+        type: TransactionType.expense,
+        sourceAmount: Money.fromMajorUnits(value: '10', currency: usd),
+        sourceAccountId: checking.id,
+        destinationAmount: null,
+        destinationAccountId: null,
+        categoryId: 'food',
+        tagId: 'tag',
+        description: 'Expense before the asset closes',
+      );
+      final data = AppDataSnapshot(
+        accounts: [checking, brokerage],
+        categories: const [
+          Category(
+            id: 'food',
+            name: 'Food',
+            allowedTransactionTypes: {TransactionType.expense},
+          ),
+        ],
+        currencies: const [usd],
+        tags: const [Tag(id: 'tag', name: 'Tag')],
+        transactions: [transaction],
+        exchangeRates: const [],
+        dailyAccountBalances: const [],
+        dailyNetWorth: const [],
+        dailyManualValuations: [
+          DailyManualValuation(
+            id: 'jan-1-brokerage',
+            date: DateTime.utc(2026, 1, 1),
+            accountId: brokerage.id,
+            value: Money.fromMajorUnits(value: '500', currency: usd),
+          ),
+        ],
+      );
+      final client = _MaintenanceClient();
+      final service = DailyMaintenanceService(
+        client: client,
+        data: data,
+        httpClient: MockClient(
+          (_) async => http.Response(jsonEncode({'rates': {}}), 200),
+        ),
+      );
+
+      await service.rebuild(yesterday: DateTime.utc(2026, 1, 3));
+
+      final netWorthRows = client.replacedNetWorthRows
+          .where((row) => row.isNotEmpty && row.first.endsWith('-net'))
+          .toList();
+      expect(netWorthRows.map((row) => row[0]), [
+        '2026-01-01-net',
+        '2026-01-02-net',
+        '2026-01-03-net',
+      ]);
+      expect(netWorthRows.map((row) => row[2]), ['1490', '1490', '990']);
     },
   );
 
@@ -232,17 +318,18 @@ void main() {
       ], data);
 
       expect(errors, contains('Unknown valuation account: missing.'));
-      expect(errors, contains('Account chase_checking does not use manual valuations.'));
       expect(
-      errors,
-      contains('Valuation currency INR does not match account currency USD.'),
-    );
+        errors,
+        contains('Account chase_checking does not use manual valuations.'),
+      );
       expect(
-      errors,
-      contains(
-        'Valuation date is before account fidelity-401k-2065 opened.',
-      ),
-    );
+        errors,
+        contains('Valuation currency INR does not match account currency USD.'),
+      );
+      expect(
+        errors,
+        contains('Valuation date is before account fidelity-401k-2065 opened.'),
+      );
       expect(
         errors,
         contains('Duplicate valuation for fidelity-401k-2065 on 2026-10-14.'),
@@ -276,6 +363,66 @@ void main() {
         currencies: currencies,
       ),
       throwsFormatException,
+    );
+  });
+
+  test('enforces valuation IDs and the inclusive account closing date', () {
+    const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
+    final account = Account(
+      id: 'closed-brokerage',
+      name: 'Closed Brokerage',
+      accountType: 'asset',
+      currencyId: 'USD',
+      openingBalance: Money.zero(usd),
+      openingDate: DateTime.utc(2026, 1, 1),
+      closingDate: DateTime.utc(2026, 1, 10),
+      usesManualValuations: true,
+    );
+    final data = AppDataSnapshot(
+      accounts: [account],
+      categories: const [],
+      currencies: const [usd],
+      tags: const [],
+      transactions: const [],
+      exchangeRates: const [],
+      dailyAccountBalances: const [],
+      dailyNetWorth: const [],
+      dailyManualValuations: [
+        DailyManualValuation(
+          id: 'existing-valuation',
+          date: DateTime.utc(2026, 1, 5),
+          accountId: account.id,
+          value: Money(minorUnits: 10000, currencyId: 'USD'),
+        ),
+      ],
+    );
+    DailyManualValuation valuation({
+      required String id,
+      required DateTime date,
+    }) => DailyManualValuation(
+      id: id,
+      date: date,
+      accountId: account.id,
+      value: Money(minorUnits: 12000, currencyId: 'USD'),
+    );
+
+    expect(
+      validateManualValuationsForWrite([
+        valuation(id: 'existing-valuation', date: DateTime.utc(2026, 1, 10)),
+      ], data),
+      contains('Duplicate valuation ID: existing-valuation.'),
+    );
+    expect(
+      validateManualValuationsForWrite([
+        valuation(id: 'after-close', date: DateTime.utc(2026, 1, 11)),
+      ], data),
+      contains('Valuation date is after account closed-brokerage closed.'),
+    );
+    expect(
+      validateManualValuationsForWrite([
+        valuation(id: 'on-closing-day', date: DateTime.utc(2026, 1, 10)),
+      ], data),
+      isEmpty,
     );
   });
 

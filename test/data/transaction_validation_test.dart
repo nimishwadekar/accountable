@@ -78,6 +78,16 @@ void main() {
       ).validate(),
       isEmpty,
     );
+    expect(
+      build(
+        type: TransactionType.expense,
+        sourceAmount: amount,
+        sourceAccountId: 'checking',
+        destinationAmount: amount,
+        destinationAccountId: 'savings',
+      ).validate(),
+      contains('expense cannot have a destination account and amount.'),
+    );
   });
 
   test('entry validation requires tag and description', () {
@@ -136,6 +146,174 @@ void main() {
       expect(
         validateTransactionForWrite(transaction, data),
         contains('Transaction date is outside account sbi_nro lifetime.'),
+      );
+    },
+  );
+
+  test(
+    'write validation checks both account references and amount currencies',
+    () {
+      const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
+      const inr = CurrencyDefinition(id: 'INR', symbol: '₹', decimalPlaces: 2);
+      const eur = CurrencyDefinition(id: 'EUR', symbol: '€', decimalPlaces: 2);
+      final checking = Account(
+        id: 'checking',
+        name: 'Checking',
+        accountType: 'cash',
+        currencyId: 'USD',
+        openingBalance: Money.zero(usd),
+        openingDate: DateTime.utc(2026, 1, 1),
+        closingDate: DateTime.utc(2026, 1, 31),
+        usesManualValuations: false,
+      );
+      final savings = Account(
+        id: 'savings',
+        name: 'Savings',
+        accountType: 'cash',
+        currencyId: 'INR',
+        openingBalance: Money.zero(inr),
+        openingDate: DateTime.utc(2026, 1, 1),
+        closingDate: null,
+        usesManualValuations: false,
+      );
+      final data = AppDataSnapshot(
+        accounts: [checking, savings],
+        categories: const [
+          Category(
+            id: 'expense',
+            name: 'Expense',
+            allowedTransactionTypes: {TransactionType.expense},
+          ),
+          Category(
+            id: 'transfer',
+            name: 'Transfer',
+            allowedTransactionTypes: {TransactionType.transfer},
+          ),
+        ],
+        currencies: const [usd, inr, eur],
+        tags: const [Tag(id: 'tag', name: 'Tag')],
+        transactions: const [],
+        exchangeRates: const [],
+        dailyAccountBalances: const [],
+        dailyNetWorth: const [],
+        dailyManualValuations: const [],
+      );
+      Transaction expense({
+        String? accountId = 'checking',
+        Money? amount,
+        String? categoryId = 'expense',
+        DateTime? date,
+      }) => Transaction(
+        id: 'expense',
+        createdAt: DateTime.utc(2026, 1, 10),
+        date: date ?? DateTime.utc(2026, 1, 10),
+        type: TransactionType.expense,
+        sourceAmount: amount ?? Money(minorUnits: 100, currencyId: 'USD'),
+        sourceAccountId: accountId,
+        destinationAmount: null,
+        destinationAccountId: null,
+        categoryId: categoryId,
+        tagId: 'tag',
+        description: 'Test expense',
+      );
+
+      expect(
+        validateTransactionForWrite(expense(accountId: 'missing'), data),
+        contains('Unknown source account: missing.'),
+      );
+      expect(
+        validateTransactionForWrite(
+          expense(amount: Money(minorUnits: 100, currencyId: 'EUR')),
+          data,
+        ),
+        contains(
+          'source amount currency EUR does not match account currency USD.',
+        ),
+      );
+      expect(
+        validateTransactionForWrite(
+          expense(amount: Money(minorUnits: -100, currencyId: 'USD')),
+          data,
+        ),
+        contains('source amount cannot be negative.'),
+      );
+      expect(
+        validateTransactionForWrite(expense(categoryId: 'missing'), data),
+        contains('Unknown category: missing.'),
+      );
+
+      final transfer = Transaction(
+        id: 'transfer',
+        createdAt: DateTime.utc(2026, 1, 10),
+        date: DateTime.utc(2026, 1, 10),
+        type: TransactionType.transfer,
+        sourceAmount: Money(minorUnits: 100, currencyId: 'USD'),
+        sourceAccountId: 'checking',
+        destinationAmount: Money(minorUnits: 100, currencyId: 'INR'),
+        destinationAccountId: 'missing',
+        categoryId: 'transfer',
+        tagId: 'tag',
+        description: 'Test transfer',
+      );
+      expect(
+        validateTransactionForWrite(transfer, data),
+        contains('Unknown destination account: missing.'),
+      );
+    },
+  );
+
+  test(
+    'transaction dates include the account closing day but not later dates',
+    () {
+      const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
+      final checking = Account(
+        id: 'checking',
+        name: 'Checking',
+        accountType: 'cash',
+        currencyId: 'USD',
+        openingBalance: Money.zero(usd),
+        openingDate: DateTime.utc(2026, 1, 1),
+        closingDate: DateTime.utc(2026, 1, 31),
+        usesManualValuations: false,
+      );
+      final data = AppDataSnapshot(
+        accounts: [checking],
+        categories: const [
+          Category(
+            id: 'expense',
+            name: 'Expense',
+            allowedTransactionTypes: {TransactionType.expense},
+          ),
+        ],
+        currencies: const [usd],
+        tags: const [Tag(id: 'tag', name: 'Tag')],
+        transactions: const [],
+        exchangeRates: const [],
+        dailyAccountBalances: const [],
+        dailyNetWorth: const [],
+        dailyManualValuations: const [],
+      );
+      final closingDay = build(
+        type: TransactionType.expense,
+        sourceAmount: amount,
+        sourceAccountId: 'checking',
+        categoryId: 'expense',
+        tagId: 'tag',
+        date: DateTime.utc(2026, 1, 31),
+      );
+      final afterClosing = build(
+        type: TransactionType.expense,
+        sourceAmount: amount,
+        sourceAccountId: 'checking',
+        categoryId: 'expense',
+        tagId: 'tag',
+        date: DateTime.utc(2026, 2, 1),
+      );
+
+      expect(validateTransactionForWrite(closingDay, data), isEmpty);
+      expect(
+        validateTransactionForWrite(afterClosing, data),
+        contains('Transaction date is outside account checking lifetime.'),
       );
     },
   );
