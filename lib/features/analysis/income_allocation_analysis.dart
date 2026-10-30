@@ -45,6 +45,7 @@ class IncomeAllocationAnalyzer {
     final transferTotals = <String, int>{};
     for (final allocation in data.incomeAllocations) {
       if (!incomeCategoryIds.contains(allocation.incomeCategoryId)) continue;
+      if (!_isActiveInMonth(monthDate, allocation)) continue;
       allocationsByCategory
           .putIfAbsent(allocation.incomeCategoryId, () => [])
           .add(allocation);
@@ -142,6 +143,17 @@ class IncomeAllocationAnalyzer {
         : _dateOnly(allocation.endDate!);
     return !normalizedDate.isBefore(startDate) &&
         (endDate == null || !normalizedDate.isAfter(endDate));
+  }
+
+  static bool _isActiveInMonth(DateTime month, IncomeAllocation allocation) {
+    final monthStart = DateTime(month.year, month.month);
+    final monthEnd = DateTime(month.year, month.month + 1, 0);
+    final allocationStart = _dateOnly(allocation.startDate);
+    final allocationEnd = allocation.endDate == null
+        ? null
+        : _dateOnly(allocation.endDate!);
+    return !allocationStart.isAfter(monthEnd) &&
+        (allocationEnd == null || !allocationEnd.isBefore(monthStart));
   }
 
   static DateTime _dateOnly(DateTime value) =>

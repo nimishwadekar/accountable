@@ -25,6 +25,30 @@ void main() {
       createdAt: DateTime.now().toUtc(),
       updatedAt: DateTime.now().toUtc(),
     );
+    final futureAllocation = IncomeAllocation(
+      id: 'future-allocation',
+      name: 'Starts next month',
+      incomeCategoryId: 'salary',
+      incomeAccountId: checking.id,
+      transferCategoryId: 'general',
+      expectedAmountPerIncome: amount,
+      startDate: DateTime.utc(2026, 11, 1),
+      endDate: null,
+      createdAt: DateTime.utc(2026, 10, 1),
+      updatedAt: DateTime.utc(2026, 10, 1),
+    );
+    final expiredAllocation = IncomeAllocation(
+      id: 'expired-allocation',
+      name: 'Ended last month',
+      incomeCategoryId: 'salary',
+      incomeAccountId: checking.id,
+      transferCategoryId: 'general',
+      expectedAmountPerIncome: amount,
+      startDate: DateTime.utc(2026, 1, 1),
+      endDate: DateTime.utc(2026, 9, 30),
+      createdAt: DateTime.utc(2026, 1, 1),
+      updatedAt: DateTime.utc(2026, 9, 30),
+    );
     final transactions = [
       Transaction(
         id: 'income-before-start',
@@ -76,7 +100,7 @@ void main() {
       dailyAccountBalances: source.dailyAccountBalances,
       dailyNetWorth: source.dailyNetWorth,
       dailyManualValuations: source.dailyManualValuations,
-      incomeAllocations: [allocation],
+      incomeAllocations: [allocation, futureAllocation, expiredAllocation],
     );
 
     final progress = IncomeAllocationAnalyzer(data)
@@ -85,6 +109,7 @@ void main() {
 
     expect(progress.expectedAmount.minorUnits, 10000);
     expect(progress.actualAmount.minorUnits, 10000);
+    expect(progress.allocation.id, 'allocation-test');
   });
 
   test('keeps allocation amounts in the income account currency', () async {

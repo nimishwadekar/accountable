@@ -71,6 +71,7 @@ run_coverage analysis \
   test/features/income_allocation_analysis_test.dart \
   test/features/analysis_page_test.dart \
   test/features/analysis_range_flow_test.dart \
+  test/features/category_analysis_section_test.dart \
   test/features/analysis_graph_responsive_test.dart \
   test/features/missing_fx_analysis_page_test.dart \
   test/features/income_allocation_dialog_test.dart \
