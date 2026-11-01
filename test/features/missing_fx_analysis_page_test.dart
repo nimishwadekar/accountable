@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:accountable/app/theme/app_theme.dart';
+import 'package:accountable/app/session_ui_preferences.dart';
 import 'package:accountable/data/data.dart';
 import 'package:accountable/features/analysis/analysis_page.dart';
 
@@ -11,6 +12,11 @@ void main() {
   testWidgets('shows a rebuild error when category FX data is missing', (
     tester,
   ) async {
+    await SessionUiPreferences.instance.startSession();
+    SessionUiPreferences.instance.analysisMonth = DateTime.utc(
+      2026,
+      10,
+    ).toIso8601String();
     final source = await AssetAppDataRepository().load();
     final withoutInrRates = AppDataSnapshot(
       accounts: source.accounts,

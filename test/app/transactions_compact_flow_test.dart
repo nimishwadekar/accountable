@@ -39,8 +39,6 @@ void main() {
       ),
     );
     await tester.pump(const Duration(milliseconds: 500));
-    await tester.tap(find.byIcon(Icons.receipt_long_outlined));
-    await tester.pump(const Duration(milliseconds: 500));
 
     final pageTitle = tester.getRect(find.text('Transactions').first);
     final addButton = tester.getRect(
@@ -409,8 +407,6 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
-    await tester.tap(find.byIcon(Icons.receipt_long_outlined));
     await tester.pump();
     await tester.tap(find.text('Filters'));
     await tester.pumpAndSettle();

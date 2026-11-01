@@ -51,16 +51,17 @@ void main() {
     for (var frame = 0; frame < 8; frame++) {
       await tester.pump(const Duration(milliseconds: 200));
     }
-    expect(tester.takeException(), isNull, reason: 'Initial overview layout');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'Initial transactions layout',
+    );
 
     expect(find.byType(NavigationBar), findsOneWidget);
-    await tester.tap(find.text('More'));
-    await tester.pumpAndSettle();
-    expect(find.text('More destinations'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    expect(find.text('Milestones'), findsOneWidget);
     await tester.tap(find.text('Milestones'));
-    await tester.pumpAndSettle();
+    // The pending milestone badge pulses continuously while it needs
+    // acknowledgement, so settling animations would never complete.
+    await tester.pump(const Duration(milliseconds: 500));
     expect(tester.takeException(), isNull);
     expect(find.text('You did it!'), findsOneWidget);
 

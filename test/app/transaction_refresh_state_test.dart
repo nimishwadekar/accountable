@@ -23,8 +23,6 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.tap(find.byIcon(Icons.receipt_long_outlined));
-    await tester.pump();
     await tester.tap(find.text('Show balances'));
     await tester.pump();
     expect(find.textContaining('Balance:'), findsWidgets);

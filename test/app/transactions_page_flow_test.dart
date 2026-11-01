@@ -27,8 +27,6 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.tap(find.byIcon(Icons.receipt_long_outlined));
-    await tester.pump();
 
     expect(find.textContaining('of 8 transactions'), findsNothing);
     expect(find.text('All Types'), findsOneWidget);
