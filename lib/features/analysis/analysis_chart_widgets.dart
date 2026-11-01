@@ -153,6 +153,15 @@ class _LineChartWidgetState extends State<LineChartWidget> {
   List<ChartPoint>? _cachedSourcePoints;
   List<FlSpot>? _cachedSpots;
   (double minimum, double maximum)? _cachedExtrema;
+  List<ChartPoint>? _cachedOverlayScalePoints;
+  String? _cachedOverlayScaleLabel;
+  String? _cachedOverlayScaleCurrencySymbol;
+  TextStyle? _cachedOverlayScaleStyle;
+  TextScaler? _cachedOverlayScaleTextScaler;
+  TextDirection? _cachedOverlayScaleTextDirection;
+  (double, double, double, double, double, double, double)?
+  _cachedOverlayScaleGeometry;
+  double? _cachedOverlaySafeMaxY;
 
   @override
   void dispose() {
@@ -220,7 +229,6 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         const labelClearance = 52.0;
         final chartMinY = minimum - padding;
         final baseMaxY = maximum + padding;
-        final baseYRange = baseMaxY - chartMinY;
         final axisStyle =
             Theme.of(context).textTheme.labelSmall ?? const TextStyle();
         final selectedX = _selectedX.value;
@@ -246,53 +254,20 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         final hasOverlaySpace =
             constraints.maxWidth > baseAxisReservedSize + 24;
         final canShowOverlay = selectedX != null && hasOverlaySpace;
-        final overlayWidth = _valueOverlayWidth(
+        final maxY = _maxYForAllOverlayPoints(
           context,
+          points: points,
           label: widget.axisLabel,
-          point: displayPoint,
-          baseline: previousValue,
           currency: currency,
+          chartMinX: chartMinX,
+          chartMaxX: chartMaxX,
+          chartWidth: constraints.maxWidth,
+          axisReservedSize: baseAxisReservedSize,
+          chartMinY: chartMinY,
+          baseMaxY: baseMaxY,
+          plotHeight: chartHeight - bottomAxisHeight,
+          labelClearance: labelClearance,
         );
-        final overlayLeft = baseAxisReservedSize + AppSpacing.sm;
-        final overlayRight = overlayLeft + overlayWidth;
-        final clashValues = hasOverlaySpace
-            ? [
-                for (final point in points)
-                  if (_xPosition(
-                            point.date.difference(firstDate).inDays.toDouble(),
-                            chartMinX,
-                            chartMaxX,
-                            constraints.maxWidth,
-                            baseAxisReservedSize,
-                          ) >=
-                          overlayLeft - AppSpacing.sm &&
-                      _xPosition(
-                            point.date.difference(firstDate).inDays.toDouble(),
-                            chartMinX,
-                            chartMaxX,
-                            constraints.maxWidth,
-                            baseAxisReservedSize,
-                          ) <=
-                          overlayRight + AppSpacing.sm)
-                    point.value,
-              ]
-            : const <double>[];
-        var maxY = baseMaxY;
-        if (clashValues.isNotEmpty) {
-          final clashValue = clashValues.reduce(math.max);
-          final basePixel =
-              (baseMaxY - clashValue) /
-              baseYRange *
-              (chartHeight - bottomAxisHeight);
-          if (basePixel < labelClearance) {
-            final extraRange =
-                (labelClearance * baseYRange -
-                    (chartHeight - bottomAxisHeight) *
-                        (baseMaxY - clashValue)) /
-                (chartHeight - bottomAxisHeight - labelClearance);
-            maxY += extraRange.clamp(0, double.infinity);
-          }
-        }
         final yAxisValues = _yAxisValues(
           minimum: chartMinY,
           maximum: maxY,
@@ -649,6 +624,115 @@ class _LineChartWidgetState extends State<LineChartWidget> {
       maxLines: 1,
     )..layout();
     return painter.width + AppSpacing.md;
+  }
+
+  double _maxYForAllOverlayPoints(
+    BuildContext context, {
+    required List<ChartPoint> points,
+    required String label,
+    required CurrencyDefinition? currency,
+    required double chartMinX,
+    required double chartMaxX,
+    required double chartWidth,
+    required double axisReservedSize,
+    required double chartMinY,
+    required double baseMaxY,
+    required double plotHeight,
+    required double labelClearance,
+  }) {
+    final style = Theme.of(context).textTheme.labelLarge ?? const TextStyle();
+    final textScaler = MediaQuery.textScalerOf(context);
+    final textDirection = Directionality.of(context);
+    final currencySymbol = currency?.symbol;
+    final geometry = (
+      chartMinX,
+      chartMaxX,
+      chartWidth,
+      axisReservedSize,
+      chartMinY,
+      baseMaxY,
+      plotHeight,
+    );
+    if (identical(_cachedOverlayScalePoints, points) &&
+        _cachedOverlayScaleLabel == label &&
+        _cachedOverlayScaleCurrencySymbol == currencySymbol &&
+        _cachedOverlayScaleStyle == style &&
+        _cachedOverlayScaleTextScaler == textScaler &&
+        _cachedOverlayScaleTextDirection == textDirection &&
+        _cachedOverlayScaleGeometry == geometry) {
+      return _cachedOverlaySafeMaxY!;
+    }
+
+    var safeMaxY = baseMaxY;
+    final baseYRange = baseMaxY - chartMinY;
+    if (chartWidth > axisReservedSize + 24) {
+      final pointPositions = [
+        for (final point in points)
+          (
+            x: _xPosition(
+              point.date.difference(points.first.date).inDays.toDouble(),
+              chartMinX,
+              chartMaxX,
+              chartWidth,
+              axisReservedSize,
+            ),
+            value: point.value,
+          ),
+      ]..sort((a, b) => a.x.compareTo(b.x));
+      final overlayRightEdges = <double>[];
+      for (var index = 0; index < points.length; index++) {
+        final overlayWidth = _valueOverlayWidth(
+          context,
+          label: label,
+          point: points[index],
+          baseline: index == 0 ? null : points[index - 1].value,
+          currency: currency,
+        );
+        overlayRightEdges.add(
+          axisReservedSize + AppSpacing.sm + overlayWidth + AppSpacing.sm,
+        );
+      }
+      overlayRightEdges.sort();
+
+      var pointIndex = 0;
+      while (pointIndex < pointPositions.length &&
+          pointPositions[pointIndex].x < axisReservedSize) {
+        pointIndex++;
+      }
+      var maximumClashingValue = double.negativeInfinity;
+      for (final rightEdge in overlayRightEdges) {
+        while (pointIndex < pointPositions.length &&
+            pointPositions[pointIndex].x <= rightEdge) {
+          maximumClashingValue = math
+              .max(maximumClashingValue, pointPositions[pointIndex].value)
+              .toDouble();
+          pointIndex++;
+        }
+        if (maximumClashingValue == double.negativeInfinity) continue;
+
+        final basePixel =
+            (baseMaxY - maximumClashingValue) / baseYRange * plotHeight;
+        if (basePixel < labelClearance) {
+          final extraRange =
+              (labelClearance * baseYRange -
+                  plotHeight * (baseMaxY - maximumClashingValue)) /
+              (plotHeight - labelClearance);
+          safeMaxY = math
+              .max(safeMaxY, baseMaxY + extraRange.clamp(0, double.infinity))
+              .toDouble();
+        }
+      }
+    }
+
+    _cachedOverlayScalePoints = points;
+    _cachedOverlayScaleLabel = label;
+    _cachedOverlayScaleCurrencySymbol = currencySymbol;
+    _cachedOverlayScaleStyle = style;
+    _cachedOverlayScaleTextScaler = textScaler;
+    _cachedOverlayScaleTextDirection = textDirection;
+    _cachedOverlayScaleGeometry = geometry;
+    _cachedOverlaySafeMaxY = safeMaxY;
+    return safeMaxY;
   }
 
   int _nextPointIndexForX(
