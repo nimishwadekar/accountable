@@ -108,6 +108,12 @@ class _MilestonesPageState extends State<MilestonesPage> {
     final formattedTarget = currency == null
         ? achievement.target.minorUnits.toString()
         : formatMoney(achievement.target, widget.data.currenciesById);
+    final compact =
+        MediaQuery.sizeOf(context).width < AppBreakpoints.compact ||
+        MediaQuery.sizeOf(context).height < 680 ||
+        MediaQuery.textScalerOf(context).scale(14) > 18;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final showDecorations = !compact && !reduceMotion;
 
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -119,39 +125,63 @@ class _MilestonesPageState extends State<MilestonesPage> {
       ),
       child: Stack(
         children: [
-          const Positioned(
-            top: 38,
-            left: 32,
-            child: Icon(Icons.auto_awesome, color: _milestoneCoral, size: 34),
-          ),
-          const Positioned(
-            top: 92,
-            right: 42,
-            child: Icon(Icons.star_rounded, color: _milestoneGold, size: 42),
-          ),
-          const Positioned(
-            bottom: 90,
-            left: 54,
-            child: Icon(Icons.auto_awesome, color: AppColors.teal, size: 28),
-          ),
+          if (showDecorations) ...[
+            const Positioned(
+              top: 38,
+              left: 32,
+              child: ExcludeSemantics(
+                child: Icon(
+                  Icons.auto_awesome,
+                  color: _milestoneCoral,
+                  size: 34,
+                ),
+              ),
+            ),
+            const Positioned(
+              top: 92,
+              right: 42,
+              child: ExcludeSemantics(
+                child: Icon(
+                  Icons.star_rounded,
+                  color: _milestoneGold,
+                  size: 42,
+                ),
+              ),
+            ),
+            const Positioned(
+              bottom: 90,
+              left: 54,
+              child: ExcludeSemantics(
+                child: Icon(
+                  Icons.auto_awesome,
+                  color: AppColors.teal,
+                  size: 28,
+                ),
+              ),
+            ),
+          ],
           SafeArea(
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 680),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  padding: EdgeInsets.all(
+                    compact ? AppPageSpacing.compactGutter : AppSpacing.xl,
+                  ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       TweenAnimationBuilder<double>(
                         tween: Tween(begin: 0.65, end: 1),
-                        duration: const Duration(milliseconds: 700),
-                        curve: Curves.elasticOut,
+                        duration: reduceMotion
+                            ? Duration.zero
+                            : const Duration(milliseconds: 700),
+                        curve: reduceMotion ? Curves.linear : Curves.elasticOut,
                         builder: (context, scale, child) =>
                             Transform.scale(scale: scale, child: child),
                         child: Container(
-                          width: 128,
-                          height: 128,
+                          width: compact ? 88 : 128,
+                          height: compact ? 88 : 128,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: const LinearGradient(
@@ -169,24 +199,27 @@ class _MilestonesPageState extends State<MilestonesPage> {
                               ),
                             ],
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.celebration,
-                            size: 76,
+                            size: compact ? 52 : 76,
                             color: Colors.white,
                           ),
                         ),
                       ),
-                      const SizedBox(height: AppSpacing.lg),
+                      SizedBox(height: compact ? AppSpacing.md : AppSpacing.lg),
                       Text(
                         'You did it!',
-                        style: Theme.of(context).textTheme.headlineLarge
-                            ?.copyWith(
-                              color: AppColors.navy,
-                              fontWeight: FontWeight.w800,
-                            ),
+                        style:
+                            (compact
+                                    ? Theme.of(context).textTheme.headlineMedium
+                                    : Theme.of(context).textTheme.headlineLarge)
+                                ?.copyWith(
+                                  color: AppColors.navy,
+                                  fontWeight: FontWeight.w800,
+                                ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: AppSpacing.sm),
+                      const SizedBox(height: AppSpacing.xs),
                       Text(
                         'A milestone worth celebrating',
                         style: Theme.of(context).textTheme.titleMedium
@@ -196,10 +229,12 @@ class _MilestonesPageState extends State<MilestonesPage> {
                             ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: AppSpacing.md),
+                      const SizedBox(height: AppSpacing.sm),
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(AppSpacing.md),
+                        padding: EdgeInsets.all(
+                          compact ? AppSpacing.sm : AppSpacing.md,
+                        ),
                         decoration: BoxDecoration(
                           color: _milestoneTargetSurface,
                           borderRadius: BorderRadius.circular(AppRadii.card),
@@ -215,10 +250,12 @@ class _MilestonesPageState extends State<MilestonesPage> {
                           textAlign: TextAlign.center,
                         ),
                       ),
-                      const SizedBox(height: AppSpacing.md),
+                      const SizedBox(height: AppSpacing.sm),
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(AppSpacing.lg),
+                        padding: EdgeInsets.all(
+                          compact ? AppSpacing.md : AppSpacing.lg,
+                        ),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
                             colors: [AppColors.navy, AppColors.teal],
@@ -236,11 +273,18 @@ class _MilestonesPageState extends State<MilestonesPage> {
                             const SizedBox(height: AppSpacing.xs),
                             Text(
                               formattedAverage,
-                              style: Theme.of(context).textTheme.headlineMedium
-                                  ?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                  ),
+                              style:
+                                  (compact
+                                          ? Theme.of(context)
+                                                .textTheme
+                                                .headlineSmall
+                                          : Theme.of(context)
+                                                .textTheme
+                                                .headlineMedium)
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: AppSpacing.sm),
@@ -264,7 +308,7 @@ class _MilestonesPageState extends State<MilestonesPage> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: AppSpacing.lg),
+                      SizedBox(height: compact ? AppSpacing.sm : AppSpacing.lg),
                       Text(
                         'This is something you worked hard for. Take a moment to celebrate.',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -281,20 +325,25 @@ class _MilestonesPageState extends State<MilestonesPage> {
                               ?.copyWith(color: AppColors.mutedText),
                         ),
                       ],
-                      const SizedBox(height: AppSpacing.xl),
-                      FilledButton.icon(
-                        onPressed: _acknowledging ? null : _acknowledgeCurrent,
-                        icon: Icon(
-                          _celebrationQueue.length > 1
-                              ? Icons.arrow_forward
-                              : Icons.check,
-                        ),
-                        label: Text(
-                          _acknowledging
-                              ? 'Saving…'
-                              : _celebrationQueue.length > 1
-                              ? 'Celebrate next'
-                              : 'Continue',
+                      SizedBox(height: compact ? AppSpacing.md : AppSpacing.xl),
+                      SizedBox(
+                        width: compact ? double.infinity : null,
+                        child: FilledButton.icon(
+                          onPressed: _acknowledging
+                              ? null
+                              : _acknowledgeCurrent,
+                          icon: Icon(
+                            _celebrationQueue.length > 1
+                                ? Icons.arrow_forward
+                                : Icons.check,
+                          ),
+                          label: Text(
+                            _acknowledging
+                                ? 'Saving…'
+                                : _celebrationQueue.length > 1
+                                ? 'Celebrate next'
+                                : 'Continue',
+                          ),
                         ),
                       ),
                     ],
@@ -347,8 +396,7 @@ class _MilestonesPageState extends State<MilestonesPage> {
         subtitle: 'A personal record of the progress you have worked for.',
         child: const EmptyState(
           icon: Icons.celebration_outlined,
-          message:
-              'Add your named milestones to the Achievements Sheet to begin.',
+          message: 'Add named milestones to your achievement data to begin.',
         ),
       );
     }
@@ -386,14 +434,16 @@ class _MilestonesPageState extends State<MilestonesPage> {
             baseline: baseline,
             currency: currency,
           ),
-          const SizedBox(height: AppSpacing.xl),
+          const SizedBox(height: AppPageSpacing.compactSection),
           Row(
             children: [
               const Icon(Icons.workspace_premium, color: AppColors.warning),
               const SizedBox(width: AppSpacing.xs),
-              Text(
-                'Earned milestones',
-                style: Theme.of(context).textTheme.titleLarge,
+              Expanded(
+                child: Text(
+                  'Earned milestones',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
               ),
             ],
           ),
@@ -456,7 +506,6 @@ class _MilestonesPageState extends State<MilestonesPage> {
       DateTime.now().year,
       DateTime.now().month - 1,
     );
-    final lastMonthLabel = _monthLabel(lastMonthStart);
     final lastMonthEnd = DateTime.utc(
       lastMonthStart.year,
       lastMonthStart.month + 1,
@@ -464,10 +513,12 @@ class _MilestonesPageState extends State<MilestonesPage> {
     );
     final lastMonthIsIncomplete = _evaluation.incompleteCompletedMonths
         .contains(lastMonthStart);
+    final compact = MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
+    final current = lastMonth?.average;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: EdgeInsets.all(compact ? AppSpacing.md : AppSpacing.lg),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
@@ -481,77 +532,130 @@ class _MilestonesPageState extends State<MilestonesPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_awesome, color: _milestoneGold),
+              const Icon(Icons.calendar_month_outlined, color: _milestoneGold),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: Text(
-                  'Last completed month average',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Last month average',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      _monthLabel(lastMonthStart),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.82),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
+          const SizedBox(height: AppSpacing.sm),
           Text(
-            lastMonthLabel,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.white.withValues(alpha: 0.82),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            lastMonth == null || currency == null
+            current == null || currency == null
                 ? lastMonthIsIncomplete
                       ? 'Waiting for missing daily snapshots to be repaired.'
                       : 'A complete month of daily snapshots is needed to show progress.'
-                : formatMoney(lastMonth.average, widget.data.currenciesById),
-            style: Theme.of(context).textTheme.headlineLarge
-                ?.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
+                : formatMoney(current, widget.data.currenciesById),
+            style:
+                (compact
+                        ? Theme.of(context).textTheme.headlineMedium
+                        : Theme.of(context).textTheme.headlineLarge)
+                    ?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
           ),
           if (lastMonth != null)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.xs),
-              child: Text(
-                'Complete daily average through ${formatDate(lastMonthEnd)}',
-                style: Theme.of(context).textTheme.bodyMedium
+            Text(
+              'Complete daily average through ${formatDate(lastMonthEnd)}',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: Colors.white.withValues(alpha: 0.82)),
+            ),
+          const SizedBox(height: AppSpacing.sm),
+          Divider(color: Colors.white.withValues(alpha: 0.3), height: 1),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Next milestone',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: Colors.white.withValues(alpha: 0.82),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (next == null)
+            Text(
+              'You have reached every current milestone.',
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: Colors.white),
+            )
+          else ...[
+            Text(
+              next.achievement.name,
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Target: ${formatMoney(next.achievement.target, widget.data.currenciesById)}',
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            if (baseline == null)
+              Text(
+                'Your first full tracked month will establish the starting point for progress.',
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: Colors.white.withValues(alpha: 0.82)),
+              )
+            else if (current != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadii.pill),
+                child: LinearProgressIndicator(
+                  value: _progressFraction(current, baseline, next),
+                  minHeight: 14,
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    _milestoneGold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Wrap(
+                spacing: AppSpacing.md,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  Text(
+                    'Current: ${formatMoney(current, widget.data.currenciesById)}',
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: Colors.white.withValues(alpha: 0.9)),
+                  ),
+                  Text(
+                    'From: ${formatMoney(Money(minorUnits: _activeLowerBound(current, baseline), currencyId: 'USD'), widget.data.currenciesById)}',
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: Colors.white.withValues(alpha: 0.9)),
+                  ),
+                ],
+              ),
+            ] else
+              Text(
+                'Progress appears when last month’s complete average is available.',
+                style: Theme.of(context).textTheme.bodySmall
                     ?.copyWith(color: Colors.white.withValues(alpha: 0.82)),
               ),
-            ),
-          const SizedBox(height: AppSpacing.lg),
-          if (baseline == null)
-            Text(
-              'Your first full tracked month will establish the starting point for progress.',
-              style: Theme.of(context).textTheme.bodyMedium
-                  ?.copyWith(color: Colors.white),
-            )
-          else if (next == null)
-            Text(
-              lastMonth == null
-                  ? 'Progress will appear when last month’s complete average is available.'
-                  : 'You have reached every milestone currently in the Sheet. Add another when you are ready.',
-              style: Theme.of(context).textTheme.bodyMedium
-                  ?.copyWith(color: Colors.white),
-            )
-          else if (lastMonth == null)
-            _buildHighlightedMilestone(
-              context,
-              name: next.achievement.name,
-              target: next.achievement.target,
-              progress: null,
-              lowerBound: null,
-            )
-          else
-            _buildProgress(context, lastMonth.average, baseline, next),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildProgress(
-    BuildContext context,
+  double _progressFraction(
     Money current,
     Money baseline,
     NetWorthAchievementProgress next,
@@ -559,97 +663,9 @@ class _MilestonesPageState extends State<MilestonesPage> {
     final lowerBound = _activeLowerBound(current, baseline);
     final upperBound = next.achievement.target.minorUnits;
     final span = upperBound - lowerBound;
-    final fraction = span <= 0
-        ? 1.0
-        : ((current.minorUnits - lowerBound) / span).clamp(0.0, 1.0);
-    return _buildHighlightedMilestone(
-      context,
-      name: next.achievement.name,
-      target: next.achievement.target,
-      progress: fraction,
-      lowerBound: lowerBound,
-    );
+    if (span <= 0) return 1;
+    return ((current.minorUnits - lowerBound) / span).clamp(0.0, 1.0);
   }
-
-  Widget _buildHighlightedMilestone(
-    BuildContext context, {
-    required String name,
-    required Money target,
-    required double? progress,
-    required int? lowerBound,
-  }) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(AppSpacing.md),
-    decoration: BoxDecoration(
-      color: _milestoneTargetSurface,
-      borderRadius: BorderRadius.circular(AppRadii.control),
-      border: Border.all(color: _milestoneGold, width: 2),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.flag_rounded, color: AppColors.warning),
-            const SizedBox(width: AppSpacing.xs),
-            Text(
-              'PROGRESS TOWARD',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: AppColors.navy,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          name,
-          style: Theme.of(context).textTheme.headlineSmall
-              ?.copyWith(color: AppColors.navy, fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          'Target: ${formatMoney(target, widget.data.currenciesById)}',
-          style: Theme.of(context).textTheme.bodyLarge
-              ?.copyWith(color: AppColors.navy, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadii.pill),
-          child: LinearProgressIndicator(
-            value: progress ?? 0,
-            minHeight: 18,
-            backgroundColor: AppColors.navy.withValues(alpha: 0.16),
-            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.warning),
-          ),
-        ),
-        if (lowerBound != null) ...[
-          const SizedBox(height: AppSpacing.xs),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                formatMoney(
-                  Money(minorUnits: lowerBound, currencyId: 'USD'),
-                  widget.data.currenciesById,
-                ),
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: AppColors.navy),
-              ),
-              Text(
-                formatMoney(target, widget.data.currenciesById),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.navy,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ],
-    ),
-  );
 
   int _activeLowerBound(Money current, Money baseline) {
     final lowerTargets = _evaluation.progress
@@ -705,28 +721,85 @@ class _EarnedAchievementRow extends StatelessWidget {
     final average = progress.qualifyingAverage;
     final surface =
         _earnedAchievementSurfaces[index % _earnedAchievementSurfaces.length];
+    final compact =
+        MediaQuery.sizeOf(context).width < AppBreakpoints.compact ||
+        MediaQuery.textScalerOf(context).scale(14) > 16.8;
     return Container(
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(AppRadii.control),
         border: Border.all(color: surface.withValues(alpha: 0.9)),
       ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.white.withValues(alpha: 0.9),
-          child: const Icon(Icons.workspace_premium, color: AppColors.teal),
-        ),
-        title: Text(
-          progress.achievement.name,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        subtitle: Text(
-          month == null || average == null
-              ? 'Earned earlier; full history is currently incomplete.'
-              : '${_monthLabel(month)} average: ${formatMoney(average, currencies)}',
-        ),
-        trailing: const Icon(Icons.check_circle, color: AppColors.success),
-      ),
+      child: compact
+          ? Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: Colors.white.withValues(alpha: 0.9),
+                        child: const Icon(
+                          Icons.workspace_premium,
+                          color: AppColors.teal,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          progress.achievement.name,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      const Icon(
+                        Icons.check_circle,
+                        color: AppColors.success,
+                        size: 22,
+                      ),
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: 44,
+                      top: AppSpacing.xs,
+                    ),
+                    child: Text(
+                      month == null || average == null
+                          ? 'Earned earlier; full history is currently incomplete.'
+                          : '${_monthLabel(month)} average: ${formatMoney(average, currencies)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.white.withValues(alpha: 0.9),
+                child: const Icon(
+                  Icons.workspace_premium,
+                  color: AppColors.teal,
+                ),
+              ),
+              title: Text(
+                progress.achievement.name,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                month == null || average == null
+                    ? 'Earned earlier; full history is currently incomplete.'
+                    : '${_monthLabel(month)} average: ${formatMoney(average, currencies)}',
+              ),
+              trailing: const Icon(
+                Icons.check_circle,
+                color: AppColors.success,
+              ),
+            ),
     );
   }
 }

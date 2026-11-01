@@ -3,6 +3,17 @@ import 'package:flutter/material.dart';
 import 'design_tokens.dart';
 
 abstract final class AppTheme {
+  static TextTheme compactTextTheme(TextTheme textTheme) => textTheme.copyWith(
+    headlineMedium: textTheme.headlineMedium?.copyWith(fontSize: 24),
+    titleLarge: textTheme.titleLarge?.copyWith(fontSize: 18),
+    bodyLarge: textTheme.bodyLarge?.copyWith(fontSize: 16),
+    bodyMedium: textTheme.bodyMedium?.copyWith(fontSize: 14),
+    bodySmall: textTheme.bodySmall?.copyWith(fontSize: 12),
+    labelLarge: textTheme.labelLarge?.copyWith(fontSize: 14),
+    labelMedium: textTheme.labelMedium?.copyWith(fontSize: 12),
+    labelSmall: textTheme.labelSmall?.copyWith(fontSize: 12),
+  );
+
   static ThemeData light() {
     final colorScheme =
         ColorScheme.fromSeed(
@@ -58,7 +69,7 @@ abstract final class AppTheme {
           TextStyle(
             color: colorScheme.onSurface,
             fontWeight: FontWeight.w600,
-            fontSize: 10,
+            fontSize: 12,
           ),
         ),
       ),

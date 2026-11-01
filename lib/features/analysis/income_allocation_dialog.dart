@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:ui' show SemanticsRole;
+
 import 'package:flutter/material.dart';
 
 import '../../app/amount_input_formatter.dart';
 import '../../app/error_dialog.dart';
+import '../../app/pages/transaction_entry_layout.dart';
 import '../../app/theme/design_tokens.dart';
 import '../../data/data.dart';
 
@@ -23,6 +27,16 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
   String? _transferCategoryId;
   DateTime _startDate = DateTime.now();
   DateTime? _endDate;
+  late final String _initialDraftFingerprint;
+  bool _allowPop = false;
+  bool _closing = false;
+  bool _submitted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialDraftFingerprint = _draftFingerprint;
+  }
 
   @override
   void dispose() {
@@ -40,101 +54,210 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
         )
         .toList();
     final accounts = widget.data.entryFormAccounts;
-    return AlertDialog(
-      title: const Text('Add Income Allocation'),
-      content: SizedBox(
-        width: 520,
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _name,
-                  decoration: const InputDecoration(labelText: 'Name'),
-                  validator: _required,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < AppBreakpoints.compact;
+        final maxHeight = (constraints.maxHeight - AppSpacing.lg * 2)
+            .clamp(280.0, 760.0)
+            .toDouble();
+        final surfaceConstraints = compact
+            ? BoxConstraints.tightFor(
+                width: constraints.maxWidth,
+                height: constraints.maxHeight,
+              )
+            : BoxConstraints(maxWidth: 560, maxHeight: maxHeight);
+        return Semantics(
+          role: SemanticsRole.dialog,
+          child: Align(
+            alignment: Alignment.center,
+            child: ConstrainedBox(
+              constraints: surfaceConstraints,
+              child: Material(
+                key: const ValueKey('income-allocation-surface'),
+                color: Theme.of(context).colorScheme.surface,
+                elevation: compact ? 0 : 24,
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(compact ? 0 : 28),
                 ),
-                const SizedBox(height: AppSpacing.md),
-                _dropdown<String>(
-                  label: 'Income Category',
-                  value: _categoryId,
-                  items: [
-                    for (final category in incomeCategories)
-                      DropdownMenuItem(
-                        value: category.id,
-                        child: Text(category.name),
-                      ),
-                  ],
-                  onChanged: (value) => setState(() => _categoryId = value),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                _dropdown<String>(
-                  label: 'Income Account',
-                  value: _incomeAccountId,
-                  items: [
-                    for (final account in accounts)
-                      DropdownMenuItem(
-                        value: account.id,
-                        child: Text(account.name),
-                      ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _incomeAccountId = value),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                TextFormField(
-                  controller: _amount,
-                  decoration: const InputDecoration(
-                    labelText: 'Expected Amount per Income',
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: const [ThousandsSeparatorInputFormatter()],
-                  validator: _amountValidator,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                _dropdown<String>(
-                  label: 'Transfer Category',
-                  value: _transferCategoryId,
-                  items: [
-                    for (final category
-                        in widget.data.entryFormCategories.where(
-                          (category) => category.allowedTransactionTypes
-                              .contains(TransactionType.transfer),
-                        ))
-                      DropdownMenuItem(
-                        value: category.id,
-                        child: Text(category.name),
-                      ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _transferCategoryId = value),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                _dateButton(
-                  'Start Date',
-                  _startDate,
-                  (value) => setState(() => _startDate = value),
-                ),
-                _dateButton(
-                  'End Date (optional)',
-                  _endDate,
-                  (value) => setState(() => _endDate = value),
-                ),
-              ],
+                child: _buildForm(context, compact, incomeCategories, accounts),
+              ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildForm(
+    BuildContext context,
+    bool compact,
+    List<Category> incomeCategories,
+    List<Account> accounts,
+  ) {
+    final fieldGap = compact && usesCompactVerticalSpacing(context)
+        ? AppSpacing.sm + AppSpacing.xs
+        : AppSpacing.md;
+    return PopScope<IncomeAllocation>(
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_requestClose());
+      },
+      child: SafeArea(
+        child: Column(
+          children: [
+            TransactionEntryHeader(
+              title: 'Add Income Allocation',
+              onClose: () => unawaited(_requestClose()),
+            ),
+            Expanded(
+              child: Form(
+                key: _formKey,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    compact
+                        ? AppPageSpacing.compactGutter
+                        : AppPageSpacing.desktopGutter,
+                    AppSpacing.sm,
+                    compact
+                        ? AppPageSpacing.compactGutter
+                        : AppPageSpacing.desktopGutter,
+                    AppSpacing.md,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextFormField(
+                        controller: _name,
+                        decoration: const InputDecoration(labelText: 'Name'),
+                        validator: _required,
+                      ),
+                      SizedBox(height: fieldGap),
+                      _dropdown<String>(
+                        label: 'Income Category',
+                        value: _categoryId,
+                        items: [
+                          for (final category in incomeCategories)
+                            DropdownMenuItem(
+                              value: category.id,
+                              child: Text(category.name),
+                            ),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => _categoryId = value),
+                      ),
+                      SizedBox(height: fieldGap),
+                      _dropdown<String>(
+                        label: 'Income Account',
+                        value: _incomeAccountId,
+                        items: [
+                          for (final account in accounts)
+                            DropdownMenuItem(
+                              value: account.id,
+                              child: Text(account.name),
+                            ),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => _incomeAccountId = value),
+                      ),
+                      SizedBox(height: fieldGap),
+                      TextFormField(
+                        controller: _amount,
+                        decoration: const InputDecoration(
+                          labelText: 'Expected amount',
+                          helperText: 'Amount to expect each time this income is received.',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: const [
+                          ThousandsSeparatorInputFormatter(),
+                        ],
+                        validator: _amountValidator,
+                      ),
+                      SizedBox(height: fieldGap),
+                      _dropdown<String>(
+                        label: 'Transfer Category',
+                        value: _transferCategoryId,
+                        items: [
+                          for (final category
+                              in widget.data.entryFormCategories.where(
+                                (category) => category.allowedTransactionTypes
+                                    .contains(TransactionType.transfer),
+                              ))
+                            DropdownMenuItem(
+                              value: category.id,
+                              child: Text(category.name),
+                            ),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => _transferCategoryId = value),
+                      ),
+                      SizedBox(height: fieldGap),
+                      _dateButton(
+                        'Start Date',
+                        _startDate,
+                        (value) => setState(() => _startDate = value),
+                      ),
+                      _dateButton(
+                        'End Date (optional)',
+                        _endDate,
+                        (value) => setState(() => _endDate = value),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              key: const ValueKey('income-allocation-actions'),
+              padding: EdgeInsets.fromLTRB(
+                compact
+                    ? AppPageSpacing.compactGutter
+                    : AppPageSpacing.desktopGutter,
+                AppSpacing.sm,
+                compact
+                    ? AppPageSpacing.compactGutter
+                    : AppPageSpacing.desktopGutter,
+                MediaQuery.viewInsetsOf(context).bottom + AppSpacing.sm,
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final stacked =
+                      constraints.maxWidth < 380 ||
+                      MediaQuery.textScalerOf(context).scale(14) > 18;
+                  final cancel = TextButton(
+                    onPressed: _closing ? null : _requestClose,
+                    child: const Text('Cancel'),
+                  );
+                  final save = FilledButton(
+                    onPressed: _submitted ? null : _submit,
+                    child: const Text('Save'),
+                  );
+                  if (stacked) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        save,
+                        const SizedBox(height: AppSpacing.xs),
+                        cancel,
+                      ],
+                    );
+                  }
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      cancel,
+                      const SizedBox(width: AppSpacing.sm),
+                      save,
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('Save')),
-      ],
     );
   }
 
@@ -190,8 +313,59 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
     return parsed == null || parsed <= 0 ? 'Enter a positive amount.' : null;
   }
 
+  String get _draftFingerprint => [
+    _name.text,
+    _amount.text,
+    _categoryId ?? '',
+    _incomeAccountId ?? '',
+    _transferCategoryId ?? '',
+    _startDate.toIso8601String(),
+    _endDate?.toIso8601String() ?? '',
+  ].join('\u0000');
+
+  Future<void> _requestClose() async {
+    if (_allowPop || _closing) return;
+    if (_draftFingerprint != _initialDraftFingerprint) {
+      setState(() => _closing = true);
+      final discard =
+          await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              scrollable: true,
+              title: const Text('Discard changes?'),
+              content: const Text('Your allocation has not been saved.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Keep editing'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Discard'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!mounted) return;
+      if (!discard) {
+        setState(() => _closing = false);
+        return;
+      }
+    }
+    if (mounted) _allowPopAndClose();
+  }
+
+  void _allowPopAndClose() {
+    setState(() => _allowPop = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
   void _submit() {
-    if (!_formKey.currentState!.validate()) return;
+    if (_submitted || !_formKey.currentState!.validate()) return;
     if (_endDate != null && _endDate!.isBefore(_startDate)) {
       showPersistentErrorDialog(context, 'End date must be after start date.');
       return;
@@ -199,23 +373,25 @@ class _IncomeAllocationDialogState extends State<IncomeAllocationDialog> {
     final now = DateTime.now().toUtc();
     final incomeAccount = widget.data.accountsById[_incomeAccountId!]!;
     final currency = widget.data.currenciesById[incomeAccount.currencyId]!;
-    Navigator.pop(
-      context,
-      IncomeAllocation(
-        id: 'income-allocation-${now.microsecondsSinceEpoch}',
-        name: _name.text.trim(),
-        incomeCategoryId: _categoryId!,
-        incomeAccountId: _incomeAccountId!,
-        transferCategoryId: _transferCategoryId!,
-        expectedAmountPerIncome: Money.fromMajorUnits(
-          value: _amount.text.trim(),
-          currency: currency,
-        ),
-        startDate: _startDate,
-        endDate: _endDate,
-        createdAt: now,
-        updatedAt: now,
+    final allocation = IncomeAllocation(
+      id: 'income-allocation-${now.microsecondsSinceEpoch}',
+      name: _name.text.trim(),
+      incomeCategoryId: _categoryId!,
+      incomeAccountId: _incomeAccountId!,
+      transferCategoryId: _transferCategoryId!,
+      expectedAmountPerIncome: Money.fromMajorUnits(
+        value: _amount.text.trim(),
+        currency: currency,
       ),
+      startDate: _startDate,
+      endDate: _endDate,
+      createdAt: now,
+      updatedAt: now,
     );
+    _submitted = true;
+    setState(() => _allowPop = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(allocation);
+    });
   }
 }

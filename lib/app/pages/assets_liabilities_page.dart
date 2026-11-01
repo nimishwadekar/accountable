@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../amount_input_formatter.dart';
 import '../../data/data.dart';
 import '../error_dialog.dart';
+import 'account_balance_row.dart';
 import 'app_pages.dart';
-import 'account_visuals.dart';
 import '../formatters.dart';
 import '../theme/design_tokens.dart';
 
@@ -95,7 +95,13 @@ class AccountsPage extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CashAccountsSection(data: data),
-        const SizedBox(height: AppSpacing.xl),
+        SizedBox(
+          height: usesCompactVerticalSpacing(context)
+              ? AppSpacing.md
+              : MediaQuery.sizeOf(context).width < AppBreakpoints.compact
+              ? AppPageSpacing.compactSection
+              : AppSpacing.xl,
+        ),
         AssetsLiabilitiesSection(
           data: data,
           onValuationsAdded: onValuationsAdded,
@@ -139,13 +145,14 @@ class _AssetsLiabilitiesSectionState extends State<AssetsLiabilitiesSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Expanded(
-              child: Text(
-                'Assets & Liabilities',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
+            Text(
+              'Assets & Liabilities',
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             FilledButton.icon(
               onPressed: _submitting ? null : _openAddValuation,
@@ -387,42 +394,13 @@ class _AssetLiabilityRow extends StatelessWidget {
     final latest = accountValuations == null || accountValuations.isEmpty
         ? null
         : accountValuations.last;
-    final currency = data.currenciesById[account.currencyId];
     final value = account.isValuationAccount
         ? latest?.value
         : balances[account.id];
-    final valueColor = value == null
-        ? null
-        : value.minorUnits > 0
-        ? AppColors.success
-        : value.minorUnits < 0
-        ? Theme.of(context).colorScheme.error
-        : null;
-    return Container(
-      color: accountTypeColor(account).withValues(alpha: 0.06),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.xs,
-        ),
-        leading: CircleAvatar(
-          backgroundColor: accountTypeColor(account).withValues(alpha: 0.14),
-          foregroundColor: accountTypeColor(account),
-          child: AccountVisualIcon(
-            account: account,
-            currencies: data.currenciesById,
-          ),
-        ),
-        title: Text(account.name),
-        subtitle: Text(accountSubtitle(account, data.currenciesById)),
-        trailing: Text(
-          value == null || currency == null
-              ? '—'
-              : formatMoney(value, data.currenciesById),
-          style: Theme.of(context).textTheme.titleMedium
-              ?.copyWith(color: valueColor, fontWeight: FontWeight.w700),
-        ),
-      ),
+    return AccountBalanceRow(
+      account: account,
+      amount: value,
+      currencies: data.currenciesById,
     );
   }
 }

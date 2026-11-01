@@ -60,45 +60,120 @@ class _DisplayPreferencesPageState extends State<DisplayPreferencesPage> {
                 onReorderItem: _reorder,
                 itemBuilder: (context, index) {
                   final preference = _preferences[index];
-                  return ListTile(
+                  final name = _nameOf(preference.entityId);
+                  return LayoutBuilder(
                     key: ValueKey(
                       '${preference.entityType}:${preference.entityId}',
                     ),
-                    leading: ReorderableDragStartListener(
-                      index: index,
-                      child: const Icon(Icons.drag_handle),
-                    ),
-                    title: Text(_nameOf(preference.entityId)),
-                    subtitle: Text(preference.showInApp ? 'Visible' : 'Hidden'),
-                    trailing: Wrap(
-                      spacing: AppSpacing.xs,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        const Text('App'),
-                        Switch(
-                          value: preference.showInApp,
-                          onChanged: (value) => _update(
-                            index,
-                            preference.copyWith(
-                              showInApp: value,
-                              showInEntryForms: value
-                                  ? preference.showInEntryForms
-                                  : false,
-                            ),
+                    builder: (context, constraints) {
+                      final compact =
+                          constraints.maxWidth < AppBreakpoints.compact ||
+                          MediaQuery.textScalerOf(context).scale(14) > 16.8;
+                      final compactSpacing = usesCompactVerticalSpacing(
+                        context,
+                        availableWidth: constraints.maxWidth,
+                      );
+                      final dragHandle = ReorderableDragStartListener(
+                        index: index,
+                        child: Tooltip(
+                          message: 'Reorder $name',
+                          child: const SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: Icon(Icons.drag_handle),
                           ),
                         ),
-                        const Text('Forms'),
-                        Switch(
-                          value: preference.showInEntryForms,
-                          onChanged: preference.showInApp
-                              ? (value) => _update(
-                                  index,
-                                  preference.copyWith(showInEntryForms: value),
-                                )
-                              : null,
+                      );
+                      final identity = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          Text(
+                            preference.showInApp ? 'Visible' : 'Hidden',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      );
+                      final inAppToggle = _PreferenceToggle(
+                        entityName: name,
+                        label: 'Show in app',
+                        value: preference.showInApp,
+                        onChanged: (value) => _update(
+                          index,
+                          preference.copyWith(
+                            showInApp: value,
+                            showInEntryForms: value
+                                ? preference.showInEntryForms
+                                : false,
+                          ),
                         ),
-                      ],
-                    ),
+                      );
+                      final formsToggle = _PreferenceToggle(
+                        entityName: name,
+                        label: 'Use in entry forms',
+                        value: preference.showInEntryForms,
+                        onChanged: preference.showInApp
+                            ? (value) => _update(
+                                index,
+                                preference.copyWith(showInEntryForms: value),
+                              )
+                            : null,
+                      );
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                              vertical: compactSpacing
+                                  ? AppSpacing.xs
+                                  : AppSpacing.sm,
+                            ),
+                            child: compact
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          dragHandle,
+                                          const SizedBox(width: AppSpacing.sm),
+                                          Expanded(child: identity),
+                                        ],
+                                      ),
+                                      inAppToggle,
+                                      formsToggle,
+                                    ],
+                                  )
+                                : Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      dragHandle,
+                                      const SizedBox(width: AppSpacing.sm),
+                                      Expanded(child: identity),
+                                      const SizedBox(width: AppSpacing.sm),
+                                      SizedBox(
+                                        width: 320,
+                                        child: Row(
+                                          children: [
+                                            Expanded(child: inAppToggle),
+                                            Expanded(child: formsToggle),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                          const Divider(height: 1),
+                        ],
+                      );
+                    },
                   );
                 },
               ),
@@ -152,5 +227,58 @@ class _DisplayPreferencesPageState extends State<DisplayPreferencesPage> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+}
+
+class _PreferenceToggle extends StatelessWidget {
+  const _PreferenceToggle({
+    required this.entityName,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String entityName;
+  final String label;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final semanticLabel = switch (label) {
+      'Show in app' => 'Show $entityName in app',
+      'Use in entry forms' => 'Use $entityName in entry forms',
+      _ => '$label: $entityName',
+    };
+    void toggle() => onChanged?.call(!value);
+
+    return Semantics(
+      container: true,
+      label: semanticLabel,
+      value: value ? 'On' : 'Off',
+      toggled: value,
+      enabled: onChanged != null,
+      onTap: onChanged == null ? null : toggle,
+      child: ExcludeSemantics(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onChanged == null ? null : toggle,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(label)),
+                    Switch(value: value, onChanged: onChanged),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

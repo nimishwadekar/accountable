@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/accountable_config.dart';
 import '../data/data.dart';
+import 'app_text_scaler.dart';
 import 'app_shell.dart';
 import 'google_sheets_gate.dart';
 import 'session_ui_preferences.dart';
@@ -39,12 +40,12 @@ class _AccountableAppState extends State<AccountableApp> {
     final preferences = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _textScale = preferences.getDouble('text_scale')?.clamp(0.75, 1.0) ?? 1;
+      _textScale = normalizeAppTextScale(preferences.getDouble('text_scale'));
     });
   }
 
   Future<void> _setTextScale(double value) async {
-    final scale = value.clamp(0.75, 1.0).toDouble();
+    final scale = normalizeAppTextScale(value);
     setState(() => _textScale = scale);
     final preferences = await SharedPreferences.getInstance();
     await preferences.setDouble('text_scale', scale);
@@ -53,18 +54,24 @@ class _AccountableAppState extends State<AccountableApp> {
   Widget _withTextScale(BuildContext context, Widget? child) {
     final mediaQuery = MediaQuery.of(context);
     final compact = mediaQuery.size.width < AppBreakpoints.compact;
-    final scale = (compact ? _textScale * 0.9 : _textScale)
-        .clamp(0.75, 1.0)
-        .toDouble();
+    final scale = normalizeAppTextScale(_textScale);
     final baseTheme = Theme.of(context);
     return Theme(
       data: baseTheme.copyWith(
+        textTheme: compact
+            ? AppTheme.compactTextTheme(baseTheme.textTheme)
+            : baseTheme.textTheme,
         visualDensity: compact
             ? const VisualDensity(horizontal: -1, vertical: -1)
             : baseTheme.visualDensity,
       ),
       child: MediaQuery(
-        data: mediaQuery.copyWith(textScaler: TextScaler.linear(scale)),
+        data: mediaQuery.copyWith(
+          textScaler: AccountableTextScaler(
+            systemScaler: mediaQuery.textScaler,
+            appScale: scale,
+          ),
+        ),
         child: child ?? const SizedBox.shrink(),
       ),
     );

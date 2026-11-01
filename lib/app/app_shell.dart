@@ -14,52 +14,47 @@ import '../features/migration_assistance/migration_assistance_page.dart';
 import 'theme/design_tokens.dart';
 
 enum AppSection {
-  overview,
   transactions,
   analysis,
-  milestones,
   accounts,
+  milestones,
   settings,
   migrationAssistance,
 }
 
 extension AppSectionDetails on AppSection {
   String get label => switch (this) {
-    AppSection.overview => 'Overview',
     AppSection.transactions => 'Transactions',
-    AppSection.milestones => 'Milestones',
-    AppSection.accounts => 'Accounts',
     AppSection.analysis => 'Analysis',
+    AppSection.accounts => 'Accounts',
+    AppSection.milestones => 'Milestones',
     AppSection.settings => 'Settings',
     AppSection.migrationAssistance => 'Migration Assistance',
   };
 
   String get compactLabel => switch (this) {
-    AppSection.overview => 'Overview',
     AppSection.transactions => 'Transactions',
-    AppSection.milestones => 'Milestones',
-    AppSection.accounts => 'Accounts',
     AppSection.analysis => 'Analysis',
+    AppSection.accounts => 'Accounts',
+    AppSection.milestones => 'Milestones',
     AppSection.settings => 'Settings',
     AppSection.migrationAssistance => 'Migration Assistance',
   };
 
   IconData get icon => switch (this) {
-    AppSection.overview => Icons.dashboard_outlined,
     AppSection.transactions => Icons.receipt_long_outlined,
-    AppSection.milestones => Icons.celebration_outlined,
-    AppSection.accounts => Icons.account_balance_wallet_outlined,
     AppSection.analysis => Icons.insights_outlined,
+    AppSection.accounts => Icons.account_balance_wallet_outlined,
+    AppSection.milestones => Icons.celebration_outlined,
     AppSection.settings => Icons.settings_outlined,
     AppSection.migrationAssistance => Icons.compare_arrows_outlined,
   };
 
   IconData get selectedIcon => switch (this) {
-    AppSection.overview => Icons.dashboard,
     AppSection.transactions => Icons.receipt_long,
-    AppSection.milestones => Icons.celebration,
-    AppSection.accounts => Icons.account_balance_wallet,
     AppSection.analysis => Icons.insights,
+    AppSection.accounts => Icons.account_balance_wallet,
+    AppSection.milestones => Icons.celebration,
     AppSection.settings => Icons.settings,
     AppSection.migrationAssistance => Icons.compare_arrows,
   };
@@ -109,10 +104,18 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
+  static const _compactPrimarySections = [
+    AppSection.transactions,
+    AppSection.analysis,
+    AppSection.accounts,
+    AppSection.milestones,
+    AppSection.settings,
+  ];
+
   late Future<AppDataSnapshot> _snapshotFuture;
   late final NavigationHistory _navigationHistory;
   StreamSubscription<String>? _navigationSubscription;
-  AppSection _selectedSection = AppSection.overview;
+  AppSection _selectedSection = AppSection.transactions;
   final Set<AppSection> _visitedSections = {};
   Set<String> _pendingAchievementIds = {};
   final Map<AppSection, Widget> _pageWidgets = {};
@@ -135,11 +138,27 @@ class _AppShellState extends State<AppShell> {
     _navigationSubscription = _navigationHistory.changes.listen((path) {
       if (!mounted) return;
       if (!_navigationHistory.isAuthenticatedPath(path)) {
-        setState(() => _selectedSection = AppSection.overview);
-        _navigationHistory.push(_pathForSection(AppSection.overview));
+        const fallback = AppSection.transactions;
+        _visitedSections.add(fallback);
+        setState(() => _selectedSection = fallback);
+        _navigationHistory.replace(
+          _navigationHistory.authenticatedPath(_pathForSection(fallback)),
+        );
         return;
       }
       final section = _sectionFromPath(path);
+      if (widget.restrictedStartup && section != AppSection.transactions) {
+        setState(() {
+          _visitedSections.add(AppSection.transactions);
+          _selectedSection = AppSection.transactions;
+        });
+        _navigationHistory.replace(
+          _navigationHistory.authenticatedPath(
+            _pathForSection(AppSection.transactions),
+          ),
+        );
+        return;
+      }
       _visitedSections.add(section);
       setState(() => _selectedSection = section);
     });
@@ -339,20 +358,119 @@ class _AppShellState extends State<AppShell> {
   }
 
   Widget _buildNavigationBar() {
+    if (_navigationSections.length > _compactPrimarySections.length &&
+        _compactNavigationLabelsNeedMoreSpace(context)) {
+      return _buildCompactNavigationToolbar();
+    }
+    final hasMore = _navigationSections.length > _compactPrimarySections.length;
+    final visibleSections = hasMore
+        ? _compactPrimarySections
+        : _navigationSections;
+    final selectedIndex = visibleSections.indexOf(_selectedSection);
     return NavigationBar(
-      selectedIndex: _selectedNavigationIndex,
-      onDestinationSelected: _selectSection,
+      selectedIndex: selectedIndex < 0 ? visibleSections.length : selectedIndex,
+      onDestinationSelected: _selectCompactDestination,
       destinations: [
-        for (final section in _navigationSections)
+        for (final section in visibleSections)
           NavigationDestination(
             icon: _sectionIcon(section, selected: false),
             selectedIcon: _sectionIcon(section, selected: true),
-            label: section.compactLabel,
+            label: section.label,
             enabled:
                 !widget.restrictedStartup || section == AppSection.transactions,
           ),
+        if (hasMore)
+          NavigationDestination(
+            icon: _moreNavigationIcon(),
+            selectedIcon: _moreNavigationIcon(),
+            label: 'More',
+            enabled: !widget.restrictedStartup,
+          ),
       ],
     );
+  }
+
+  bool _compactNavigationLabelsNeedMoreSpace(BuildContext context) {
+    final style =
+        NavigationBarTheme.of(context).labelTextStyle
+            ?.resolve(const {WidgetState.selected}) ??
+        Theme.of(context).textTheme.labelSmall;
+    final labelFontSize = style?.fontSize ?? 12;
+    return MediaQuery.textScalerOf(context).scale(labelFontSize) > 13.5;
+  }
+
+  Widget _buildCompactNavigationToolbar() {
+    return SafeArea(
+      top: false,
+      child: Material(
+        color: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppPageSpacing.compactGutter,
+            vertical: AppSpacing.xs,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _selectedSection.label,
+                  maxLines: 2,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              FilledButton(
+                onPressed: widget.restrictedStartup
+                    ? null
+                    : () =>
+                          unawaited(_openMoreNavigation(showAllSections: true)),
+                child: const Text('Navigate'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _moreNavigationIcon() {
+    final pending = _pendingAchievementIds.isNotEmpty;
+    return Semantics(
+      label: pending ? 'More; milestone ready to acknowledge' : 'More',
+      child: Badge(
+        isLabelVisible: pending,
+        smallSize: 8,
+        child: const Icon(Icons.more_horiz),
+      ),
+    );
+  }
+
+  void _selectCompactDestination(int index) {
+    if (index < _compactPrimarySections.length) {
+      _selectSectionValue(_compactPrimarySections[index]);
+    } else {
+      unawaited(_openMoreNavigation());
+    }
+  }
+
+  Future<void> _openMoreNavigation({bool showAllSections = false}) async {
+    if (widget.restrictedStartup) return;
+    final sections = showAllSections
+        ? _navigationSections
+        : _navigationSections.skip(_compactPrimarySections.length).toList();
+    final section = await showModalBottomSheet<AppSection>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _MoreNavigationSheet(
+        title: showAllSections ? 'Navigate' : 'More destinations',
+        sections: sections,
+        selectedSection: _selectedSection,
+        pendingMilestone: _pendingAchievementIds.isNotEmpty,
+      ),
+    );
+    if (section != null && mounted) _selectSectionValue(section);
   }
 
   Widget _buildContent(AsyncSnapshot<AppDataSnapshot> snapshot) {
@@ -417,10 +535,6 @@ class _AppShellState extends State<AppShell> {
 
   Widget _createSection(AppSection section, AppDataSnapshot data) {
     return switch (section) {
-      AppSection.overview => OverviewPage(
-        key: ValueKey<AppSection>(section),
-        data: data,
-      ),
       AppSection.transactions => TransactionsPage(
         key: ValueKey<AppSection>(section),
         data: data,
@@ -476,10 +590,14 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _selectSection(int index) {
-    final section = _navigationSections[index];
+    _selectSectionValue(_navigationSections[index]);
+  }
+
+  void _selectSectionValue(AppSection section) {
     if (widget.restrictedStartup && section != AppSection.transactions) {
       return;
     }
+    if (section == _selectedSection) return;
     _visitedSections.add(section);
     setState(() => _selectedSection = section);
     _navigationHistory.push(
@@ -498,7 +616,7 @@ class _AppShellState extends State<AppShell> {
       'settings' => AppSection.settings,
       'migration-assistance' when widget.migrationAssistance =>
         AppSection.migrationAssistance,
-      _ => AppSection.overview,
+      _ => AppSection.transactions,
     };
   }
 
@@ -518,7 +636,6 @@ class _AppShellState extends State<AppShell> {
         : segments;
     final base = baseSegments.isEmpty ? '' : '/${baseSegments.join('/')}';
     final suffix = switch (section) {
-      AppSection.overview => '',
       AppSection.transactions => '/transactions',
       AppSection.analysis => '/analysis',
       AppSection.milestones => '/milestones',
@@ -723,6 +840,91 @@ class _AppShellState extends State<AppShell> {
       if (migrated) throw MigrationHistoryRepairException(error);
       rethrow;
     }
+  }
+}
+
+class _MoreNavigationSheet extends StatelessWidget {
+  const _MoreNavigationSheet({
+    required this.title,
+    required this.sections,
+    required this.selectedSection,
+    required this.pendingMilestone,
+  });
+
+  final String title;
+  final List<AppSection> sections;
+  final AppSection selectedSection;
+  final bool pendingMilestone;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.75,
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppPageSpacing.compactGutter,
+                AppSpacing.xs,
+                AppPageSpacing.compactGutter,
+                AppSpacing.xs,
+              ),
+              child: Align(alignment: Alignment.centerLeft, child: Text(title)),
+            ),
+            for (final section in sections)
+              InkWell(
+                onTap: () => Navigator.of(context).pop(section),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 64),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppPageSpacing.compactGutter,
+                      vertical: AppSpacing.sm,
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 40,
+                          child:
+                              section == AppSection.milestones &&
+                                  pendingMilestone
+                              ? Badge(smallSize: 8, child: Icon(section.icon))
+                              : Icon(section.icon),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(section.label),
+                              if (section == AppSection.milestones &&
+                                  pendingMilestone)
+                                const Text(
+                                  'Milestone ready to acknowledge',
+                                  softWrap: true,
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        selectedSection == section
+                            ? const Icon(Icons.check)
+                            : const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -9,6 +9,8 @@ void main() {
   testWidgets('switches sections from compact navigation', (
     WidgetTester tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final repository = AssetAppDataRepository();
     await repository.load();
 
@@ -27,12 +29,12 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(NavigationBar),
-        matching: find.byIcon(Icons.receipt_long_outlined),
+        matching: find.text('Analysis'),
       ),
     );
     await tester.pump(const Duration(seconds: 2));
 
-    expect(find.text('Transactions'), findsWidgets);
-    expect(find.text('8 of 8 transactions'), findsOneWidget);
+    expect(find.text('Net worth (USD)'), findsOneWidget);
+    expect(find.text('Overview'), findsNothing);
   });
 }

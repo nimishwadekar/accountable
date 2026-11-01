@@ -13,6 +13,8 @@ void main() {
   testWidgets('pending achievement pulses in navigation and is acknowledged', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final tables = <String, String>{
       for (final schema in RuntimeTableSchemas.all)
         schema.assetPath: await rootBundle.loadString(schema.assetPath),
@@ -49,18 +51,23 @@ void main() {
     for (var frame = 0; frame < 8; frame++) {
       await tester.pump(const Duration(milliseconds: 200));
     }
+    expect(tester.takeException(), isNull, reason: 'Initial overview layout');
 
     expect(find.byType(NavigationBar), findsOneWidget);
-    final milestonesIcon = find.byIcon(Icons.celebration_outlined);
-    expect(milestonesIcon, findsOneWidget);
-    await tester.tap(milestonesIcon);
-    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('More'));
+    await tester.pumpAndSettle();
+    expect(find.text('More destinations'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(find.text('Milestones'), findsOneWidget);
+    await tester.tap(find.text('Milestones'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
     expect(find.text('You did it!'), findsOneWidget);
 
     await tester.ensureVisible(find.text('Continue'));
     await tester.tap(find.text('Continue'));
     await tester.pump();
-    expect(find.text('Last completed month average'), findsOneWidget);
+    expect(find.text('Last month average'), findsOneWidget);
     expect(find.textContaining('Provisional'), findsNothing);
     expect(
       csv.decode((await store.read())![DataAssetPaths.achievements]!).last.last,

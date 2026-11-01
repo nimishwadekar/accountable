@@ -95,7 +95,7 @@ void main() {
       expect(find.text('Dining'), findsOneWidget);
       expect(find.text('INCOME'), findsOneWidget);
       expect(find.text('New Transaction'), findsOneWidget);
-      expect(find.text('New Template'), findsOneWidget);
+      expect(find.text('Create Template'), findsOneWidget);
       expect(
         tester.getTopLeft(find.text('Zebra')).dy,
         lessThan(tester.getTopLeft(find.text('Bravo')).dy),
@@ -105,7 +105,7 @@ void main() {
         lessThan(tester.getTopLeft(find.text('Alpha')).dy),
       );
 
-      await tester.tap(find.byTooltip('Add favorite').at(0));
+      await tester.tap(find.byTooltip('Add favorite: Alpha'));
       await tester.pump();
       expect(updatedTemplate?.id, 'regular-a');
       expect(updatedTemplate?.isFavorite, isTrue);

@@ -83,4 +83,36 @@ void main() {
     expect(savedValuations!.single.accountId, 'brokerage');
     expect(savedValuations!.single.value.minorUnits, 123456);
   });
+
+  testWidgets('valuation action wraps below its heading on a narrow page', (
+    tester,
+  ) async {
+    const size = Size(320, 740);
+    await tester.binding.setSurfaceSize(size);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final data = await AssetAppDataRepository().load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: MediaQuery(
+          data: const MediaQueryData(size: size),
+          child: Scaffold(
+            body: AccountsPage(data: data, onValuationsAdded: (_) async {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Assets & Liabilities'), findsOneWidget);
+    expect(find.text('Add valuation'), findsOneWidget);
+    expect(
+      tester.getRect(find.text('Add valuation')).top,
+      greaterThanOrEqualTo(
+        tester.getRect(find.text('Assets & Liabilities')).bottom,
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

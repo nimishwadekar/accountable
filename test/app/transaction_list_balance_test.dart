@@ -9,6 +9,7 @@ void main() {
   testWidgets('shows post-transaction balances for both sides of transfers', (
     tester,
   ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
     Account account(String id, String name, String openingBalance) => Account(
       id: id,
@@ -66,5 +67,42 @@ void main() {
 
     expect(find.text(r'Balance: $ 980.00'), findsOneWidget);
     expect(find.text(r'Balance: $ 520.00'), findsOneWidget);
+
+    await tester.binding.setSurfaceSize(const Size(320, 740));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(320, 740)),
+          child: Scaffold(
+            body: ListView(
+              shrinkWrap: true,
+              children: [
+                TransactionListRow(
+                  transaction: transaction,
+                  data: data,
+                  onTap: () {},
+                  showAccountBalances: true,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('From · Checking'), findsOneWidget);
+    expect(find.text('To · Savings'), findsOneWidget);
+    expect(find.text(r'-$ 20.00'), findsOneWidget);
+    expect(find.text(r'+$ 20.00'), findsOneWidget);
+    expect(find.text(r'Balance: $ 980.00'), findsOneWidget);
+    expect(find.text(r'Balance: $ 520.00'), findsOneWidget);
+    expect(
+      tester.getRect(find.byType(TransactionListRow)).height,
+      lessThanOrEqualTo(180),
+      reason: 'Both labeled legs and balances remain while excess gaps shrink.',
+    );
+    expect(tester.takeException(), isNull);
   });
 }

@@ -45,11 +45,13 @@ run_coverage transactions \
   test/data/google_sheets_repository_test.dart \
   test/data/repositories_test.dart \
   test/app/transaction_entry_widget_test.dart \
+  test/app/transaction_entry_responsive_test.dart \
   test/app/transaction_builder_test.dart \
   test/app/transactions_page_test.dart \
   test/app/transactions_page_flow_test.dart \
   test/app/transactions_compact_flow_test.dart \
-  test/app/transaction_list_balance_test.dart
+  test/app/transaction_list_balance_test.dart \
+  test/app/transactions_short_startup_test.dart
 
 run_coverage history-valuation \
   "${SHARED_FINANCIAL_TESTS[@]}" \
@@ -60,6 +62,8 @@ run_coverage history-valuation \
   test/data/manual_valuation_test.dart \
   test/data/google_sheets_repository_test.dart \
   test/data/repositories_test.dart \
+  test/app/overview_responsive_test.dart \
+  test/app/account_balance_row_test.dart \
   test/app/manual_valuation_date_test.dart \
   test/app/assets_liabilities_page_test.dart \
   test/features/analysis_calculator_test.dart
@@ -70,6 +74,7 @@ run_coverage analysis \
   test/features/category_analysis_test.dart \
   test/features/income_allocation_analysis_test.dart \
   test/features/analysis_page_test.dart \
+  test/features/analysis_responsive_view_test.dart \
   test/features/analysis_range_flow_test.dart \
   test/features/category_analysis_section_test.dart \
   test/features/analysis_graph_responsive_test.dart \
@@ -81,6 +86,7 @@ run_coverage milestones \
   "${SHARED_FINANCIAL_TESTS[@]}" \
   test/data/net_worth_achievement_test.dart \
   test/features/milestones_page_test.dart \
+  test/features/milestones_responsive_test.dart \
   test/app/milestones_navigation_test.dart \
   test/data/local_dataset_store_test.dart \
   test/data/google_sheets_repository_test.dart
@@ -138,7 +144,11 @@ scopes = {
             "lib/data/repositories/manual_valuation_write_validator.dart",
             "lib/features/analysis/analysis_calculator.dart",
         ],
-        "User workflow": ["lib/app/pages/assets_liabilities_page.dart"],
+        "User workflow": [
+            "lib/app/pages/app_pages.dart",
+            "lib/app/pages/account_balance_row.dart",
+            "lib/app/pages/assets_liabilities_page.dart",
+        ],
     },
     "analysis": {
         "Financial logic (95% minimum per file)": [

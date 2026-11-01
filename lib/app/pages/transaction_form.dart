@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../amount_input_formatter.dart';
@@ -5,6 +7,7 @@ import '../error_dialog.dart';
 import '../../data/data.dart';
 import '../formatters.dart';
 import '../theme/design_tokens.dart';
+import 'transaction_entry_layout.dart';
 import 'transaction_form_selectors.dart';
 import 'transaction_builder.dart';
 
@@ -27,56 +30,59 @@ class TransactionTypeChooser extends StatelessWidget {
     super.key,
     this.createTemplate = false,
     this.onSelected,
+    this.onBack,
     this.onClose,
   });
 
   final bool createTemplate;
   final ValueChanged<AddTransactionChoice>? onSelected;
+  final VoidCallback? onBack;
   final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+      child: Column(
+        children: [
+          TransactionEntryHeader(
+            title: createTemplate ? 'Create Template' : 'New Transaction',
+            onBack: onBack,
+            onClose: onClose ?? () => Navigator.of(context).pop(),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppPageSpacing.compactGutter,
+              AppSpacing.sm,
+              AppPageSpacing.compactGutter,
+              AppSpacing.sm,
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Transaction Type'),
+            ),
+          ),
+          Expanded(
+            child: ListView(
               children: [
-                Expanded(
-                  child: Text(
-                    createTemplate ? 'Create Template' : 'New Transaction',
-                    style: Theme.of(context).textTheme.headlineSmall,
+                for (final type in TransactionType.values)
+                  ListTile(
+                    leading: Icon(_typeIcon(type)),
+                    title: Text(transactionTypeLabel(type)),
+                    onTap: () {
+                      final choice = AddTransactionChoice(type: type);
+                      final select = onSelected;
+                      if (select != null) {
+                        select(choice);
+                      } else {
+                        Navigator.of(context).pop(choice);
+                      }
+                    },
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Close',
-                  onPressed: onClose ?? () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
-            const Text('Transaction Type'),
-            for (final type in TransactionType.values)
-              ListTile(
-                leading: Icon(_typeIcon(type)),
-                title: Text(transactionTypeLabel(type)),
-                onTap: () {
-                  final choice = AddTransactionChoice(type: type);
-                  final select = onSelected;
-                  if (select != null) {
-                    select(choice);
-                  } else {
-                    Navigator.of(context).pop(choice);
-                  }
-                },
-              ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -89,12 +95,14 @@ class TransactionTemplateBrowser extends StatefulWidget {
     required this.onTemplateUpdated,
     this.allowTemplateManagement = true,
     this.onChoice,
+    this.onClose,
   });
 
   final AppDataSnapshot data;
   final Future<void> Function(TransactionTemplate template) onTemplateUpdated;
   final bool allowTemplateManagement;
   final ValueChanged<AddTransactionChoice>? onChoice;
+  final VoidCallback? onClose;
 
   @override
   State<TransactionTemplateBrowser> createState() =>
@@ -142,102 +150,107 @@ class _TransactionTemplateBrowserState
 
     return Material(
       color: Theme.of(context).colorScheme.surface,
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.8,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Add Transaction',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              TextField(
-                controller: _searchController,
-                onChanged: (_) => setState(() {}),
-                textInputAction: TextInputAction.search,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: 'Search templates',
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < AppBreakpoints.compact;
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              compact
+                  ? AppPageSpacing.compactGutter
+                  : AppPageSpacing.desktopGutter,
+              AppSpacing.sm,
+              compact
+                  ? AppPageSpacing.compactGutter
+                  : AppPageSpacing.desktopGutter,
+              AppSpacing.sm,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TransactionEntryHeader(
+                  title: 'Add Transaction',
+                  onClose: widget.onClose ?? () => Navigator.of(context).pop(),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _choose(const AddTransactionChoice()),
-                      icon: const Icon(Icons.edit_note_outlined),
-                      label: const Text('New Transaction'),
-                    ),
+                const SizedBox(height: AppSpacing.sm),
+                TextField(
+                  controller: _searchController,
+                  onChanged: (_) => setState(() {}),
+                  textInputAction: TextInputAction.search,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search templates',
                   ),
-                  if (widget.allowTemplateManagement) ...[
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: FilledButton.icon(
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                OutlinedButton.icon(
+                  onPressed: () => _choose(const AddTransactionChoice()),
+                  icon: const Icon(Icons.edit_note_outlined),
+                  label: const Text('New Transaction'),
+                ),
+                if (widget.allowTemplateManagement) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  if (compact)
+                    TextButton.icon(
+                      onPressed: () => _choose(
+                        const AddTransactionChoice(createTemplate: true),
+                      ),
+                      icon: const Icon(Icons.note_add_outlined),
+                      label: const Text('Create Template'),
+                    )
+                  else
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
                         onPressed: () => _choose(
                           const AddTransactionChoice(createTemplate: true),
                         ),
                         icon: const Icon(Icons.note_add_outlined),
-                        label: const Text('New Template'),
+                        label: const Text('Create Template'),
                       ),
                     ),
-                  ],
                 ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Expanded(
-                child: ListView(
-                  children: [
-                    for (final type in TransactionType.values)
-                      if (groups[type]!.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Expanded(
+                  child: ListView(
+                    key: const PageStorageKey<String>('transaction-templates'),
+                    children: [
+                      for (final type in TransactionType.values)
+                        if (groups[type]!.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.xs,
+                              AppSpacing.md,
+                              AppSpacing.xs,
+                              AppSpacing.xs,
+                            ),
+                            child: Text(
+                              transactionTypeLabel(type).toUpperCase(),
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(color: AppColors.mutedText),
+                            ),
+                          ),
+                          for (final template in groups[type]!)
+                            _templateTile(template),
+                        ],
+                      if (groups.values.every((items) => items.isEmpty))
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(
-                            AppSpacing.xs,
-                            AppSpacing.md,
-                            AppSpacing.xs,
-                            AppSpacing.xs,
-                          ),
+                          padding: const EdgeInsets.all(AppSpacing.lg),
                           child: Text(
-                            transactionTypeLabel(type).toUpperCase(),
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(color: AppColors.mutedText),
+                            query.isEmpty
+                                ? widget.allowTemplateManagement
+                                      ? 'No templates yet. Use Create Template to create one.'
+                                      : 'No templates are available yet.'
+                                : 'No templates match “${_searchController.text.trim()}”.',
+                            textAlign: TextAlign.center,
                           ),
                         ),
-                        for (final template in groups[type]!)
-                          _templateTile(template),
-                      ],
-                    if (groups.values.every((items) => items.isEmpty))
-                      Padding(
-                        padding: const EdgeInsets.all(AppSpacing.xl),
-                        child: Text(
-                          query.isEmpty
-                              ? widget.allowTemplateManagement
-                                    ? 'No templates yet. Use New Template to create one.'
-                                    : 'No templates are available yet.'
-                              : 'No templates match “${_searchController.text.trim()}”.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -256,37 +269,45 @@ class _TransactionTemplateBrowserState
         side: const BorderSide(color: AppColors.border),
       ),
       color: Theme.of(context).colorScheme.surface,
-      child: ListTile(
-        dense: true,
-        title: Text(
-          template.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: unavailableReason == null
-            ? null
-            : Text(
-                'Unavailable: $unavailableReason',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-        trailing: SizedBox(
-          width: 170,
+      child: InkWell(
+        onTap: unavailableReason == null
+            ? () => _choose(AddTransactionChoice(template: template))
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Flexible(
-                child: Text(
-                  category,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: Theme.of(context).textTheme.bodySmall,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(template.name),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      category,
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: AppColors.mutedText),
+                    ),
+                    if (unavailableReason != null) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Unavailable: $unavailableReason',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               IconButton(
                 tooltip: template.isFavorite
-                    ? 'Remove favorite'
-                    : 'Add favorite',
+                    ? 'Remove favorite: ${template.name}'
+                    : 'Add favorite: ${template.name}',
                 onPressed: !widget.allowTemplateManagement || _updatingFavorite
                     ? null
                     : () => _toggleFavorite(template),
@@ -298,9 +319,6 @@ class _TransactionTemplateBrowserState
             ],
           ),
         ),
-        onTap: unavailableReason == null
-            ? () => _choose(AddTransactionChoice(template: template))
-            : null,
       ),
     );
   }
@@ -404,35 +422,134 @@ class _TransactionEntryFlowDialogState
     extends State<TransactionEntryFlowDialog> {
   AddTransactionChoice? _choice;
   TransactionType? _type;
+  final _formKey = GlobalKey<_TransactionFormSheetState>();
+  bool _allowPop = false;
 
   @override
   Widget build(BuildContext context) {
     final choice = _choice;
     final type = _type;
-    if (choice != null && type != null) {
-      return TransactionFormSheet(
-        type: type,
-        data: widget.data,
-        template: choice.template,
-        createTemplate: choice.createTemplate,
-      );
-    }
-    if (choice != null) {
-      return TransactionTypeChooser(
-        createTemplate: choice.createTemplate,
-        onSelected: (selected) => setState(() => _type = selected.type),
-        onClose: () => setState(() => _choice = null),
-      );
-    }
-    return TransactionTemplateBrowser(
-      data: widget.data,
-      onTemplateUpdated: widget.onTemplateUpdated,
-      allowTemplateManagement: widget.allowTemplateManagement,
-      onChoice: (selected) => setState(() {
-        _choice = selected;
-        _type = selected.template?.type;
-      }),
+    return PopScope<Object?>(
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_handleSystemBack());
+      },
+      child: Material(
+        key: const ValueKey('transaction-entry-flow-content'),
+        color: Theme.of(context).colorScheme.surface,
+        child: SafeArea(
+          child: SizedBox.expand(
+            child: IndexedStack(
+              index: choice == null
+                  ? 0
+                  : type == null
+                  ? 1
+                  : 2,
+              children: [
+                TransactionTemplateBrowser(
+                  data: widget.data,
+                  onTemplateUpdated: widget.onTemplateUpdated,
+                  allowTemplateManagement: widget.allowTemplateManagement,
+                  onClose: () => unawaited(_closeFlow()),
+                  onChoice: (selected) => setState(() {
+                    _choice = selected;
+                    _type = selected.template?.type;
+                  }),
+                ),
+                TransactionTypeChooser(
+                  createTemplate: choice?.createTemplate ?? false,
+                  onSelected: (selected) =>
+                      setState(() => _type = selected.type),
+                  onBack: _returnToTemplates,
+                  onClose: () => unawaited(_closeFlow()),
+                ),
+                if (choice != null && type != null)
+                  TransactionFormSheet(
+                    key: _formKey,
+                    type: type,
+                    data: widget.data,
+                    template: choice.template,
+                    createTemplate: choice.createTemplate,
+                    onBack: () => unawaited(_returnFromForm()),
+                    onClose: () => unawaited(_closeFlow()),
+                    onResult: _complete,
+                  )
+                else
+                  const SizedBox.expand(),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
+  }
+
+  void _returnToTemplates() {
+    setState(() {
+      _choice = null;
+      _type = null;
+    });
+  }
+
+  Future<void> _returnFromForm() async {
+    if (_formKey.currentState?.hasUnsavedChanges == true &&
+        !await _confirmDiscard()) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      if (_choice?.template != null) _choice = null;
+      _type = null;
+    });
+  }
+
+  Future<void> _handleSystemBack() async {
+    if (_type != null) {
+      await _returnFromForm();
+    } else if (_choice != null) {
+      _returnToTemplates();
+    } else {
+      await _closeFlow();
+    }
+  }
+
+  Future<void> _closeFlow() async {
+    if (_formKey.currentState?.hasUnsavedChanges == true &&
+        !await _confirmDiscard()) {
+      return;
+    }
+    if (mounted) _allowPopAndReturn();
+  }
+
+  Future<bool> _confirmDiscard() async =>
+      await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          scrollable: true,
+          title: const Text('Discard changes?'),
+          content: const Text('Your transaction has not been added.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Keep editing'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Discard'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+
+  void _complete(Object result) => _allowPopAndReturn(result);
+
+  void _allowPopAndReturn([Object? result]) {
+    setState(() => _allowPop = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(result);
+    });
   }
 }
 
@@ -443,12 +560,18 @@ class TransactionFormSheet extends StatefulWidget {
     required this.data,
     this.template,
     this.createTemplate = false,
+    this.onBack,
+    this.onClose,
+    this.onResult,
   });
 
   final TransactionType type;
   final AppDataSnapshot data;
   final TransactionTemplate? template;
   final bool createTemplate;
+  final VoidCallback? onBack;
+  final VoidCallback? onClose;
+  final ValueChanged<Object>? onResult;
 
   @override
   State<TransactionFormSheet> createState() => _TransactionFormSheetState();
@@ -456,6 +579,7 @@ class TransactionFormSheet extends StatefulWidget {
 
 class _TransactionFormSheetState extends State<TransactionFormSheet> {
   final _formKey = GlobalKey<FormState>();
+  final _dateButtonKey = GlobalKey();
   final _sourceAmountController = TextEditingController();
   final _destinationAmountController = TextEditingController();
   final _sourceFeeController = TextEditingController();
@@ -473,6 +597,10 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   String? _tagId;
   TransactionDescriptionPattern? _descriptionPattern;
   String? _descriptionPatternError;
+  late String _initialDraftFingerprint;
+  bool _resultSubmitted = false;
+
+  bool get hasUnsavedChanges => _draftFingerprint() != _initialDraftFingerprint;
 
   bool get _sourceRequired => transactionTypeRules[widget.type]!.sourceRequired;
   bool get _destinationRequired =>
@@ -519,7 +647,26 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
           )
           .toString();
     }
+    _initialDraftFingerprint = _draftFingerprint();
   }
+
+  String _draftFingerprint() => [
+    _date?.toIso8601String() ?? '',
+    _sourceAccountId ?? '',
+    _destinationAccountId ?? '',
+    _categoryId ?? '',
+    _tagId ?? '',
+    _sourceAmountController.text,
+    _destinationAmountController.text,
+    _sourceFeeController.text,
+    _destinationFeeController.text,
+    _sourceFeeEnabled.toString(),
+    _destinationFeeEnabled.toString(),
+    _descriptionController.text,
+    _templateNameController.text,
+    for (final placeholder in _placeholderControllers.keys.toList()..sort())
+      '$placeholder=${_placeholderControllers[placeholder]!.text}',
+  ].join('\u0000');
 
   bool get _transferSameCurrency {
     if (widget.type != TransactionType.transfer ||
@@ -557,201 +704,237 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final content = Form(
-      key: _formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            widget.createTemplate
-                ? 'Create Template'
-                : widget.template?.name ?? transactionTypeLabel(widget.type),
-            style: Theme.of(context).textTheme.headlineSmall,
+    final compact = MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
+    final fieldGap = compact && usesCompactVerticalSpacing(context)
+        ? AppSpacing.sm + AppSpacing.xs
+        : AppSpacing.md;
+    final title = widget.createTemplate
+        ? 'Create Template'
+        : widget.template?.name ?? transactionTypeLabel(widget.type);
+    final fields = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.template != null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          _buildTemplateSummary(widget.template!),
+        ],
+        if (widget.createTemplate) ...[
+          SizedBox(height: fieldGap),
+          TextFormField(
+            controller: _templateNameController,
+            decoration: const InputDecoration(labelText: 'Template Name'),
+            validator: (value) => value == null || value.trim().isEmpty
+                ? 'Enter a template name.'
+                : null,
           ),
-          if (widget.template != null) ...[
-            const SizedBox(height: AppSpacing.sm),
-            _buildTemplateSummary(widget.template!),
-          ],
-          if (widget.createTemplate) ...[
-            const SizedBox(height: AppSpacing.md),
-            TextFormField(
-              controller: _templateNameController,
-              decoration: const InputDecoration(labelText: 'Template Name'),
-              validator: (value) => value == null || value.trim().isEmpty
-                  ? 'Enter a template name.'
-                  : null,
+        ],
+        SizedBox(height: fieldGap),
+        if (widget.createTemplate)
+          TextFormField(
+            controller: _descriptionController,
+            decoration: const InputDecoration(
+              labelText: 'Description pattern',
+              hintText: 'Coffee at {Merchant}',
+              helperText: 'Use {Label} to ask for a value each time.',
             ),
-          ],
-          const SizedBox(height: AppSpacing.md),
-          if (widget.createTemplate)
-            TextFormField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description pattern',
-                hintText: 'Coffee at {Merchant}',
-                helperText: 'Use {Label} to ask for a value each time.',
-              ),
-              validator: _validateDescriptionPattern,
-              textCapitalization: TextCapitalization.sentences,
-              textInputAction: TextInputAction.next,
-            ),
-          if (!widget.createTemplate && _descriptionPatternError != null)
-            Text(
-              'This template cannot be used: $_descriptionPatternError. Fix its description in Sheets.',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          if (!widget.createTemplate &&
-              widget.template?.hasDescription != true) ...[
-            TextFormField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(labelText: 'Description'),
-              textCapitalization: TextCapitalization.words,
-              textInputAction: TextInputAction.next,
-              validator: (value) => value == null || value.trim().isEmpty
-                  ? 'Enter a description.'
-                  : null,
-            ),
-            const SizedBox(height: AppSpacing.md),
-          ],
-          if (!widget.createTemplate &&
-              _descriptionPattern != null &&
-              _descriptionPattern!.placeholders.isNotEmpty) ...[
-            for (final placeholder in _descriptionPattern!.placeholders)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                child: TextFormField(
-                  controller: _placeholderControllers[placeholder],
-                  decoration: InputDecoration(labelText: placeholder),
-                  textCapitalization: TextCapitalization.sentences,
-                  textInputAction: TextInputAction.next,
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? 'Enter $placeholder.'
-                      : null,
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(AppRadii.control),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.sm),
-                child: Text('Description: ${_descriptionPreview()}'),
+            validator: _validateDescriptionPattern,
+            textCapitalization: TextCapitalization.sentences,
+            textInputAction: TextInputAction.next,
+          ),
+        if (!widget.createTemplate && _descriptionPatternError != null)
+          Text(
+            'This template cannot be used: $_descriptionPatternError. Fix its description in Sheets.',
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        if (!widget.createTemplate &&
+            widget.template?.hasDescription != true) ...[
+          TextFormField(
+            controller: _descriptionController,
+            decoration: const InputDecoration(labelText: 'Description'),
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.next,
+            validator: (value) => value == null || value.trim().isEmpty
+                ? 'Enter a description.'
+                : null,
+          ),
+          SizedBox(height: fieldGap),
+        ],
+        if (!widget.createTemplate &&
+            _descriptionPattern != null &&
+            _descriptionPattern!.placeholders.isNotEmpty) ...[
+          for (final placeholder in _descriptionPattern!.placeholders)
+            Padding(
+              padding: EdgeInsets.only(bottom: fieldGap),
+              child: TextFormField(
+                controller: _placeholderControllers[placeholder],
+                decoration: InputDecoration(labelText: placeholder),
+                textCapitalization: TextCapitalization.sentences,
+                textInputAction: TextInputAction.next,
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? 'Enter $placeholder.'
+                    : null,
+                onChanged: (_) => setState(() {}),
               ),
             ),
-          ],
-          if (widget.createTemplate || widget.template?.date == null)
-            const SizedBox(height: AppSpacing.md),
-          if (widget.template == null || widget.template!.date == null)
-            OutlinedButton.icon(
-              onPressed: _selectDate,
-              icon: const Icon(Icons.calendar_today_outlined),
-              label: Text(_date == null ? 'Select date' : _formatDate(_date!)),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(AppRadii.control),
             ),
-          const SizedBox(height: AppSpacing.md),
-          if (_sourceRequired &&
-              (widget.template == null ||
-                  widget.template!.sourceAccountId == null)) ...[
-            _accountDropdown(
-              label: _destinationRequired ? 'Source Account' : 'Account',
-              value: _sourceAccountId,
-              onChanged: (value) => setState(() => _sourceAccountId = value),
-            ),
-            const SizedBox(height: AppSpacing.md),
-          ],
-          if (_sourceRequired && !_sourceAmountIsFixed) ...[
-            _amountField(
-              controller: _sourceAmountController,
-              label: _destinationRequired ? 'Source Amount' : 'Amount',
-              accountId: _sourceAccountId,
-            ),
-            if (_destinationRequired) const SizedBox(height: AppSpacing.md),
-          ],
-          if (widget.type == TransactionType.transfer &&
-              !widget.createTemplate) ...[
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _sourceFeeEnabled,
-              title: const Text('Source Account Fee'),
-              onChanged: (value) =>
-                  setState(() => _sourceFeeEnabled = value ?? false),
-            ),
-            if (_sourceFeeEnabled)
-              _amountField(
-                controller: _sourceFeeController,
-                label: 'Source Fee',
-                accountId: _sourceAccountId,
-              ),
-            const SizedBox(height: AppSpacing.md),
-          ],
-          if (_destinationRequired &&
-              (widget.template == null ||
-                  widget.template!.destinationAccountId == null)) ...[
-            _accountDropdown(
-              label: _sourceRequired ? 'Destination Account' : 'Account',
-              value: _destinationAccountId,
-              onChanged: (value) =>
-                  setState(() => _destinationAccountId = value),
-            ),
-            const SizedBox(height: AppSpacing.md),
-          ],
-          if (_destinationRequired &&
-              !_transferSameCurrency &&
-              (widget.template == null ||
-                  widget.template!.destinationAmount == null))
-            _amountField(
-              controller: _destinationAmountController,
-              label: _sourceRequired ? 'Destination Amount' : 'Amount',
-              accountId: _destinationAccountId,
-            ),
-          if (widget.type == TransactionType.transfer &&
-              !widget.createTemplate) ...[
-            const SizedBox(height: AppSpacing.md),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _destinationFeeEnabled,
-              title: const Text('Destination Account Fee'),
-              onChanged: (value) =>
-                  setState(() => _destinationFeeEnabled = value ?? false),
-            ),
-            if (_destinationFeeEnabled)
-              _amountField(
-                controller: _destinationFeeController,
-                label: 'Destination Fee',
-                accountId: _destinationAccountId,
-              ),
-          ],
-          if ((widget.template == null ||
-                  widget.template!.categoryId == null) &&
-              (_categoryRequired || _availableCategories.isNotEmpty)) ...[
-            const SizedBox(height: AppSpacing.md),
-            _categoryDropdown(),
-          ],
-          if (widget.template == null || widget.template!.tagId == null) ...[
-            const SizedBox(height: AppSpacing.md),
-            _tagDropdown(),
-          ],
-          const SizedBox(height: AppSpacing.lg),
-          FilledButton(
-            onPressed: _descriptionPatternError == null ? _submit : null,
-            child: Text(
-              widget.createTemplate ? 'Save Template' : 'Add Transaction',
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              child: Text('Description: ${_descriptionPreview()}'),
             ),
           ),
         ],
-      ),
+        if (widget.createTemplate || widget.template?.date == null)
+          SizedBox(height: fieldGap),
+        if (widget.template == null || widget.template!.date == null)
+          OutlinedButton.icon(
+            key: _dateButtonKey,
+            onPressed: _selectDate,
+            icon: const Icon(Icons.calendar_today_outlined),
+            label: Text(_date == null ? 'Select date' : _formatDate(_date!)),
+          ),
+        SizedBox(height: fieldGap),
+        if (_sourceRequired &&
+            (widget.template == null ||
+                widget.template!.sourceAccountId == null)) ...[
+          _accountDropdown(
+            label: _destinationRequired ? 'Source Account' : 'Account',
+            value: _sourceAccountId,
+            onChanged: (value) => setState(() => _sourceAccountId = value),
+          ),
+          SizedBox(height: fieldGap),
+        ],
+        if (_sourceRequired && !_sourceAmountIsFixed) ...[
+          _amountField(
+            controller: _sourceAmountController,
+            label: _destinationRequired ? 'Source Amount' : 'Amount',
+            accountId: _sourceAccountId,
+          ),
+          if (_destinationRequired) SizedBox(height: fieldGap),
+        ],
+        if (widget.type == TransactionType.transfer &&
+            !widget.createTemplate) ...[
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _sourceFeeEnabled,
+            title: const Text('Source Account Fee'),
+            onChanged: (value) =>
+                setState(() => _sourceFeeEnabled = value ?? false),
+          ),
+          if (_sourceFeeEnabled)
+            _amountField(
+              controller: _sourceFeeController,
+              label: 'Source Fee',
+              accountId: _sourceAccountId,
+            ),
+          SizedBox(height: fieldGap),
+        ],
+        if (_destinationRequired &&
+            (widget.template == null ||
+                widget.template!.destinationAccountId == null)) ...[
+          _accountDropdown(
+            label: _sourceRequired ? 'Destination Account' : 'Account',
+            value: _destinationAccountId,
+            onChanged: (value) => setState(() => _destinationAccountId = value),
+          ),
+          SizedBox(height: fieldGap),
+        ],
+        if (_destinationRequired &&
+            !_transferSameCurrency &&
+            (widget.template == null ||
+                widget.template!.destinationAmount == null))
+          _amountField(
+            controller: _destinationAmountController,
+            label: _sourceRequired ? 'Destination Amount' : 'Amount',
+            accountId: _destinationAccountId,
+          ),
+        if (widget.type == TransactionType.transfer &&
+            !widget.createTemplate) ...[
+          SizedBox(height: fieldGap),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _destinationFeeEnabled,
+            title: const Text('Destination Account Fee'),
+            onChanged: (value) =>
+                setState(() => _destinationFeeEnabled = value ?? false),
+          ),
+          if (_destinationFeeEnabled)
+            _amountField(
+              controller: _destinationFeeController,
+              label: 'Destination Fee',
+              accountId: _destinationAccountId,
+            ),
+        ],
+        if ((widget.template == null || widget.template!.categoryId == null) &&
+            (_categoryRequired || _availableCategories.isNotEmpty)) ...[
+          SizedBox(height: fieldGap),
+          _categoryDropdown(),
+        ],
+        if (widget.template == null || widget.template!.tagId == null) ...[
+          SizedBox(height: fieldGap),
+          _tagDropdown(),
+        ],
+      ],
     );
 
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.sm,
-          AppSpacing.lg,
-          MediaQuery.viewInsetsOf(context).bottom + AppSpacing.lg,
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        child: Column(
+          children: [
+            TransactionEntryHeader(
+              title: title,
+              onBack: widget.onBack ?? () => Navigator.of(context).pop(),
+              onClose: widget.onClose ?? () => Navigator.of(context).pop(),
+            ),
+            Expanded(
+              child: Form(
+                key: _formKey,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    compact
+                        ? AppPageSpacing.compactGutter
+                        : AppPageSpacing.desktopGutter,
+                    AppSpacing.sm,
+                    compact
+                        ? AppPageSpacing.compactGutter
+                        : AppPageSpacing.desktopGutter,
+                    AppSpacing.md,
+                  ),
+                  child: fields,
+                ),
+              ),
+            ),
+            Padding(
+              key: const ValueKey('transaction-entry-submit-footer'),
+              padding: EdgeInsets.fromLTRB(
+                compact
+                    ? AppPageSpacing.compactGutter
+                    : AppPageSpacing.desktopGutter,
+                AppSpacing.sm,
+                compact
+                    ? AppPageSpacing.compactGutter
+                    : AppPageSpacing.desktopGutter,
+                MediaQuery.viewInsetsOf(context).bottom + AppSpacing.sm,
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed:
+                      _descriptionPatternError == null && !_resultSubmitted
+                      ? _submit
+                      : null,
+                  child: Text(
+                    widget.createTemplate ? 'Save Template' : 'Add Transaction',
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-        child: content,
       ),
     );
   }
@@ -919,10 +1102,17 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   }
 
   void _submit() {
-    if (!_formKey.currentState!.validate()) return;
+    if (_resultSubmitted) return;
+    final invalidFields = _formKey.currentState!.validateGranularly();
+    if (invalidFields.isNotEmpty) {
+      _focusFirstInvalidField(invalidFields);
+      return;
+    }
     if (_descriptionPatternError != null) return;
 
     if (!widget.createTemplate && _date == null) {
+      final dateContext = _dateButtonKey.currentContext;
+      if (dateContext != null) unawaited(Scrollable.ensureVisible(dateContext));
       showPersistentErrorDialog(context, 'Select a date.');
       return;
     }
@@ -966,7 +1156,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     }
     if (widget.createTemplate) {
       final now = DateTime.now().toUtc();
-      Navigator.of(context).pop(
+      _deliverResult(
         TransactionTemplate(
           id: generateTransactionId(widget.data.transactionTemplatesById.keys),
           name: _templateNameController.text.trim(),
@@ -1025,7 +1215,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
         showPersistentErrorDialog(context, result.error!);
         return;
       }
-      Navigator.of(context).pop(result.transactions);
+      _deliverResult(result.transactions);
       return;
     }
 
@@ -1047,7 +1237,55 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       showPersistentErrorDialog(context, errors.join(' '));
       return;
     }
-    Navigator.of(context).pop(transaction);
+    _deliverResult(transaction);
+  }
+
+  void _deliverResult(Object result) {
+    if (_resultSubmitted) return;
+    _resultSubmitted = true;
+    final onResult = widget.onResult;
+    if (onResult != null) {
+      onResult(result);
+    } else {
+      Navigator.of(context).pop(result);
+    }
+  }
+
+  void _focusFirstInvalidField(Set<FormFieldState<Object?>> invalidFields) {
+    final fields = invalidFields.toList()
+      ..sort((a, b) {
+        double top(FormFieldState<Object?> field) {
+          final renderObject = field.context.findRenderObject();
+          return renderObject is RenderBox
+              ? renderObject.localToGlobal(Offset.zero).dy
+              : double.infinity;
+        }
+
+        return top(a).compareTo(top(b));
+      });
+    final first = fields.first;
+    unawaited(
+      Scrollable.ensureVisible(
+        first.context,
+        alignment: 0.2,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      ),
+    );
+
+    FocusNode? firstFocus;
+    void findEditable(Element element) {
+      if (firstFocus != null) return;
+      final widget = element.widget;
+      if (widget is EditableText) {
+        firstFocus = widget.focusNode;
+        return;
+      }
+      element.visitChildElements(findEditable);
+    }
+
+    first.context.visitChildElements(findEditable);
+    firstFocus?.requestFocus();
   }
 
   Money? _parseAmount(String value, Account? account) {

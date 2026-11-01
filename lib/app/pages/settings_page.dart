@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
+import '../app_text_scaler.dart';
 import '../error_dialog.dart';
 import 'display_preferences_page.dart';
 import '../theme/design_tokens.dart';
@@ -34,7 +35,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _savingPreferences = false;
   late Map<String, List<DisplayPreference>> _preferencesByType;
 
-  double get _displayScale => widget.textScale.clamp(0.75, 1.0).toDouble();
+  double get _displayScale => normalizeAppTextScale(widget.textScale);
 
   @override
   void initState() {
@@ -53,10 +54,14 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onRebuildDailyTables != null;
+    final compact = MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
+    final compactSpacing = usesCompactVerticalSpacing(context);
     return Align(
       alignment: Alignment.topCenter,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: EdgeInsets.all(
+          compact ? AppPageSpacing.compactGutter : AppPageSpacing.desktopGutter,
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
           child: Column(
@@ -66,26 +71,49 @@ class _SettingsPageState extends State<SettingsPage> {
                 'Settings',
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(
+                height: compact
+                    ? usesCompactVerticalSpacing(context)
+                          ? AppSpacing.md
+                          : AppPageSpacing.compactSection
+                    : AppPageSpacing.desktopSection,
+              ),
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: compactSpacing
+                        ? AppSpacing.sm + AppSpacing.xs
+                        : AppSpacing.md,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Font size',
+                        'App text size',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: AppSpacing.xs),
-                      Text('${(_displayScale * 100).round()}%'),
+                      Text('${(_displayScale * 100).round()}% app preference'),
                       Slider(
                         min: 0.75,
-                        max: 1,
-                        divisions: 10,
+                        max: 1.5,
+                        divisions: 15,
                         value: _displayScale,
                         label: '${(_displayScale * 100).round()}%',
                         onChanged: widget.onTextScaleChanged,
+                      ),
+                      const Text(
+                        'System text enlargement is always respected.',
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: widget.onTextScaleChanged == null
+                              ? null
+                              : () => widget.onTextScaleChanged!(1),
+                          child: const Text('Reset to 100%'),
+                        ),
                       ),
                     ],
                   ),
@@ -93,13 +121,20 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               if (widget.data != null &&
                   widget.onSaveDisplayPreferences != null) ...[
-                const SizedBox(height: AppSpacing.md),
+                SizedBox(
+                  height: compactSpacing ? AppSpacing.sm : AppSpacing.md,
+                ),
                 _buildDisplayPreferencesMenu(),
               ],
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: compactSpacing ? AppSpacing.sm : AppSpacing.md),
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: compactSpacing
+                        ? AppSpacing.sm + AppSpacing.xs
+                        : AppSpacing.md,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

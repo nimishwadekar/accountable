@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/data.dart';
 import '../formatters.dart';
 import '../theme/design_tokens.dart';
-import 'account_visuals.dart';
+import 'account_balance_row.dart';
 
 class OverviewPage extends StatelessWidget {
   const OverviewPage({super.key, required this.data});
@@ -12,16 +12,7 @@ class OverviewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final latestNetWorth = _latestByDate(
-      data.dailyNetWorth,
-      (value) => value.date,
-    );
     final balances = data.ledgerBalances;
-    final netWorthChange = _netWorthChangeOver30Days(
-      data.dailyNetWorth,
-      latestNetWorth,
-    );
-    final monthlyComparison = _monthlyNetWorthComparison(data.dailyNetWorth);
 
     return AppPageFrame(
       title: 'Overview',
@@ -29,75 +20,24 @@ class OverviewPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final cards = [
-                MetricCard(
-                  label: 'Net Worth',
-                  value: latestNetWorth == null
-                      ? 'Unavailable'
-                      : formatMoney(latestNetWorth.amount, data.currenciesById),
-                  detail: latestNetWorth == null
-                      ? 'No daily snapshot available'
-                      : _netWorthDetail(
-                          latestNetWorth: latestNetWorth,
-                          change: netWorthChange,
-                          currencies: data.currenciesById,
-                        ),
-                  accent: latestNetWorth == null
-                      ? AppColors.mutedText
-                      : amountColor(
-                              context,
-                              latestNetWorth.amount.minorUnits,
-                            ) ??
-                            AppColors.teal,
-                ),
-                _monthlyAverageCard(
-                  comparison: monthlyComparison,
-                  currencies: data.currenciesById,
-                ),
-                _monthlyChangeCard(
-                  comparison: monthlyComparison,
-                  currencies: data.currenciesById,
-                ),
-              ];
-              if (constraints.maxWidth < AppBreakpoints.compact) {
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (var index = 0; index < cards.length; index++) ...[
-                        SizedBox(width: 260, child: cards[index]),
-                        if (index < cards.length - 1)
-                          const SizedBox(width: AppSpacing.sm),
-                      ],
-                    ],
-                  ),
-                );
-              }
-              return Row(
-                children: [
-                  for (var index = 0; index < cards.length; index++) ...[
-                    Expanded(child: cards[index]),
-                    if (index < cards.length - 1)
-                      const SizedBox(width: AppSpacing.md),
-                  ],
-                ],
-              );
-            },
+          _buildNetWorthSummary(context, data),
+          SizedBox(
+            height: usesCompactVerticalSpacing(context)
+                ? AppSpacing.md
+                : AppPageSpacing.compactSection,
           ),
-          const SizedBox(height: AppSpacing.xl),
-          Text(
-            'Current Cash Account Balances',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text('Cash balances', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Cash account ledger balances through the latest transaction.',
+            'Through the latest transaction.',
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: AppColors.mutedText),
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(
+            height: usesCompactVerticalSpacing(context)
+                ? AppSpacing.xs
+                : AppSpacing.sm,
+          ),
           Card(
             clipBehavior: Clip.hardEdge,
             child: Column(
@@ -110,16 +50,20 @@ class OverviewPage extends StatelessWidget {
                         (item) => item.accountTypeKind == AccountType.cash,
                       ))
                     const Divider(height: 1),
-                  _AccountRow(
+                  AccountBalanceRow(
                     account: account,
-                    balance: balances[account.id]!,
+                    amount: balances[account.id]!,
                     currencies: data.currenciesById,
                   ),
                 ],
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(
+            height: usesCompactVerticalSpacing(context)
+                ? AppSpacing.md
+                : AppPageSpacing.compactSection,
+          ),
           Builder(
             builder: (context) {
               final assetLiabilityAccounts = data.visibleAccounts
@@ -137,7 +81,7 @@ class OverviewPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Current Assets & Liabilities',
+                    'Assets & liabilities',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: AppSpacing.xs),
@@ -203,6 +147,7 @@ class OverviewPage extends StatelessWidget {
   }
 
   static Widget _monthlyAverageCard({
+    required BuildContext context,
     required _MonthlyNetWorthComparison? comparison,
     required Map<String, CurrencyDefinition> currencies,
   }) {
@@ -217,7 +162,9 @@ class OverviewPage extends StatelessWidget {
       label: '${comparison.currentLabel} Average',
       value: formatMoney(comparison.currentAverage, currencies),
       detail: '${comparison.currentSnapshotCount} daily snapshots',
-      accent: AppColors.teal,
+      accent:
+          amountColor(context, comparison.currentAverage.minorUnits) ??
+          AppColors.mutedText,
     );
   }
 
@@ -347,6 +294,113 @@ class OverviewPage extends StatelessWidget {
   }
 }
 
+class NetWorthSummarySection extends StatelessWidget {
+  const NetWorthSummarySection({super.key, required this.data});
+
+  final AppDataSnapshot data;
+
+  @override
+  Widget build(BuildContext context) => _buildNetWorthSummary(context, data);
+}
+
+Widget _buildNetWorthSummary(BuildContext context, AppDataSnapshot data) {
+  final latestNetWorth = OverviewPage._latestByDate(
+    data.dailyNetWorth,
+    (value) => value.date,
+  );
+  final netWorthChange = OverviewPage._netWorthChangeOver30Days(
+    data.dailyNetWorth,
+    latestNetWorth,
+  );
+  final monthlyComparison = OverviewPage._monthlyNetWorthComparison(
+    data.dailyNetWorth,
+  );
+
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      final compactSpacing = usesCompactVerticalSpacing(
+        context,
+        availableWidth: constraints.maxWidth,
+      );
+      final netWorthCard = MetricCard(
+        label: 'Net worth',
+        value: latestNetWorth == null
+            ? 'Unavailable'
+            : formatMoney(latestNetWorth.amount, data.currenciesById),
+        detail: latestNetWorth == null
+            ? 'No daily snapshot available'
+            : OverviewPage._netWorthDetail(
+                latestNetWorth: latestNetWorth,
+                change: netWorthChange,
+                currencies: data.currenciesById,
+              ),
+        accent: latestNetWorth == null
+            ? AppColors.mutedText
+            : amountColor(context, latestNetWorth.amount.minorUnits) ??
+                  AppColors.mutedText,
+      );
+      final secondaryCards = [
+        OverviewPage._monthlyAverageCard(
+          context: context,
+          comparison: monthlyComparison,
+          currencies: data.currenciesById,
+        ),
+        OverviewPage._monthlyChangeCard(
+          comparison: monthlyComparison,
+          currencies: data.currenciesById,
+        ),
+      ];
+
+      if (constraints.maxWidth >= AppBreakpoints.medium) {
+        return Row(
+          children: [
+            Expanded(child: netWorthCard),
+            const SizedBox(width: AppSpacing.md),
+            for (var index = 0; index < secondaryCards.length; index++) ...[
+              Expanded(child: secondaryCards[index]),
+              if (index < secondaryCards.length - 1)
+                const SizedBox(width: AppSpacing.md),
+            ],
+          ],
+        );
+      }
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          netWorthCard,
+          SizedBox(height: compactSpacing ? AppSpacing.xs : AppSpacing.sm),
+          LayoutBuilder(
+            builder: (context, secondaryConstraints) {
+              if (secondaryConstraints.maxWidth >= 520 &&
+                  MediaQuery.textScalerOf(context).scale(14) <= 16.8) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: secondaryCards[0]),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(child: secondaryCards[1]),
+                  ],
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  secondaryCards[0],
+                  SizedBox(
+                    height: compactSpacing ? AppSpacing.xs : AppSpacing.sm,
+                  ),
+                  secondaryCards[1],
+                ],
+              );
+            },
+          ),
+        ],
+      );
+    },
+  );
+}
+
 class _MonthlyNetWorthComparison {
   const _MonthlyNetWorthComparison({
     required this.currentLabel,
@@ -396,7 +450,11 @@ class CashAccountsSection extends StatelessWidget {
           style: Theme.of(context).textTheme.bodyMedium
               ?.copyWith(color: AppColors.mutedText),
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(
+          height: usesCompactVerticalSpacing(context)
+              ? AppSpacing.xs
+              : AppSpacing.sm,
+        ),
         if (cashAccounts.isEmpty)
           const EmptyState(message: 'No Cash accounts yet.')
         else
@@ -406,9 +464,9 @@ class CashAccountsSection extends StatelessWidget {
               children: [
                 for (var index = 0; index < cashAccounts.length; index++) ...[
                   if (index > 0) const Divider(height: 1),
-                  _AccountRow(
+                  AccountBalanceRow(
                     account: cashAccounts[index],
-                    balance: balances[cashAccounts[index].id]!,
+                    amount: balances[cashAccounts[index].id]!,
                     currencies: data.currenciesById,
                   ),
                 ],
@@ -620,20 +678,25 @@ class AppPageFrame extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.scrollStorageKey,
     required this.child,
   });
 
   final String title;
   final String? subtitle;
+  final PageStorageKey<String>? scrollStorageKey;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
     return Align(
       alignment: Alignment.topCenter,
       child: SingleChildScrollView(
-        key: PageStorageKey<String>('app-page-$title'),
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        key: scrollStorageKey ?? PageStorageKey<String>('app-page-$title'),
+        padding: EdgeInsets.all(
+          compact ? AppPageSpacing.compactGutter : AppPageSpacing.desktopGutter,
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(
             maxWidth: AppBreakpoints.maxContentWidth,
@@ -650,7 +713,13 @@ class AppPageFrame extends StatelessWidget {
                       ?.copyWith(color: AppColors.mutedText),
                 ),
               ],
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(
+                height: compact
+                    ? usesCompactVerticalSpacing(context)
+                          ? AppSpacing.md
+                          : AppPageSpacing.compactSection
+                    : AppPageSpacing.desktopSection,
+              ),
               child,
             ],
           ),
@@ -676,9 +745,15 @@ class MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compactSpacing = usesCompactVerticalSpacing(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: compactSpacing
+              ? AppSpacing.sm + AppSpacing.xs
+              : AppSpacing.md,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -687,12 +762,13 @@ class MetricCard extends StatelessWidget {
               style: Theme.of(context).textTheme.labelLarge
                   ?.copyWith(color: AppColors.mutedText),
             ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              value,
+            SizedBox(height: compactSpacing ? AppSpacing.xs : AppSpacing.sm),
+            _CompleteMetricValue(
+              value: value,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 color: accent ?? AppColors.navy,
                 fontWeight: FontWeight.w800,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
             const SizedBox(height: AppSpacing.xs),
@@ -702,6 +778,34 @@ class MetricCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CompleteMetricValue extends StatelessWidget {
+  const _CompleteMetricValue({required this.value, required this.style});
+
+  final String value;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final painter = TextPainter(
+        text: TextSpan(text: value, style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      final text = Text(value, maxLines: 1, softWrap: false, style: style);
+      if (painter.width <= constraints.maxWidth ||
+          !constraints.maxWidth.isFinite) {
+        return text;
+      }
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: text,
+      );
+    },
+  );
 }
 
 class EmptyState extends StatelessWidget {
@@ -755,90 +859,10 @@ class _ManualValuationRow extends StatelessWidget {
     final value = account.isValuationAccount
         ? latest?.value
         : balances[account.id];
-    final color = value == null ? null : amountColor(context, value.minorUnits);
-    return Container(
-      color: accountTypeColor(account).withValues(alpha: 0.06),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.xs,
-        ),
-        leading: CircleAvatar(
-          backgroundColor: accountTypeColor(account).withValues(alpha: 0.14),
-          foregroundColor: accountTypeColor(account),
-          child: AccountVisualIcon(
-            account: account,
-            currencies: data.currenciesById,
-          ),
-        ),
-        title: Text(account.name),
-        subtitle: Text(accountSubtitle(account, data.currenciesById)),
-        trailing: Text(
-          value == null || currency == null
-              ? '—'
-              : formatMoney(value, data.currenciesById),
-          style: Theme.of(context).textTheme.titleMedium
-              ?.copyWith(color: color, fontWeight: FontWeight.w700),
-        ),
-      ),
-    );
-  }
-}
-
-String accountSubtitle(
-  Account account,
-  Map<String, CurrencyDefinition> currencies,
-) {
-  final currency = currencies[account.currencyId];
-  final currencyCode = currency?.id ?? account.currencyId;
-  final type = account.accountTypeKind;
-  if (type == AccountType.cash) return currencyCode;
-  final displayType = type.displayName;
-  return '$currencyCode · $displayType';
-}
-
-Color? amountColor(BuildContext context, int minorUnits) {
-  if (minorUnits > 0) return AppColors.success;
-  if (minorUnits < 0) return Theme.of(context).colorScheme.error;
-  return null;
-}
-
-class _AccountRow extends StatelessWidget {
-  const _AccountRow({
-    required this.account,
-    required this.balance,
-    required this.currencies,
-  });
-
-  final Account account;
-  final Money balance;
-  final Map<String, CurrencyDefinition> currencies;
-
-  @override
-  Widget build(BuildContext context) {
-    final currency = currencies[account.currencyId];
-    return Container(
-      color: accountTypeColor(account).withValues(alpha: 0.06),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.xs,
-        ),
-        leading: CircleAvatar(
-          backgroundColor: accountTypeColor(account).withValues(alpha: 0.14),
-          foregroundColor: accountTypeColor(account),
-          child: AccountVisualIcon(account: account, currencies: currencies),
-        ),
-        title: Text(account.name),
-        subtitle: Text(accountSubtitle(account, currencies)),
-        trailing: Text(
-          currency == null ? '—' : formatMoney(balance, currencies),
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: amountColor(context, balance.minorUnits),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
+    return AccountBalanceRow(
+      account: account,
+      amount: currency == null ? null : value,
+      currencies: data.currenciesById,
     );
   }
 }

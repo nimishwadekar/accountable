@@ -11,6 +11,8 @@ void main() {
   testWidgets('celebrates retroactive milestones one at a time', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final source = await AssetAppDataRepository().load();
     final now = DateTime.now();
     final currentMonth = DateTime.utc(now.year, now.month);
@@ -42,15 +44,32 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: Scaffold(
-          body: MilestonesPage(
-            data: data,
-            onAchievementAcknowledged: (id) async => acknowledged.add(id),
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(size: const Size(390, 844), disableAnimations: true),
+            child: Scaffold(
+              body: MilestonesPage(
+                data: data,
+                onAchievementAcknowledged: (id) async => acknowledged.add(id),
+              ),
+            ),
           ),
         ),
       ),
     );
     await tester.pump();
+    expect(tester.takeException(), isNull, reason: 'Initial celebration');
+    final celebrationAnimation = find.byWidgetPredicate(
+      (widget) => widget is TweenAnimationBuilder<double>,
+    );
+    expect(
+      tester
+          .widget<TweenAnimationBuilder<double>>(celebrationAnimation)
+          .duration,
+      Duration.zero,
+    );
+    expect(find.byIcon(Icons.auto_awesome), findsNothing);
 
     expect(find.text('You did it!'), findsOneWidget);
     expect(find.text('A fresh start'), findsOneWidget);
@@ -58,20 +77,33 @@ void main() {
     expect(find.text('A new frontier'), findsNothing);
 
     await tester.ensureVisible(find.text('Celebrate next'));
+    expect(tester.takeException(), isNull, reason: 'Showing first action');
     await tester.tap(find.text('Celebrate next'));
     await tester.pump();
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'After first acknowledgement',
+    );
     expect(acknowledged, ['ACH001']);
     expect(find.text('A stronger foundation'), findsOneWidget);
 
     await tester.ensureVisible(find.text('Continue'));
+    expect(tester.takeException(), isNull, reason: 'Showing final action');
     await tester.tap(find.text('Continue'));
     await tester.pump();
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'After final acknowledgement',
+    );
     expect(acknowledged, ['ACH001', 'ACH002']);
-    expect(find.text('Last completed month average'), findsOneWidget);
+    expect(find.text('Last month average'), findsOneWidget);
+    expect(find.text('Next milestone'), findsOneWidget);
+    expect(find.text('Earned milestones'), findsOneWidget);
     expect(find.textContaining('Provisional'), findsNothing);
     expect(find.text('A fresh start'), findsOneWidget);
     expect(find.text('A stronger foundation'), findsOneWidget);
-    expect(find.text('PROGRESS TOWARD'), findsOneWidget);
     expect(find.text('A new frontier'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });

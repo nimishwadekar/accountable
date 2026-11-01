@@ -1,4 +1,6 @@
 class NavigationHistory {
+  static void captureInitialPath() {}
+
   String get currentPath => '/';
   Stream<String> get changes => const Stream.empty();
   bool isAuthenticatedPath(String path) => true;

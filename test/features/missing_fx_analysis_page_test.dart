@@ -41,7 +41,7 @@ void main() {
 
     expect(find.text('Historical exchange rates unavailable'), findsOneWidget);
     expect(find.text('INR · 2026-10-11'), findsOneWidget);
-    expect(find.text('Net Worth Trend (USD)'), findsNothing);
+    expect(find.text('Net worth (USD)'), findsNothing);
     expect(find.text('Spending by Category'), findsNothing);
     expect(find.text('Rebuild daily tables'), findsOneWidget);
   });

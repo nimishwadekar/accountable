@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:ui' show SemanticsRole;
+
 import 'package:flutter/material.dart';
 
 import '../../data/data.dart';
@@ -62,6 +64,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
   String? _categoryId;
   String? _tagId;
   DateTimeRange? _dateRange;
+  bool _entryFlowActive = false;
   final ValueNotifier<bool> _showScrollToTop = ValueNotifier(false);
   final ValueNotifier<bool> _showAccountBalances = ValueNotifier(false);
   AppDataSnapshot? _cachedFilterData;
@@ -134,13 +137,22 @@ class _TransactionsPageState extends State<TransactionsPage> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openAddTransaction,
-        icon: const Icon(Icons.add),
-        label: const Text('Add transaction'),
-      ),
+      floatingActionButton: isCompact
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _openAddTransaction,
+              icon: const Icon(Icons.add),
+              label: const Text('Add transaction'),
+            ),
       body: LayoutBuilder(
         builder: (context, constraints) {
+          final shortViewport =
+              constraints.maxHeight < 600 ||
+              MediaQuery.viewInsetsOf(context).bottom > 0;
+          final compactSpacing = usesCompactVerticalSpacing(
+            context,
+            availableWidth: constraints.maxWidth,
+          );
           return Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(
@@ -149,58 +161,102 @@ class _TransactionsPageState extends State<TransactionsPage> {
               child: SizedBox(
                 height: constraints.maxHeight,
                 child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  padding: EdgeInsets.all(
+                    constraints.maxWidth < AppBreakpoints.compact
+                        ? AppPageSpacing.compactGutter
+                        : AppPageSpacing.desktopGutter,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Transactions',
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        widget.restrictedStartup
-                            ? '${transactions.length} pending local transactions'
-                            : '${transactions.length} of ${widget.data.transactions.length} transactions',
-                        style: Theme.of(context).textTheme.bodyLarge
-                            ?.copyWith(color: AppColors.mutedText),
-                      ),
-                      if (widget.restrictedStartup &&
-                          (widget.startupError != null ||
-                              widget.onStartupSignIn != null ||
-                              widget.onRetryOutbox != null)) ...[
-                        const SizedBox(height: AppSpacing.sm),
-                        if (widget.startupError != null)
+                      if (!_entryFlowActive) ...[
+                        if (!shortViewport) ...[
                           Text(
-                            'Pending upload issue: ${widget.startupError}',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
+                            'Transactions',
+                            style: Theme.of(context).textTheme.headlineMedium,
+                          ),
+                          if (widget.restrictedStartup) ...[
+                            SizedBox(
+                              height: compactSpacing ? 2 : AppSpacing.xs,
+                            ),
+                            Text(
+                              '${transactions.length} pending local transactions',
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(color: AppColors.mutedText),
+                            ),
+                          ],
+                        ],
+                        if (isCompact) ...[
+                          if (!shortViewport)
+                            const SizedBox(
+                              height: AppSpacing.sm + AppSpacing.xs,
+                            ),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: _openAddTransaction,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add transaction'),
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                              ),
                             ),
                           ),
-                        Wrap(
-                          spacing: AppSpacing.sm,
-                          children: [
-                            if (widget.onStartupSignIn != null)
-                              TextButton.icon(
-                                onPressed: widget.onStartupSignIn,
-                                icon: const Icon(Icons.login),
-                                label: const Text('Sign in to sync'),
+                        ],
+                        if (widget.restrictedStartup &&
+                            (widget.startupError != null ||
+                                widget.onStartupSignIn != null ||
+                                widget.onRetryOutbox != null)) ...[
+                          const SizedBox(height: AppSpacing.sm),
+                          if (shortViewport)
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxHeight: (constraints.maxHeight * 0.3)
+                                    .clamp(72.0, 180.0)
+                                    .toDouble(),
                               ),
-                            if (widget.onRetryOutbox != null)
-                              TextButton.icon(
-                                onPressed: widget.onRetryOutbox,
-                                icon: const Icon(Icons.sync),
-                                label: const Text('Retry upload'),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${transactions.length} pending local transactions',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall,
+                                    ),
+                                    if (widget.startupError != null)
+                                      _startupErrorMessage(context),
+                                    _buildStartupActions(),
+                                  ],
+                                ),
                               ),
+                            )
+                          else ...[
+                            if (widget.startupError != null)
+                              _startupErrorMessage(context),
+                            _buildStartupActions(),
                           ],
-                        ),
+                        ],
+                        if (!shortViewport) ...[
+                          SizedBox(
+                            height: isCompact
+                                ? AppSpacing.sm + AppSpacing.xs
+                                : AppSpacing.md,
+                          ),
+                          if (isCompact)
+                            _buildCompactFilterButton(context)
+                          else
+                            _buildDesktopFilters(context),
+                          SizedBox(
+                            height: compactSpacing
+                                ? AppSpacing.xs
+                                : isCompact
+                                ? AppSpacing.sm
+                                : AppSpacing.md,
+                          ),
+                        ],
                       ],
-                      const SizedBox(height: AppSpacing.md),
-                      if (isCompact)
-                        _buildCompactFilterButton(context)
-                      else
-                        _buildDesktopFilters(context),
-                      const SizedBox(height: AppSpacing.md),
                       Expanded(
                         child: Stack(
                           children: [
@@ -239,23 +295,52 @@ class _TransactionsPageState extends State<TransactionsPage> {
   Future<T?> _showTransactionDialog<T>(Widget child) {
     return showDialog<T>(
       context: context,
-      builder: (context) => Dialog(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: 560,
-            maxHeight: MediaQuery.sizeOf(context).height * 0.9,
-          ),
-          child: child,
-        ),
+      barrierDismissible: false,
+      useSafeArea: false,
+      builder: (_) => LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < AppBreakpoints.compact;
+          final maxHeight = (constraints.maxHeight - AppSpacing.lg * 2)
+              .clamp(280.0, 760.0)
+              .toDouble();
+          final surfaceConstraints = compact
+              ? BoxConstraints.tightFor(
+                  width: constraints.maxWidth,
+                  height: constraints.maxHeight,
+                )
+              : BoxConstraints(maxWidth: 560, maxHeight: maxHeight);
+
+          return Semantics(
+            role: SemanticsRole.dialog,
+            child: Align(
+              alignment: Alignment.center,
+              child: ConstrainedBox(
+                constraints: surfaceConstraints,
+                child: Material(
+                  key: const ValueKey('transaction-entry-surface'),
+                  color: Theme.of(context).colorScheme.surface,
+                  elevation: compact ? 0 : 24,
+                  clipBehavior: Clip.antiAlias,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(compact ? 0 : 28),
+                  ),
+                  child: child,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
   Future<void> _openAddTransaction() async {
+    if (mounted) setState(() => _entryFlowActive = true);
     widget.onTransactionFormActiveChanged?.call(true);
     try {
       await _openAddTransactionFlow();
     } finally {
+      if (mounted) setState(() => _entryFlowActive = false);
       // A data reload can replace this page while the dialog is open. Always
       // release the gate's active-form flag, even if this State was disposed.
       widget.onTransactionFormActiveChanged?.call(false);
@@ -374,6 +459,33 @@ class _TransactionsPageState extends State<TransactionsPage> {
     );
   }
 
+  Widget _startupErrorMessage(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+    child: Text(
+      'Pending upload issue: ${widget.startupError}',
+      style: TextStyle(color: Theme.of(context).colorScheme.error),
+    ),
+  );
+
+  Widget _buildStartupActions() => Wrap(
+    spacing: AppSpacing.sm,
+    runSpacing: AppSpacing.xs,
+    children: [
+      if (widget.onStartupSignIn != null)
+        TextButton.icon(
+          onPressed: widget.onStartupSignIn,
+          icon: const Icon(Icons.login),
+          label: const Text('Sign in to sync'),
+        ),
+      if (widget.onRetryOutbox != null)
+        TextButton.icon(
+          onPressed: widget.onRetryOutbox,
+          icon: const Icon(Icons.sync),
+          label: const Text('Retry upload'),
+        ),
+    ],
+  );
+
   Widget _buildDesktopFilters(BuildContext context) {
     return Card(
       child: Padding(
@@ -424,20 +536,26 @@ class _TransactionsPageState extends State<TransactionsPage> {
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
-        return item.date == null
-            ? ValueListenableBuilder<bool>(
-                valueListenable: _showAccountBalances,
-                builder: (context, showBalances, _) => TransactionListRow(
-                  transaction: item.transaction!,
-                  data: widget.data,
-                  onTap: () => _showTransactionDetails(item.transaction!),
-                  showAccountBalances: showBalances,
-                ),
-              )
-            : TransactionDateHeader(date: item.date!);
+        if (item.date != null) {
+          return TransactionDateHeader(date: item.date!);
+        }
+        return ValueListenableBuilder<bool>(
+          valueListenable: _showAccountBalances,
+          builder: (context, showBalances, _) => TransactionListRow(
+            transaction: item.transaction!,
+            data: widget.data,
+            onTap: () => _showTransactionDetails(item.transaction!),
+            showAccountBalances: showBalances,
+          ),
+        );
       },
-      separatorBuilder: (context, index) =>
-          const SizedBox(height: AppSpacing.xs),
+      separatorBuilder: (context, index) {
+        final nextItem = items[index + 1];
+        if (nextItem.date == null) {
+          return const SizedBox.shrink();
+        }
+        return const SizedBox(height: AppSpacing.xs);
+      },
     );
   }
 
@@ -633,8 +751,20 @@ class _TransactionsPageState extends State<TransactionsPage> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (context) =>
-          TransactionDetailsSheet(transaction: transaction, data: widget.data),
+      builder: (context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth < AppBreakpoints.compact
+              ? constraints.maxWidth
+              : 560.0;
+          return SizedBox(
+            width: width,
+            child: TransactionDetailsSheet(
+              transaction: transaction,
+              data: widget.data,
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -755,6 +885,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
   DropdownButtonFormField<TransactionType?> _buildTypeDropdown() {
     return DropdownButtonFormField<TransactionType?>(
       initialValue: _transactionType,
+      isExpanded: true,
       decoration: const InputDecoration(labelText: 'Type'),
       items: [
         const DropdownMenuItem<TransactionType?>(
@@ -774,6 +905,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
   DropdownButtonFormField<String?> _buildAccountDropdown() {
     return DropdownButtonFormField<String?>(
       initialValue: _accountId,
+      isExpanded: true,
       decoration: const InputDecoration(labelText: 'Account'),
       items: [
         const DropdownMenuItem<String?>(
@@ -793,6 +925,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
   DropdownButtonFormField<String?> _buildCategoryDropdown() {
     return DropdownButtonFormField<String?>(
       initialValue: _categoryId,
+      isExpanded: true,
       decoration: const InputDecoration(labelText: 'Category'),
       items: [
         const DropdownMenuItem<String?>(
@@ -812,6 +945,7 @@ class _TransactionFilterSheetState extends State<_TransactionFilterSheet> {
   DropdownButtonFormField<String?> _buildTagDropdown() {
     return DropdownButtonFormField<String?>(
       initialValue: _tagId,
+      isExpanded: true,
       decoration: const InputDecoration(labelText: 'Tag'),
       items: [
         const DropdownMenuItem<String?>(value: null, child: Text('All Tags')),

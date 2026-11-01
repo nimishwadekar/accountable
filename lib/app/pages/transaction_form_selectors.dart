@@ -168,7 +168,7 @@ class _AccountSummary extends StatelessWidget {
       children: [
         AccountVisualIcon(account: account, currencies: data.currenciesById),
         const SizedBox(width: AppSpacing.sm),
-        Expanded(child: Text(account.name, overflow: TextOverflow.ellipsis)),
+        Expanded(child: Text(account.name)),
         Text(
           currency?.id ?? account.currencyId,
           style: Theme.of(context).textTheme.bodySmall,
@@ -194,7 +194,7 @@ class _CategorySummary extends StatelessWidget {
       children: [
         Icon(categoryIcon(category), color: categoryColor(category)),
         const SizedBox(width: AppSpacing.sm),
-        Text(category.name),
+        Expanded(child: Text(category.name)),
       ],
     );
   }
@@ -240,7 +240,10 @@ class _AccountPicker extends StatelessWidget {
                       ? Theme.of(context).colorScheme.secondaryContainer
                       : accountTypeColor(account).withValues(alpha: 0.06),
                   child: ListTile(
-                    leading: AccountVisualIcon(account: account, currencies: data.currenciesById),
+                    leading: AccountVisualIcon(
+                      account: account,
+                      currencies: data.currenciesById,
+                    ),
                     title: Text(account.name),
                     subtitle: Text(
                       [

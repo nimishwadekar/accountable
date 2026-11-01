@@ -30,7 +30,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.receipt_long_outlined));
     await tester.pump();
 
-    expect(find.text('8 of 8 transactions'), findsOneWidget);
+    expect(find.textContaining('of 8 transactions'), findsNothing);
     expect(find.text('All Types'), findsOneWidget);
 
     await tester.tap(find.text('All Types'));
@@ -38,7 +38,7 @@ void main() {
     await tester.tap(find.text('Expense').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('5 of 8 transactions'), findsOneWidget);
+    expect(find.textContaining('of 8 transactions'), findsNothing);
     expect(find.text('Clear Filters'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.insights_outlined));
@@ -46,10 +46,10 @@ void main() {
     expect(find.text('Analysis'), findsWidgets);
     await tester.tap(find.byIcon(Icons.receipt_long_outlined));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('5 of 8 transactions'), findsOneWidget);
+    expect(find.textContaining('of 8 transactions'), findsNothing);
 
     await tester.tap(find.text('Clear Filters'));
     await tester.pumpAndSettle();
-    expect(find.text('8 of 8 transactions'), findsOneWidget);
+    expect(find.textContaining('of 8 transactions'), findsNothing);
   });
 }

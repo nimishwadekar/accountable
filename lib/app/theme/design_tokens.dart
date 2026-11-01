@@ -19,6 +19,13 @@ abstract final class AppSpacing {
   static const xl = 32.0;
 }
 
+abstract final class AppPageSpacing {
+  static const compactGutter = 16.0;
+  static const desktopGutter = 24.0;
+  static const compactSection = 24.0;
+  static const desktopSection = 32.0;
+}
+
 abstract final class AppRadii {
   static const card = 16.0;
   static const control = 12.0;
@@ -30,3 +37,11 @@ abstract final class AppBreakpoints {
   static const medium = 840.0;
   static const maxContentWidth = 1200.0;
 }
+
+bool usesCompactVerticalSpacing(
+  BuildContext context, {
+  double? availableWidth,
+}) =>
+    (availableWidth ?? MediaQuery.sizeOf(context).width) <
+        AppBreakpoints.compact &&
+    MediaQuery.textScalerOf(context).scale(14) <= 16.8;

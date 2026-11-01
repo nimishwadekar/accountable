@@ -30,6 +30,7 @@ class AnalysisChartSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
+    final compactSpacing = usesCompactVerticalSpacing(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -42,24 +43,42 @@ class AnalysisChartSection extends StatelessWidget {
                 ?.copyWith(color: AppColors.mutedText),
           ),
         ],
-        if (header != null) ...[const SizedBox(height: AppSpacing.md), header!],
+        if (header != null) ...[
+          SizedBox(
+            height: compactSpacing
+                ? AppSpacing.sm + AppSpacing.xs
+                : AppSpacing.md,
+          ),
+          header!,
+        ],
         if (warning != null) ...[
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(
+            height: compactSpacing
+                ? AppSpacing.sm + AppSpacing.xs
+                : AppSpacing.md,
+          ),
           _MissingDataNotice(message: warning!),
         ],
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: compactSpacing ? AppSpacing.xs : AppSpacing.sm),
         Card(
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               compact ? AppSpacing.xs : AppSpacing.sm,
-              compact ? AppSpacing.sm : AppSpacing.md,
+              compactSpacing
+                  ? AppSpacing.xs
+                  : compact
+                  ? AppSpacing.sm
+                  : AppSpacing.md,
               compact ? AppSpacing.sm : AppSpacing.md,
               compact ? 0 : cardBottomPadding,
             ),
             child: child,
           ),
         ),
-        if (footer != null) ...[const SizedBox(height: AppSpacing.sm), footer!],
+        if (footer != null) ...[
+          SizedBox(height: compactSpacing ? AppSpacing.xs : AppSpacing.sm),
+          footer!,
+        ],
       ],
     );
   }
