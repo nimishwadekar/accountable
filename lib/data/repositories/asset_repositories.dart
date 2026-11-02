@@ -482,6 +482,10 @@ class AssetAppDataRepository implements AppDataRepository {
         tables[DataAssetPaths.transactionTemplates]!,
         accounts: accountById,
         currencies: currencyById,
+        categories: {
+          for (final category in categoryList) category.id: category,
+        },
+        tags: {for (final tag in tagList) tag.id: tag},
       );
       final preferenceList = ModelParsers.parseDisplayPreferences(
         tables[DataAssetPaths.displayPreferences]!,
@@ -757,33 +761,11 @@ List<String> _assetTransactionTemplateRow(
   TransactionTemplate template,
   Map<String, Account> accounts,
   Map<String, CurrencyDefinition> currencies,
-) {
-  String amountFor(Money? amount, String? accountId) {
-    if (amount == null || accountId == null) return '';
-    final account = accounts[accountId];
-    if (account == null) {
-      throw StateError('Template references unknown account: $accountId.');
-    }
-    return amount.toMajorUnitsString(currencies[account.currencyId]!);
-  }
-
-  return [
-    template.id,
-    template.name,
-    template.type.wireValue,
-    template.date == null ? '' : _dateString(template.date!),
-    template.description ?? '',
-    template.categoryId ?? '',
-    template.tagId ?? '',
-    template.sourceAccountId ?? '',
-    amountFor(template.sourceAmount, template.sourceAccountId),
-    template.destinationAccountId ?? '',
-    amountFor(template.destinationAmount, template.destinationAccountId),
-    template.createdAt.toUtc().toIso8601String(),
-    template.updatedAt.toUtc().toIso8601String(),
-    template.isFavorite.toString().toUpperCase(),
-  ];
-}
+) => TransactionTemplateCodec.encodeRow(
+  template,
+  accounts: accounts,
+  currencies: currencies,
+);
 
 String _tableNameFromPath(String path) {
   final fileName = path.split('/').last;

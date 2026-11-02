@@ -88,6 +88,997 @@ class TransactionTypeChooser extends StatelessWidget {
   }
 }
 
+extension _TransactionFormSheetBuilder on _TransactionFormSheetState {
+  Widget _buildTransactionFields(double fieldGap) {
+    final template = widget.template;
+    final descriptionOptions =
+        template?.effectiveDescriptionOptions ??
+        const <TemplateOption<String>>[];
+    final dateOptions =
+        template?.effectiveDateOptions ?? const <TemplateOption<DateTime>>[];
+    final sourceAccounts =
+        template?.effectiveSourceAccountOptions ??
+        const <TemplateOption<String>>[];
+    final destinationAccounts =
+        template?.effectiveDestinationAccountOptions ??
+        const <TemplateOption<String>>[];
+    final categoryOptions =
+        template?.effectiveCategoryOptions ?? const <TemplateOption<String>>[];
+    final tagOptions =
+        template?.effectiveTagOptions ?? const <TemplateOption<String>>[];
+    final sourceAmounts = _sourceAmountOptionsForUse;
+    final destinationAmounts = _amountOptions(template, source: false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (template != null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          _buildTemplateSummary(template),
+        ],
+        if (_descriptionPatternError != null)
+          Text(
+            'This template cannot be used: $_descriptionPatternError. Fix it in Sheets.',
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        if (descriptionOptions.length > 1)
+          _descriptionChoiceDropdown(descriptionOptions),
+        if (descriptionOptions.isEmpty) ...[
+          TextFormField(
+            controller: _descriptionController,
+            decoration: const InputDecoration(labelText: 'Description'),
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.next,
+            validator: _validateTransactionDescription,
+          ),
+          SizedBox(height: fieldGap),
+        ],
+        if (_descriptionPattern != null &&
+            _descriptionPattern!.placeholders.isNotEmpty) ...[
+          for (final placeholder in _descriptionPattern!.placeholders)
+            Padding(
+              padding: EdgeInsets.only(bottom: fieldGap),
+              child: _descriptionPlaceholderField(placeholder),
+            ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(AppRadii.control),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              child: Text('Description: ${_descriptionPreview()}'),
+            ),
+          ),
+        ],
+        if (dateOptions.length > 1) _dateChoiceDropdown(dateOptions),
+        if (dateOptions.isEmpty) ...[
+          OutlinedButton.icon(
+            key: _dateButtonKey,
+            onPressed: _selectDate,
+            icon: const Icon(Icons.calendar_today_outlined),
+            label: Text(_date == null ? 'Select date' : _formatDate(_date!)),
+          ),
+          SizedBox(height: fieldGap),
+        ],
+        if (_sourceRequired && sourceAccounts.isEmpty) ...[
+          _accountDropdown(
+            label: _destinationRequired ? 'Source Account' : 'Account',
+            value: _sourceAccountId,
+            onChanged: (value) => _setState(() => _sourceAccountId = value),
+          ),
+          SizedBox(height: fieldGap),
+        ],
+        if (_sourceRequired && sourceAccounts.length > 1) ...[
+          _accountChoiceDropdown(
+            label: _destinationRequired ? 'Source Account' : 'Account',
+            value: _sourceAccountId,
+            options: sourceAccounts,
+            onChanged: (value) => _setState(() => _sourceAccountId = value),
+          ),
+          SizedBox(height: fieldGap),
+        ],
+        if (_sourceRequired && !_sourceAmountIsFixed) ...[
+          if (sourceAmounts.length > 1)
+            _amountChoiceDropdown(
+              controller: _sourceAmountController,
+              options: sourceAmounts,
+              label: _destinationRequired ? 'Source Amount' : 'Amount',
+              accountId: _sourceAccountId,
+            )
+          else
+            _amountField(
+              controller: _sourceAmountController,
+              label: _destinationRequired ? 'Source Amount' : 'Amount',
+              accountId: _sourceAccountId,
+            ),
+          if (_destinationRequired) SizedBox(height: fieldGap),
+        ],
+        if (widget.type == TransactionType.transfer) ...[
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _sourceFeeEnabled,
+            title: const Text('Source Account Fee'),
+            onChanged: (value) =>
+                _setState(() => _sourceFeeEnabled = value ?? false),
+          ),
+          if (_sourceFeeEnabled)
+            _amountField(
+              controller: _sourceFeeController,
+              label: 'Source Fee',
+              accountId: _sourceAccountId,
+            ),
+          SizedBox(height: fieldGap),
+        ],
+        if (_destinationRequired && destinationAccounts.isEmpty) ...[
+          _accountDropdown(
+            label: _sourceRequired ? 'Destination Account' : 'Account',
+            value: _destinationAccountId,
+            onChanged: (value) =>
+                _setState(() => _destinationAccountId = value),
+          ),
+          SizedBox(height: fieldGap),
+        ],
+        if (_destinationRequired && destinationAccounts.length > 1) ...[
+          _accountChoiceDropdown(
+            label: _sourceRequired ? 'Destination Account' : 'Account',
+            value: _destinationAccountId,
+            options: destinationAccounts,
+            onChanged: (value) =>
+                _setState(() => _destinationAccountId = value),
+          ),
+          SizedBox(height: fieldGap),
+        ],
+        if (_destinationRequired && !_transferSameCurrency) ...[
+          if (destinationAmounts.length > 1)
+            _amountChoiceDropdown(
+              controller: _destinationAmountController,
+              options: destinationAmounts,
+              label: _sourceRequired ? 'Destination Amount' : 'Amount',
+              accountId: _destinationAccountId,
+            )
+          else if (destinationAmounts.isEmpty)
+            _amountField(
+              controller: _destinationAmountController,
+              label: _sourceRequired ? 'Destination Amount' : 'Amount',
+              accountId: _destinationAccountId,
+            ),
+        ],
+        if (widget.type == TransactionType.transfer) ...[
+          SizedBox(height: fieldGap),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _destinationFeeEnabled,
+            title: const Text('Destination Account Fee'),
+            onChanged: (value) =>
+                _setState(() => _destinationFeeEnabled = value ?? false),
+          ),
+          if (_destinationFeeEnabled)
+            _amountField(
+              controller: _destinationFeeController,
+              label: 'Destination Fee',
+              accountId: _destinationAccountId,
+            ),
+        ],
+        if (_categoryRequired || _availableCategories.isNotEmpty) ...[
+          SizedBox(height: fieldGap),
+          if (categoryOptions.length > 1)
+            _categoryChoiceDropdown(categoryOptions)
+          else if (categoryOptions.isEmpty)
+            _categoryDropdown(),
+        ],
+        SizedBox(height: fieldGap),
+        if (tagOptions.length > 1)
+          _tagChoiceDropdown(tagOptions)
+        else if (tagOptions.isEmpty)
+          _tagDropdown(),
+      ],
+    );
+  }
+
+  Widget _descriptionChoiceDropdown(List<TemplateOption<String>> options) =>
+      DropdownButtonFormField<String>(
+        key: const ValueKey('template-description-options'),
+        initialValue: _descriptionPattern == null
+            ? null
+            : _descriptionController.text,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'Description'),
+        validator: (value) => value == null ? 'Choose a description.' : null,
+        items: [
+          for (final option in options)
+            DropdownMenuItem(value: option.value, child: Text(option.value)),
+        ],
+        onChanged: (value) {
+          if (value == null) return;
+          _setState(() {
+            _descriptionController.text = value;
+            _setDescriptionPattern(value);
+          });
+        },
+      );
+
+  Widget _accountChoiceDropdown({
+    required String label,
+    required String? value,
+    required List<TemplateOption<String>> options,
+    required ValueChanged<String?> onChanged,
+  }) {
+    final accounts = widget.data.entryFormAccounts
+        .where((account) => options.any((option) => option.value == account.id))
+        .toList();
+    return DropdownButtonFormField<String>(
+      key: ValueKey('template-account-options-$label'),
+      initialValue: value,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: label),
+      validator: (value) => value == null ? 'Choose an account.' : null,
+      items: [
+        for (final account in accounts)
+          DropdownMenuItem(
+            value: account.id,
+            child: Text('${account.name} · ${account.currencyId}'),
+          ),
+      ],
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _descriptionPlaceholderField(String placeholder) {
+    final options = _placeholderOptions[placeholder] ?? const [];
+    if (options.length > 1) {
+      return DropdownButtonFormField<String>(
+        key: ValueKey('placeholder-options-$placeholder'),
+        initialValue: _selectedPlaceholderOptions[placeholder],
+        isExpanded: true,
+        decoration: InputDecoration(labelText: placeholder),
+        validator: (value) => value == null ? 'Choose $placeholder.' : null,
+        items: [
+          for (final option in options)
+            DropdownMenuItem(value: option.value, child: Text(option.value)),
+        ],
+        onChanged: (value) => _setState(() {
+          _selectedPlaceholderOptions[placeholder] = value;
+        }),
+      );
+    }
+    if (options.length == 1) return const SizedBox.shrink();
+    return TextFormField(
+      controller: _placeholderControllers[placeholder],
+      decoration: InputDecoration(labelText: placeholder),
+      textCapitalization: TextCapitalization.sentences,
+      textInputAction: TextInputAction.next,
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) return 'Enter $placeholder.';
+        return validateTemplateEntryText(value);
+      },
+      onChanged: (_) => _setState(() {}),
+    );
+  }
+
+  Widget _dateChoiceDropdown(List<TemplateOption<DateTime>> options) =>
+      DropdownButtonFormField<DateTime>(
+        key: const ValueKey('template-date-options'),
+        initialValue: _date,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'Date'),
+        validator: (value) => value == null ? 'Choose a date.' : null,
+        items: [
+          for (final option in options)
+            DropdownMenuItem(
+              value: option.value,
+              child: Text(_formatDate(option.value)),
+            ),
+        ],
+        onChanged: (value) => _setState(() => _date = value),
+      );
+
+  Widget _amountChoiceDropdown({
+    required TextEditingController controller,
+    required List<TemplateOption<String>> options,
+    required String label,
+    required String? accountId,
+  }) {
+    final account = accountId == null
+        ? null
+        : widget.data.accountsById[accountId];
+    final currency = account == null
+        ? null
+        : widget.data.currenciesById[account.currencyId];
+    return DropdownButtonFormField<String>(
+      key: ValueKey('template-amount-options-$label'),
+      initialValue: controller.text.isEmpty ? null : controller.text,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixText: currency == null ? null : '${currency.symbol} ',
+      ),
+      validator: (value) => value == null ? 'Choose an amount.' : null,
+      items: [
+        for (final option in options)
+          DropdownMenuItem(
+            value: option.value,
+            child: Text(
+              currency == null
+                  ? option.value
+                  : formatMoney(
+                      Money.fromMajorUnits(
+                        value: option.value,
+                        currency: currency,
+                      ),
+                      widget.data.currenciesById,
+                    ),
+            ),
+          ),
+      ],
+      onChanged: (value) => _setState(() => controller.text = value ?? ''),
+    );
+  }
+
+  Widget _categoryChoiceDropdown(List<TemplateOption<String>> options) =>
+      DropdownButtonFormField<String>(
+        key: const ValueKey('template-category-options'),
+        initialValue: _categoryId,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: _categoryRequired ? 'Category' : 'Category (optional)',
+        ),
+        validator: (value) => value == null ? 'Choose a category.' : null,
+        items: [
+          for (final option in options)
+            DropdownMenuItem(
+              value: option.value,
+              child: Text(
+                widget.data.categoriesById[option.value]?.name ?? option.value,
+              ),
+            ),
+        ],
+        onChanged: (value) => _setState(() => _categoryId = value),
+      );
+
+  Widget _tagChoiceDropdown(List<TemplateOption<String>> options) =>
+      DropdownButtonFormField<String>(
+        key: const ValueKey('template-tag-options'),
+        initialValue: _tagId,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'Tag'),
+        validator: (value) => value == null ? 'Choose a tag.' : null,
+        items: [
+          for (final option in options)
+            DropdownMenuItem(
+              value: option.value,
+              child: Text(
+                widget.data.tagsById[option.value]?.name ?? option.value,
+              ),
+            ),
+        ],
+        onChanged: (value) => _setState(() => _tagId = value),
+      );
+
+  Widget _buildTemplateBuilder(double fieldGap) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextFormField(
+        controller: _templateNameController,
+        decoration: const InputDecoration(labelText: 'Template Name'),
+        validator: (value) => value == null || value.trim().isEmpty
+            ? 'Enter a template name.'
+            : null,
+      ),
+      SizedBox(height: fieldGap),
+      Text(
+        'Add one or more saved choices for each field. Leave a field empty to enter it when using the template.',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      SizedBox(height: fieldGap),
+      for (final field in _templateFields)
+        _buildTemplateFieldSection(field, fieldGap),
+      if (_templateBuilderError != null) ...[
+        SizedBox(height: fieldGap),
+        Text(
+          _templateBuilderError!,
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+      ],
+    ],
+  );
+
+  Widget _buildTemplateFieldSection(_TemplateField field, double fieldGap) {
+    final options = _templateOptionDrafts[field]!;
+    final label = _templateFieldLabel(field);
+    return Padding(
+      padding: EdgeInsets.only(bottom: fieldGap),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Add $label option',
+                onPressed: () => _setState(() {
+                  options.add(_TemplateOptionDraft());
+                  _templateBuilderError = null;
+                }),
+                icon: const Icon(Icons.add_circle_outline),
+              ),
+            ],
+          ),
+          for (var index = 0; index < options.length; index++)
+            _buildTemplateOption(field, options[index], index, options.length),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTemplateOption(
+    _TemplateField field,
+    _TemplateOptionDraft option,
+    int index,
+    int optionCount,
+  ) {
+    final label = _templateFieldLabel(field);
+    final control = switch (field) {
+      _TemplateField.date => FormField<DateTime>(
+        key: ValueKey('template-builder-date-$index-${option.hashCode}'),
+        initialValue: option.date,
+        validator: (value) => value == null ? 'Select a date.' : null,
+        builder: (state) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () async {
+                final selected = await _pickTemplateDate(option.date);
+                if (selected == null) return;
+                option.date = selected;
+                state.didChange(selected);
+                _setState(() => _templateBuilderError = null);
+              },
+              icon: const Icon(Icons.calendar_today_outlined),
+              label: Text(
+                option.date == null ? 'Select date' : _formatDate(option.date!),
+              ),
+            ),
+            if (state.errorText != null)
+              Text(
+                state.errorText!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+          ],
+        ),
+      ),
+      _TemplateField.description => TextFormField(
+        key: ValueKey('template-description-option-$index'),
+        controller: option.controller,
+        decoration: InputDecoration(
+          labelText: 'Description option ${index + 1}',
+          hintText: 'Coffee at {Merchant}',
+          helperText: 'Use {Name} for each value you want to fill or choose.',
+        ),
+        textCapitalization: TextCapitalization.sentences,
+        validator: (value) {
+          if (value == null || value.trim().isEmpty) {
+            return 'Enter a description option.';
+          }
+          return _validateDescriptionPattern(value);
+        },
+        onChanged: (_) => _setState(() {
+          _templateBuilderError = null;
+          _syncDescriptionPlaceholders(option);
+        }),
+      ),
+      _TemplateField.sourceAccount ||
+      _TemplateField.destinationAccount => TransactionAccountSelector(
+        label: '$label option ${index + 1}',
+        value: option.selection,
+        accounts: widget.data.entryFormAccounts,
+        data: widget.data,
+        requiredSelection: true,
+        onChanged: (value) => _setState(() {
+          option.selection = value;
+          _templateBuilderError = null;
+        }),
+      ),
+      _TemplateField.sourceAmount ||
+      _TemplateField.destinationAmount => TextFormField(
+        controller: option.controller,
+        decoration: InputDecoration(
+          labelText: '$label option ${index + 1}',
+          prefixText: _templateAmountCurrency(field) == null
+              ? null
+              : '${_templateAmountCurrency(field)!.symbol} ',
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: const [ThousandsSeparatorInputFormatter()],
+        validator: (value) {
+          if (value == null || value.trim().isEmpty) {
+            return 'Enter an amount.';
+          }
+          final amount = num.tryParse(value.trim().replaceAll(',', ''));
+          if (amount == null || !amount.isFinite || amount < 0) {
+            return 'Enter a valid amount.';
+          }
+          return null;
+        },
+        onChanged: (_) => _setState(() => _templateBuilderError = null),
+      ),
+      _TemplateField.category => TransactionCategorySelector(
+        label: 'Category option ${index + 1}',
+        value: option.selection,
+        categories: _availableCategories,
+        requiredSelection: true,
+        onChanged: (value) => _setState(() {
+          option.selection = value;
+          _templateBuilderError = null;
+        }),
+      ),
+      _TemplateField.tag => DropdownButtonFormField<String>(
+        key: ValueKey('template-builder-tag-$index-${option.hashCode}'),
+        initialValue: option.selection,
+        isExpanded: true,
+        decoration: InputDecoration(labelText: 'Tag option ${index + 1}'),
+        validator: (value) => value == null ? 'Select a tag.' : null,
+        items: [
+          for (final tag in widget.data.entryFormTags)
+            DropdownMenuItem(value: tag.id, child: Text(tag.name)),
+        ],
+        onChanged: (value) => _setState(() {
+          option.selection = value;
+          _templateBuilderError = null;
+        }),
+      ),
+    };
+    return Card(
+      key: ValueKey('template-option-${field.name}-${option.hashCode}'),
+      margin: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            control,
+            Row(
+              children: [
+                if (optionCount > 1)
+                  Expanded(
+                    child: CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: const Text('Default'),
+                      value: option.isDefault,
+                      onChanged: (value) => _setState(() {
+                        for (final item in _templateOptionDrafts[field]!) {
+                          item.isDefault = false;
+                        }
+                        option.isDefault = value ?? false;
+                        _templateBuilderError = null;
+                      }),
+                    ),
+                  )
+                else
+                  const Spacer(),
+                IconButton(
+                  tooltip: 'Remove $label option ${index + 1}',
+                  onPressed: () => _setState(() {
+                    _templateOptionDrafts[field]!.remove(option);
+                    option.dispose();
+                    _templateBuilderError = null;
+                  }),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
+            ),
+            if (field == _TemplateField.description)
+              for (final placeholder in _descriptionPlaceholders(option))
+                _buildPlaceholderOptionSection(option, placeholder, index),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<String> _descriptionPlaceholders(_TemplateOptionDraft option) {
+    try {
+      final pattern = TransactionDescriptionPattern.parse(
+        option.controller.text.trim(),
+      );
+      if (pattern.placeholderOptions.values.any(
+        (values) => values.isNotEmpty,
+      )) {
+        return const [];
+      }
+      return pattern.placeholders;
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  void _syncDescriptionPlaceholders(_TemplateOptionDraft option) {
+    try {
+      final pattern = TransactionDescriptionPattern.parse(
+        option.controller.text.trim(),
+      );
+      if (pattern.placeholderOptions.values.any(
+        (values) => values.isNotEmpty,
+      )) {
+        return;
+      }
+      final names = pattern.placeholders.toSet();
+      for (final oldName in option.placeholderOptions.keys.toList()) {
+        if (names.contains(oldName)) continue;
+        for (final draft in option.placeholderOptions.remove(oldName)!) {
+          draft.dispose();
+        }
+      }
+      for (final name in names) {
+        option.placeholderOptions.putIfAbsent(name, () => []);
+      }
+    } on FormatException {
+      // Keep the last valid placeholder controls while the pattern is edited.
+    }
+  }
+
+  Widget _buildPlaceholderOptionSection(
+    _TemplateOptionDraft description,
+    String placeholder,
+    int descriptionIndex,
+  ) {
+    final options = description.placeholderOptions[placeholder]!;
+    return Padding(
+      padding: const EdgeInsets.only(left: AppSpacing.md, top: AppSpacing.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(placeholder)),
+              IconButton(
+                tooltip:
+                    'Add $placeholder option for description ${descriptionIndex + 1}',
+                onPressed: () => _setState(() {
+                  options.add(_TemplateOptionDraft());
+                  _templateBuilderError = null;
+                }),
+                icon: const Icon(Icons.add_circle_outline),
+              ),
+            ],
+          ),
+          for (var index = 0; index < options.length; index++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      key: ValueKey(
+                        'description-$descriptionIndex-placeholder-$placeholder-option-$index',
+                      ),
+                      controller: options[index].controller,
+                      decoration: InputDecoration(
+                        labelText: '$placeholder option ${index + 1}',
+                      ),
+                      textCapitalization: TextCapitalization.sentences,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Enter a $placeholder option.';
+                        }
+                        return validateTemplateEntryText(value);
+                      },
+                      onChanged: (_) =>
+                          _setState(() => _templateBuilderError = null),
+                    ),
+                  ),
+                  if (options.length > 1)
+                    _placeholderDefaultControl(options, index),
+                  IconButton(
+                    tooltip: 'Remove $placeholder option ${index + 1}',
+                    onPressed: () => _setState(() {
+                      final removed = options.removeAt(index);
+                      removed.dispose();
+                      _templateBuilderError = null;
+                    }),
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _placeholderDefaultControl(
+    List<_TemplateOptionDraft> options,
+    int index,
+  ) {
+    void updateDefault(bool? value) => _setState(() {
+      for (final item in options) {
+        item.isDefault = false;
+      }
+      options[index].isDefault = value ?? false;
+      _templateBuilderError = null;
+    });
+
+    return InkWell(
+      onTap: () => updateDefault(!options[index].isDefault),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Checkbox(
+            value: options[index].isDefault,
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            onChanged: updateDefault,
+          ),
+          const Text('Default', maxLines: 1, softWrap: false),
+        ],
+      ),
+    );
+  }
+
+  CurrencyDefinition? _templateAmountCurrency(_TemplateField field) {
+    final accountId = field == _TemplateField.sourceAmount
+        ? defaultOrOnlyTemplateOption(
+            _templateOptionDrafts[_TemplateField.sourceAccount]!
+                .where((option) => option.selection != null)
+                .map((option) => TemplateOption(value: option.selection!)),
+          )
+        : defaultOrOnlyTemplateOption(
+            _templateOptionDrafts[_TemplateField.destinationAccount]!
+                .where((option) => option.selection != null)
+                .map((option) => TemplateOption(value: option.selection!)),
+          );
+    if (accountId == null) return null;
+    final account = widget.data.accountsById[accountId];
+    return account == null
+        ? null
+        : widget.data.currenciesById[account.currencyId];
+  }
+
+  String _templateFieldLabel(_TemplateField field) => switch (field) {
+    _TemplateField.date => 'Date',
+    _TemplateField.description => 'Description',
+    _TemplateField.sourceAccount =>
+      _destinationRequired ? 'Source Account' : 'Account',
+    _TemplateField.sourceAmount =>
+      _destinationRequired ? 'Source Amount' : 'Amount',
+    _TemplateField.destinationAccount =>
+      _sourceRequired ? 'Destination Account' : 'Account',
+    _TemplateField.destinationAmount =>
+      _sourceRequired ? 'Destination Amount' : 'Amount',
+    _TemplateField.category =>
+      _categoryRequired ? 'Category' : 'Category (optional)',
+    _TemplateField.tag => 'Tag',
+  };
+
+  String? _draftValue(_TemplateField field, _TemplateOptionDraft option) =>
+      switch (field) {
+        _TemplateField.date =>
+          option.date == null ? null : _formatDate(option.date!),
+        _TemplateField.description => option.controller.text.trim(),
+        _TemplateField.sourceAccount ||
+        _TemplateField.destinationAccount ||
+        _TemplateField.category ||
+        _TemplateField.tag => option.selection,
+        _TemplateField.sourceAmount || _TemplateField.destinationAmount =>
+          option.controller.text.trim().replaceAll(',', ''),
+      };
+
+  String? _validateTemplateOptionDrafts() {
+    for (final field in _templateFields) {
+      final options = _templateOptionDrafts[field]!;
+      final values = <String>[];
+      for (final option in options) {
+        final value = _draftValue(field, option);
+        if (value == null || value.isEmpty) {
+          return 'Complete every ${_templateFieldLabel(field).toLowerCase()} option.';
+        }
+        if (field == _TemplateField.description) {
+          try {
+            final pattern = TransactionDescriptionPattern.parse(value);
+            if (pattern.placeholderOptions.values.any(
+              (placeholderOptions) => placeholderOptions.isNotEmpty,
+            )) {
+              return 'Enter placeholder names as {Name}; add their choices below the description.';
+            }
+            for (final placeholder in pattern.placeholders) {
+              final placeholderOptions =
+                  option.placeholderOptions[placeholder] ?? const [];
+              final placeholderValues = <String>[];
+              for (final placeholderOption in placeholderOptions) {
+                final placeholderValue = placeholderOption.controller.text
+                    .trim();
+                if (placeholderValue.isEmpty) {
+                  return 'Complete every $placeholder option.';
+                }
+                final reservedError = validateTemplateEntryText(
+                  placeholderValue,
+                );
+                if (reservedError != null) return reservedError;
+                placeholderValues.add(placeholderValue);
+              }
+              if (placeholderValues.toSet().length !=
+                  placeholderValues.length) {
+                return '$placeholder options must be unique.';
+              }
+              if (placeholderOptions
+                      .where((choice) => choice.isDefault)
+                      .length >
+                  1) {
+                return 'Choose at most one default $placeholder option.';
+              }
+            }
+          } on FormatException catch (error) {
+            return error.message;
+          }
+        } else {
+          final reservedError = validateTemplateEntryText(value);
+          if (reservedError != null) return reservedError;
+        }
+        if (field == _TemplateField.sourceAmount ||
+            field == _TemplateField.destinationAmount) {
+          final numericValue = num.tryParse(value);
+          if (numericValue == null ||
+              !numericValue.isFinite ||
+              numericValue < 0) {
+            return 'Enter a valid ${_templateFieldLabel(field).toLowerCase()} option.';
+          }
+        }
+        values.add(value);
+      }
+      if (values.toSet().length != values.length) {
+        return '${_templateFieldLabel(field)} options must be unique.';
+      }
+      if (options.where((option) => option.isDefault).length > 1) {
+        return 'Choose at most one default ${_templateFieldLabel(field).toLowerCase()}.';
+      }
+    }
+
+    for (final pair in [
+      (_TemplateField.sourceAccount, _TemplateField.sourceAmount),
+      (_TemplateField.destinationAccount, _TemplateField.destinationAmount),
+    ]) {
+      final accounts = (_templateOptionDrafts[pair.$1] ?? const [])
+          .map((option) => option.selection)
+          .whereType<String>();
+      final amounts = (_templateOptionDrafts[pair.$2] ?? const [])
+          .map((option) => _draftValue(pair.$2, option))
+          .whereType<String>();
+      for (final accountId in accounts) {
+        final account = widget.data.accountsById[accountId];
+        if (account == null) continue;
+        final currency = widget.data.currenciesById[account.currencyId]!;
+        for (final amount in amounts) {
+          try {
+            Money.fromMajorUnits(value: amount, currency: currency);
+          } on FormatException {
+            return 'An amount option is not valid in ${currency.id}.';
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  TransactionTemplate _buildTemplateFromDrafts() {
+    List<TemplateOption<T>> values<T>(
+      _TemplateField field,
+      T? Function(_TemplateOptionDraft option) valueOf,
+    ) {
+      final result = <TemplateOption<T>>[];
+      for (final option
+          in _templateOptionDrafts[field] ?? const <_TemplateOptionDraft>[]) {
+        final value = valueOf(option);
+        if (value == null) {
+          throw StateError('Template option was not validated before saving.');
+        }
+        result.add(TemplateOption(value: value, isDefault: option.isDefault));
+      }
+      return result;
+    }
+
+    final dates = values<DateTime>(
+      _TemplateField.date,
+      (option) => option.date,
+    );
+    final descriptions = values<String>(
+      _TemplateField.description,
+      _encodeDescriptionDraft,
+    );
+    final sourceAccounts = values<String>(
+      _TemplateField.sourceAccount,
+      (option) => option.selection,
+    );
+    final sourceAmounts = values<String>(
+      _TemplateField.sourceAmount,
+      (option) => option.controller.text.trim().replaceAll(',', ''),
+    );
+    final destinationAccounts = values<String>(
+      _TemplateField.destinationAccount,
+      (option) => option.selection,
+    );
+    final destinationAmounts = values<String>(
+      _TemplateField.destinationAmount,
+      (option) => option.controller.text.trim().replaceAll(',', ''),
+    );
+    final categories = values<String>(
+      _TemplateField.category,
+      (option) => option.selection,
+    );
+    final tags = values<String>(
+      _TemplateField.tag,
+      (option) => option.selection,
+    );
+    final sourceAccountId = defaultOrOnlyTemplateOption(sourceAccounts);
+    final destinationAccountId = defaultOrOnlyTemplateOption(
+      destinationAccounts,
+    );
+    Money? amountFor(List<TemplateOption<String>> choices, String? accountId) {
+      final amount = defaultOrOnlyTemplateOption(choices);
+      if (amount == null || accountId == null) return null;
+      final account = widget.data.accountsById[accountId];
+      if (account == null) return null;
+      return Money.fromMajorUnits(
+        value: amount,
+        currency: widget.data.currenciesById[account.currencyId]!,
+      );
+    }
+
+    final now = DateTime.now().toUtc();
+    return TransactionTemplate(
+      id: generateTransactionId(widget.data.transactionTemplatesById.keys),
+      name: _templateNameController.text.trim(),
+      type: widget.type,
+      date: defaultOrOnlyTemplateOption(dates),
+      dateOptions: dates,
+      description: defaultOrOnlyTemplateOption(descriptions),
+      descriptionOptions: descriptions,
+      categoryId: defaultOrOnlyTemplateOption(categories),
+      categoryOptions: categories,
+      tagId: defaultOrOnlyTemplateOption(tags),
+      tagOptions: tags,
+      sourceAccountId: sourceAccountId,
+      sourceAccountOptions: sourceAccounts,
+      sourceAmount: amountFor(sourceAmounts, sourceAccountId),
+      sourceAmountOptions: sourceAmounts,
+      destinationAccountId: destinationAccountId,
+      destinationAccountOptions: destinationAccounts,
+      destinationAmount: amountFor(destinationAmounts, destinationAccountId),
+      destinationAmountOptions: destinationAmounts,
+      isFavorite: false,
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  String _encodeDescriptionDraft(_TemplateOptionDraft option) {
+    final source = option.controller.text.trim();
+    final pattern = TransactionDescriptionPattern.parse(source);
+    return TransactionDescriptionPattern.encodePlaceholderOptions(source, {
+      for (final name in pattern.placeholders)
+        if (option.placeholderOptions[name]?.isNotEmpty == true)
+          name: [
+            for (final choice in option.placeholderOptions[name]!)
+              TemplateOption(
+                value: choice.controller.text.trim(),
+                isDefault: choice.isDefault,
+              ),
+          ],
+    });
+  }
+
+  Future<DateTime?> _pickTemplateDate(DateTime? initialDate) => showDatePicker(
+    context: context,
+    initialDate: initialDate ?? DateTime.now(),
+    firstDate: DateTime(2000),
+    lastDate: DateTime.now().add(const Duration(days: 365)),
+  );
+}
+
 class TransactionTemplateBrowser extends StatefulWidget {
   const TransactionTemplateBrowser({
     super.key,
@@ -130,13 +1121,16 @@ class _TransactionTemplateBrowserState
     for (final type in TransactionType.values) {
       final matches = _templates.where((template) {
         if (template.type != type) return false;
-        final categoryName = template.categoryId == null
-            ? 'No category'
-            : widget.data.categoriesById[template.categoryId!]?.name ??
-                  'Unknown category';
+        final categoryNames = template.effectiveCategoryOptions.isEmpty
+            ? ['No category']
+            : [
+                for (final option in template.effectiveCategoryOptions)
+                  widget.data.categoriesById[option.value]?.name ??
+                      'Unknown category',
+              ];
         return query.isEmpty ||
             template.name.toLowerCase().contains(query) ||
-            categoryName.toLowerCase().contains(query) ||
+            categoryNames.any((name) => name.toLowerCase().contains(query)) ||
             transactionTypeLabel(type).toLowerCase().contains(query);
       }).toList();
       final favorites = matches.where((template) => template.isFavorite);
@@ -256,9 +1250,12 @@ class _TransactionTemplateBrowserState
   }
 
   Widget _templateTile(TransactionTemplate template) {
-    final category = template.categoryId == null
+    final categoryOptions = template.effectiveCategoryOptions;
+    final category = categoryOptions.isEmpty
         ? 'No category'
-        : widget.data.categoriesById[template.categoryId!]?.name ??
+        : categoryOptions.length > 1
+        ? '${categoryOptions.length} categories'
+        : widget.data.categoriesById[categoryOptions.single.value]?.name ??
               'Unknown category';
     final unavailableReason = _templateUnavailableReason(template);
     return Card(
@@ -333,43 +1330,85 @@ class _TransactionTemplateBrowserState
   }
 
   String? _templateUnavailableReason(TransactionTemplate template) {
-    if (template.description != null && template.description!.isNotEmpty) {
+    for (final option in template.effectiveDescriptionOptions) {
       try {
-        TransactionDescriptionPattern.parse(template.description!);
+        TransactionDescriptionPattern.parse(option.value);
       } on FormatException catch (error) {
         return error.message;
       }
     }
-    final categoryId = template.categoryId;
-    if (categoryId != null) {
-      final category = widget.data.categoriesById[categoryId];
+    for (final option in template.effectiveCategoryOptions) {
+      final category = widget.data.categoriesById[option.value];
       if (category == null ||
           !category.allowedTransactionTypes.contains(template.type)) {
         return 'category is missing or incompatible';
       }
     }
-    if (template.tagId != null &&
-        !widget.data.tagsById.containsKey(template.tagId)) {
-      return 'tag is missing';
+    for (final option in template.effectiveTagOptions) {
+      if (!widget.data.tagsById.containsKey(option.value)) {
+        return 'tag is missing';
+      }
     }
-    for (final accountId in [
-      template.sourceAccountId,
-      template.destinationAccountId,
+    for (final option in [
+      ...template.effectiveSourceAccountOptions,
+      ...template.effectiveDestinationAccountOptions,
     ]) {
-      if (accountId != null &&
-          !widget.data.accountsById.containsKey(accountId)) {
-        return 'account $accountId is missing';
+      if (!widget.data.accountsById.containsKey(option.value) ||
+          !widget.data.entryFormAccounts.any(
+            (account) => account.id == option.value,
+          )) {
+        return 'account ${option.value} is missing or unavailable';
+      }
+    }
+    for (final pair in [
+      (
+        template.effectiveSourceAmountOptions(widget.data.currenciesById),
+        template.effectiveSourceAccountOptions,
+      ),
+      (
+        template.effectiveDestinationAmountOptions(widget.data.currenciesById),
+        template.effectiveDestinationAccountOptions,
+      ),
+    ]) {
+      for (final amountOption in pair.$1) {
+        final numericValue = num.tryParse(amountOption.value);
+        if (numericValue == null ||
+            !numericValue.isFinite ||
+            numericValue < 0) {
+          return 'amount option is invalid';
+        }
+        for (final accountOption in pair.$2) {
+          final account = widget.data.accountsById[accountOption.value];
+          if (account == null) continue;
+          try {
+            Money.fromMajorUnits(
+              value: amountOption.value,
+              currency: widget.data.currenciesById[account.currencyId]!,
+            );
+          } on FormatException {
+            return 'amount option is invalid for ${account.currencyId}';
+          }
+        }
       }
     }
     if (template.type == TransactionType.transfer &&
-        template.sourceAccountId != null &&
-        template.destinationAccountId != null &&
+        template.effectiveSourceAccountOptions.length == 1 &&
+        template.effectiveDestinationAccountOptions.length == 1 &&
+        template.sourceAmountOptions.isEmpty &&
+        template.destinationAmountOptions.isEmpty &&
         template.sourceAmount != null &&
         template.destinationAmount != null) {
-      final sourceCurrency =
-          widget.data.accountsById[template.sourceAccountId]!.currencyId;
-      final destinationCurrency =
-          widget.data.accountsById[template.destinationAccountId]!.currencyId;
+      final sourceCurrency = widget
+          .data
+          .accountsById[template.effectiveSourceAccountOptions.single.value]!
+          .currencyId;
+      final destinationCurrency = widget
+          .data
+          .accountsById[template
+              .effectiveDestinationAccountOptions
+              .single
+              .value]!
+          .currencyId;
       if (sourceCurrency == destinationCurrency &&
           template.sourceAmount!.minorUnits !=
               template.destinationAmount!.minorUnits) {
@@ -577,6 +1616,34 @@ class TransactionFormSheet extends StatefulWidget {
   State<TransactionFormSheet> createState() => _TransactionFormSheetState();
 }
 
+enum _TemplateField {
+  date,
+  description,
+  sourceAccount,
+  sourceAmount,
+  destinationAccount,
+  destinationAmount,
+  category,
+  tag,
+}
+
+class _TemplateOptionDraft {
+  final TextEditingController controller = TextEditingController();
+  final Map<String, List<_TemplateOptionDraft>> placeholderOptions = {};
+  String? selection;
+  DateTime? date;
+  bool isDefault = false;
+
+  void dispose() {
+    controller.dispose();
+    for (final options in placeholderOptions.values) {
+      for (final option in options) {
+        option.dispose();
+      }
+    }
+  }
+}
+
 class _TransactionFormSheetState extends State<TransactionFormSheet> {
   final _formKey = GlobalKey<FormState>();
   final _dateButtonKey = GlobalKey();
@@ -589,6 +1656,10 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   bool _destinationFeeEnabled = false;
   final _templateNameController = TextEditingController();
   final Map<String, TextEditingController> _placeholderControllers = {};
+  final Map<String, List<TemplateOption<String>>> _placeholderOptions = {};
+  final Map<String, String?> _selectedPlaceholderOptions = {};
+  final Map<_TemplateField, List<_TemplateOptionDraft>> _templateOptionDrafts =
+      {};
 
   DateTime? _date;
   String? _sourceAccountId;
@@ -597,8 +1668,11 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   String? _tagId;
   TransactionDescriptionPattern? _descriptionPattern;
   String? _descriptionPatternError;
+  String? _templateBuilderError;
   late String _initialDraftFingerprint;
   bool _resultSubmitted = false;
+
+  void _setState(VoidCallback callback) => setState(callback);
 
   bool get hasUnsavedChanges => _draftFingerprint() != _initialDraftFingerprint;
 
@@ -612,40 +1686,47 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   void initState() {
     super.initState();
     final template = widget.template;
-    _date = template?.date ?? (widget.createTemplate ? null : DateTime.now());
-    _descriptionController.text = template?.description ?? '';
-    if (!widget.createTemplate && template?.hasDescription == true) {
-      try {
-        _descriptionPattern = TransactionDescriptionPattern.parse(
-          template!.description!,
-        );
-        for (final placeholder in _descriptionPattern!.placeholders) {
-          _placeholderControllers[placeholder] = TextEditingController();
-        }
-      } on FormatException catch (error) {
-        _descriptionPatternError = error.message;
+    if (widget.createTemplate) {
+      for (final field in _templateFields) {
+        _templateOptionDrafts[field] = [];
       }
     }
-    _sourceAccountId = template?.sourceAccountId;
-    _destinationAccountId = template?.destinationAccountId;
-    _categoryId = template?.categoryId;
-    _tagId = template?.tagId;
-    final fixedSourceAmount =
-        template?.sourceAmount ??
-        (_transferSameCurrency ? template?.destinationAmount : null);
-    if (fixedSourceAmount != null) {
-      _sourceAmountController.text = fixedSourceAmount
-          .toMajorUnits(
-            widget.data.currenciesById[fixedSourceAmount.currencyId]!,
-          )
-          .toString();
+    _date =
+        _selectedTemplateValue(template?.effectiveDateOptions) ??
+        (widget.createTemplate ? null : DateTime.now());
+    _sourceAccountId = _selectedTemplateValue(
+      template?.effectiveSourceAccountOptions,
+    );
+    _destinationAccountId = _selectedTemplateValue(
+      template?.effectiveDestinationAccountOptions,
+    );
+    _categoryId = _selectedTemplateValue(template?.effectiveCategoryOptions);
+    _tagId = _selectedTemplateValue(template?.effectiveTagOptions);
+    final descriptionOptions =
+        template?.effectiveDescriptionOptions ?? const [];
+    final selectedDescription = _selectedTemplateValue(descriptionOptions);
+    _descriptionController.text = selectedDescription ?? '';
+    if (selectedDescription != null && selectedDescription.isNotEmpty) {
+      _setDescriptionPattern(selectedDescription);
     }
-    if (template?.destinationAmount != null) {
-      _destinationAmountController.text = template!.destinationAmount!
-          .toMajorUnits(
-            widget.data.currenciesById[template.destinationAmount!.currencyId]!,
-          )
-          .toString();
+    final sourceAmountOptions = _amountOptions(template, source: true);
+    final destinationAmountOptions = _amountOptions(template, source: false);
+    final sourceValue = _selectedTemplateValue(sourceAmountOptions);
+    final destinationValue = _selectedTemplateValue(destinationAmountOptions);
+    _sourceAmountController.text =
+        sourceValue ?? (_transferSameCurrency ? destinationValue : null) ?? '';
+    _destinationAmountController.text = destinationValue ?? '';
+    if (_sourceAmountController.text.isEmpty &&
+        template?.sourceAmount != null) {
+      _sourceAmountController.text = _legacyAmountValue(
+        template!.sourceAmount!,
+      );
+    }
+    if (_destinationAmountController.text.isEmpty &&
+        template?.destinationAmount != null) {
+      _destinationAmountController.text = _legacyAmountValue(
+        template!.destinationAmount!,
+      );
     }
     _initialDraftFingerprint = _draftFingerprint();
   }
@@ -664,8 +1745,19 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     _destinationFeeEnabled.toString(),
     _descriptionController.text,
     _templateNameController.text,
+    for (final field in _TemplateField.values)
+      for (final option in _templateOptionDrafts[field] ?? const [])
+        '${field.name}:${option.date?.toIso8601String() ?? ''}:'
+            '${option.selection ?? ''}:${option.controller.text}:${option.isDefault}:',
+    for (final field in _TemplateField.values)
+      for (final option in _templateOptionDrafts[field] ?? const [])
+        for (final entry in option.placeholderOptions.entries)
+          for (final placeholderOption in entry.value)
+            '${field.name}:${entry.key}=${placeholderOption.controller.text}:${placeholderOption.isDefault}',
     for (final placeholder in _placeholderControllers.keys.toList()..sort())
       '$placeholder=${_placeholderControllers[placeholder]!.text}',
+    for (final placeholder in _selectedPlaceholderOptions.keys.toList()..sort())
+      '$placeholder=${_selectedPlaceholderOptions[placeholder] ?? ''}',
   ].join('\u0000');
 
   bool get _transferSameCurrency {
@@ -678,15 +1770,80 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
         widget.data.accountsById[_destinationAccountId!]!.currencyId;
   }
 
-  bool get _sourceAmountIsFixed =>
-      widget.template?.sourceAmount != null ||
-      (_transferSameCurrency && widget.template?.destinationAmount != null);
+  List<TemplateOption<String>> get _sourceAmountOptionsForUse {
+    final source = _amountOptions(widget.template, source: true);
+    if (source.isNotEmpty || !_transferSameCurrency) return source;
+    return _amountOptions(widget.template, source: false);
+  }
+
+  bool get _sourceAmountIsFixed => _sourceAmountOptionsForUse.length == 1;
 
   List<Category> get _availableCategories => widget.data.entryFormCategories
       .where(
         (category) => category.allowedTransactionTypes.contains(widget.type),
       )
       .toList();
+
+  List<_TemplateField> get _templateFields => [
+    _TemplateField.date,
+    _TemplateField.description,
+    if (_sourceRequired) ...[
+      _TemplateField.sourceAccount,
+      _TemplateField.sourceAmount,
+    ],
+    if (_destinationRequired) ...[
+      _TemplateField.destinationAccount,
+      _TemplateField.destinationAmount,
+    ],
+    if (_categoryRequired || _availableCategories.isNotEmpty)
+      _TemplateField.category,
+    _TemplateField.tag,
+  ];
+
+  List<TemplateOption<String>> _amountOptions(
+    TransactionTemplate? template, {
+    required bool source,
+  }) {
+    if (template == null) return const [];
+    return source
+        ? template.effectiveSourceAmountOptions(widget.data.currenciesById)
+        : template.effectiveDestinationAmountOptions(
+            widget.data.currenciesById,
+          );
+  }
+
+  T? _selectedTemplateValue<T>(List<TemplateOption<T>>? options) =>
+      options == null ? null : defaultOrOnlyTemplateOption(options);
+
+  String _legacyAmountValue(Money amount) =>
+      amount.toMajorUnitsString(widget.data.currenciesById[amount.currencyId]!);
+
+  void _setDescriptionPattern(String source) {
+    for (final controller in _placeholderControllers.values) {
+      controller.dispose();
+    }
+    _placeholderControllers.clear();
+    _placeholderOptions.clear();
+    _selectedPlaceholderOptions.clear();
+    try {
+      _descriptionPattern = TransactionDescriptionPattern.parse(source);
+      _descriptionPatternError = null;
+      for (final placeholder in _descriptionPattern!.placeholders) {
+        final options =
+            _descriptionPattern!.placeholderOptions[placeholder] ?? const [];
+        _placeholderOptions[placeholder] = options;
+        if (options.isEmpty) {
+          _placeholderControllers[placeholder] = TextEditingController();
+        } else {
+          _selectedPlaceholderOptions[placeholder] =
+              defaultOrOnlyTemplateOption(options);
+        }
+      }
+    } on FormatException catch (error) {
+      _descriptionPattern = null;
+      _descriptionPatternError = error.message;
+    }
+  }
 
   @override
   void dispose() {
@@ -698,6 +1855,11 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     _templateNameController.dispose();
     for (final controller in _placeholderControllers.values) {
       controller.dispose();
+    }
+    for (final options in _templateOptionDrafts.values) {
+      for (final option in options) {
+        option.dispose();
+      }
     }
     super.dispose();
   }
@@ -711,231 +1873,94 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     final title = widget.createTemplate
         ? 'Create Template'
         : widget.template?.name ?? transactionTypeLabel(widget.type);
-    final fields = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (widget.template != null) ...[
-          const SizedBox(height: AppSpacing.sm),
-          _buildTemplateSummary(widget.template!),
-        ],
-        if (widget.createTemplate) ...[
-          SizedBox(height: fieldGap),
-          TextFormField(
-            controller: _templateNameController,
-            decoration: const InputDecoration(labelText: 'Template Name'),
-            validator: (value) => value == null || value.trim().isEmpty
-                ? 'Enter a template name.'
-                : null,
-          ),
-        ],
-        SizedBox(height: fieldGap),
-        if (widget.createTemplate)
-          TextFormField(
-            controller: _descriptionController,
-            decoration: const InputDecoration(
-              labelText: 'Description pattern',
-              hintText: 'Coffee at {Merchant}',
-              helperText: 'Use {Label} to ask for a value each time.',
-            ),
-            validator: _validateDescriptionPattern,
-            textCapitalization: TextCapitalization.sentences,
-            textInputAction: TextInputAction.next,
-          ),
-        if (!widget.createTemplate && _descriptionPatternError != null)
-          Text(
-            'This template cannot be used: $_descriptionPatternError. Fix its description in Sheets.',
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
-        if (!widget.createTemplate &&
-            widget.template?.hasDescription != true) ...[
-          TextFormField(
-            controller: _descriptionController,
-            decoration: const InputDecoration(labelText: 'Description'),
-            textCapitalization: TextCapitalization.words,
-            textInputAction: TextInputAction.next,
-            validator: (value) => value == null || value.trim().isEmpty
-                ? 'Enter a description.'
-                : null,
-          ),
-          SizedBox(height: fieldGap),
-        ],
-        if (!widget.createTemplate &&
-            _descriptionPattern != null &&
-            _descriptionPattern!.placeholders.isNotEmpty) ...[
-          for (final placeholder in _descriptionPattern!.placeholders)
-            Padding(
-              padding: EdgeInsets.only(bottom: fieldGap),
-              child: TextFormField(
-                controller: _placeholderControllers[placeholder],
-                decoration: InputDecoration(labelText: placeholder),
-                textCapitalization: TextCapitalization.sentences,
-                textInputAction: TextInputAction.next,
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Enter $placeholder.'
-                    : null,
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(AppRadii.control),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.sm),
-              child: Text('Description: ${_descriptionPreview()}'),
-            ),
-          ),
-        ],
-        if (widget.createTemplate || widget.template?.date == null)
-          SizedBox(height: fieldGap),
-        if (widget.template == null || widget.template!.date == null)
-          OutlinedButton.icon(
-            key: _dateButtonKey,
-            onPressed: _selectDate,
-            icon: const Icon(Icons.calendar_today_outlined),
-            label: Text(_date == null ? 'Select date' : _formatDate(_date!)),
-          ),
-        SizedBox(height: fieldGap),
-        if (_sourceRequired &&
-            (widget.template == null ||
-                widget.template!.sourceAccountId == null)) ...[
-          _accountDropdown(
-            label: _destinationRequired ? 'Source Account' : 'Account',
-            value: _sourceAccountId,
-            onChanged: (value) => setState(() => _sourceAccountId = value),
-          ),
-          SizedBox(height: fieldGap),
-        ],
-        if (_sourceRequired && !_sourceAmountIsFixed) ...[
-          _amountField(
-            controller: _sourceAmountController,
-            label: _destinationRequired ? 'Source Amount' : 'Amount',
-            accountId: _sourceAccountId,
-          ),
-          if (_destinationRequired) SizedBox(height: fieldGap),
-        ],
-        if (widget.type == TransactionType.transfer &&
-            !widget.createTemplate) ...[
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _sourceFeeEnabled,
-            title: const Text('Source Account Fee'),
-            onChanged: (value) =>
-                setState(() => _sourceFeeEnabled = value ?? false),
-          ),
-          if (_sourceFeeEnabled)
-            _amountField(
-              controller: _sourceFeeController,
-              label: 'Source Fee',
-              accountId: _sourceAccountId,
-            ),
-          SizedBox(height: fieldGap),
-        ],
-        if (_destinationRequired &&
-            (widget.template == null ||
-                widget.template!.destinationAccountId == null)) ...[
-          _accountDropdown(
-            label: _sourceRequired ? 'Destination Account' : 'Account',
-            value: _destinationAccountId,
-            onChanged: (value) => setState(() => _destinationAccountId = value),
-          ),
-          SizedBox(height: fieldGap),
-        ],
-        if (_destinationRequired &&
-            !_transferSameCurrency &&
-            (widget.template == null ||
-                widget.template!.destinationAmount == null))
-          _amountField(
-            controller: _destinationAmountController,
-            label: _sourceRequired ? 'Destination Amount' : 'Amount',
-            accountId: _destinationAccountId,
-          ),
-        if (widget.type == TransactionType.transfer &&
-            !widget.createTemplate) ...[
-          SizedBox(height: fieldGap),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _destinationFeeEnabled,
-            title: const Text('Destination Account Fee'),
-            onChanged: (value) =>
-                setState(() => _destinationFeeEnabled = value ?? false),
-          ),
-          if (_destinationFeeEnabled)
-            _amountField(
-              controller: _destinationFeeController,
-              label: 'Destination Fee',
-              accountId: _destinationAccountId,
-            ),
-        ],
-        if ((widget.template == null || widget.template!.categoryId == null) &&
-            (_categoryRequired || _availableCategories.isNotEmpty)) ...[
-          SizedBox(height: fieldGap),
-          _categoryDropdown(),
-        ],
-        if (widget.template == null || widget.template!.tagId == null) ...[
-          SizedBox(height: fieldGap),
-          _tagDropdown(),
-        ],
-      ],
-    );
+    final fields = widget.createTemplate
+        ? _buildTemplateBuilder(fieldGap)
+        : _buildTransactionFields(fieldGap);
 
-    return SafeArea(
-      child: Material(
-        color: Theme.of(context).colorScheme.surface,
-        child: Column(
-          children: [
-            TransactionEntryHeader(
-              title: title,
-              onBack: widget.onBack ?? () => Navigator.of(context).pop(),
-              onClose: widget.onClose ?? () => Navigator.of(context).pop(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Dialog routes can briefly report a near-zero viewport while opening
+        // or while the platform window is being resized. Do not lay out the
+        // fixed header/footer column in that transient 1px surface.
+        if (constraints.maxWidth < 80 || constraints.maxHeight < 80) {
+          return const SizedBox.shrink();
+        }
+
+        final horizontalGutter = compact
+            ? AppPageSpacing.compactGutter
+            : AppPageSpacing.desktopGutter;
+        final header = TransactionEntryHeader(
+          title: title,
+          onBack: widget.onBack ?? () => Navigator.of(context).pop(),
+          onClose: widget.onClose ?? () => Navigator.of(context).pop(),
+        );
+        final footer = Padding(
+          key: const ValueKey('transaction-entry-submit-footer'),
+          padding: EdgeInsets.fromLTRB(
+            horizontalGutter,
+            AppSpacing.sm,
+            horizontalGutter,
+            MediaQuery.viewInsetsOf(context).bottom + AppSpacing.sm,
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _descriptionPatternError == null && !_resultSubmitted
+                  ? _submit
+                  : null,
+              child: Text(
+                widget.createTemplate ? 'Save Template' : 'Add Transaction',
+              ),
             ),
-            Expanded(
-              child: Form(
-                key: _formKey,
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    compact
-                        ? AppPageSpacing.compactGutter
-                        : AppPageSpacing.desktopGutter,
-                    AppSpacing.sm,
-                    compact
-                        ? AppPageSpacing.compactGutter
-                        : AppPageSpacing.desktopGutter,
-                    AppSpacing.md,
+          ),
+        );
+        final formPadding = EdgeInsets.fromLTRB(
+          horizontalGutter,
+          AppSpacing.sm,
+          horizontalGutter,
+          AppSpacing.md,
+        );
+        final compactViewport = constraints.maxHeight < 240;
+        final content = compactViewport
+            ? SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      header,
+                      Form(
+                        key: _formKey,
+                        child: Padding(padding: formPadding, child: fields),
+                      ),
+                      footer,
+                    ],
                   ),
-                  child: fields,
                 ),
-              ),
-            ),
-            Padding(
-              key: const ValueKey('transaction-entry-submit-footer'),
-              padding: EdgeInsets.fromLTRB(
-                compact
-                    ? AppPageSpacing.compactGutter
-                    : AppPageSpacing.desktopGutter,
-                AppSpacing.sm,
-                compact
-                    ? AppPageSpacing.compactGutter
-                    : AppPageSpacing.desktopGutter,
-                MediaQuery.viewInsetsOf(context).bottom + AppSpacing.sm,
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed:
-                      _descriptionPatternError == null && !_resultSubmitted
-                      ? _submit
-                      : null,
-                  child: Text(
-                    widget.createTemplate ? 'Save Template' : 'Add Transaction',
+              )
+            : Column(
+                children: [
+                  header,
+                  Expanded(
+                    child: Form(
+                      key: _formKey,
+                      child: SingleChildScrollView(
+                        padding: formPadding,
+                        child: fields,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+                  footer,
+                ],
+              );
+
+        return SafeArea(
+          child: Material(
+            color: Theme.of(context).colorScheme.surface,
+            child: content,
+          ),
+        );
+      },
     );
   }
 
@@ -1011,13 +2036,14 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     required String label,
     required String? value,
     required ValueChanged<String?> onChanged,
+    List<Account>? accounts,
   }) {
     return TransactionAccountSelector(
       label: label,
       value: value,
-      accounts: widget.data.entryFormAccounts,
+      accounts: accounts ?? widget.data.entryFormAccounts,
       data: widget.data,
-      requiredSelection: !widget.createTemplate,
+      requiredSelection: true,
       onChanged: onChanged,
     );
   }
@@ -1046,31 +2072,24 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: const [ThousandsSeparatorInputFormatter()],
       validator: (value) {
-        if (widget.createTemplate &&
-            value != null &&
-            value.trim().isNotEmpty &&
-            account == null) {
-          return 'Select an account to save this amount.';
-        }
-        if (widget.createTemplate && (value == null || value.trim().isEmpty)) {
-          return null;
-        }
         if (value == null || value.trim().isEmpty) {
           return 'Enter an amount.';
         }
         final parsed = num.tryParse(value.trim().replaceAll(',', ''));
-        if (parsed == null || parsed < 0) return 'Enter a valid amount.';
+        if (parsed == null || !parsed.isFinite || parsed < 0) {
+          return 'Enter a valid amount.';
+        }
         return null;
       },
     );
   }
 
-  Widget _categoryDropdown() {
+  Widget _categoryDropdown({List<Category>? categories}) {
     return TransactionCategorySelector(
       label: _categoryRequired ? 'Category' : 'Category (optional)',
       value: _categoryId,
-      categories: _availableCategories,
-      requiredSelection: _categoryRequired && !widget.createTemplate,
+      categories: categories ?? _availableCategories,
+      requiredSelection: _categoryRequired,
       onChanged: (value) => setState(() => _categoryId = value),
     );
   }
@@ -1080,8 +2099,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       initialValue: _tagId,
       isExpanded: true,
       decoration: const InputDecoration(labelText: 'Tag'),
-      validator: (value) =>
-          !widget.createTemplate && value == null ? 'Select a tag.' : null,
+      validator: (value) => value == null ? 'Select a tag.' : null,
       items: [
         for (final tag in widget.data.entryFormTags)
           DropdownMenuItem<String?>(value: tag.id, child: Text(tag.name)),
@@ -1110,7 +2128,17 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     }
     if (_descriptionPatternError != null) return;
 
-    if (!widget.createTemplate && _date == null) {
+    if (widget.createTemplate) {
+      final error = _validateTemplateOptionDrafts();
+      if (error != null) {
+        setState(() => _templateBuilderError = error);
+        return;
+      }
+      _deliverResult(_buildTemplateFromDrafts());
+      return;
+    }
+
+    if (_date == null) {
       final dateContext = _dateButtonKey.currentContext;
       if (dateContext != null) unawaited(Scrollable.ensureVisible(dateContext));
       showPersistentErrorDialog(context, 'Select a date.');
@@ -1133,49 +2161,30 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     if (_transferSameCurrency) {
       if (sourceAmount != null &&
           transferDestinationAmount != null &&
-          sourceAmount.minorUnits != transferDestinationAmount.minorUnits) {
+          sourceAmount.minorUnits != transferDestinationAmount.minorUnits &&
+          (widget.template?.sourceAmountOptions.length ?? 0) <= 1 &&
+          (widget.template?.destinationAmountOptions.length ?? 0) <= 1) {
         showPersistentErrorDialog(
           context,
-          'This same-currency template has conflicting saved amounts. Fix it in Sheets.',
+          'The selected same-currency transfer amounts must match.',
         );
         return;
       }
+      // Same-currency transfers have one amount control. If options were
+      // stored for both legs, use the source choice for both legs.
       sourceAmount ??= transferDestinationAmount;
       transferDestinationAmount = sourceAmount;
     }
     final entryDescription = _descriptionPattern == null
         ? _descriptionController.text.trim()
         : _descriptionPattern!.compose({
-            for (final entry in _placeholderControllers.entries)
-              entry.key: entry.value.text,
+            for (final placeholder in _descriptionPattern!.placeholders)
+              placeholder: _placeholderOptions[placeholder]?.isNotEmpty == true
+                  ? _selectedPlaceholderOptions[placeholder] ?? ''
+                  : _placeholderControllers[placeholder]!.text,
           });
-    if (!widget.createTemplate &&
-        (sourceAmount == null && _sourceRequired ||
-            transferDestinationAmount == null && _destinationRequired)) {
-      return;
-    }
-    if (widget.createTemplate) {
-      final now = DateTime.now().toUtc();
-      _deliverResult(
-        TransactionTemplate(
-          id: generateTransactionId(widget.data.transactionTemplatesById.keys),
-          name: _templateNameController.text.trim(),
-          type: widget.type,
-          date: _date,
-          description: _descriptionController.text.trim().isEmpty
-              ? null
-              : _descriptionController.text.trim(),
-          categoryId: _categoryId,
-          tagId: _tagId,
-          sourceAccountId: _sourceAccountId,
-          sourceAmount: sourceAmount,
-          destinationAccountId: _destinationAccountId,
-          destinationAmount: transferDestinationAmount,
-          isFavorite: false,
-          createdAt: now,
-          updatedAt: now,
-        ),
-      );
+    if (sourceAmount == null && _sourceRequired ||
+        transferDestinationAmount == null && _destinationRequired) {
       return;
     }
 
@@ -1303,18 +2312,30 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   String? _validateDescriptionPattern(String? value) {
     if (value == null || value.trim().isEmpty) return null;
     try {
-      TransactionDescriptionPattern.parse(value);
+      final pattern = TransactionDescriptionPattern.parse(value);
+      if (pattern.placeholderOptions.values.any(
+        (options) => options.isNotEmpty,
+      )) {
+        return 'Enter placeholder names as {Name}; add their choices below the description.';
+      }
       return null;
     } on FormatException catch (error) {
       return error.message;
     }
   }
 
+  String? _validateTransactionDescription(String? value) {
+    if (value == null || value.trim().isEmpty) return 'Enter a description.';
+    return validateTemplateEntryText(value);
+  }
+
   String _descriptionPreview() {
     final pattern = _descriptionPattern!;
     return pattern.compose({
       for (final placeholder in pattern.placeholders)
-        placeholder: _placeholderControllers[placeholder]!.text.trim().isEmpty
+        placeholder: _placeholderOptions[placeholder]?.isNotEmpty == true
+            ? _selectedPlaceholderOptions[placeholder] ?? '{$placeholder}'
+            : _placeholderControllers[placeholder]!.text.trim().isEmpty
             ? '{$placeholder}'
             : _placeholderControllers[placeholder]!.text,
     });

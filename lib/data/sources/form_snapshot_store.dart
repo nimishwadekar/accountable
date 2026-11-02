@@ -41,16 +41,6 @@ class FormSnapshot {
   }) {
     final currencies = data.currenciesById;
     final accounts = data.accountsById;
-    String amount(Money value, String accountId) {
-      final account = accounts[accountId];
-      if (account == null) throw StateError('Unknown account: $accountId.');
-      final currency = currencies[account.currencyId];
-      if (currency == null) {
-        throw StateError('Unknown currency: ${account.currencyId}.');
-      }
-      return value.toMajorUnitsString(currency);
-    }
-
     String date(DateTime value) =>
         '${value.year.toString().padLeft(4, '0')}-'
         '${value.month.toString().padLeft(2, '0')}-'
@@ -107,29 +97,11 @@ class FormSnapshot {
       RuntimeTableSchemas.transactionTemplates.name: csv.encode([
         RuntimeTableSchemas.transactionTemplates.headers,
         for (final template in data.transactionTemplates)
-          [
-            template.id,
-            template.name,
-            template.type.wireValue,
-            template.date == null ? '' : date(template.date!),
-            template.description ?? '',
-            template.categoryId ?? '',
-            template.tagId ?? '',
-            template.sourceAccountId ?? '',
-            template.sourceAmount == null
-                ? ''
-                : amount(template.sourceAmount!, template.sourceAccountId!),
-            template.destinationAccountId ?? '',
-            template.destinationAmount == null
-                ? ''
-                : amount(
-                    template.destinationAmount!,
-                    template.destinationAccountId!,
-                  ),
-            template.createdAt.toUtc().toIso8601String(),
-            template.updatedAt.toUtc().toIso8601String(),
-            template.isFavorite.toString().toUpperCase(),
-          ],
+          TransactionTemplateCodec.encodeRow(
+            template,
+            accounts: accounts,
+            currencies: currencies,
+          ),
       ]),
     };
     return FormSnapshot(
@@ -157,6 +129,8 @@ class FormSnapshot {
       tables['TransactionTemplates']!,
       accounts: accounts,
       currencies: currencies,
+      categories: {for (final category in categoryList) category.id: category},
+      tags: {for (final tag in tagList) tag.id: tag},
     );
     final synchronizedPreferences = synchronizeDisplayPreferences(
       existing: preferenceList,

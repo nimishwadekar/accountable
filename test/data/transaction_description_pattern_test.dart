@@ -30,6 +30,56 @@ void main() {
     );
   });
 
+  test('parses placeholder choices and composes the selected choice', () {
+    final pattern = TransactionDescriptionPattern.parse(
+      'Coffee at {Merchant~Cafe;^Office}',
+    );
+
+    expect(pattern.placeholders, ['Merchant']);
+    expect(
+      pattern.placeholderOptions['Merchant']!.map((option) => option.value),
+      ['Cafe', 'Office'],
+    );
+    expect(pattern.compose({'Merchant': 'Office'}), 'Coffee at Office');
+  });
+
+  test('encodes placeholder choices separately from the placeholder label', () {
+    expect(
+      TransactionDescriptionPattern.encodePlaceholderOptions(
+        'Coffee at {Merchant}',
+        {
+          'Merchant': const [
+            TemplateOption(value: 'Cafe'),
+            TemplateOption(value: 'Office', isDefault: true),
+          ],
+        },
+      ),
+      'Coffee at {Merchant~Cafe;^Office}',
+    );
+  });
+
+  test(
+    'rejects inconsistent repeated placeholder choices and reserved literals',
+    () {
+      expect(
+        () => TransactionDescriptionPattern.parse(
+          '{Place~Cafe;^Office} then {Place~Cafe;^Home}',
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => TransactionDescriptionPattern.parse('Coffee; cake'),
+        throwsFormatException,
+      );
+      expect(
+        () => TransactionDescriptionPattern.parse(
+          'At {Place~Cafe;^Office;^Home}',
+        ),
+        throwsFormatException,
+      );
+    },
+  );
+
   test('rejects malformed, empty, and unfilled placeholders', () {
     expect(
       () => TransactionDescriptionPattern.parse('At {Restaurant'),

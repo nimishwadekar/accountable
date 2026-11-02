@@ -40,6 +40,60 @@ void main() {
     );
   });
 
+  test(
+    'writes template choices into the existing Sheets template cells',
+    () async {
+      final client = _FakeSheetsClient(await _fixtureTables());
+      final repository = GoogleSheetsAppDataRepository(client);
+      await repository.load();
+      final now = DateTime.utc(2026, 10, 20);
+
+      await repository.addTransactionTemplate(
+        TransactionTemplate(
+          id: 'options-template',
+          name: 'Options',
+          type: TransactionType.expense,
+          dateOptions: [
+            TemplateOption(value: now),
+            TemplateOption(
+              value: now.add(const Duration(days: 1)),
+              isDefault: true,
+            ),
+          ],
+          descriptionOptions: const [
+            TemplateOption(
+              value: 'Coffee at {Merchant~Cafe;^Office}',
+              isDefault: true,
+            ),
+            TemplateOption(value: 'Lunch at {Place}'),
+          ],
+          sourceAccountOptions: const [
+            TemplateOption(value: 'chase_checking'),
+            TemplateOption(value: 'sbi_nro', isDefault: true),
+          ],
+          sourceAmountOptions: const [
+            TemplateOption(value: '4.50'),
+            TemplateOption(value: '8.25', isDefault: true),
+          ],
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+
+      final row = client.appendedRows.singleWhere(
+        (values) => values.first == 'options-template',
+      );
+      expect(
+        row,
+        hasLength(RuntimeTableSchemas.transactionTemplates.columnCount),
+      );
+      expect(row[3], '2026-10-20;^2026-10-21');
+      expect(row[4], '^Coffee at {Merchant~Cafe;^Office};Lunch at {Place}');
+      expect(row[7], 'chase_checking;^sbi_nro');
+      expect(row[8], '4.50;^8.25');
+    },
+  );
+
   test('validates template rename, update, and delete operations', () async {
     final tables = await _fixtureTables();
     tables[GoogleSheetsRanges.transactionTemplates]!.add([

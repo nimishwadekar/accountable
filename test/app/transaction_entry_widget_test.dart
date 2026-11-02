@@ -479,6 +479,436 @@ void main() {
   });
 
   testWidgets(
+    'template builder saves ordered description options and default',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 740));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final source = fixtureData;
+      TransactionTemplate? created;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: TransactionFormSheet(
+              type: TransactionType.expense,
+              data: source,
+              createTemplate: true,
+              onResult: (result) => created = result as TransactionTemplate,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Date'), findsOneWidget);
+      expect(find.text('Description'), findsOneWidget);
+      expect(find.text('Account'), findsOneWidget);
+      expect(find.text('Amount'), findsOneWidget);
+      expect(find.byTooltip('Add Description option'), findsOneWidget);
+      expect(find.byTooltip('Add Account option'), findsOneWidget);
+      expect(find.byTooltip('Add Amount option'), findsOneWidget);
+      expect(find.text('Description pattern'), findsNothing);
+
+      await tester.enterText(find.byType(TextFormField).first, 'Cafe');
+      await tester.tap(find.byTooltip('Add Description option'));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const ValueKey('template-description-option-0')),
+        'Coffee at {Merchant~Cafe;^Office}',
+      );
+      await tester.tap(find.text('Save Template'));
+      await tester.pump();
+      expect(
+        find.text(
+          'Enter placeholder names as {Name}; add their choices below the description.',
+        ),
+        findsOneWidget,
+      );
+      expect(created, isNull);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('template-description-option-0')),
+        'Coffee at {Merchant}',
+      );
+      await tester.pump();
+      expect(find.text('Merchant'), findsOneWidget);
+      await tester.ensureVisible(
+        find.byTooltip('Add Merchant option for description 1'),
+      );
+      await tester.pump();
+      await tester.tap(find.byTooltip('Add Merchant option for description 1'));
+      await tester.pump();
+      await tester.ensureVisible(
+        find.byKey(
+          const ValueKey('description-0-placeholder-Merchant-option-0'),
+        ),
+      );
+      await tester.enterText(
+        find.byKey(
+          const ValueKey('description-0-placeholder-Merchant-option-0'),
+        ),
+        'Cafe',
+      );
+      await tester.ensureVisible(
+        find.byTooltip('Add Merchant option for description 1'),
+      );
+      await tester.pump();
+      await tester.tap(find.byTooltip('Add Merchant option for description 1'));
+      await tester.pump();
+      await tester.ensureVisible(
+        find.byKey(
+          const ValueKey('description-0-placeholder-Merchant-option-1'),
+        ),
+      );
+      await tester.enterText(
+        find.byKey(
+          const ValueKey('description-0-placeholder-Merchant-option-1'),
+        ),
+        'Office',
+      );
+      await tester.ensureVisible(find.byType(Checkbox).last);
+      await tester.pump();
+      final placeholderDefaultLabel = find.text('Default').last;
+      expect(tester.widget<Text>(placeholderDefaultLabel).maxLines, 1);
+      expect(tester.widget<Text>(placeholderDefaultLabel).softWrap, isFalse);
+      await tester.tap(find.byType(Checkbox).last);
+      await tester.pump();
+      await tester.ensureVisible(find.byTooltip('Add Description option'));
+      await tester.pump();
+      await tester.tap(find.byTooltip('Add Description option'));
+      await tester.pump();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('template-description-option-1')),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('template-description-option-1')),
+        'Lunch at {Place}',
+      );
+      await tester.ensureVisible(find.byType(CheckboxListTile).first);
+      await tester.pump();
+      await tester.tap(find.byType(CheckboxListTile).first);
+      await tester.pump();
+      await tester.tap(find.text('Save Template'));
+      await tester.pump();
+
+      expect(created, isNotNull);
+      expect(created!.name, 'Cafe');
+      expect(created!.descriptionOptions.map((option) => option.value), [
+        'Coffee at {Merchant~Cafe;^Office}',
+        'Lunch at {Place}',
+      ]);
+      expect(created!.descriptionOptions.map((option) => option.isDefault), [
+        true,
+        false,
+      ]);
+      expect(created!.effectiveSourceAccountOptions, isEmpty);
+      expect(created!.sourceAmountOptions, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'template option defaults apply and placeholder dropdowns remain editable',
+    (tester) async {
+      final source = fixtureData;
+      final now = DateTime.utc(2026, 10, 20);
+      final usd = source.currenciesById['USD']!;
+      final template = TransactionTemplate(
+        id: 'choice-template',
+        name: 'Coffee choices',
+        type: TransactionType.expense,
+        date: now,
+        dateOptions: [
+          TemplateOption(value: now.subtract(const Duration(days: 1))),
+          TemplateOption(value: now, isDefault: true),
+        ],
+        description: 'Coffee at {Merchant~Cafe;^Office}',
+        descriptionOptions: [
+          const TemplateOption(
+            value: 'Coffee at {Merchant~Cafe;^Office}',
+            isDefault: true,
+          ),
+          const TemplateOption(value: 'Lunch at {Place}'),
+        ],
+        categoryId: 'groceries',
+        categoryOptions: const [
+          TemplateOption(value: 'food_drink'),
+          TemplateOption(value: 'groceries', isDefault: true),
+        ],
+        tagId: 'boston',
+        sourceAccountId: 'chase_checking',
+        sourceAmount: Money.fromMajorUnits(value: '4.50', currency: usd),
+        sourceAmountOptions: const [TemplateOption(value: '4.50')],
+        createdAt: now,
+        updatedAt: now,
+      );
+      Transaction? created;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: TransactionFormSheet(
+              type: template.type,
+              data: source,
+              template: template,
+              onResult: (result) => created = result as Transaction,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('template-description-options')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('placeholder-options-Merchant')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('template-date-options')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('template-category-options')),
+        findsOneWidget,
+      );
+      expect(find.text('Office'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('placeholder-options-Merchant')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cafe').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add Transaction'));
+      await tester.pump();
+
+      expect(created, isNotNull);
+      expect(created!.description, 'Coffee at Cafe');
+      expect(created!.sourceAmount?.minorUnits, 450);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('multi-option fields without a default require a selection', (
+    tester,
+  ) async {
+    final source = fixtureData;
+    final now = DateTime.utc(2026, 10, 20);
+    final usd = source.currenciesById['USD']!;
+    final template = TransactionTemplate(
+      id: 'no-default-template',
+      name: 'Choose description',
+      type: TransactionType.expense,
+      date: now,
+      descriptionOptions: const [
+        TemplateOption(value: 'Coffee'),
+        TemplateOption(value: 'Lunch'),
+      ],
+      categoryId: 'food_drink',
+      tagId: 'boston',
+      sourceAccountId: 'chase_checking',
+      sourceAmount: Money.fromMajorUnits(value: '4.50', currency: usd),
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: TransactionFormSheet(
+            type: template.type,
+            data: source,
+            template: template,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Add Transaction'));
+    await tester.pump();
+    expect(find.text('Choose a description.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('template fields without options remain normal entry fields', (
+    tester,
+  ) async {
+    final source = fixtureData;
+    final now = DateTime.utc(2026, 10, 10);
+    final template = TransactionTemplate(
+      id: 'empty-template',
+      name: 'Fill each time',
+      type: TransactionType.expense,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: TransactionFormSheet(
+            type: template.type,
+            data: source,
+            template: template,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.widgetWithText(TextFormField, 'Description'), findsOneWidget);
+    expect(find.byIcon(Icons.calendar_today_outlined), findsOneWidget);
+    expect(find.text('Select account'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Amount'), findsOneWidget);
+    expect(find.text('Select category'), findsOneWidget);
+    expect(find.byType(DropdownButtonFormField<String?>), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('ordinary descriptions reject the reserved option characters', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: TransactionFormSheet(
+            type: TransactionType.expense,
+            data: fixtureData,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Description'),
+      'Coffee; cake',
+    );
+    await tester.tap(find.text('Add Transaction'));
+    await tester.pump();
+
+    expect(
+      find.text(
+        'The characters ;, ^, and ~ are reserved for template options.',
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('entry form avoids flex overflow during tiny viewport layouts', (
+    tester,
+  ) async {
+    for (final size in [const Size(1, 1), const Size(390, 160)]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: size.width,
+                height: size.height,
+                child: TransactionFormSheet(
+                  type: TransactionType.expense,
+                  data: fixtureData,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: '${size.width}x${size.height}',
+      );
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('account and amount option choices use the selected currency', (
+    tester,
+  ) async {
+    final source = fixtureData;
+    final now = DateTime.utc(2026, 10, 10);
+    final usd = source.currenciesById['USD']!;
+    final template = TransactionTemplate(
+      id: 'currency-choice-template',
+      name: 'Choose account and amount',
+      type: TransactionType.expense,
+      date: now,
+      description: 'Purchase',
+      categoryId: 'food_drink',
+      tagId: 'boston',
+      sourceAccountId: 'chase_checking',
+      sourceAccountOptions: const [
+        TemplateOption(value: 'chase_checking', isDefault: true),
+        TemplateOption(value: 'sbi_nro'),
+      ],
+      sourceAmount: Money.fromMajorUnits(value: '8.25', currency: usd),
+      sourceAmountOptions: const [
+        TemplateOption(value: '4.50'),
+        TemplateOption(value: '8.25', isDefault: true),
+      ],
+      createdAt: now,
+      updatedAt: now,
+    );
+    Transaction? created;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: TransactionFormSheet(
+            type: template.type,
+            data: source,
+            template: template,
+            onResult: (result) => created = result as Transaction,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final accountDropdown = find.byKey(
+      const ValueKey('template-account-options-Account'),
+    );
+    final amountDropdown = find.byKey(
+      const ValueKey('template-amount-options-Amount'),
+    );
+    expect(accountDropdown, findsOneWidget);
+    expect(amountDropdown, findsOneWidget);
+    await tester.tap(accountDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('SBI NRO · INR').last);
+    await tester.pumpAndSettle();
+    expect(find.text('SBI NRO · INR'), findsOneWidget);
+    await tester.tap(amountDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('4.50').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add Transaction'));
+    await tester.pump();
+
+    expect(created, isNotNull);
+    expect(created!.sourceAccountId, 'sbi_nro');
+    expect(created!.sourceAmount!.currencyId, 'INR');
+    expect(created!.sourceAmount!.minorUnits, 450);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
     'same-currency transfer template preserves a saved destination amount',
     (tester) async {
       final source = fixtureData;

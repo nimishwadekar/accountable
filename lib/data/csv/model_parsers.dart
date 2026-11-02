@@ -449,32 +449,135 @@ class ModelParsers {
     String source, {
     required Map<String, Account> accounts,
     required Map<String, CurrencyDefinition> currencies,
+    Map<String, Category>? categories,
+    Map<String, Tag>? tags,
   }) {
     final table = CsvTable.parse(source, tableName: 'TransactionTemplates');
     return _uniqueById(
       table.rows.map((row) {
-        Money? amount(String field, String? accountId) {
-          final raw = optionalValue(row, field);
-          if (raw == null) return null;
-          if (accountId == null) {
+        List<TemplateOption<T>> parseValues<T>(
+          String field,
+          T Function(String value) parseValue,
+        ) => [
+          for (final option in parseTemplateOptions(
+            optionalValue(row, field) ?? '',
+            fieldName: field,
+          ))
+            TemplateOption(
+              value: parseValue(option.value),
+              isDefault: option.isDefault,
+            ),
+        ];
+
+        List<TemplateOption<String>> parseIds(String field) =>
+            parseValues(field, (value) => value);
+
+        final dateOptions = parseValues(
+          'date',
+          (value) => parseDateOnly(value, fieldName: 'date'),
+        );
+        final descriptionOptions =
+            TransactionTemplateCodec.parseDescriptionOptions(
+              optionalValue(row, 'description'),
+            );
+        final categoryOptions = parseIds('category');
+        final tagOptions = parseIds('tag');
+        final sourceAccountOptions = parseIds('source_account_id');
+        final destinationAccountOptions = parseIds('dest_account_id');
+        for (final option in [
+          ...sourceAccountOptions,
+          ...destinationAccountOptions,
+        ]) {
+          if (!accounts.containsKey(option.value)) {
             throw FormatException(
-              '$field requires an account in TransactionTemplates.',
+              'Template references unknown account: ${option.value}.',
             );
           }
-          final account = accounts[accountId];
-          if (account == null) {
+        }
+
+        final type = TransactionTypeWireValue.parse(
+          requiredValue(row, 'transaction_type'),
+        );
+        if (categories != null) {
+          for (final option in categoryOptions) {
+            final category = categories[option.value];
+            if (category == null ||
+                !category.allowedTransactionTypes.contains(type)) {
+              throw FormatException(
+                'Template category is missing or incompatible: ${option.value}.',
+              );
+            }
+          }
+        }
+        if (tags != null) {
+          for (final option in tagOptions) {
+            if (!tags.containsKey(option.value)) {
+              throw FormatException(
+                'Template references unknown tag: ${option.value}.',
+              );
+            }
+          }
+        }
+
+        final sourceAmountOptions = parseIds('source_amount');
+        final destinationAmountOptions = parseIds('dest_amount');
+        final typeRules = transactionTypeRules[type]!;
+        if (!typeRules.sourceRequired &&
+            (sourceAccountOptions.isNotEmpty ||
+                sourceAmountOptions.isNotEmpty)) {
+          throw FormatException(
+            '${type.wireValue} templates cannot contain source account or amount options.',
+          );
+        }
+        if (!typeRules.destinationRequired &&
+            (destinationAccountOptions.isNotEmpty ||
+                destinationAmountOptions.isNotEmpty)) {
+          throw FormatException(
+            '${type.wireValue} templates cannot contain destination account or amount options.',
+          );
+        }
+        final allAccountOptions = [
+          ...sourceAccountOptions,
+          ...destinationAccountOptions,
+        ];
+        for (final amountOption in [
+          ...sourceAmountOptions,
+          ...destinationAmountOptions,
+        ]) {
+          final decimal = Decimal.tryParse(amountOption.value);
+          if (decimal == null || decimal < Decimal.zero) {
             throw FormatException(
-              'Template references unknown account: $accountId.',
+              'Invalid template amount: ${amountOption.value}.',
             );
           }
+          for (final accountOption in allAccountOptions) {
+            final account = accounts[accountOption.value]!;
+            Money.fromMajorUnits(
+              value: amountOption.value,
+              currency: _currency(currencies, account.currencyId),
+            );
+          }
+        }
+
+        final sourceAccountId = defaultOrOnlyTemplateOption(
+          sourceAccountOptions,
+        );
+        final destinationAccountId = defaultOrOnlyTemplateOption(
+          destinationAccountOptions,
+        );
+        Money? amountFor(
+          List<TemplateOption<String>> options,
+          String? accountId,
+        ) {
+          final value = defaultOrOnlyTemplateOption(options);
+          if (value == null || accountId == null) return null;
+          final account = accounts[accountId]!;
           return Money.fromMajorUnits(
-            value: raw,
+            value: value,
             currency: _currency(currencies, account.currencyId),
           );
         }
 
-        final sourceAccountId = optionalValue(row, 'source_account_id');
-        final destinationAccountId = optionalValue(row, 'dest_account_id');
         final createdAt = parseUtcTimestamp(
           requiredValue(row, 'created_at'),
           fieldName: 'created_at',
@@ -482,17 +585,26 @@ class ModelParsers {
         return TransactionTemplate(
           id: requiredValue(row, 'template_id'),
           name: requiredValue(row, 'name'),
-          type: TransactionTypeWireValue.parse(
-            requiredValue(row, 'transaction_type'),
-          ),
-          date: _optionalDate(row, 'date'),
-          description: optionalValue(row, 'description'),
-          categoryId: optionalValue(row, 'category'),
-          tagId: optionalValue(row, 'tag'),
+          type: type,
+          date: defaultOrOnlyTemplateOption(dateOptions),
+          dateOptions: dateOptions,
+          description: defaultOrOnlyTemplateOption(descriptionOptions),
+          descriptionOptions: descriptionOptions,
+          categoryId: defaultOrOnlyTemplateOption(categoryOptions),
+          categoryOptions: categoryOptions,
+          tagId: defaultOrOnlyTemplateOption(tagOptions),
+          tagOptions: tagOptions,
           sourceAccountId: sourceAccountId,
-          sourceAmount: amount('source_amount', sourceAccountId),
+          sourceAccountOptions: sourceAccountOptions,
+          sourceAmount: amountFor(sourceAmountOptions, sourceAccountId),
+          sourceAmountOptions: sourceAmountOptions,
           destinationAccountId: destinationAccountId,
-          destinationAmount: amount('dest_amount', destinationAccountId),
+          destinationAccountOptions: destinationAccountOptions,
+          destinationAmount: amountFor(
+            destinationAmountOptions,
+            destinationAccountId,
+          ),
+          destinationAmountOptions: destinationAmountOptions,
           isFavorite: optionalValue(row, 'is_favorite') == null
               ? false
               : _parseBoolean(

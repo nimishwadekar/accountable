@@ -200,64 +200,61 @@ void main() {
     );
   });
 
-  test(
-    'transaction templates parse both currency legs and reject orphan amounts',
-    () {
-      final template = ModelParsers.parseTransactionTemplates(
-        _table(RuntimeTableSchemas.transactionTemplates, [
-          [
-            'cross-currency',
-            'International transfer',
-            'transfer',
-            '',
-            'Monthly transfer',
-            'transfer',
-            'tag',
-            'checking',
-            '12.34',
-            'savings',
-            '56.78',
-            '2026-01-01T00:00:00Z',
-            '2026-01-02T00:00:00Z',
-            'TRUE',
-          ],
-        ]),
-        accounts: accounts,
-        currencies: currencies,
-      ).single;
+  test('transaction templates parse both currency legs and retain an amount option without an account option', () {
+    final template = ModelParsers.parseTransactionTemplates(
+      _table(RuntimeTableSchemas.transactionTemplates, [
+        [
+          'cross-currency',
+          'International transfer',
+          'transfer',
+          '',
+          'Monthly transfer',
+          'transfer',
+          'tag',
+          'checking',
+          '12.34',
+          'savings',
+          '56.78',
+          '2026-01-01T00:00:00Z',
+          '2026-01-02T00:00:00Z',
+          'TRUE',
+        ],
+      ]),
+      accounts: accounts,
+      currencies: currencies,
+    ).single;
 
-      expect(template.sourceAmount?.minorUnits, 1234);
-      expect(template.sourceAmount?.currencyId, 'USD');
-      expect(template.destinationAmount?.minorUnits, 5678);
-      expect(template.destinationAmount?.currencyId, 'INR');
-      expect(template.isFavorite, isTrue);
+    expect(template.sourceAmount?.minorUnits, 1234);
+    expect(template.sourceAmount?.currencyId, 'USD');
+    expect(template.destinationAmount?.minorUnits, 5678);
+    expect(template.destinationAmount?.currencyId, 'INR');
+    expect(template.isFavorite, isTrue);
 
-      final orphanedAmount = [
-        'orphan',
-        'Broken template',
-        'expense',
-        '',
-        '',
-        'expense',
-        'tag',
-        '',
-        '1.00',
-        '',
-        '',
-        '2026-01-01T00:00:00Z',
-        '2026-01-02T00:00:00Z',
-        'FALSE',
-      ];
-      expect(
-        () => ModelParsers.parseTransactionTemplates(
-          _table(RuntimeTableSchemas.transactionTemplates, [orphanedAmount]),
-          accounts: accounts,
-          currencies: currencies,
-        ),
-        throwsFormatException,
-      );
-    },
-  );
+    final orphanedAmount = [
+      'orphan',
+      'Broken template',
+      'expense',
+      '',
+      '',
+      'expense',
+      'tag',
+      '',
+      '1.00',
+      '',
+      '',
+      '2026-01-01T00:00:00Z',
+      '2026-01-02T00:00:00Z',
+      'FALSE',
+    ];
+    final amountWithoutAccount = ModelParsers.parseTransactionTemplates(
+      _table(RuntimeTableSchemas.transactionTemplates, [orphanedAmount]),
+      accounts: accounts,
+      currencies: currencies,
+    ).single;
+    expect(amountWithoutAccount.sourceAccountOptions, isEmpty);
+    expect(amountWithoutAccount.sourceAmount, isNull);
+    expect(amountWithoutAccount.sourceAmountOptions.single.value, '1.00');
+  });
 
   test('strict migration parsing assigns deterministic IDs and timestamps', () {
     final parsed = ModelParsers.parseMigrationTransactions(

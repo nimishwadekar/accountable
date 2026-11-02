@@ -114,6 +114,89 @@ void main() {
     },
   );
 
+  test(
+    'form snapshot round-trips template option cells without new columns',
+    () async {
+      final source = await AssetAppDataRepository().load();
+      final date = DateTime.utc(2026, 10, 10);
+      final inr = source.currenciesById['INR']!;
+      final template = TransactionTemplate(
+        id: 'template-options',
+        name: 'Options',
+        type: TransactionType.expense,
+        dateOptions: [
+          TemplateOption(value: date),
+          TemplateOption(
+            value: date.add(const Duration(days: 1)),
+            isDefault: true,
+          ),
+        ],
+        descriptionOptions: const [
+          TemplateOption(
+            value: 'Coffee at {Merchant~Cafe;^Office}',
+            isDefault: true,
+          ),
+          TemplateOption(value: 'Lunch at {Place}'),
+        ],
+        categoryOptions: const [
+          TemplateOption(value: 'food_drink'),
+          TemplateOption(value: 'shopping', isDefault: true),
+        ],
+        tagId: 'boston',
+        sourceAccountOptions: const [
+          TemplateOption(value: 'chase_checking'),
+          TemplateOption(value: 'sbi_nro', isDefault: true),
+        ],
+        sourceAmountOptions: const [
+          TemplateOption(value: '4.50'),
+          TemplateOption(value: '8.25', isDefault: true),
+        ],
+        sourceAmount: Money.fromMajorUnits(value: '8.25', currency: inr),
+        createdAt: date,
+        updatedAt: date,
+      );
+      final data = AppDataSnapshot(
+        accounts: source.accounts,
+        categories: source.categories,
+        currencies: source.currencies,
+        tags: source.tags,
+        transactions: source.transactions,
+        transactionsToMigrate: source.transactionsToMigrate,
+        exchangeRates: source.exchangeRates,
+        dailyAccountBalances: source.dailyAccountBalances,
+        dailyNetWorth: source.dailyNetWorth,
+        dailyManualValuations: source.dailyManualValuations,
+        displayPreferences: source.displayPreferences,
+        transactionTemplates: [template],
+        incomeAllocations: source.incomeAllocations,
+        achievements: source.achievements,
+        achievementStartDate: source.achievementStartDate,
+      );
+
+      final snapshot = FormSnapshot.fromData(data, dataSource: 'sheets');
+      final templateCells = snapshot.tables['TransactionTemplates']!;
+      expect(templateCells, contains('chase_checking;^sbi_nro'));
+      expect(templateCells, contains('4.50;^8.25'));
+      expect(
+        snapshot.tables['TransactionTemplates']!.split('\n').first.trimRight(),
+        RuntimeTableSchemas.transactionTemplates.headers.join(','),
+      );
+
+      final restored = snapshot.toDataSnapshot().transactionTemplates.single;
+      expect(restored.effectiveDateOptions.map((option) => option.isDefault), [
+        false,
+        true,
+      ]);
+      expect(restored.descriptionOptions.map((option) => option.value), [
+        'Coffee at {Merchant~Cafe;^Office}',
+        'Lunch at {Place}',
+      ]);
+      expect(restored.categoryId, 'shopping');
+      expect(restored.sourceAccountId, 'sbi_nro');
+      expect(restored.sourceAmount?.currencyId, 'INR');
+    },
+  );
+
   test('form snapshot rejects invalid metadata, unknown tables, and missing tables', () async {
     final data = await AssetAppDataRepository().load();
     final snapshot = FormSnapshot.fromData(
