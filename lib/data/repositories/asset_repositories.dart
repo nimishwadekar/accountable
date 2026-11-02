@@ -36,8 +36,6 @@ abstract final class DataAssetPaths {
   static final incomeAllocations =
       RuntimeTableSchemas.incomeAllocations.assetPath;
   static final achievements = RuntimeTableSchemas.achievements.assetPath;
-  static final achievementSettings =
-      RuntimeTableSchemas.achievementSettings.assetPath;
   static final metadata = RuntimeTableSchemas.metadata.assetPath;
 }
 
@@ -476,12 +474,11 @@ class AssetAppDataRepository implements AppDataRepository {
         tables[DataAssetPaths.achievements]!,
         currencies: currencyById,
       );
-      final achievementSettings = ModelParsers.parseAchievementSettings(
-        tables[DataAssetPaths.achievementSettings]!,
-      );
       final metadata = ModelParsers.parseMetadata(
         tables[DataAssetPaths.metadata]!,
       );
+      final achievementStartDate =
+          ModelParsers.parseAchievementTrackingStartDate(metadata);
       final dailyProcessedThrough = ModelParsers.parseDailyProcessedThrough(
         metadata,
       );
@@ -562,13 +559,13 @@ class AssetAppDataRepository implements AppDataRepository {
         transactionTemplates: templateList,
         incomeAllocations: allocationList,
         achievements: achievementList,
-        achievementStartDate: achievementSettings.trackingStartDate,
+        achievementStartDate: achievementStartDate,
         metadata: metadata,
         dailyProcessedThrough: dailyProcessedThrough,
       );
       final achievementEvaluation = NetWorthAchievementCalculator.evaluate(
         dailyNetWorth: dailyNetWorthList,
-        trackingStartDate: achievementSettings.trackingStartDate,
+        trackingStartDate: achievementStartDate,
         achievements: achievementList,
         processedThrough: dailyProcessedThrough,
       );
@@ -607,10 +604,7 @@ class AssetAppDataRepository implements AppDataRepository {
       if (_storedDatasetMatchesSchema(
         tables,
         migrationAssistance,
-        allowMissing: {
-          DataAssetPaths.achievements,
-          DataAssetPaths.achievementSettings,
-        },
+        allowMissing: {DataAssetPaths.achievements},
       )) {
         for (final path in _runtimeAssetPaths(migrationAssistance)) {
           if (tables.containsKey(path)) continue;

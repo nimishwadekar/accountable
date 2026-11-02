@@ -38,8 +38,6 @@ abstract final class GoogleSheetsRanges {
       RuntimeTableSchemas.transactionTemplates.range;
   static final incomeAllocations = RuntimeTableSchemas.incomeAllocations.range;
   static final achievements = RuntimeTableSchemas.achievements.range;
-  static final achievementSettings =
-      RuntimeTableSchemas.achievementSettings.range;
   static final metadata = RuntimeTableSchemas.metadata.range;
   static final transactionsToMigrate =
       RuntimeTableSchemas.transactionsToMigrate.range;
@@ -679,18 +677,11 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
         }
       }
       try {
-        achievementStartDate = ModelParsers.parseAchievementSettings(
-          _encode(tables[GoogleSheetsRanges.achievementSettings]!),
-        ).trackingStartDate;
-        recordIssues('AchievementSettings', const []);
-      } catch (error) {
-        recordIssues('AchievementSettings', [
-          issueFromError('AchievementSettings', error),
-        ]);
-      }
-      try {
         metadata = ModelParsers.parseMetadata(
           _encode(tables[GoogleSheetsRanges.metadata]!),
+        );
+        achievementStartDate = ModelParsers.parseAchievementTrackingStartDate(
+          metadata,
         );
         dailyProcessedThrough = ModelParsers.parseDailyProcessedThrough(
           metadata,
@@ -786,7 +777,6 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       GoogleSheetsRanges.transactionTemplates,
       GoogleSheetsRanges.incomeAllocations,
       GoogleSheetsRanges.achievements,
-      GoogleSheetsRanges.achievementSettings,
       GoogleSheetsRanges.metadata,
       GoogleSheetsRanges.tags,
       GoogleSheetsRanges.transactions,

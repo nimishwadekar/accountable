@@ -306,10 +306,6 @@ void main() {
         RuntimeTableSchemas.achievements.headers,
         ['ACH001', 'First milestone', '5000', 'TRUE'],
       ]);
-      tables[DataAssetPaths.achievementSettings] = csv.encode([
-        RuntimeTableSchemas.achievementSettings.headers,
-        ['2025-01-01'],
-      ]);
       final historyEnd = DateTime.utc(
         DateTime.now().year,
         DateTime.now().month,
@@ -317,6 +313,7 @@ void main() {
       tables[DataAssetPaths.metadata] = csv.encode([
         RuntimeTableSchemas.metadata.headers,
         [dailyProcessedThroughMetadataKey, _dateOnlyString(historyEnd)],
+        [achievementTrackingStartDateMetadataKey, '2025-01-01'],
       ]);
       final historyDates = <DateTime>[];
       for (
@@ -425,9 +422,10 @@ void main() {
         for (final schema in RuntimeTableSchemas.all)
           schema.assetPath: await rootBundle.loadString(schema.assetPath),
       };
-      tables[DataAssetPaths.achievementSettings] = csv.encode([
-        RuntimeTableSchemas.achievementSettings.headers,
-        ['2025-01-01'],
+      tables[DataAssetPaths.metadata] = csv.encode([
+        RuntimeTableSchemas.metadata.headers,
+        [dailyProcessedThroughMetadataKey, '2026-10-12'],
+        [achievementTrackingStartDateMetadataKey, '2025-01-01'],
       ]);
       tables[DataAssetPaths.dailyNetWorth] = csv.encode([
         RuntimeTableSchemas.dailyNetWorth.headers,

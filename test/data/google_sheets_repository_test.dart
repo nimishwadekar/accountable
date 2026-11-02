@@ -678,7 +678,7 @@ void main() {
         GoogleSheetsRanges.dailyNetWorth: 'DailyNetWorth',
         GoogleSheetsRanges.dailyManualValuations: 'DailyManualValuations',
         GoogleSheetsRanges.achievements: 'Achievements',
-        GoogleSheetsRanges.achievementSettings: 'AchievementSettings',
+        GoogleSheetsRanges.metadata: 'Metadata',
       };
 
       for (final entry in tablesToCheck.entries) {
@@ -712,10 +712,6 @@ void main() {
         RuntimeTableSchemas.achievements.headers,
         ['ACH001', 'First milestone', '5000', 'TRUE'],
       ];
-      tables[GoogleSheetsRanges.achievementSettings] = [
-        RuntimeTableSchemas.achievementSettings.headers,
-        ['2025-01-01'],
-      ];
       final historyEnd = DateTime.utc(
         DateTime.now().year,
         DateTime.now().month,
@@ -723,6 +719,7 @@ void main() {
       tables[GoogleSheetsRanges.metadata] = [
         RuntimeTableSchemas.metadata.headers,
         [dailyProcessedThroughMetadataKey, _date(historyEnd)],
+        [achievementTrackingStartDateMetadataKey, '2025-01-01'],
       ];
       final dailyHistory = <List<String>>[
         RuntimeTableSchemas.dailyNetWorth.headers,
@@ -769,9 +766,10 @@ void main() {
         RuntimeTableSchemas.achievements.headers,
         ['ACH001', 'First milestone', '5000', 'TRUE'],
       ];
-      tables[GoogleSheetsRanges.achievementSettings] = [
-        RuntimeTableSchemas.achievementSettings.headers,
-        ['2025-01-01'],
+      tables[GoogleSheetsRanges.metadata] = [
+        RuntimeTableSchemas.metadata.headers,
+        [dailyProcessedThroughMetadataKey, '2026-10-12'],
+        [achievementTrackingStartDateMetadataKey, '2025-01-01'],
       ];
       tables[GoogleSheetsRanges.dailyNetWorth] = [
         RuntimeTableSchemas.dailyNetWorth.headers,
@@ -1065,16 +1063,17 @@ void main() {
   });
 
   test(
-    'loads achievements from adjacent ranges and acknowledges them',
+    'loads achievements and tracking start from Metadata and acknowledges them',
     () async {
       final tables = await _fixtureTables();
       tables[GoogleSheetsRanges.achievements] = [
         RuntimeTableSchemas.achievements.headers,
         ['ACH001', 'A fresh start', '-12000', 'FALSE'],
       ];
-      tables[GoogleSheetsRanges.achievementSettings] = [
-        RuntimeTableSchemas.achievementSettings.headers,
-        ['2026-10-01'],
+      tables[GoogleSheetsRanges.metadata] = [
+        RuntimeTableSchemas.metadata.headers,
+        [dailyProcessedThroughMetadataKey, '2026-10-12'],
+        [achievementTrackingStartDateMetadataKey, '2026-10-01'],
       ];
       final repository = GoogleSheetsAppDataRepository(
         _FakeSheetsClient(tables),
@@ -1126,8 +1125,6 @@ Future<Map<String, List<List<String>>>> _fixtureTables() async {
         'test_sheets/TransactionTemplates.csv',
     GoogleSheetsRanges.incomeAllocations: 'test_sheets/IncomeAllocations.csv',
     GoogleSheetsRanges.achievements: 'test_sheets/Achievements.csv',
-    GoogleSheetsRanges.achievementSettings:
-        'test_sheets/AchievementSettings.csv',
     GoogleSheetsRanges.metadata: 'test_sheets/Metadata.csv',
     GoogleSheetsRanges.transactions: 'test_sheets/Transactions.csv',
     GoogleSheetsRanges.transactionsToMigrate:

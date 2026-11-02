@@ -26,10 +26,6 @@ void main() {
       RuntimeTableSchemas.achievements.headers,
       ['ACH001', 'A personal achievement', '100', 'FALSE'],
     ]);
-    tables[DataAssetPaths.achievementSettings] = csv.encode([
-      RuntimeTableSchemas.achievementSettings.headers,
-      ['${previousMonth.year}-${previousMonth.month.toString().padLeft(2, '0')}-01'],
-    ]);
     final checkpoint = DateTime.utc(
       now.year,
       now.month,
@@ -37,6 +33,10 @@ void main() {
     ).subtract(const Duration(days: 1));
     tables[DataAssetPaths.metadata] = csv.encode([
       RuntimeTableSchemas.metadata.headers,
+      [
+        achievementTrackingStartDateMetadataKey,
+        '${previousMonth.year}-${previousMonth.month.toString().padLeft(2, '0')}-01',
+      ],
       [
         dailyProcessedThroughMetadataKey,
         '${checkpoint.year}-${checkpoint.month.toString().padLeft(2, '0')}-'

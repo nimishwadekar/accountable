@@ -111,8 +111,7 @@ void main() {
     () async {
       final oldTables = <String, String>{
         for (final schema in RuntimeTableSchemas.all)
-          if (schema != RuntimeTableSchemas.achievements &&
-              schema != RuntimeTableSchemas.achievementSettings)
+          if (schema != RuntimeTableSchemas.achievements)
             schema.assetPath: await rootBundle.loadString(schema.assetPath),
       };
       final store = MemoryLocalDatasetStore(oldTables);

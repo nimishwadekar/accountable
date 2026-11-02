@@ -32,6 +32,7 @@ void main() {
     final metadata = ModelParsers.parseMetadata(
       'metadata_key,metadata_value\n'
       'daily_processed_through,2026-10-12\n'
+      'achievement_tracking_start_date,2026-10-01\n'
       'custom_setting,enabled\n',
     );
 
@@ -41,6 +42,14 @@ void main() {
       DateTime.utc(2026, 10, 12),
     );
     expect(ModelParsers.parseDailyProcessedThrough(const {}), isNull);
+    expect(
+      ModelParsers.parseAchievementTrackingStartDate(metadata),
+      DateTime.utc(2026, 10, 1),
+    );
+    expect(
+      () => ModelParsers.parseAchievementTrackingStartDate(const {}),
+      throwsFormatException,
+    );
     expect(
       () => ModelParsers.parseMetadata(
         'metadata_key,metadata_value\n'
@@ -204,30 +213,6 @@ void main() {
       () => ModelParsers.parseDisplayPreferences(
         _table(RuntimeTableSchemas.displayPreferences, [
           ['account', 'checking', '0', 'maybe', 'FALSE'],
-        ]),
-      ),
-      throwsFormatException,
-    );
-  });
-
-  test('achievement settings require exactly one correctly named date row', () {
-    expect(
-      ModelParsers.parseAchievementSettings(
-        _table(RuntimeTableSchemas.achievementSettings, [
-          ['2026-01-01'],
-        ]),
-      ).trackingStartDate,
-      DateTime.utc(2026, 1, 1),
-    );
-    expect(
-      () => ModelParsers.parseAchievementSettings('wrong_header\n2026-01-01\n'),
-      throwsFormatException,
-    );
-    expect(
-      () => ModelParsers.parseAchievementSettings(
-        _table(RuntimeTableSchemas.achievementSettings, [
-          ['2026-01-01'],
-          ['2026-02-01'],
         ]),
       ),
       throwsFormatException,

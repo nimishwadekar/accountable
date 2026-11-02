@@ -171,11 +171,6 @@ abstract final class RuntimeTableSchemas {
     numericColumns: {2},
     booleanColumns: {3},
   );
-  static const achievementSettings = RuntimeTableSchema(
-    name: 'AchievementSettings',
-    headers: ['tracking_start_date'],
-    range: 'Achievements!H1:H2',
-  );
   static const metadata = RuntimeTableSchema(
     name: 'Metadata',
     headers: ['metadata_key', 'metadata_value'],
@@ -197,7 +192,6 @@ abstract final class RuntimeTableSchemas {
     transactionTemplates,
     incomeAllocations,
     achievements,
-    achievementSettings,
     metadata,
   ];
 

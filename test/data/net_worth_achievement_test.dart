@@ -5,21 +5,28 @@ import 'package:accountable/data/data.dart';
 void main() {
   const usd = CurrencyDefinition(id: 'USD', symbol: r'$', decimalPlaces: 2);
 
-  test('parses signed targets, earned booleans, and the settings date', () {
-    final achievements = ModelParsers.parseAchievements(
-      'achievement_id,name,target_usd,earned\n'
-      'ACH001,Recovery One,-12000,FALSE\n'
-      'ACH002,Break Even,0,TRUE\n',
-      currencies: {'USD': usd},
-    );
-    final settings = ModelParsers.parseAchievementSettings(
-      'tracking_start_date\n2026-10-01\n',
-    );
+  test(
+    'parses signed targets, earned booleans, and the metadata start date',
+    () {
+      final achievements = ModelParsers.parseAchievements(
+        'achievement_id,name,target_usd,earned\n'
+        'ACH001,Recovery One,-12000,FALSE\n'
+        'ACH002,Break Even,0,TRUE\n',
+        currencies: {'USD': usd},
+      );
+      final metadata = ModelParsers.parseMetadata(
+        'metadata_key,metadata_value\n'
+        'achievement_tracking_start_date,2026-10-01\n',
+      );
 
-    expect(achievements.map((item) => item.target.minorUnits), [-1200000, 0]);
-    expect(achievements.map((item) => item.earned), [false, true]);
-    expect(settings.trackingStartDate, DateTime.utc(2026, 10, 1));
-  });
+      expect(achievements.map((item) => item.target.minorUnits), [-1200000, 0]);
+      expect(achievements.map((item) => item.earned), [false, true]);
+      expect(
+        ModelParsers.parseAchievementTrackingStartDate(metadata),
+        DateTime.utc(2026, 10, 1),
+      );
+    },
+  );
 
   test('validates target order and uniqueness', () {
     final descending = ModelParsers.parseAchievementsWithIssues(

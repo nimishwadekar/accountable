@@ -295,7 +295,12 @@ Future<({AppDataSnapshot data, _MemorySheets client, DateTime end})> _fixture({
     ['category', 'general', '2000', 'TRUE', 'TRUE'],
     ['tag', 'general', '3000', 'TRUE', 'TRUE'],
   ]);
-  tables[GoogleSheetsRanges.achievementSettings]!.add([_date(start)]);
+  final metadataRows = tables[GoogleSheetsRanges.metadata]!;
+  metadataRows.firstWhere(
+    (row) => row.first == achievementTrackingStartDateMetadataKey,
+  )[1] = _date(
+    start,
+  );
   for (var index = 0; index < count; index++) {
     final date = start.add(Duration(days: index * days ~/ count));
     final transfer = index % 10 == 0;

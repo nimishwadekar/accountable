@@ -14,7 +14,9 @@ The web client ID and spreadsheet ID are not secrets; OAuth access tokens are ne
 
 ## Daily history Sheets
 
-Google Sheets mode requires a `Metadata` sheet with `metadata_key,metadata_value` headers and a `daily_processed_through` date containing the last fully processed day. Daily maintenance reports an error if that checkpoint is missing; set it to the latest date covered by all three daily history sheets before connecting.
+Google Sheets mode requires a `Metadata` sheet with `metadata_key,metadata_value` headers and both `daily_processed_through` (last fully processed day) and `achievement_tracking_start_date` (milestone tracking start). Daily maintenance reports an error if the checkpoint is missing; set it to the latest date covered by all three daily history sheets before connecting.
+
+If the milestone start date is still in the legacy `Achievements!H1:H2` range, copy its date into the `Metadata` row for `achievement_tracking_start_date`. The app no longer reads the legacy range; it does not migrate this value automatically.
 
 The `DailyAccountBalances` sheet uses `balance_id,balance_date,account_id,balance,retrieved_at`; remove the old `balance_usd` column and place `retrieved_at` in column E. USD balances are calculated from the native balance and the applicable exchange rate. Daily exchange rates, account balances, and net worth are stored as change points; readers carry the last value forward through the metadata checkpoint. Use **Settings → Rebuild daily tables** to compact existing dense history.
 

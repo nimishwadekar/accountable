@@ -15,5 +15,4 @@ export 'template_option.dart';
 export 'transaction_template_codec.dart';
 export 'transaction_description_pattern.dart';
 export 'net_worth_achievement.dart';
-export 'achievement_settings.dart';
 export 'metadata_keys.dart';

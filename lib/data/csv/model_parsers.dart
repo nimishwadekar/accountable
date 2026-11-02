@@ -427,8 +427,10 @@ class ModelParsers {
         throw FormatException('Metadata contains duplicate key: $key.');
       }
       final value = optionalValue(row, 'metadata_value') ?? '';
-      if (key == dailyProcessedThroughMetadataKey && value.isNotEmpty) {
-        parseDateOnly(value, fieldName: dailyProcessedThroughMetadataKey);
+      if ((key == dailyProcessedThroughMetadataKey ||
+              key == achievementTrackingStartDateMetadataKey) &&
+          value.isNotEmpty) {
+        parseDateOnly(value, fieldName: key);
       }
       values[key] = value;
     }
@@ -439,6 +441,21 @@ class ModelParsers {
     final value = metadata[dailyProcessedThroughMetadataKey]?.trim();
     if (value == null || value.isEmpty) return null;
     return parseDateOnly(value, fieldName: dailyProcessedThroughMetadataKey);
+  }
+
+  static DateTime parseAchievementTrackingStartDate(
+    Map<String, String> metadata,
+  ) {
+    final value = metadata[achievementTrackingStartDateMetadataKey]?.trim();
+    if (value == null || value.isEmpty) {
+      throw const FormatException(
+        'Metadata is missing $achievementTrackingStartDateMetadataKey.',
+      );
+    }
+    return parseDateOnly(
+      value,
+      fieldName: achievementTrackingStartDateMetadataKey,
+    );
   }
 
   static NetWorthAchievement _parseAchievementRow(
@@ -453,27 +470,6 @@ class ModelParsers {
     ),
     earned: _parseBoolean(requiredValue(row, 'earned'), fieldName: 'earned'),
   );
-
-  static AchievementSettings parseAchievementSettings(String source) {
-    final table = CsvTable.parse(source, tableName: 'AchievementSettings');
-    if (table.headers.length != 1 ||
-        table.headers.single != 'tracking_start_date') {
-      throw const FormatException(
-        'AchievementSettings must have a tracking_start_date header.',
-      );
-    }
-    if (table.rows.length != 1) {
-      throw const FormatException(
-        'AchievementSettings must contain exactly one start-date row.',
-      );
-    }
-    return AchievementSettings(
-      trackingStartDate: parseDateOnly(
-        requiredValue(table.rows.single, 'tracking_start_date'),
-        fieldName: 'tracking_start_date',
-      ),
-    );
-  }
 
   static List<TransactionTemplate> parseTransactionTemplates(
     String source, {

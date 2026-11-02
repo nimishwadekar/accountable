@@ -99,13 +99,13 @@ DisplayPreferences: entity_type, entity_id, display_order, show_in_app, show_in_
 TransactionTemplates: template_id, name, transaction_type, date, description, category, tag, source_account_id, source_amount, dest_account_id, dest_amount, created_at, updated_at, is_favorite
 IncomeAllocations: allocation_id, name, income_category_id, income_account_id, transfer_category_id, expected_amount_per_income, start_date, end_date, created_at, updated_at
 Achievements!A:D: achievement_id, name, target_usd, earned
-Achievements!H1:H2: tracking_start_date
 ```
 
-`Metadata` must contain a `daily_processed_through` key whose value is the last
-date fully processed across the three daily history tables. Daily maintenance
-fails with an actionable error if this value is absent. The achievement
-tracking-start setting remains in its existing range for now.
+`Metadata` must contain `daily_processed_through` (the last date fully processed
+across the three daily history tables) and `achievement_tracking_start_date`
+(the shared milestone tracking start date). Daily maintenance fails with an
+actionable error if the checkpoint is absent; metadata parsing rejects a missing
+achievement start date.
 
 `source_rate_date` records the actual Frankfurter date used when the requested sequential rate date fell on a weekend or holiday. Legacy local data without this column is read compatibly by treating `rate_date` as the source date. Google Sheets serial-number dates are normalized to calendar dates before freshness checks and parsing.
 
@@ -126,7 +126,7 @@ The runtime data snapshot contains:
 - DisplayPreferences
 - TransactionTemplates
 - IncomeAllocations
-- Achievements and its tracking-start-date range
+- Achievements and the Metadata keys above
 
 `TransactionTypes.csv` is not runtime data. Transaction types and their validation rules are defined in Dart.
 
@@ -334,10 +334,10 @@ The previous `/assets-liabilities` route is replaced by `/accounts`.
 
 ### Net worth milestones — implemented
 
-- The `Achievements` tab contains two ranges: milestone definitions in `A:D`, and one shared start date in `H1:H2` (header `tracking_start_date`, followed by one ISO date value).
+- The `Achievements` tab contains milestone definitions in `A:D`. The shared start date is stored in `Metadata` under `achievement_tracking_start_date`.
 - Milestone rows use stable, user-entered IDs, custom names, unique ascending USD targets, and an `earned` boolean. All rows start as `FALSE`.
 - The `earned` boolean records celebration acknowledgement: a `FALSE` row whose target qualifies waits for a celebration; the app writes `TRUE` after acknowledgment. The app derives earned months and averages from daily net-worth history rather than persisting those as separate Sheet columns.
-- Milestones qualify using completed calendar-month averages. Every daily snapshot in a month is required; missing history delays awards until reconciliation repairs it.
+- Milestones qualify using completed calendar-month averages. Sparse daily net-worth values carry forward through `daily_processed_through`; dates before the first saved value are missing.
 - A mid-month start date skips that partial month. A start date before the first DailyNetWorth row is clamped to the first available daily value.
 - The page shows the latest completed calendar month's average only; it does not display a current or provisional month-to-date average. Progress is measured between the prior milestone (or first eligible month's average) and the next ascending target.
 - The Milestones page uses the app's navy/teal visual language with a more celebratory gradient panel, a prominent gold progress bar, and colorful earned-achievement cards.
