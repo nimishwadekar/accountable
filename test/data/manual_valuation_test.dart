@@ -58,6 +58,8 @@ void main() {
             value: Money.fromMajorUnits(value: '1000', currency: usd),
           ),
         ],
+        metadata: const {dailyProcessedThroughMetadataKey: '2026-10-09'},
+        dailyProcessedThrough: DateTime.utc(2026, 10, 9),
       );
       final client = _MaintenanceClient();
       await DailyMaintenanceService(
@@ -71,7 +73,7 @@ void main() {
             200,
           ),
         ),
-      ).catchUp(yesterday: DateTime.utc(2026, 10, 10));
+      ).rebuild(yesterday: DateTime.utc(2026, 10, 10));
 
       final netWorth = client.replacedNetWorthRows.firstWhere(
         (row) => row.first == '2026-10-10-net',
@@ -118,6 +120,8 @@ void main() {
             ),
           ),
         ],
+        metadata: const {dailyProcessedThroughMetadataKey: '2026-10-09'},
+        dailyProcessedThrough: DateTime.utc(2026, 10, 9),
       );
       final client = _MaintenanceClient();
       await DailyMaintenanceService(
@@ -131,7 +135,7 @@ void main() {
             200,
           ),
         ),
-      ).catchUp(yesterday: DateTime.utc(2026, 10, 10));
+      ).rebuild(yesterday: DateTime.utc(2026, 10, 10));
 
       expect(client.replacedNetWorthRows, isNotEmpty);
       final netWorthRow = client.replacedNetWorthRows.firstWhere(
@@ -201,6 +205,8 @@ void main() {
             value: Money.fromMajorUnits(value: '500', currency: usd),
           ),
         ],
+        metadata: const {dailyProcessedThroughMetadataKey: '2025-12-31'},
+        dailyProcessedThrough: DateTime.utc(2025, 12, 31),
       );
       final client = _MaintenanceClient();
       final service = DailyMaintenanceService(
@@ -218,10 +224,9 @@ void main() {
           .toList();
       expect(netWorthRows.map((row) => row[0]), [
         '2026-01-01-net',
-        '2026-01-02-net',
         '2026-01-03-net',
       ]);
-      expect(netWorthRows.map((row) => row[2]), ['1490', '1490', '990']);
+      expect(netWorthRows.map((row) => row[2]), ['1490', '990']);
     },
   );
 

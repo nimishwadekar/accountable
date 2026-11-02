@@ -225,6 +225,7 @@ class _AppShellState extends State<AppShell> {
       dailyNetWorth: data.dailyNetWorth,
       trackingStartDate: startDate,
       achievements: data.achievements,
+      processedThrough: data.dailyProcessedThrough,
     );
     if (evaluation.validationErrors.isNotEmpty) {
       throw DataValidationFailure([
@@ -244,6 +245,7 @@ class _AppShellState extends State<AppShell> {
         dailyNetWorth: data.dailyNetWorth,
         trackingStartDate: data.achievementStartDate ?? startDate,
         achievements: data.achievements,
+        processedThrough: data.dailyProcessedThrough,
       );
       if (evaluation.validationErrors.isNotEmpty) {
         throw DataValidationFailure([
@@ -670,7 +672,9 @@ class _AppShellState extends State<AppShell> {
       return;
     }
     final future = _observeMilestoneState(rebuild());
-    setState(() => _snapshotFuture = future);
+    setState(() {
+      _snapshotFuture = future;
+    });
     await future;
   }
 
@@ -691,7 +695,9 @@ class _AppShellState extends State<AppShell> {
           .map((valuation) => valuation.date)
           .reduce((a, b) => a.isBefore(b) ? a : b);
       final rebuilt = _observeMilestoneState(rebuildNetWorth(earliest));
-      setState(() => _snapshotFuture = rebuilt);
+      setState(() {
+        _snapshotFuture = rebuilt;
+      });
       await rebuilt;
     }
   }
@@ -833,7 +839,9 @@ class _AppShellState extends State<AppShell> {
       final future = reconcile == null
           ? _loadSnapshotAndUpdateMilestones(reload: true)
           : _observeMilestoneState(reconcile());
-      setState(() => _snapshotFuture = future);
+      setState(() {
+        _snapshotFuture = future;
+      });
       await future;
       return result;
     } catch (error) {

@@ -75,17 +75,48 @@ class NetWorthAchievementCalculator {
     required DateTime trackingStartDate,
     required List<NetWorthAchievement> achievements,
     DateTime? today,
+    DateTime? processedThrough,
   }) {
     final validationErrors = <String>[];
-    final byDate = <DateTime, DailyNetWorth>{};
+    final sourceByDate = <DateTime, DailyNetWorth>{};
+    final through = processedThrough == null
+        ? null
+        : _dateOnly(processedThrough);
     for (final point in dailyNetWorth) {
       final date = _dateOnly(point.date);
-      if (byDate.containsKey(date)) {
+      if (through != null && date.isAfter(through)) continue;
+      if (sourceByDate.containsKey(date)) {
         validationErrors.add(
           'Daily net worth contains more than one snapshot for ${_dateString(date)}.',
         );
       } else {
-        byDate[date] = point;
+        sourceByDate[date] = point;
+      }
+    }
+
+    final sourceDates = sourceByDate.keys.toList()..sort();
+    final historyEnd =
+        through ?? (sourceDates.isEmpty ? null : sourceDates.last);
+    final byDate = <DateTime, DailyNetWorth>{};
+    if (sourceDates.isNotEmpty &&
+        historyEnd != null &&
+        !historyEnd.isBefore(sourceDates.first)) {
+      DailyNetWorth? latest;
+      for (
+        var date = sourceDates.first;
+        !date.isAfter(historyEnd);
+        date = date.add(const Duration(days: 1))
+      ) {
+        final saved = sourceByDate[date];
+        if (saved != null) latest = saved;
+        if (latest != null) {
+          byDate[date] = DailyNetWorth(
+            id: '${_dateString(date)}-net',
+            date: date,
+            amount: latest.amount,
+            retrievedAt: latest.retrievedAt,
+          );
+        }
       }
     }
 

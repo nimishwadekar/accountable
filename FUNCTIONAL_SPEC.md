@@ -91,6 +91,9 @@ Currencies: currency_id, currency_symbol, decimal_places
 Transactions: transaction_id, date, description, category, transaction_type, source_amount, source_account_id, dest_amount, dest_account_id, tag, created_at
 TransactionsToMigrate: transaction_id, date, description, category, transaction_type, source_amount, source_account_id, dest_amount, dest_account_id, tag, created_at
 DailyExchangeRates: rate_id, rate_date, currency, rate_to_usd, source_rate_date, retrieved_at
+DailyAccountBalances: balance_id, balance_date, account_id, balance, retrieved_at
+DailyNetWorth: net_worth_id, net_worth_date, amount, retrieved_at
+Metadata: metadata_key, metadata_value
 DailyManualValuations: valuation_id, date, account_id, value
 DisplayPreferences: entity_type, entity_id, display_order, show_in_app, show_in_entry_forms
 TransactionTemplates: template_id, name, transaction_type, date, description, category, tag, source_account_id, source_amount, dest_account_id, dest_amount, created_at, updated_at, is_favorite
@@ -98,6 +101,11 @@ IncomeAllocations: allocation_id, name, income_category_id, income_account_id, t
 Achievements!A:D: achievement_id, name, target_usd, earned
 Achievements!H1:H2: tracking_start_date
 ```
+
+`Metadata` must contain a `daily_processed_through` key whose value is the last
+date fully processed across the three daily history tables. Daily maintenance
+fails with an actionable error if this value is absent. The achievement
+tracking-start setting remains in its existing range for now.
 
 `source_rate_date` records the actual Frankfurter date used when the requested sequential rate date fell on a weekend or holiday. Legacy local data without this column is read compatibly by treating `rate_date` as the source date. Google Sheets serial-number dates are normalized to calendar dates before freshness checks and parsing.
 
@@ -114,6 +122,7 @@ The runtime data snapshot contains:
 - DailyAccountBalances
 - DailyNetWorth
 - DailyManualValuations
+- Metadata
 - DisplayPreferences
 - TransactionTemplates
 - IncomeAllocations
@@ -349,7 +358,7 @@ The first Analysis page contains:
 - Net-worth history from `DailyNetWorth`.
 - Selectable account history from `DailyAccountBalances`.
 - Native-currency account values by default.
-- A USD toggle using `balance_usd`.
+- A USD toggle derived from native balances and the as-of exchange rate; USD balances are not persisted.
 - Date presets: 30 days, 90 days, year-to-date, and all history.
 - All history as the initial selection.
 - Inclusive calendar-date ranges.
@@ -419,8 +428,11 @@ Analysis uses:
 
 ```text
 DailyAccountBalances.balance       // native currency
-DailyAccountBalances.balance_usd   // USD toggle
 ```
+
+The USD value is derived from the native balance and the latest exchange-rate
+change point on or before the requested date; it is not stored in the balance
+sheet.
 
 It does not use current ledger calculations for historical values.
 
@@ -434,22 +446,22 @@ The global analysis and daily-table start date is the earliest `Transactions.dat
 - The current `opening_balance` is the account balance at the cutover/start of the current transaction history.
 - During initial cutover, account opening dates may be set to the global transaction cutoff date; migration can move them earlier as historical transactions are added.
 
-## Daily table inclusion rules
+## Daily table inclusion and sparse storage rules
 
 - Add exchange rates only for currencies used by at least one account open on that date.
 - Add daily account balances only for accounts open on that date.
 - An account is open when `opening_date <= date` and either `closing_date` is empty or `date <= closing_date`.
-- Rebuilds apply the same rules, replacing any stale rows for closed accounts or unused currencies.
+- Write the first value for each currency/account/net-worth series, then write a row only when its value differs from that series' latest prior value. Exchange rates compare `rate_to_usd`; account rows compare native `balance`; net-worth rows compare USD `amount`.
+- Rebuilds apply the same change-point rule and replace stale rows for closed accounts or unused currencies. The processed-through checkpoint is updated only after all three tables are successfully written.
 
 ### Missing daily data
 
 For a requested date range:
 
 1. Enumerate every calendar date inclusively.
-2. Collect the dates present in the relevant daily table.
-3. Report dates present in the requested range but absent from the table.
-4. Do not carry values forward or interpolate.
-5. Display a warning above the affected chart.
+2. Carry each currency/account/net-worth value forward from its latest saved change point through `daily_processed_through`.
+3. Report dates before a series' first value, or beyond the processed-through checkpoint, as missing.
+4. Display a warning above the affected chart.
 
 Closed account ranges stop at the closing date before missing-date detection.
 
@@ -576,7 +588,7 @@ Changing the base currency will require:
 1. Add an `AppSettings` table with one `base_currency_id` value.
 2. Load the setting into `AppDataSnapshot` and expose it in Settings.
 3. Validate the selected ID against `Currencies`.
-4. Generalize USD-specific derived fields such as `balance_usd` and `rate_to_usd` to base-currency-neutral fields.
+4. Generalize USD-specific derived values such as `rate_to_usd` to base-currency-neutral fields; account USD values are derived from native balances.
 5. Update parsers, serializers, daily maintenance, analysis, charts, income allocation displays, fixtures, and documentation.
 6. Rebuild `DailyExchangeRates`, `DailyAccountBalances`, and `DailyNetWorth` from source-of-truth data after a base-currency change.
 7. Generate rates using the configured base currency, including a rate of 1 for the base currency itself.

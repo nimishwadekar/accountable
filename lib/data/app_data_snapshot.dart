@@ -17,6 +17,8 @@ class AppDataSnapshot {
     List<IncomeAllocation> incomeAllocations = const [],
     List<NetWorthAchievement> achievements = const [],
     this.achievementStartDate,
+    Map<String, String> metadata = const {},
+    this.dailyProcessedThrough,
   }) : accounts = List.unmodifiable(accounts),
        categories = List.unmodifiable(categories),
        currencies = List.unmodifiable(currencies),
@@ -93,7 +95,8 @@ class AppDataSnapshot {
        achievementsById = _indexById(
          achievements,
          (achievement) => achievement.id,
-       ) {
+       ),
+       metadata = Map.unmodifiable(metadata) {
     final ledgerOrder = _sortTransactionsChronologically(this.transactions);
     transactionsInLedgerOrder = List.unmodifiable(ledgerOrder);
     transactionsByDisplayOrder = List.unmodifiable(ledgerOrder.reversed);
@@ -119,6 +122,8 @@ class AppDataSnapshot {
   final List<IncomeAllocation> incomeAllocations;
   final List<NetWorthAchievement> achievements;
   final DateTime? achievementStartDate;
+  final Map<String, String> metadata;
+  final DateTime? dailyProcessedThrough;
 
   final Map<String, Account> accountsById;
   final Map<String, Category> categoriesById;
@@ -133,6 +138,65 @@ class AppDataSnapshot {
   final Map<String, DailyManualValuation> dailyManualValuationsById;
   final Map<String, List<DailyManualValuation>> manualValuationsByAccountId;
   final Map<String, List<ExchangeRate>> exchangeRatesByCurrencyId;
+  DateTime? get dailyHistoryThrough {
+    final checkpoint = dailyProcessedThrough;
+    if (checkpoint != null) return _dateOnly(checkpoint);
+    final dates = [
+      ...dailyNetWorth.map((value) => _dateOnly(value.date)),
+      ...dailyAccountBalances.map((value) => _dateOnly(value.date)),
+      ...exchangeRates.map((value) => _dateOnly(value.date)),
+    ];
+    if (dates.isEmpty) return null;
+    return dates.reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  /// Expands sparse net-worth change points into daily values through the
+  /// processed-through date. Dates before the first saved value remain absent.
+  List<DailyNetWorth> materializedDailyNetWorth({DateTime? through}) {
+    final historyEnd = dailyHistoryThrough;
+    if (historyEnd == null || dailyNetWorth.isEmpty) return const [];
+    final requestedEnd = through == null ? historyEnd : _dateOnly(through);
+    final end = requestedEnd.isAfter(historyEnd) ? historyEnd : requestedEnd;
+    final rows =
+        dailyNetWorth
+            .where((value) => !_dateOnly(value.date).isAfter(end))
+            .toList()
+          ..sort((a, b) => a.date.compareTo(b.date));
+    if (rows.isEmpty) return const [];
+
+    final values = <DailyNetWorth>[];
+    var rowIndex = 0;
+    DailyNetWorth? latest;
+    for (
+      var date = _dateOnly(rows.first.date);
+      !date.isAfter(end);
+      date = date.add(const Duration(days: 1))
+    ) {
+      while (rowIndex < rows.length &&
+          !_dateOnly(rows[rowIndex].date).isAfter(date)) {
+        latest = rows[rowIndex++];
+      }
+      if (latest == null) continue;
+      values.add(
+        DailyNetWorth(
+          id: '${_dateString(date)}-net',
+          date: date,
+          amount: latest.amount,
+          retrievedAt: latest.retrievedAt,
+        ),
+      );
+    }
+    return List.unmodifiable(values);
+  }
+
+  static DateTime _dateOnly(DateTime value) =>
+      DateTime.utc(value.year, value.month, value.day);
+
+  static String _dateString(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-'
+      '${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')}';
+
   late final Map<String, Money> ledgerBalances = _calculateLedgerBalances(
     accounts,
     transactions,
@@ -172,6 +236,8 @@ class AppDataSnapshot {
         incomeAllocations: incomeAllocations,
         achievements: value,
         achievementStartDate: achievementStartDate,
+        metadata: metadata,
+        dailyProcessedThrough: dailyProcessedThrough,
       );
 
   AppDataSnapshot withAdditionalTransactions(List<Transaction> additional) =>
@@ -191,6 +257,8 @@ class AppDataSnapshot {
         incomeAllocations: incomeAllocations,
         achievements: achievements,
         achievementStartDate: achievementStartDate,
+        metadata: metadata,
+        dailyProcessedThrough: dailyProcessedThrough,
       );
 
   DisplayPreference? displayPreferenceFor(String entityType, String entityId) =>

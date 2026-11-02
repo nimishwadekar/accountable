@@ -30,6 +30,19 @@ void main() {
       RuntimeTableSchemas.achievementSettings.headers,
       ['${previousMonth.year}-${previousMonth.month.toString().padLeft(2, '0')}-01'],
     ]);
+    final checkpoint = DateTime.utc(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(const Duration(days: 1));
+    tables[DataAssetPaths.metadata] = csv.encode([
+      RuntimeTableSchemas.metadata.headers,
+      [
+        dailyProcessedThroughMetadataKey,
+        '${checkpoint.year}-${checkpoint.month.toString().padLeft(2, '0')}-'
+            '${checkpoint.day.toString().padLeft(2, '0')}',
+      ],
+    ]);
     tables[DataAssetPaths.dailyNetWorth] = csv.encode([
       RuntimeTableSchemas.dailyNetWorth.headers,
       ..._month(previousMonth.year, previousMonth.month, 10000),

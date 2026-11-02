@@ -34,6 +34,33 @@ class DailyMaintenanceService {
   final bool _ownsHttpClient;
   final Duration httpRequestTimeout;
   final Map<DateTime, Map<String, dynamic>> _rateResponsesByDate = {};
+  DateTime? _processedThroughOverride;
+
+  DateTime? get _processedThrough =>
+      _processedThroughOverride ?? data.dailyProcessedThrough;
+
+  DateTime _requireProcessedThrough() {
+    final value = _processedThrough;
+    if (value == null) {
+      throw StateError(
+        'Metadata is missing $dailyProcessedThroughMetadataKey. '
+        'Add the last fully processed date before running daily maintenance.',
+      );
+    }
+    return _dateOnly(value);
+  }
+
+  Future<void> _writeProcessedThrough(DateTime date) async {
+    final normalized = _dateOnly(date);
+    final updatedMetadata = Map<String, String>.of(data.metadata)
+      ..[dailyProcessedThroughMetadataKey] = _dateString(normalized);
+    await client.replaceRange(GoogleSheetsRanges.metadata, [
+      RuntimeTableSchemas.metadata.headers,
+      for (final key in updatedMetadata.keys.toList()..sort())
+        [key, updatedMetadata[key]!],
+    ]);
+    _processedThroughOverride = normalized;
+  }
 
   void close() {
     if (_ownsHttpClient) _httpClient.close();
@@ -42,61 +69,68 @@ class DailyMaintenanceService {
   Future<void> catchUp({required DateTime yesterday}) async {
     _rateResponsesByDate.clear();
     final endDate = _dateOnly(yesterday);
-    final fallbackStart = _earliestSourceDate ?? endDate;
-    if (fallbackStart.isAfter(endDate)) return;
-    if (_requiresFullRebuild) {
-      return rebuild(yesterday: endDate);
+    final processedThrough = _requireProcessedThrough();
+    if (!endDate.isAfter(processedThrough)) return;
+    if (_requiresManualRebuild) {
+      throw StateError(
+        'Daily history does not cover the current source data. '
+        'Run the explicit “Rebuild daily tables” action before catch-up.',
+      );
+    }
+
+    final nextDate = processedThrough.add(const Duration(days: 1));
+    final sourceStart = _earliestSourceDate;
+    if (sourceStart == null) {
+      await _writeProcessedThrough(endDate);
+      return;
+    }
+    final appendStart = nextDate.isBefore(sourceStart) ? sourceStart : nextDate;
+    if (appendStart.isAfter(endDate)) {
+      await _writeProcessedThrough(endDate);
+      return;
     }
 
     final existingIds = await _readDailyIds();
-    final coverage = _derivedCoverage(
-      startDate: fallbackStart,
-      endDate: endDate,
-      existingIds: existingIds,
-    );
-    if (coverage.hasMiddleGap) {
-      return rebuild(yesterday: endDate);
-    }
-    final appendStart = coverage.firstMissingDate;
-    if (appendStart == null) return;
-
     final rates = <ExchangeRate>[...data.exchangeRates];
-    final missingRates = <ExchangeRate>[];
+    final rateCandidates = <ExchangeRate>[];
     for (
       var date = appendStart;
       !date.isAfter(endDate);
       date = date.add(const Duration(days: 1))
     ) {
-      final expectedRateIds = {
-        for (final currency in _currenciesWithOpenAccounts(date))
-          '${_dateString(date)}-${currency.id}',
-      };
-      if (expectedRateIds.every(existingIds['rates']!.contains)) continue;
-
       final dateRates = await _ratesForDate(date);
       rates.addAll(dateRates);
-      for (final rate in dateRates) {
-        if (existingIds['rates']!.add(rate.id)) {
-          missingRates.add(rate);
-        }
-      }
+      rateCandidates.addAll(dateRates);
     }
+    final changedRates = _changedExchangeRates(
+      rateCandidates,
+      previous: data.exchangeRates.where(
+        (rate) => _dateOnly(rate.date).isBefore(appendStart),
+      ),
+    );
+    final missingRates = _notAlreadyStored(changedRates, existingIds['rates']!);
     if (missingRates.isNotEmpty) {
       await client.appendRows(GoogleSheetsRanges.dailyExchangeRates, [
         for (final rate in missingRates) _exchangeRateRow(rate),
       ]);
     }
-    final rateIndex = _ExactExchangeRateIndex(rates);
+    final rateIndex = _LatestExchangeRateIndex(rates);
 
     final balances = _balancesThrough(
       startDate: appendStart,
       endDate: endDate,
       rates: rateIndex,
     );
-    final missingBalances = [
-      for (final balance in balances)
-        if (existingIds['balances']!.add(balance.id)) balance,
-    ];
+    final changedBalances = _changedBalances(
+      balances,
+      previous: data.dailyAccountBalances.where(
+        (balance) => _dateOnly(balance.date).isBefore(appendStart),
+      ),
+    );
+    final missingBalances = _notAlreadyStored(
+      changedBalances,
+      existingIds['balances']!,
+    );
     if (missingBalances.isNotEmpty) {
       await client.appendRows(GoogleSheetsRanges.dailyAccountBalances, [
         for (final balance in missingBalances) _balanceRow(balance),
@@ -119,46 +153,55 @@ class DailyMaintenanceService {
       startDate: appendStart,
       endDate: endDate,
     );
-    final missingNetWorths = [
-      for (final netWorth in netWorths)
-        if (existingIds['netWorth']!.add(netWorth.id)) netWorth,
-    ];
+    final changedNetWorths = _changedNetWorth(
+      netWorths,
+      previous: data.dailyNetWorth.where(
+        (netWorth) => _dateOnly(netWorth.date).isBefore(appendStart),
+      ),
+    );
+    final missingNetWorths = _notAlreadyStored(
+      changedNetWorths,
+      existingIds['netWorth']!,
+    );
     if (missingNetWorths.isNotEmpty) {
       await client.appendRows(GoogleSheetsRanges.dailyNetWorth, [
         for (final netWorth in missingNetWorths) _netWorthRow(netWorth),
       ]);
     }
+    await _writeProcessedThrough(endDate);
   }
 
   Future<void> rebuildNetWorth({
     required DateTime startDate,
     DateTime? yesterday,
   }) async {
+    _requireProcessedThrough();
     final start = _dateOnly(startDate);
     final end = _dateOnly(
       yesterday ?? DateTime.now().subtract(const Duration(days: 1)),
     );
     if (start.isAfter(end)) return;
 
-    final rates = data.exchangeRates;
-    final balances = data.dailyAccountBalances.where((balance) {
-      final date = _dateOnly(balance.date);
-      return !date.isBefore(start) && !date.isAfter(end);
-    });
+    final rates = _LatestExchangeRateIndex(data.exchangeRates);
+    final balances = _balancesThrough(
+      startDate: start,
+      endDate: end,
+      rates: rates,
+    );
     final recalculated = _netWorthThrough(
       balances,
-      rates: _ExactExchangeRateIndex(rates),
+      rates: rates,
       startDate: start,
       endDate: end,
     );
     final recalculatedById = {
       for (final value in recalculated) value.id: value,
     };
-    final merged = [
+    final merged = _changedNetWorth([
       for (final value in data.dailyNetWorth)
         recalculatedById.remove(value.id) ?? value,
       ...recalculatedById.values,
-    ]..sort((a, b) => a.date.compareTo(b.date));
+    ]);
 
     await client.replaceRange(GoogleSheetsRanges.dailyNetWorth, [
       RuntimeTableSchemas.dailyNetWorth.headers,
@@ -166,150 +209,313 @@ class DailyMaintenanceService {
     ]);
   }
 
-  /// Reconciles materialized daily tables against the current source snapshot.
-  /// Existing exchange rates are retained; only missing dates are requested
-  /// from Frankfurter. This detects historical appends, edits, and deletions.
+  /// Reconciles daily change-point rows against the current source snapshot.
+  /// Missing rows within the processed range are interpreted as unchanged.
   Future<bool> reconcile({DateTime? yesterday}) async {
     _rateResponsesByDate.clear();
+    final processedThrough = _requireProcessedThrough();
     final endDate = _dateOnly(
       yesterday ?? DateTime.now().subtract(const Duration(days: 1)),
     );
     final startDate = _earliestSourceDate;
     if (startDate == null || startDate.isAfter(endDate)) {
-      if (data.exchangeRates.isEmpty &&
-          data.dailyAccountBalances.isEmpty &&
-          data.dailyNetWorth.isEmpty) {
-        return false;
-      }
-      await _clearDerivedTables();
-      return true;
+      return false;
     }
-
-    final existingRates = {
-      for (final rate in data.exchangeRates)
-        '${_dateString(_dateOnly(rate.date))}-${rate.currencyId}': rate,
-    };
-    final rates = <ExchangeRate>[];
-    for (
-      var date = startDate;
-      !date.isAfter(endDate);
-      date = date.add(const Duration(days: 1))
-    ) {
-      final currencies = _currenciesWithOpenAccounts(date).toList();
-      final missing = currencies.where(
-        (currency) =>
-            !existingRates.containsKey('${_dateString(date)}-${currency.id}'),
+    if (_requiresManualRebuild) {
+      throw StateError(
+        'Daily history does not cover the current source data. '
+        'Run the explicit “Rebuild daily tables” action to initialize or repair it.',
       );
-      if (missing.isNotEmpty) {
-        final fetched = await _ratesForDate(date);
-        for (final rate in fetched) {
-          existingRates.putIfAbsent(rate.id, () => rate);
-        }
-      }
-      for (final currency in currencies) {
-        final key = '${_dateString(date)}-${currency.id}';
-        final rate = existingRates[key];
-        if (rate == null) {
-          throw StateError(
-            'No exchange rate for ${currency.id} on ${_dateString(date)}.',
-          );
-        }
-        rates.add(rate);
-      }
     }
 
-    final rateIndex = _ExactExchangeRateIndex(rates);
+    final rates = await _ratesForReconciliation(
+      startDate: startDate,
+      endDate: endDate,
+      processedThrough: processedThrough,
+    );
+    final rateIndex = _LatestExchangeRateIndex(rates);
     final balances = _balancesThrough(
       startDate: startDate,
       endDate: endDate,
       rates: rateIndex,
     );
-    final netWorths = _netWorthThrough(balances, rates: rateIndex);
-    if (_sameDerivedValues(
-      expectedRates: rates,
-      expectedBalances: balances,
-      expectedNetWorth: netWorths,
-    )) {
-      return false;
-    }
-
-    await client.replaceRanges({
-      GoogleSheetsRanges.dailyExchangeRates: [
+    final netWorths = _netWorthThrough(
+      balances,
+      rates: rateIndex,
+      startDate: startDate,
+      endDate: endDate,
+    );
+    final mergedRates = _mergeDailyRows(
+      existing: data.exchangeRates,
+      expected: rates,
+      changePoints: _changedExchangeRates(rates),
+      idOf: (value) => value.id,
+      sameValue: (a, b) => a.rateToUsd == b.rateToUsd,
+      compare: (a, b) {
+        final byDate = _dateOnly(a.date).compareTo(_dateOnly(b.date));
+        return byDate == 0 ? a.currencyId.compareTo(b.currencyId) : byDate;
+      },
+    );
+    final mergedBalances = _mergeDailyRows(
+      existing: data.dailyAccountBalances,
+      expected: balances,
+      changePoints: _changedBalances(balances),
+      idOf: (value) => value.id,
+      sameValue: (a, b) =>
+          a.balance.currencyId == b.balance.currencyId &&
+          a.balance.minorUnits == b.balance.minorUnits,
+      compare: (a, b) {
+        final byDate = _dateOnly(a.date).compareTo(_dateOnly(b.date));
+        return byDate == 0 ? a.accountId.compareTo(b.accountId) : byDate;
+      },
+    );
+    final mergedNetWorth = _mergeDailyRows(
+      existing: data.dailyNetWorth,
+      expected: netWorths,
+      changePoints: _changedNetWorth(netWorths),
+      idOf: (value) => value.id,
+      sameValue: (a, b) =>
+          a.amount.currencyId == b.amount.currencyId &&
+          a.amount.minorUnits == b.amount.minorUnits,
+      compare: (a, b) => _dateOnly(a.date).compareTo(_dateOnly(b.date)),
+    );
+    final ranges = <String, List<List<String>>>{};
+    if (mergedRates.changed) {
+      ranges[GoogleSheetsRanges.dailyExchangeRates] = [
         RuntimeTableSchemas.dailyExchangeRates.headers,
-        for (final rate in rates) _exchangeRateRow(rate),
-      ],
-      GoogleSheetsRanges.dailyAccountBalances: [
-        RuntimeTableSchemas.dailyAccountBalances.headers,
-        for (final balance in balances) _balanceRow(balance),
-      ],
-      GoogleSheetsRanges.dailyNetWorth: [
-        RuntimeTableSchemas.dailyNetWorth.headers,
-        for (final netWorth in netWorths) _netWorthRow(netWorth),
-      ],
-    });
-    return true;
-  }
-
-  bool _sameDerivedValues({
-    required List<ExchangeRate> expectedRates,
-    required List<DailyAccountBalance> expectedBalances,
-    required List<DailyNetWorth> expectedNetWorth,
-  }) {
-    bool sameRows<T>(
-      List<T> expected,
-      List<T> actual,
-      String Function(T) idOf,
-      bool Function(T, T) sameValue,
-    ) {
-      if (expected.length != actual.length) return false;
-      final actualById = {for (final value in actual) idOf(value): value};
-      if (actualById.length != actual.length) return false;
-      return expected.every((value) {
-        final existing = actualById[idOf(value)];
-        return existing != null && sameValue(value, existing);
-      });
+        for (final rate in mergedRates.rows) _exchangeRateRow(rate),
+      ];
     }
-
-    return sameRows(
-          expectedRates,
-          data.exchangeRates,
-          (value) => value.id,
-          (a, b) =>
-              _dateOnly(a.date) == _dateOnly(b.date) &&
-              a.currencyId == b.currencyId &&
-              a.rateToUsd == b.rateToUsd &&
-              _dateOnly(a.sourceRateDate) == _dateOnly(b.sourceRateDate),
-        ) &&
-        sameRows(
-          expectedBalances,
-          data.dailyAccountBalances,
-          (value) => value.id,
-          (a, b) =>
-              _dateOnly(a.date) == _dateOnly(b.date) &&
-              a.accountId == b.accountId &&
-              a.balance.minorUnits == b.balance.minorUnits &&
-              a.balance.currencyId == b.balance.currencyId &&
-              a.balanceUsd.minorUnits == b.balanceUsd.minorUnits,
-        ) &&
-        sameRows(
-          expectedNetWorth,
-          data.dailyNetWorth,
-          (value) => value.id,
-          (a, b) =>
-              _dateOnly(a.date) == _dateOnly(b.date) &&
-              a.amount.minorUnits == b.amount.minorUnits &&
-              a.amount.currencyId == b.amount.currencyId,
-        );
+    if (mergedBalances.changed) {
+      ranges[GoogleSheetsRanges.dailyAccountBalances] = [
+        RuntimeTableSchemas.dailyAccountBalances.headers,
+        for (final balance in mergedBalances.rows) _balanceRow(balance),
+      ];
+    }
+    if (mergedNetWorth.changed) {
+      ranges[GoogleSheetsRanges.dailyNetWorth] = [
+        RuntimeTableSchemas.dailyNetWorth.headers,
+        for (final value in mergedNetWorth.rows) _netWorthRow(value),
+      ];
+    }
+    if (ranges.isNotEmpty) await client.replaceRanges(ranges);
+    final checkpointChanged = endDate.isAfter(processedThrough);
+    if (checkpointChanged) await _writeProcessedThrough(endDate);
+    return ranges.isNotEmpty || checkpointChanged;
   }
+
+  ({List<T> rows, bool changed}) _mergeDailyRows<T extends Object>({
+    required Iterable<T> existing,
+    required Iterable<T> expected,
+    required Iterable<T> changePoints,
+    required String Function(T) idOf,
+    required bool Function(T, T) sameValue,
+    required int Function(T, T) compare,
+  }) {
+    final expectedById = {for (final value in expected) idOf(value): value};
+    final existingById = {for (final value in existing) idOf(value): value};
+    final rows = <T>[];
+    var changed = false;
+    for (final value in existingById.values) {
+      final replacement = expectedById.remove(idOf(value));
+      if (replacement == null) {
+        changed = true;
+        continue;
+      }
+      if (sameValue(value, replacement)) {
+        rows.add(value);
+      } else {
+        rows.add(replacement);
+        changed = true;
+      }
+    }
+    for (final value in changePoints) {
+      if (expectedById.remove(idOf(value)) != null) {
+        rows.add(value);
+        changed = true;
+      }
+    }
+    rows.sort(compare);
+    return (rows: List.unmodifiable(rows), changed: changed);
+  }
+
+  Future<List<ExchangeRate>> _ratesForReconciliation({
+    required DateTime startDate,
+    required DateTime endDate,
+    required DateTime processedThrough,
+  }) async {
+    final existingByDateAndCurrency = {
+      for (final rate in data.exchangeRates)
+        (_dateOnly(rate.date), rate.currencyId): rate,
+    };
+    final latestByCurrency = <String, ExchangeRate>{};
+    final denseRates = <ExchangeRate>[];
+    for (
+      var date = _dateOnly(startDate);
+      !date.isAfter(endDate);
+      date = date.add(const Duration(days: 1))
+    ) {
+      final currencies = _currenciesWithOpenAccounts(date).toList();
+      for (final currency in currencies) {
+        final existing = existingByDateAndCurrency[(date, currency.id)];
+        if (existing != null && !date.isAfter(processedThrough)) {
+          latestByCurrency[currency.id] = existing;
+        }
+      }
+
+      final needsFreshRates =
+          date.isAfter(processedThrough) ||
+          currencies.any(
+            (currency) => !latestByCurrency.containsKey(currency.id),
+          );
+      final fetched = needsFreshRates ? await _ratesForDate(date) : const [];
+      final fetchedByCurrency = {
+        for (final rate in fetched) rate.currencyId: rate,
+      };
+      for (final currency in currencies) {
+        final rate =
+            fetchedByCurrency[currency.id] ??
+            latestByCurrency[currency.id] ??
+            existingByDateAndCurrency[(date, currency.id)];
+        if (rate == null) {
+          throw StateError(
+            'No exchange rate for ${currency.id} on ${_dateString(date)}.',
+          );
+        }
+        final dailyRate = ExchangeRate(
+          id: '${_dateString(date)}-${currency.id}',
+          date: date,
+          currencyId: currency.id,
+          rateToUsd: rate.rateToUsd,
+          sourceRateDate: rate.sourceRateDate,
+          retrievedAt: rate.retrievedAt,
+        );
+        latestByCurrency[currency.id] = dailyRate;
+        denseRates.add(dailyRate);
+      }
+    }
+    return denseRates;
+  }
+
+  List<ExchangeRate> _changedExchangeRates(
+    Iterable<ExchangeRate> values, {
+    Iterable<ExchangeRate> previous = const [],
+  }) {
+    final orderedPrevious = [...previous]
+      ..sort((a, b) => a.date.compareTo(b.date));
+    final latest = <String, ExchangeRate>{};
+    for (final rate in orderedPrevious) {
+      latest[rate.currencyId] = rate;
+    }
+    final ordered = [...values]
+      ..sort((a, b) {
+        final byDate = _dateOnly(a.date).compareTo(_dateOnly(b.date));
+        return byDate == 0 ? a.currencyId.compareTo(b.currencyId) : byDate;
+      });
+    final changed = <ExchangeRate>[];
+    for (final rate in ordered) {
+      final previousRate = latest[rate.currencyId];
+      if (previousRate == null || previousRate.rateToUsd != rate.rateToUsd) {
+        changed.add(rate);
+      }
+      latest[rate.currencyId] = rate;
+    }
+    return changed;
+  }
+
+  List<DailyAccountBalance> _changedBalances(
+    Iterable<DailyAccountBalance> values, {
+    Iterable<DailyAccountBalance> previous = const [],
+  }) {
+    final orderedPrevious = [...previous]
+      ..sort((a, b) => a.date.compareTo(b.date));
+    final latest = <String, DailyAccountBalance>{};
+    for (final balance in orderedPrevious) {
+      latest[balance.accountId] = balance;
+    }
+    final ordered = [...values]
+      ..sort((a, b) {
+        final byDate = _dateOnly(a.date).compareTo(_dateOnly(b.date));
+        return byDate == 0 ? a.accountId.compareTo(b.accountId) : byDate;
+      });
+    final changed = <DailyAccountBalance>[];
+    for (final balance in ordered) {
+      final previousBalance = latest[balance.accountId];
+      if (previousBalance == null ||
+          previousBalance.balance.currencyId != balance.balance.currencyId ||
+          previousBalance.balance.minorUnits != balance.balance.minorUnits) {
+        changed.add(balance);
+      }
+      latest[balance.accountId] = balance;
+    }
+    return changed;
+  }
+
+  List<DailyNetWorth> _changedNetWorth(
+    Iterable<DailyNetWorth> values, {
+    Iterable<DailyNetWorth> previous = const [],
+  }) {
+    final orderedPrevious = [...previous]
+      ..sort((a, b) => a.date.compareTo(b.date));
+    var latest = orderedPrevious.isEmpty ? null : orderedPrevious.last;
+    final ordered = [...values]
+      ..sort((a, b) => _dateOnly(a.date).compareTo(_dateOnly(b.date)));
+    final changed = <DailyNetWorth>[];
+    for (final netWorth in ordered) {
+      if (latest == null ||
+          latest.amount.currencyId != netWorth.amount.currencyId ||
+          latest.amount.minorUnits != netWorth.amount.minorUnits) {
+        changed.add(netWorth);
+      }
+      latest = netWorth;
+    }
+    return changed;
+  }
+
+  List<T> _notAlreadyStored<T extends Object>(
+    List<T> values,
+    Set<String> existingIds,
+  ) => [
+    for (final value in values)
+      if (existingIds.add(_idOf(value))) value,
+  ];
+
+  String _idOf(Object value) => switch (value) {
+    ExchangeRate() => value.id,
+    DailyAccountBalance() => value.id,
+    DailyNetWorth() => value.id,
+    _ => throw ArgumentError.value(value, 'value', 'Unsupported daily row.'),
+  };
+
+  Future<void> _replaceDerivedTables({
+    required List<ExchangeRate> rates,
+    required List<DailyAccountBalance> balances,
+    required List<DailyNetWorth> netWorth,
+  }) => client.replaceRanges({
+    GoogleSheetsRanges.dailyExchangeRates: [
+      RuntimeTableSchemas.dailyExchangeRates.headers,
+      for (final rate in rates) _exchangeRateRow(rate),
+    ],
+    GoogleSheetsRanges.dailyAccountBalances: [
+      RuntimeTableSchemas.dailyAccountBalances.headers,
+      for (final balance in balances) _balanceRow(balance),
+    ],
+    GoogleSheetsRanges.dailyNetWorth: [
+      RuntimeTableSchemas.dailyNetWorth.headers,
+      for (final netWorthRow in netWorth) _netWorthRow(netWorthRow),
+    ],
+  });
 
   Future<void> rebuild({DateTime? yesterday}) async {
     _rateResponsesByDate.clear();
+    _requireProcessedThrough();
     final endDate = _dateOnly(
       yesterday ?? DateTime.now().subtract(const Duration(days: 1)),
     );
     final startDate = _earliestSourceDate;
     if (startDate == null || startDate.isAfter(endDate)) {
       await _clearDerivedTables();
+      await _writeProcessedThrough(endDate);
       return;
     }
 
@@ -322,52 +528,25 @@ class DailyMaintenanceService {
       rates.addAll(await _ratesForDate(date));
     }
 
-    final rateIndex = _ExactExchangeRateIndex(rates);
+    final rateIndex = _LatestExchangeRateIndex(rates);
     final balances = _balancesThrough(
       startDate: startDate,
       endDate: endDate,
       rates: rateIndex,
     );
-    final netWorths = _netWorthThrough(balances, rates: rateIndex);
+    final netWorths = _netWorthThrough(
+      balances,
+      rates: rateIndex,
+      startDate: startDate,
+      endDate: endDate,
+    );
 
-    await client.replaceRanges({
-      GoogleSheetsRanges.dailyExchangeRates: [
-        RuntimeTableSchemas.dailyExchangeRates.headers,
-        for (final rate in rates)
-          [
-            rate.id,
-            _dateString(rate.date),
-            rate.currencyId,
-            rate.rateToUsd.toString(),
-            _dateString(rate.sourceRateDate),
-            rate.retrievedAt.toUtc().toIso8601String(),
-          ],
-      ],
-      GoogleSheetsRanges.dailyAccountBalances: [
-        RuntimeTableSchemas.dailyAccountBalances.headers,
-        for (final balance in balances)
-          [
-            balance.id,
-            _dateString(balance.date),
-            balance.accountId,
-            balance.balance.toMajorUnitsString(
-              data.currenciesById[balance.balance.currencyId]!,
-            ),
-            balance.balanceUsd.toMajorUnitsString(data.currenciesById['USD']!),
-            balance.retrievedAt.toUtc().toIso8601String(),
-          ],
-      ],
-      GoogleSheetsRanges.dailyNetWorth: [
-        RuntimeTableSchemas.dailyNetWorth.headers,
-        for (final netWorth in netWorths)
-          [
-            netWorth.id,
-            _dateString(netWorth.date),
-            netWorth.amount.toMajorUnitsString(data.currenciesById['USD']!),
-            netWorth.retrievedAt.toUtc().toIso8601String(),
-          ],
-      ],
-    });
+    await _replaceDerivedTables(
+      rates: _changedExchangeRates(rates),
+      balances: _changedBalances(balances),
+      netWorth: _changedNetWorth(netWorths),
+    );
+    await _writeProcessedThrough(endDate);
   }
 
   Future<void> _clearDerivedTables() => client.replaceRanges({
@@ -381,52 +560,6 @@ class DailyMaintenanceService {
       RuntimeTableSchemas.dailyNetWorth.headers,
     ],
   });
-
-  _DerivedCoverage _derivedCoverage({
-    required DateTime startDate,
-    required DateTime endDate,
-    required Map<String, Set<String>> existingIds,
-  }) {
-    DateTime? firstMissingDate;
-    for (
-      var date = startDate;
-      !date.isAfter(endDate);
-      date = date.add(const Duration(days: 1))
-    ) {
-      final complete = _hasDerivedDataForDate(date, existingIds);
-      if (!complete) {
-        firstMissingDate ??= date;
-      } else if (firstMissingDate != null) {
-        return const _DerivedCoverage.middleGap();
-      }
-    }
-    return _DerivedCoverage.tail(firstMissingDate);
-  }
-
-  bool _hasDerivedDataForDate(
-    DateTime date,
-    Map<String, Set<String>> existingIds,
-  ) {
-    final normalized = _dateOnly(date);
-    if (!existingIds['netWorth']!.contains('${_dateString(normalized)}-net')) {
-      return false;
-    }
-    for (final currency in _currenciesWithOpenAccounts(normalized)) {
-      if (!existingIds['rates']!.contains(
-        '${_dateString(normalized)}-${currency.id}',
-      )) {
-        return false;
-      }
-    }
-    for (final account in _openLedgerAccountsOn(normalized)) {
-      if (!existingIds['balances']!.contains(
-        '${_dateString(normalized)}-${account.id}',
-      )) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   Future<Map<String, Set<String>>> _readDailyIds() async {
     final ranges = await client.batchReadRanges(const [
@@ -500,7 +633,7 @@ class DailyMaintenanceService {
   List<DailyAccountBalance> _balancesThrough({
     required DateTime startDate,
     required DateTime endDate,
-    required _ExactExchangeRateIndex rates,
+    required _LatestExchangeRateIndex rates,
   }) {
     final result = <DailyAccountBalance>[];
     final balances = <String, Money>{
@@ -519,14 +652,12 @@ class DailyMaintenanceService {
       final retrievedAt = DateTime.now().toUtc();
       for (final account in _openLedgerAccountsOn(date)) {
         final balance = balances[account.id]!;
-        final usd = _toUsd(balance, rates.rateFor(account.currencyId, date));
         result.add(
           DailyAccountBalance(
             id: '${_dateString(date)}-${account.id}',
             date: date,
             accountId: account.id,
             balance: balance,
-            balanceUsd: usd,
             retrievedAt: retrievedAt,
           ),
         );
@@ -537,21 +668,23 @@ class DailyMaintenanceService {
 
   List<DailyNetWorth> _netWorthThrough(
     Iterable<DailyAccountBalance> balances, {
-    required _ExactExchangeRateIndex rates,
-    DateTime? startDate,
-    DateTime? endDate,
+    required _LatestExchangeRateIndex rates,
+    required DateTime startDate,
+    required DateTime endDate,
   }) {
     final byDate = <DateTime, int>{};
     for (final balance in balances) {
-      final amount = balance.balanceUsd.minorUnits;
+      final amount = _toUsd(
+        balance.balance,
+        rates.rateFor(balance.balance.currencyId, balance.date),
+      ).minorUnits;
       byDate[balance.date] = (byDate[balance.date] ?? 0) + amount;
     }
-    for (final rate in rates.values) {
-      final date = _dateOnly(rate.date);
-      if ((startDate != null && date.isBefore(_dateOnly(startDate))) ||
-          (endDate != null && date.isAfter(_dateOnly(endDate)))) {
-        continue;
-      }
+    for (
+      var date = _dateOnly(startDate);
+      !date.isAfter(_dateOnly(endDate));
+      date = date.add(const Duration(days: 1))
+    ) {
       byDate.putIfAbsent(date, () => 0);
     }
     final dates = byDate.keys.toList()..sort();
@@ -609,7 +742,6 @@ class DailyMaintenanceService {
     balance.balance.toMajorUnitsString(
       data.currenciesById[balance.balance.currencyId]!,
     ),
-    balance.balanceUsd.toMajorUnitsString(data.currenciesById['USD']!),
     balance.retrievedAt.toUtc().toIso8601String(),
   ];
 
@@ -662,16 +794,7 @@ class DailyMaintenanceService {
     String currencyId,
     DateTime date,
   ) {
-    // Retained as a list-based utility for callers that have only one lookup.
-    // Historical calculations construct one index and reuse it instead.
-    final targetDate = _dateOnly(date);
-    return rates.lastWhere(
-      (rate) =>
-          rate.currencyId == currencyId && _dateOnly(rate.date) == targetDate,
-      orElse: () => throw StateError(
-        'No exchange rate for $currencyId on ${_dateString(targetDate)}.',
-      ),
-    );
+    return _LatestExchangeRateIndex(rates).rateFor(currencyId, date);
   }
 
   Iterable<Account> _openLedgerAccountsOn(DateTime date) {
@@ -697,20 +820,63 @@ class DailyMaintenanceService {
     );
   }
 
-  bool get _requiresFullRebuild {
+  bool get _requiresManualRebuild {
     final earliestSource = _earliestSourceDate;
     if (earliestSource == null) return false;
-    if (data.exchangeRates.isEmpty ||
-        data.dailyAccountBalances.isEmpty ||
-        data.dailyNetWorth.isEmpty) {
-      return true;
+    final through = _processedThrough;
+    if (data.dailyNetWorth.isEmpty || through == null) return true;
+    final firstNetWorth = data.dailyNetWorth
+        .map((value) => _dateOnly(value.date))
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    if (firstNetWorth.isAfter(earliestSource)) return true;
+
+    final latestRates = _LatestExchangeRateIndex(data.exchangeRates);
+    final throughDate = _dateOnly(through);
+    for (final currency in data.currencies) {
+      final currencyAccounts = data.accounts.where(
+        (account) => account.currencyId == currency.id,
+      );
+      DateTime? firstUse;
+      for (final account in currencyAccounts) {
+        final opening = _dateOnly(account.openingDate);
+        final firstActive = opening.isBefore(earliestSource)
+            ? earliestSource
+            : opening;
+        if (account.closingDate != null &&
+            _dateOnly(account.closingDate!).isBefore(firstActive)) {
+          continue;
+        }
+        if (firstActive.isAfter(throughDate)) continue;
+        if (firstUse == null || firstActive.isBefore(firstUse)) {
+          firstUse = firstActive;
+        }
+      }
+      if (firstUse != null) {
+        try {
+          latestRates.rateFor(currency.id, firstUse);
+        } on StateError {
+          return true;
+        }
+      }
     }
-    final earliestDerived = [
-      ...data.exchangeRates.map((value) => _dateOnly(value.date)),
-      ...data.dailyAccountBalances.map((value) => _dateOnly(value.date)),
-      ...data.dailyNetWorth.map((value) => _dateOnly(value.date)),
-    ].reduce((a, b) => a.isBefore(b) ? a : b);
-    return earliestSource.isBefore(earliestDerived);
+    for (final account in data.accounts.where((item) => item.isLedgerAccount)) {
+      final opening = _dateOnly(account.openingDate);
+      final firstActive = opening.isBefore(earliestSource)
+          ? earliestSource
+          : opening;
+      if (account.closingDate != null &&
+          _dateOnly(account.closingDate!).isBefore(firstActive)) {
+        continue;
+      }
+      if (firstActive.isAfter(throughDate)) continue;
+      final hasBaseline = data.dailyAccountBalances.any(
+        (balance) =>
+            balance.accountId == account.id &&
+            !_dateOnly(balance.date).isAfter(throughDate),
+      );
+      if (!hasBaseline) return true;
+    }
+    return false;
   }
 
   DateTime? get _earliestSourceDate => data.earliestTransactionDate;
@@ -731,36 +897,48 @@ class DailyMaintenanceService {
       '${value.day.toString().padLeft(2, '0')}';
 }
 
-class _DerivedCoverage {
-  const _DerivedCoverage.tail(this.firstMissingDate) : hasMiddleGap = false;
+/// Rates are stored as change points; reads use the latest rate on or before a
+/// requested day.
+class _LatestExchangeRateIndex {
+  _LatestExchangeRateIndex(Iterable<ExchangeRate> source) {
+    final byKey = <(DateTime, String), ExchangeRate>{};
+    for (final rate in source) {
+      byKey[(_dateOnly(rate.date), rate.currencyId)] = rate;
+    }
+    final ordered = byKey.values.toList()
+      ..sort((a, b) {
+        final byDate = _dateOnly(a.date).compareTo(_dateOnly(b.date));
+        return byDate == 0 ? a.currencyId.compareTo(b.currencyId) : byDate;
+      });
+    byCurrency = {
+      for (final currencyId in ordered.map((rate) => rate.currencyId).toSet())
+        currencyId: List.unmodifiable(
+          ordered.where((rate) => rate.currencyId == currencyId).toList(),
+        ),
+    };
+  }
 
-  const _DerivedCoverage.middleGap()
-    : firstMissingDate = null,
-      hasMiddleGap = true;
-
-  final DateTime? firstMissingDate;
-  final bool hasMiddleGap;
-}
-
-/// Exact-date lookup used by daily maintenance. The analysis feature intentionally
-/// uses a different latest-on-or-before lookup for transaction-date conversion.
-class _ExactExchangeRateIndex {
-  _ExactExchangeRateIndex(Iterable<ExchangeRate> values)
-    : values = List.unmodifiable(values),
-      byDateAndCurrency = {
-        for (final rate in values)
-          (_dateOnly(rate.date), rate.currencyId): rate,
-      };
-
-  final List<ExchangeRate> values;
-  final Map<(DateTime, String), ExchangeRate> byDateAndCurrency;
+  late final Map<String, List<ExchangeRate>> byCurrency;
 
   ExchangeRate rateFor(String currencyId, DateTime date) {
-    final normalized = DateTime.utc(date.year, date.month, date.day);
-    return byDateAndCurrency[(normalized, currencyId)] ??
-        (throw StateError(
-          'No exchange rate for $currencyId on ${_formatDate(normalized)}.',
-        ));
+    final normalized = _dateOnly(date);
+    final rates = byCurrency[currencyId] ?? const <ExchangeRate>[];
+    var low = 0;
+    var high = rates.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (!_dateOnly(rates[middle].date).isAfter(normalized)) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    if (low == 0) {
+      throw StateError(
+        'No exchange rate for $currencyId on ${_formatDate(normalized)}.',
+      );
+    }
+    return rates[low - 1];
   }
 
   static DateTime _dateOnly(DateTime value) =>

@@ -167,7 +167,6 @@ AppDataSnapshot _syntheticSnapshot() {
           date: date,
           accountId: checking.id,
           balance: checkingMoney,
-          balanceUsd: checkingMoney,
           retrievedAt: end,
         ),
       )
@@ -177,7 +176,6 @@ AppDataSnapshot _syntheticSnapshot() {
           date: date,
           accountId: savings.id,
           balance: savingsMoney,
-          balanceUsd: savingsMoney,
           retrievedAt: end,
         ),
       );

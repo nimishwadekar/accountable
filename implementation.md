@@ -302,9 +302,9 @@ Transaction entry is implemented with local Chrome persistence, shared validatio
 - Net-worth trend defaults to all available history.
 - Account history is selectable one account at a time.
 - Account history uses daily values, never current ledger calculations.
-- Account history shows native currency by default with a USD toggle using `balance_usd`.
+- Account history shows native currency by default with USD derived from the latest exchange rate on or before each date; `balance_usd` is not persisted.
 - Net-worth history uses the USD values in `DailyNetWorth`.
-- Missing daily rows are not inferred or interpolated; charts use available rows and show the missing dates.
+- Daily tables use change-point rows; readers carry values forward through `daily_processed_through` and report dates before the first value or beyond the checkpoint as missing.
 - The Analysis page includes a date-range selector with All history as the default.
 - Initial fixed presets are 30 days, 90 days, year-to-date, and all history.
 - Analysis date ranges include both selected calendar-date boundaries.

@@ -304,16 +304,17 @@ class NetWorthSummarySection extends StatelessWidget {
 }
 
 Widget _buildNetWorthSummary(BuildContext context, AppDataSnapshot data) {
+  final dailyValues = data.materializedDailyNetWorth();
   final latestNetWorth = OverviewPage._latestByDate(
-    data.dailyNetWorth,
+    dailyValues,
     (value) => value.date,
   );
   final netWorthChange = OverviewPage._netWorthChangeOver30Days(
-    data.dailyNetWorth,
+    dailyValues,
     latestNetWorth,
   );
   final monthlyComparison = OverviewPage._monthlyNetWorthComparison(
-    data.dailyNetWorth,
+    dailyValues,
   );
 
   return LayoutBuilder(

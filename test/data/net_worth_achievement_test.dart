@@ -79,7 +79,7 @@ void main() {
     },
   );
 
-  test('does not qualify a month with a missing daily snapshot', () {
+  test('carries the last net-worth change point through an omitted day', () {
     final points = _month(2025, 1, -800000)
       ..removeWhere((point) => point.date == DateTime.utc(2025, 1, 12));
     final result = NetWorthAchievementCalculator.evaluate(
@@ -89,8 +89,9 @@ void main() {
       today: DateTime.utc(2025, 2, 1),
     );
 
-    expect(result.incompleteCompletedMonths, [DateTime.utc(2025, 1, 1)]);
-    expect(result.progress.single.qualifies, isFalse);
+    expect(result.incompleteCompletedMonths, isEmpty);
+    expect(result.completedMonths.single.snapshotCount, 31);
+    expect(result.progress.single.qualifies, isTrue);
   });
 
   test('allows several targets to qualify in the same completed month', () {
@@ -108,7 +109,7 @@ void main() {
     expect(result.pendingCelebrations, hasLength(2));
   });
 
-  test('resets an earned flag only when complete history disproves it', () {
+  test('resets an earned flag when sparse history disproves it', () {
     final complete = NetWorthAchievementCalculator.evaluate(
       dailyNetWorth: _month(2025, 1, -1200000),
       trackingStartDate: DateTime.utc(2025, 1, 1),
@@ -125,7 +126,7 @@ void main() {
     );
 
     expect(complete.earnedFlagsToReset, ['target']);
-    expect(incomplete.earnedFlagsToReset, isEmpty);
+    expect(incomplete.earnedFlagsToReset, ['target']);
   });
 
   test('flags duplicate daily snapshots after normalizing their dates', () {
@@ -249,9 +250,9 @@ void main() {
       today: DateTime.utc(2025, 2, 3),
     );
 
-    expect(incompleteMonth.monthToDateSnapshotCount, 2);
+    expect(incompleteMonth.monthToDateSnapshotCount, 3);
     expect(incompleteMonth.monthToDateExpectedSnapshotCount, 3);
-    expect(incompleteMonth.hasMonthToDateGaps, isTrue);
+    expect(incompleteMonth.hasMonthToDateGaps, isFalse);
     expect(emptyHistory.firstEligibleMonth, isNull);
     expect(emptyHistory.hasMonthToDateGaps, isFalse);
   });

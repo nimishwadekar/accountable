@@ -54,12 +54,13 @@ class AnalysisCalculator {
 
   DailySeries<DailyNetWorthPoint> netWorthSeries(DateTimeRange range) {
     final values =
-        data.dailyNetWorthByDate.entries
-            .where((entry) => _inRange(entry.key, range))
+        data
+            .materializedDailyNetWorth(through: range.end)
+            .where((value) => _inRange(value.date, range))
             .map(
-              (entry) => DailyNetWorthPoint(
-                date: entry.key,
-                amount: entry.value.amount,
+              (value) => DailyNetWorthPoint(
+                date: _dateOnly(value.date),
+                amount: value.amount,
               ),
             )
             .toList()
@@ -105,24 +106,50 @@ class AnalysisCalculator {
       return _manualAccountBalanceSeries(account!, range);
     }
 
-    final values =
+    final balances =
         (data.dailyBalancesByAccountId[accountId] ??
                 const <DailyAccountBalance>[])
-            .where((value) => _inRange(value.date, range))
-            .map(
-              (value) => AccountBalancePoint(
-                date: _dateOnly(value.date),
-                nativeAmount: value.balance,
-                usdAmount: value.balanceUsd,
-              ),
-            )
-            .toList();
+            .toList()
+          ..sort((a, b) => a.date.compareTo(b.date));
+    final values = <AccountBalancePoint>[];
+    final missingDates = <DateTime>[];
+    final unavailableDates = <DateTime>[];
+    final currency = data.currenciesById[account!.currencyId]!;
+    final historyEnd = data.dailyHistoryThrough;
+    var balanceIndex = 0;
+    DailyAccountBalance? latestBalance;
+    var date = _dateOnly(range.start);
+    final end = _dateOnly(range.end);
+    while (!date.isAfter(end)) {
+      if (historyEnd != null && date.isAfter(historyEnd)) {
+        missingDates.add(date);
+        date = date.add(const Duration(days: 1));
+        continue;
+      }
+      while (balanceIndex < balances.length &&
+          !_dateOnly(balances[balanceIndex].date).isAfter(date)) {
+        latestBalance = balances[balanceIndex++];
+      }
+      if (latestBalance == null) {
+        missingDates.add(date);
+      } else {
+        final usdAmount = _usdAtDate(latestBalance.balance, currency, date);
+        if (usdAmount == null) unavailableDates.add(date);
+        values.add(
+          AccountBalancePoint(
+            date: date,
+            nativeAmount: latestBalance.balance,
+            usdAmount: usdAmount,
+          ),
+        );
+      }
+      date = date.add(const Duration(days: 1));
+    }
 
     return DailySeries(
       points: List.unmodifiable(values),
-      missingDates: List.unmodifiable(
-        _missingDates(range, values.map((v) => v.date)),
-      ),
+      missingDates: List.unmodifiable(missingDates),
+      unavailableDates: List.unmodifiable(unavailableDates),
     );
   }
 
@@ -182,6 +209,26 @@ class AnalysisCalculator {
       missingDates: const [],
       unavailableDates: List.unmodifiable(unavailableDates),
     );
+  }
+
+  Money? _usdAtDate(Money value, CurrencyDefinition currency, DateTime date) {
+    final usd = data.currenciesById['USD'];
+    if (usd == null) return null;
+    if (currency.id == usd.id) return value;
+    final rates = data.exchangeRatesByCurrencyId[currency.id] ?? const [];
+    var low = 0;
+    var high = rates.length;
+    final target = _dateOnly(date);
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (!_dateOnly(rates[middle].date).isAfter(target)) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    if (low == 0) return null;
+    return _convertToUsd(value, currency, rates[low - 1], usd);
   }
 
   Money _convertToUsd(

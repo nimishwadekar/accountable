@@ -314,6 +314,10 @@ void main() {
         DateTime.now().year,
         DateTime.now().month,
       ).subtract(const Duration(days: 1));
+      tables[DataAssetPaths.metadata] = csv.encode([
+        RuntimeTableSchemas.metadata.headers,
+        [dailyProcessedThroughMetadataKey, _dateOnlyString(historyEnd)],
+      ]);
       final historyDates = <DateTime>[];
       for (
         var date = DateTime.utc(2025, 1, 1);
@@ -470,6 +474,11 @@ void main() {
     );
   });
 }
+
+String _dateOnlyString(DateTime value) =>
+    '${value.year.toString().padLeft(4, '0')}-'
+    '${value.month.toString().padLeft(2, '0')}-'
+    '${value.day.toString().padLeft(2, '0')}';
 
 class _ThrowingAssetReader implements AssetReader {
   const _ThrowingAssetReader();

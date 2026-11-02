@@ -28,6 +28,40 @@ void main() {
   );
   const tag = Tag(id: 'tag', name: 'Tag');
 
+  test('Metadata parses key/value settings and validates the checkpoint', () {
+    final metadata = ModelParsers.parseMetadata(
+      'metadata_key,metadata_value\n'
+      'daily_processed_through,2026-10-12\n'
+      'custom_setting,enabled\n',
+    );
+
+    expect(metadata['custom_setting'], 'enabled');
+    expect(
+      ModelParsers.parseDailyProcessedThrough(metadata),
+      DateTime.utc(2026, 10, 12),
+    );
+    expect(ModelParsers.parseDailyProcessedThrough(const {}), isNull);
+    expect(
+      () => ModelParsers.parseMetadata(
+        'metadata_key,metadata_value\n'
+        'daily_processed_through,2026-10-12\n'
+        'daily_processed_through,2026-10-13\n',
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => ModelParsers.parseMetadata('wrong_key,wrong_value\n'),
+      throwsFormatException,
+    );
+    expect(
+      () => ModelParsers.parseMetadata(
+        'metadata_key,metadata_value\n'
+        'daily_processed_through,not-a-date\n',
+      ),
+      throwsFormatException,
+    );
+  });
+
   test(
     'income allocation parsing preserves account currency and date bounds',
     () {
@@ -336,7 +370,6 @@ void main() {
             '2026-01-01',
             'missing',
             '1.00',
-            '1.00',
             '2026-01-01T00:00:00Z',
           ],
         ]),
@@ -425,7 +458,6 @@ void main() {
           '2026-01-10-checking',
           '2026-01-10',
           'checking',
-          '100.00',
           '100.00',
           '2026-01-10T12:00:00Z',
         ],

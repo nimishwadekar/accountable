@@ -29,7 +29,7 @@ void main() {
     },
   );
 
-  test('reports missing dates without filling them in', () async {
+  test('carries sparse balances forward through the checkpoint', () async {
     final data = await AssetAppDataRepository().load();
     final calculator = AnalysisCalculator(data);
     final range = DateTimeRange(
@@ -42,9 +42,14 @@ void main() {
       range: range,
     );
 
-    expect(series.points, hasLength(2));
-    expect(series.missingDates, [
+    expect(series.points, hasLength(3));
+    expect(series.points.map((point) => point.date), [
+      DateTime.utc(2026, 10, 10),
+      DateTime.utc(2026, 10, 11),
       DateTime.utc(2026, 10, 12),
+    ]);
+    expect(series.points[2].nativeAmount, series.points[1].nativeAmount);
+    expect(series.missingDates, [
       DateTime.utc(2026, 10, 13),
       DateTime.utc(2026, 10, 14),
     ]);

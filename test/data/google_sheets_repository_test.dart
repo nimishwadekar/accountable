@@ -720,6 +720,10 @@ void main() {
         DateTime.now().year,
         DateTime.now().month,
       ).subtract(const Duration(days: 1));
+      tables[GoogleSheetsRanges.metadata] = [
+        RuntimeTableSchemas.metadata.headers,
+        [dailyProcessedThroughMetadataKey, _date(historyEnd)],
+      ];
       final dailyHistory = <List<String>>[
         RuntimeTableSchemas.dailyNetWorth.headers,
       ];
@@ -1124,6 +1128,7 @@ Future<Map<String, List<List<String>>>> _fixtureTables() async {
     GoogleSheetsRanges.achievements: 'test_sheets/Achievements.csv',
     GoogleSheetsRanges.achievementSettings:
         'test_sheets/AchievementSettings.csv',
+    GoogleSheetsRanges.metadata: 'test_sheets/Metadata.csv',
     GoogleSheetsRanges.transactions: 'test_sheets/Transactions.csv',
     GoogleSheetsRanges.transactionsToMigrate:
         'test_sheets/TransactionsToMigrate.csv',

@@ -38,6 +38,7 @@ abstract final class DataAssetPaths {
   static final achievements = RuntimeTableSchemas.achievements.assetPath;
   static final achievementSettings =
       RuntimeTableSchemas.achievementSettings.assetPath;
+  static final metadata = RuntimeTableSchemas.metadata.assetPath;
 }
 
 class AssetCurrencyRepository implements CurrencyRepository {
@@ -478,6 +479,12 @@ class AssetAppDataRepository implements AppDataRepository {
       final achievementSettings = ModelParsers.parseAchievementSettings(
         tables[DataAssetPaths.achievementSettings]!,
       );
+      final metadata = ModelParsers.parseMetadata(
+        tables[DataAssetPaths.metadata]!,
+      );
+      final dailyProcessedThrough = ModelParsers.parseDailyProcessedThrough(
+        metadata,
+      );
       final templateList = ModelParsers.parseTransactionTemplates(
         tables[DataAssetPaths.transactionTemplates]!,
         accounts: accountById,
@@ -556,11 +563,14 @@ class AssetAppDataRepository implements AppDataRepository {
         incomeAllocations: allocationList,
         achievements: achievementList,
         achievementStartDate: achievementSettings.trackingStartDate,
+        metadata: metadata,
+        dailyProcessedThrough: dailyProcessedThrough,
       );
       final achievementEvaluation = NetWorthAchievementCalculator.evaluate(
         dailyNetWorth: dailyNetWorthList,
         trackingStartDate: achievementSettings.trackingStartDate,
         achievements: achievementList,
+        processedThrough: dailyProcessedThrough,
       );
       if (achievementEvaluation.validationErrors.isNotEmpty) {
         throw DataValidationFailure([

@@ -61,15 +61,8 @@ void main() {
           'retrieved_at',
         ],
       ],
-      'DailyAccountBalances!A:F': [
-        [
-          'balance_id',
-          'balance_date',
-          'account_id',
-          'balance',
-          'balance_usd',
-          'retrieved_at',
-        ],
+      'DailyAccountBalances!A:E': [
+        ['balance_id', 'balance_date', 'account_id', 'balance', 'retrieved_at'],
       ],
       'DailyNetWorth!A:D': [
         ['net_worth_id', 'net_worth_date', 'amount', 'retrieved_at'],

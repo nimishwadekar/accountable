@@ -76,6 +76,7 @@ class _MilestonesPageState extends State<MilestonesPage> {
         dailyNetWorth: widget.data.dailyNetWorth,
         trackingStartDate: startDate,
         achievements: widget.data.achievements,
+        processedThrough: widget.data.dailyProcessedThrough,
       );
     }
     _celebrationQueue = [
@@ -375,6 +376,7 @@ class _MilestonesPageState extends State<MilestonesPage> {
           dailyNetWorth: updatedData.dailyNetWorth,
           trackingStartDate: updatedData.achievementStartDate!,
           achievements: updatedData.achievements,
+          processedThrough: updatedData.dailyProcessedThrough,
         );
         _celebrationQueue = _celebrationQueue.skip(1).toList();
         _acknowledging = false;

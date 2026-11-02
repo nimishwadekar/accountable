@@ -89,11 +89,10 @@ abstract final class RuntimeTableSchemas {
       'balance_date',
       'account_id',
       'balance',
-      'balance_usd',
       'retrieved_at',
     ],
-    range: 'DailyAccountBalances!A:F',
-    numericColumns: {3, 4},
+    range: 'DailyAccountBalances!A:E',
+    numericColumns: {3},
   );
   static const dailyNetWorth = RuntimeTableSchema(
     name: 'DailyNetWorth',
@@ -177,6 +176,11 @@ abstract final class RuntimeTableSchemas {
     headers: ['tracking_start_date'],
     range: 'Achievements!H1:H2',
   );
+  static const metadata = RuntimeTableSchema(
+    name: 'Metadata',
+    headers: ['metadata_key', 'metadata_value'],
+    range: 'Metadata!A:B',
+  );
 
   static const all = [
     currencies,
@@ -194,6 +198,7 @@ abstract final class RuntimeTableSchemas {
     incomeAllocations,
     achievements,
     achievementSettings,
+    metadata,
   ];
 
   static RuntimeTableSchema byName(String name) => all.firstWhere(

@@ -411,6 +411,36 @@ class ModelParsers {
     return result.values;
   }
 
+  static Map<String, String> parseMetadata(String source) {
+    final table = CsvTable.parse(source, tableName: 'Metadata');
+    if (table.headers.length != 2 ||
+        table.headers[0] != 'metadata_key' ||
+        table.headers[1] != 'metadata_value') {
+      throw const FormatException(
+        'Metadata must have metadata_key and metadata_value headers.',
+      );
+    }
+    final values = <String, String>{};
+    for (final row in table.rows) {
+      final key = requiredValue(row, 'metadata_key');
+      if (values.containsKey(key)) {
+        throw FormatException('Metadata contains duplicate key: $key.');
+      }
+      final value = optionalValue(row, 'metadata_value') ?? '';
+      if (key == dailyProcessedThroughMetadataKey && value.isNotEmpty) {
+        parseDateOnly(value, fieldName: dailyProcessedThroughMetadataKey);
+      }
+      values[key] = value;
+    }
+    return Map.unmodifiable(values);
+  }
+
+  static DateTime? parseDailyProcessedThrough(Map<String, String> metadata) {
+    final value = metadata[dailyProcessedThroughMetadataKey]?.trim();
+    if (value == null || value.isEmpty) return null;
+    return parseDateOnly(value, fieldName: dailyProcessedThroughMetadataKey);
+  }
+
   static NetWorthAchievement _parseAchievementRow(
     Map<String, String> row,
     Map<String, CurrencyDefinition> currencies,
@@ -950,10 +980,6 @@ class ModelParsers {
       balance: Money.fromMajorUnits(
         value: requiredValue(row, 'balance'),
         currency: _currency(currencies, account.currencyId),
-      ),
-      balanceUsd: Money.fromMajorUnits(
-        value: requiredValue(row, 'balance_usd'),
-        currency: _currency(currencies, 'USD'),
       ),
       retrievedAt: parseUtcTimestamp(
         requiredValue(row, 'retrieved_at'),

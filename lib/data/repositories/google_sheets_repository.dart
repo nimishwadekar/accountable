@@ -40,6 +40,7 @@ abstract final class GoogleSheetsRanges {
   static final achievements = RuntimeTableSchemas.achievements.range;
   static final achievementSettings =
       RuntimeTableSchemas.achievementSettings.range;
+  static final metadata = RuntimeTableSchemas.metadata.range;
   static final transactionsToMigrate =
       RuntimeTableSchemas.transactionsToMigrate.range;
 }
@@ -478,6 +479,8 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       List<IncomeAllocation> incomeAllocations = const [];
       List<NetWorthAchievement> achievements = const [];
       DateTime? achievementStartDate;
+      Map<String, String> metadata = const {};
+      DateTime? dailyProcessedThrough;
 
       try {
         final result = ModelParsers.parseCurrenciesWithIssues(
@@ -685,6 +688,17 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
           issueFromError('AchievementSettings', error),
         ]);
       }
+      try {
+        metadata = ModelParsers.parseMetadata(
+          _encode(tables[GoogleSheetsRanges.metadata]!),
+        );
+        dailyProcessedThrough = ModelParsers.parseDailyProcessedThrough(
+          metadata,
+        );
+        recordIssues('Metadata', const []);
+      } catch (error) {
+        recordIssues('Metadata', [issueFromError('Metadata', error)]);
+      }
       if (dependenciesAreValid('DailyManualValuations')) {
         try {
           final result = ModelParsers.parseDailyManualValuationsWithIssues(
@@ -718,11 +732,14 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
         incomeAllocations: incomeAllocations,
         achievements: achievements,
         achievementStartDate: achievementStartDate,
+        metadata: metadata,
+        dailyProcessedThrough: dailyProcessedThrough,
       );
       final achievementEvaluation = NetWorthAchievementCalculator.evaluate(
         dailyNetWorth: dailyNetWorth,
         trackingStartDate: achievementStartDate!,
         achievements: achievements,
+        processedThrough: dailyProcessedThrough,
       );
       if (achievementEvaluation.validationErrors.isNotEmpty) {
         throw DataValidationFailure([
@@ -770,6 +787,7 @@ class GoogleSheetsAppDataRepository implements AppDataRepository {
       GoogleSheetsRanges.incomeAllocations,
       GoogleSheetsRanges.achievements,
       GoogleSheetsRanges.achievementSettings,
+      GoogleSheetsRanges.metadata,
       GoogleSheetsRanges.tags,
       GoogleSheetsRanges.transactions,
       if (migrationAssistance) GoogleSheetsRanges.transactionsToMigrate,
