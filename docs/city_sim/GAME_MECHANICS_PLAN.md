@@ -167,7 +167,7 @@ slice.
 
 ### Features currently present
 
-- Isometric map with pan, zoom, and camera reset.
+- Isometric map with pan, zoom (touch pinch, mouse wheel, and trackpad), and camera reset.
 - Inspect, parcels, roads, buildings, decorations, and bridge tools.
 - Terrain, ownership, road, structure, reservation, and project-progress views.
 - Manual calendar controls, explicit check-in, and a clearly labelled test-only
@@ -175,6 +175,11 @@ slice.
 - Recent event history and a separate local parcel-world save.
 - An explicit new-world choice when an older V1 save is detected; the V1 save
   remains separate and untouched.
+- Ambient life that is presentation-only: pedestrians wander connected roads
+  using the pack's walk cycles, water carries a gentle travelling shimmer, and
+  vegetation (trees, flowers) sways slightly in the wind. Ambience is muted
+  when the platform requests reduced motion, is excluded from saves and
+  progression, and never affects gameplay.
 
 ## 8. Future features and open decisions
 

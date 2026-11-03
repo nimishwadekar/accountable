@@ -37,6 +37,7 @@ class SpriteDefinition {
     this.groundAnchorX = 0.5,
     this.groundAnchorY = 1,
     this.baseOffsetY = 0,
+    this.sways = false,
   });
 
   final String assetPath;
@@ -49,6 +50,11 @@ class SpriteDefinition {
   /// aspect ratio and aligns the diamond's south tip with the cell's south
   /// vertex, letting this overhang extend past it.
   final double baseOffsetY;
+
+  /// Whether the ambient renderer gently rocks this sprite around its
+  /// ground anchor to suggest wind. Only vegetation should set this;
+  /// buildings and other rigid objects stay still.
+  final bool sways;
 }
 
 const structureCatalogue = <StructureDefinition>[
@@ -332,8 +338,12 @@ const spriteManifest = <String, SpriteDefinition>{
     assetPath: 'Props/prop_flowers_yellow.png',
     renderScale: 2,
     groundAnchorY: 0.95,
+    sways: true,
   ),
-  'pine-medium': SpriteDefinition(assetPath: 'Props/prop_tree_pine_medium.png'),
+  'pine-medium': SpriteDefinition(
+    assetPath: 'Props/prop_tree_pine_medium.png',
+    sways: true,
+  ),
 };
 
 String citysimAssetPath(String role) =>

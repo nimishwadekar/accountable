@@ -68,6 +68,19 @@ void main() {
     expect(roadSpriteRole(roadEast | roadWest), 'road.straight.se');
   });
 
+  test('ambient pedestrian walk-cycle frames bundle as assets', () async {
+    for (final character in ['a', 'b', 'c']) {
+      for (final direction in ['NE', 'NW', 'SE', 'SW']) {
+        for (final frame in [1, 2, 3, 4]) {
+          final path =
+              'assets/citysim/buggy_studio/Characters/'
+              'char_${character}_walk_${direction}_f0$frame.png';
+          expect(await rootBundle.load(path), isNotNull, reason: path);
+        }
+      }
+    }
+  });
+
   test('terrain stays fixed for a seed and agrees across parcel edges', () {
     const provider = DemoTerrainProvider();
     const seed = 145;

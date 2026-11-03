@@ -5,7 +5,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
+
+import 'package:accountable/citysim/rendering/parcel_world_tuning.dart';
 
 import '../world/coordinates.dart';
 import '../world/road_sprite_resolver.dart';
@@ -47,7 +50,8 @@ class ParcelWorldView extends StatefulWidget {
   State<ParcelWorldView> createState() => _ParcelWorldViewState();
 }
 
-class _ParcelWorldViewState extends State<ParcelWorldView> {
+class _ParcelWorldViewState extends State<ParcelWorldView>
+    with SingleTickerProviderStateMixin {
   final Map<String, ui.Image> _images = {};
   final Map<String, Future<ui.Image>> _imageRequests = {};
   late WorldQueries _queries = WorldQueries(
@@ -65,10 +69,25 @@ class _ParcelWorldViewState extends State<ParcelWorldView> {
   Offset _panZoomStartPosition = Offset.zero;
   bool _cameraInitialized = false;
 
+  /// Drives water shimmer, vegetation sway, and ambient pedestrians. The
+  /// clock is muted when the platform requests reduced motion.
+  final _AmbientClock _ambient = _AmbientClock();
+  late final Ticker _ambientTicker = createTicker(_ambient.tick);
+  final _TerrainLayerCache _terrainCache = _TerrainLayerCache();
+  final _PedestrianSim _pedestrians = _PedestrianSim();
+
   @override
   void initState() {
     super.initState();
     _loading = _loadMissingImages();
+    _ambientTicker.start();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ambientTicker.muted =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
   }
 
   @override
@@ -89,6 +108,9 @@ class _ParcelWorldViewState extends State<ParcelWorldView> {
 
   @override
   void dispose() {
+    _ambientTicker.dispose();
+    _ambient.dispose();
+    _terrainCache.dispose();
     for (final image in _images.values) {
       image.dispose();
     }
@@ -133,7 +155,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView> {
               _zoomAt(
                 event.localPosition,
                 size,
-                math.exp(-event.scrollDelta.dy * 0.0015),
+                math.exp(-event.scrollDelta.dy * cameraWheelZoomSensitivity),
               );
             },
             onPointerPanZoomStart: (event) {
@@ -149,8 +171,8 @@ class _ParcelWorldViewState extends State<ParcelWorldView> {
                 _panZoomStartOffset,
               );
               final nextScale = (_panZoomStartScale * event.scale).clamp(
-                0.42,
-                3.2,
+                cameraMinZoom,
+                cameraMaxZoom,
               );
               final focal = _panZoomStartPosition + event.pan;
               setState(() {
@@ -171,8 +193,8 @@ class _ParcelWorldViewState extends State<ParcelWorldView> {
               },
               onScaleUpdate: (details) {
                 final nextScale = (_scaleAtGestureStart * details.scale).clamp(
-                  0.42,
-                  3.2,
+                  cameraMinZoom,
+                  cameraMaxZoom,
                 );
                 setState(() {
                   _scale = nextScale;
@@ -196,6 +218,9 @@ class _ParcelWorldViewState extends State<ParcelWorldView> {
                   bridgeStartCell: widget.bridgeStartCell,
                   roadPlanCells: widget.roadPlanCells,
                   fundableRoadCells: widget.fundableRoadCells,
+                  ambient: _ambient,
+                  terrainCache: _terrainCache,
+                  pedestrians: _pedestrians,
                 ),
               ),
             ),
@@ -253,7 +278,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView> {
   void _zoomAt(Offset focalPoint, Size size, double factor) {
     if (factor == 1.0) return;
     final anchor = _screenToWorld(focalPoint, size, _scale, _offset);
-    final nextScale = (_scale * factor).clamp(0.42, 3.2);
+    final nextScale = (_scale * factor).clamp(cameraMinZoom, cameraMaxZoom);
     setState(() {
       _scale = nextScale;
       _offset = focalPoint - size.center(Offset.zero) - anchor * nextScale;
@@ -261,7 +286,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView> {
   }
 
   Future<void> _loadMissingImages({bool retryFailed = false}) async {
-    final paths = <String>{
+    final roles = <String>{
       'terrain.grass',
       'terrain.grass.puddle',
       'terrain.dirt',
@@ -295,7 +320,17 @@ class _ParcelWorldViewState extends State<ParcelWorldView> {
           'bridge.ramp.sw',
         ])
           role,
-    }.map(citysimAssetPath).toSet();
+    };
+    // Ambient pedestrian walk cycles have no manifest roles; they are
+    // render-only art, so their asset paths join the set directly.
+    final paths = {
+      ...roles.map(citysimAssetPath),
+      for (final character in ['a', 'b', 'c'])
+        for (final direction in ['NE', 'NW', 'SE', 'SW'])
+          for (final frame in [1, 2, 3, 4])
+            'assets/citysim/buggy_studio/Characters/'
+                'char_${character}_walk_${direction}_f0$frame.png',
+    };
 
     if (retryFailed) {
       _imageRequests.removeWhere((path, _) => !_images.containsKey(path));
@@ -453,7 +488,7 @@ _WorldHit _hitTest(
 }
 
 class _ParcelWorldPainter extends CustomPainter {
-  const _ParcelWorldPainter({
+  _ParcelWorldPainter({
     required this.state,
     required this.queries,
     required this.images,
@@ -465,7 +500,10 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.bridgeStartCell,
     required this.roadPlanCells,
     required this.fundableRoadCells,
-  });
+    required this.ambient,
+    required this.terrainCache,
+    required this.pedestrians,
+  }) : super(repaint: ambient);
 
   final ParcelWorldState state;
   final WorldQueries queries;
@@ -478,6 +516,9 @@ class _ParcelWorldPainter extends CustomPainter {
   final CellCoord? bridgeStartCell;
   final List<CellCoord> roadPlanCells;
   final Set<CellCoord> fundableRoadCells;
+  final _AmbientClock ambient;
+  final _TerrainLayerCache terrainCache;
+  final _PedestrianSim pedestrians;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -486,6 +527,31 @@ class _ParcelWorldPainter extends CustomPainter {
       Paint()..color = const Color(0xFFB5DCCF),
     );
     final bounds = _visibleCellBounds(size, scale, offset);
+
+    // Ground, roads, and bridges only change with the world or the camera,
+    // so they are recorded once and replayed while the ambient animations
+    // tick. Animated layers (water shimmer, swaying vegetation,
+    // pedestrians) are drawn on top every frame.
+    final cacheKey = (state, scale, offset, size, images.length);
+    if (terrainCache.key != cacheKey) {
+      _recordTerrainLayer(terrainCache, cacheKey, size, bounds);
+    }
+    canvas.drawPicture(terrainCache.picture!);
+    _paintWaterShimmer(canvas, terrainCache, ambient.seconds);
+    _drawActors(canvas, size, bounds, ambient.seconds);
+    _drawPendingConstructions(canvas, size);
+    _drawRoadPlan(canvas, size);
+    _drawSelection(canvas, size, queries);
+  }
+
+  void _recordTerrainLayer(
+    _TerrainLayerCache cache,
+    Object cacheKey,
+    Size size,
+    _CellBounds bounds,
+  ) {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Offset.zero & size);
     final visibleCellCount =
         (bounds.right - bounds.left + 1) * (bounds.bottom - bounds.top + 1);
     var terrainStride = 1;
@@ -494,6 +560,10 @@ class _ParcelWorldPainter extends CustomPainter {
     }
     final terrainTop = floorDivide(bounds.top, terrainStride) * terrainStride;
     final terrainLeft = floorDivide(bounds.left, terrainStride) * terrainStride;
+    final shimmerBuckets = List<Path>.generate(
+      waterShimmerBands,
+      (_) => Path(),
+    );
     for (var row = terrainTop; row <= bounds.bottom; row += terrainStride) {
       for (
         var column = terrainLeft;
@@ -541,16 +611,181 @@ class _ParcelWorldPainter extends CustomPainter {
             offset,
           );
         }
+        if (anyWater && terrainStride == 1) {
+          final center = _worldToScreen(blockCenter, size, scale, offset);
+          final bucket = shimmerBuckets[(column - row) % waterShimmerBands];
+          bucket
+            ..moveTo(center.dx, center.dy - _logicalTileHeight / 2 * scale)
+            ..lineTo(center.dx + _logicalTileWidth / 2 * scale, center.dy)
+            ..lineTo(center.dx, center.dy + _logicalTileHeight / 2 * scale)
+            ..lineTo(center.dx - _logicalTileWidth / 2 * scale, center.dy)
+            ..close();
+        }
       }
     }
 
     _drawOwnedParcels(canvas, size, bounds);
     _drawRoads(canvas, size, queries, bounds);
     _drawBridges(canvas, size, bounds);
-    _drawStructures(canvas, size, bounds);
-    _drawPendingConstructions(canvas, size);
-    _drawRoadPlan(canvas, size);
-    _drawSelection(canvas, size, queries);
+    cache.picture?.dispose();
+    cache.picture = recorder.endRecording();
+    cache.key = cacheKey;
+    cache.shimmerPaths = shimmerBuckets;
+  }
+
+  /// A gentle travelling highlight over the water: diagonal bands of
+  /// translucent white whose brightness rises and falls out of phase,
+  /// reading as ripples moving across rivers, lakes, and the ocean.
+  void _paintWaterShimmer(
+    Canvas canvas,
+    _TerrainLayerCache cache,
+    double seconds,
+  ) {
+    final paths = cache.shimmerPaths;
+    if (paths == null) return;
+    for (var bucket = 0; bucket < paths.length; bucket++) {
+      final wave =
+          0.5 +
+          0.5 *
+              math.sin(
+                2 * math.pi * (seconds / waterShimmerPeriod) -
+                    bucket * 2 * math.pi / paths.length,
+              );
+      final alpha = wave * waterShimmerMaxOpacity;
+      if (alpha < 0.006) continue;
+      canvas.drawPath(
+        paths[bucket],
+        Paint()
+          ..color = Color.fromARGB(
+            (alpha * 255).round(),
+            waterShimmerColorR,
+            waterShimmerColorG,
+            waterShimmerColorB,
+          ),
+      );
+    }
+  }
+
+  /// Structures and ambient pedestrians share one depth-sorted pass so
+  /// people disappear behind buildings correctly.
+  void _drawActors(
+    Canvas canvas,
+    Size size,
+    _CellBounds bounds,
+    double seconds,
+  ) {
+    pedestrians.update(seconds, state, queries);
+    final actors = <(double, PlacedStructure?, _Pedestrian?)>[];
+    for (final structure in queries.structuresInBounds(
+      left: bounds.left - 5,
+      right: bounds.right + 5,
+      top: bounds.top - 5,
+      bottom: bounds.bottom + 5,
+    )) {
+      actors.add((
+        structure.footprint
+            .map((cell) => cell.column + cell.row)
+            .reduce(math.max)
+            .toDouble(),
+        structure,
+        null,
+      ));
+    }
+    for (final pedestrian in pedestrians.list) {
+      actors.add((pedestrian.depth, null, pedestrian));
+    }
+    actors.sort((a, b) => a.$1.compareTo(b.$1));
+    for (final actor in actors) {
+      final structure = actor.$2;
+      if (structure != null) {
+        _drawStructure(canvas, size, structure, seconds);
+      } else {
+        _drawPedestrian(canvas, size, actor.$3!, seconds);
+      }
+    }
+  }
+
+  void _drawStructure(
+    Canvas canvas,
+    Size size,
+    PlacedStructure structure,
+    double seconds,
+  ) {
+    final definition = structureById[structure.catalogueId]!;
+    final image = images[citysimAssetPath(definition.assetRole)];
+    if (image == null) return;
+    final sprite = spriteManifest[definition.assetRole]!;
+    final rect = _worldRectToScreen(
+      _structureRect(image, definition, structure),
+      size,
+      scale,
+      offset,
+    );
+    final source = Rect.fromLTWH(
+      0,
+      0,
+      image.width.toDouble(),
+      image.height.toDouble(),
+    );
+    final paint = Paint()..filterQuality = FilterQuality.medium;
+    if (!sprite.sways) {
+      canvas.drawImageRect(image, source, rect, paint);
+      return;
+    }
+    // Vegetation rocks a couple of degrees around its ground anchor; the
+    // phase and speed derive from the tile so the motion is stable across
+    // reloads and neighbouring plants move out of step.
+    final origin = structure.origin;
+    final phase = origin.column * 1.7 + origin.row * 2.3;
+    final frequency =
+        vegetationSwayBaseFrequency +
+        ((origin.column * 3 + origin.row * 7) % vegetationSwayFrequencySteps) *
+            vegetationSwayFrequencyStep;
+    final angle =
+        vegetationSwayMaxAngle * math.sin(seconds * frequency + phase);
+    final pivot = Offset(
+      rect.left + rect.width * sprite.groundAnchorX,
+      rect.top + rect.height * sprite.groundAnchorY,
+    );
+    canvas
+      ..save()
+      ..translate(pivot.dx, pivot.dy)
+      ..rotate(angle)
+      ..translate(-pivot.dx, -pivot.dy)
+      ..drawImageRect(image, source, rect, paint)
+      ..restore();
+  }
+
+  void _drawPedestrian(
+    Canvas canvas,
+    Size size,
+    _Pedestrian pedestrian,
+    double seconds,
+  ) {
+    final world = pedestrian.worldPosition();
+    final screen = _worldToScreen(world, size, scale, offset);
+    if (screen.dx < -40 ||
+        screen.dx > size.width + 40 ||
+        screen.dy < -60 ||
+        screen.dy > size.height + 60) {
+      return;
+    }
+    final image = images[pedestrian.assetPath(seconds)];
+    if (image == null) return;
+    final unit = 0.5 * scale * pedestrianSpriteScale;
+    final width = image.width * unit;
+    final height = image.height * unit;
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+      Rect.fromLTWH(
+        screen.dx - width / 2,
+        screen.dy + 2 * scale - height,
+        width,
+        height,
+      ),
+      Paint()..filterQuality = FilterQuality.medium,
+    );
   }
 
   _CellBounds _visibleCellBounds(Size size, double cameraScale, Offset pan) {
@@ -800,41 +1035,6 @@ class _ParcelWorldPainter extends CustomPainter {
         ..filterQuality = FilterQuality.medium
         ..color = const Color(0xFFFFFFFF),
     );
-  }
-
-  void _drawStructures(Canvas canvas, Size size, _CellBounds bounds) {
-    final structures =
-        queries.structuresInBounds(
-          left: bounds.left - 5,
-          right: bounds.right + 5,
-          top: bounds.top - 5,
-          bottom: bounds.bottom + 5,
-        )..sort((a, b) {
-          final aDepth = a.footprint
-              .map((cell) => cell.column + cell.row)
-              .reduce(math.max);
-          final bDepth = b.footprint
-              .map((cell) => cell.column + cell.row)
-              .reduce(math.max);
-          return aDepth.compareTo(bDepth);
-        });
-    for (final structure in structures) {
-      final definition = structureById[structure.catalogueId]!;
-      final image = images[citysimAssetPath(definition.assetRole)];
-      if (image == null) continue;
-      final rect = _worldRectToScreen(
-        _structureRect(image, definition, structure),
-        size,
-        scale,
-        offset,
-      );
-      canvas.drawImageRect(
-        image,
-        Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-        rect,
-        Paint()..filterQuality = FilterQuality.medium,
-      );
-    }
   }
 
   void _drawPendingConstructions(Canvas canvas, Size size) {
@@ -1116,7 +1316,16 @@ void _drawCellWash(
     ..lineTo(center.dx, center.dy + halfHeight)
     ..lineTo(center.dx - halfWidth, center.dy)
     ..close();
-  canvas.drawPath(path, Paint()..color = const Color(0x4FB5DCCF));
+  canvas.drawPath(
+    path,
+    Paint()
+      ..color = Color.fromARGB(
+        unownedLandWashAlpha,
+        unownedLandWashRed,
+        unownedLandWashGreen,
+        unownedLandWashBlue,
+      ),
+  );
 }
 
 void _drawCellOutline(
@@ -1205,3 +1414,194 @@ bool _containsCell(_CellBounds bounds, CellCoord cell) =>
     cell.column <= bounds.right &&
     cell.row >= bounds.top &&
     cell.row <= bounds.bottom;
+
+/// How large ambient pedestrians render relative to the standard
+/// 128×64 tile scale. A 24×32 character frame at this size reads as a
+/// person roughly two-thirds of a small building's height.
+
+/// Elapsed-time source for ambient rendering. A raw ticker rather than an
+/// [AnimationController] so the value is plainly "seconds since startup",
+/// with no repeating wrap that would jump animation phases.
+///
+/// The ticker callback receives cumulative time since the ticker started,
+/// so the elapsed value is *assigned*, never accumulated — accumulating it
+/// would advance ambient time once per frame and couple animation speed to
+/// the frame rate. [ambientTimeScale] converts real seconds to animation
+/// seconds in one place.
+class _AmbientClock extends ChangeNotifier {
+  double _seconds = 0;
+
+  double get seconds => _seconds;
+
+  void tick(Duration elapsed) {
+    _seconds =
+        elapsed.inMicroseconds /
+        Duration.microsecondsPerSecond *
+        ambientTimeScale;
+    notifyListeners();
+  }
+}
+
+/// Records the camera- and world-dependent ground layers (terrain, shores,
+/// roads, bridges) plus the prebuilt water-shimmer band paths. Rebuilt
+/// whenever any cache-key input changes; replayed every animation frame.
+class _TerrainLayerCache {
+  ui.Picture? picture;
+  List<Path>? shimmerPaths;
+  Object? key;
+
+  void dispose() {
+    picture?.dispose();
+    picture = null;
+    shimmerPaths = null;
+    key = null;
+  }
+}
+
+/// Render-only pedestrians that wander along connected roads. They are
+/// deliberately excluded from world state and saves: ambience never
+/// affects gameplay, and a reload simply repopulates the streets.
+class _PedestrianSim {
+  final List<_Pedestrian> list = [];
+  int _roadCount = -1;
+  double _lastSeconds = 0;
+
+  void update(double seconds, ParcelWorldState state, WorldQueries queries) {
+    final roadCells = <CellCoord>{
+      for (final road in state.roads)
+        if (queries.connectedRoadCells.contains(road.cell)) road.cell,
+    };
+    if (roadCells.length != _roadCount) {
+      _roadCount = roadCells.length;
+      _lastSeconds = seconds;
+      _reconcile(roadCells, state.seed);
+      return;
+    }
+    final dt = (seconds - _lastSeconds).clamp(0.0, 0.25);
+    _lastSeconds = seconds;
+    if (dt <= 0) return;
+    final random = math.Random();
+    for (final pedestrian in list) {
+      pedestrian.advance(dt, roadCells, random);
+    }
+  }
+
+  void _reconcile(Set<CellCoord> roadCells, int seed) {
+    if (roadCells.length < 2) {
+      list.clear();
+      return;
+    }
+    final target = (roadCells.length / pedestrianRoadCellsPerPerson)
+        .floor()
+        .clamp(0, pedestrianMaxCount);
+    final random = math.Random(seed + roadCells.length);
+    final cells = roadCells.toList()..shuffle(random);
+    while (list.length > target) {
+      list.removeLast();
+    }
+    var cursor = 0;
+    while (list.length < target && cells.isNotEmpty) {
+      final from = cells[cursor % cells.length];
+      cursor++;
+      final next = _pickNext(from, null, roadCells, random);
+      if (next == null) continue;
+      list.add(
+        _Pedestrian(
+          character: 'abc'[random.nextInt(3)],
+          from: from,
+          to: next,
+          speed:
+              pedestrianSpeedMin + random.nextDouble() * pedestrianSpeedRange,
+          phase: random.nextDouble() * 4,
+          offset: Offset(
+            (random.nextDouble() - 0.5) * pedestrianLateralWanderX,
+            (random.nextDouble() - 0.5) * pedestrianLateralWanderY,
+          ),
+        ),
+      );
+    }
+  }
+}
+
+CellCoord? _pickNext(
+  CellCoord cell,
+  CellCoord? previous,
+  Set<CellCoord> roadCells,
+  math.Random random,
+) {
+  var options = cell.neighbors
+      .where((next) => roadCells.contains(next) && next != previous)
+      .toList();
+  if (options.isEmpty) {
+    options = cell.neighbors.where(roadCells.contains).toList();
+  }
+  if (options.isEmpty) return null;
+  return options[random.nextInt(options.length)];
+}
+
+class _Pedestrian {
+  _Pedestrian({
+    required this.character,
+    required this.from,
+    required this.to,
+    required this.speed,
+    required this.phase,
+    required this.offset,
+  });
+
+  final String character;
+  CellCoord from;
+  CellCoord to;
+  final double speed;
+  final double phase;
+  final Offset offset;
+  double progress = 0;
+
+  void advance(double dt, Set<CellCoord> roadCells, math.Random random) {
+    progress += speed * dt;
+    while (progress >= 1) {
+      final previous = from;
+      from = to;
+      final next = _pickNext(from, previous, roadCells, random);
+      if (next == null) {
+        progress = 0;
+        return;
+      }
+      to = next;
+      progress -= 1;
+    }
+  }
+
+  /// Pack walk-cycle frames are named for the isometric compass, which maps
+  /// onto grid directions: north (row −1) is screen NE, east (col +1) is
+  /// SE, south (row +1) is SW, and west (col −1) is NW.
+  String get _direction {
+    final dx = to.column - from.column;
+    final dy = to.row - from.row;
+    if (dy < 0) return 'NE';
+    if (dx > 0) return 'SE';
+    if (dy > 0) return 'SW';
+    return 'NW';
+  }
+
+  String assetPath(double seconds) {
+    final frame = ((seconds * pedestrianWalkFrameRate + phase).floor() % 4) + 1;
+    return 'assets/citysim/buggy_studio/Characters/'
+        'char_${character}_walk_${_direction}_f0$frame.png';
+  }
+
+  Offset worldPosition() {
+    final a = _cellWorldCenter(from);
+    final b = _cellWorldCenter(to);
+    return Offset(
+          a.dx + (b.dx - a.dx) * progress,
+          a.dy + (b.dy - a.dy) * progress,
+        ) +
+        offset;
+  }
+
+  double get depth =>
+      from.column +
+      from.row +
+      ((to.column - from.column) + (to.row - from.row)) * progress;
+}

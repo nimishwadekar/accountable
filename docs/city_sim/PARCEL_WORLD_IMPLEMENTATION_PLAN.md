@@ -89,6 +89,7 @@ Future generator work should preserve a stable provider API and pinned version; 
 - Preserve stable depth ordering for tall/multi-cell sprites; distinguish logical footprints from transparent image margins.
 - Share image caching and report load/retry failures visibly.
 - Derive road masks and shoreline sprites from logical neighbors; never store sprite filenames in durable state.
+- Ambient animation (water shimmer, vegetation sway, road pedestrians) runs on a ticker-driven clock and repaints through the painter's `repaint` listenable. Ground, roads, and bridges are recorded into a cached `ui.Picture` keyed by world, camera, and image set, so per-frame work is limited to replaying that picture plus the animated layers. Ambient state is render-only: it is not persisted, does not touch rules, and the ticker is muted under reduced-motion preferences.
 - Audit supplied sprite alignment for dirt paths, shore masks, and bridge axes/ramps. Do not invent construction art or use damaged sprites as construction stages; project progress is separate from final building art.
 - Profile large worlds after terrain generation exists. Consider cached far-zoom summaries only when measurements justify them.
 
