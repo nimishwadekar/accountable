@@ -1,0 +1,1504 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import 'world/coordinates.dart';
+import 'world/terrain_provider.dart';
+import 'world/world_content.dart';
+import 'world/world_queries.dart';
+import 'world/world_reducer.dart';
+import 'world/world_rules.dart';
+import 'world/world_save_store.dart';
+import 'world/world_state.dart';
+import 'rendering/parcel_world_view.dart';
+
+enum _WorldTool { inspect, parcel, road, building, decor, bridge }
+
+class ParcelCityApp extends StatelessWidget {
+  const ParcelCityApp({super.key, this.store});
+
+  final ParcelWorldStore? store;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    title: 'Parcel City Preview',
+    theme: ThemeData(
+      useMaterial3: true,
+      scaffoldBackgroundColor: const Color(0xFFF4F3EA),
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF276B58),
+        surface: const Color(0xFFFCFBF6),
+      ),
+      textTheme: const TextTheme(
+        titleMedium: TextStyle(
+          color: Color(0xFF193A31),
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ),
+    home: ParcelCityPage(store: store),
+  );
+}
+
+class ParcelCityPage extends StatefulWidget {
+  const ParcelCityPage({super.key, this.store});
+
+  final ParcelWorldStore? store;
+
+  @override
+  State<ParcelCityPage> createState() => _ParcelCityPageState();
+}
+
+class _ParcelCityPageState extends State<ParcelCityPage> {
+  final TerrainProvider _terrain = const DemoTerrainProvider();
+  late final ParcelWorldStore _store =
+      widget.store ??
+      SharedPreferencesParcelWorldStore(terrainProvider: _terrain);
+  late final ParcelWorldSaveCoordinator _saveCoordinator =
+      ParcelWorldSaveCoordinator(_store);
+
+  ParcelWorldState? _world;
+  Object? _loadError;
+  String? _saveError;
+  bool _legacySaveNeedsChoice = false;
+  bool _loading = true;
+
+  _WorldTool _tool = _WorldTool.inspect;
+  RoadStyle _roadStyle = RoadStyle.dirt;
+  String? _selectedCatalogueId;
+  CellCoord? _selectedCell;
+  ParcelCoord? _selectedParcel;
+  CellCoord? _bridgeStartCell;
+  List<CellCoord> _roadPlanCells = const [];
+  int _cameraResetToken = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadWorld());
+  }
+
+  Future<void> _loadWorld() async {
+    try {
+      final loaded = await _store.load();
+      if (loaded != null) {
+        if (!mounted) return;
+        setState(() {
+          _world = loaded;
+          _loading = false;
+        });
+        return;
+      }
+      final hasLegacy = await _store.hasLegacyV1Save();
+      if (hasLegacy) {
+        if (!mounted) return;
+        setState(() {
+          _legacySaveNeedsChoice = true;
+          _loading = false;
+        });
+        return;
+      }
+      final initial = _newWorld();
+      await _store.save(initial);
+      if (!mounted) return;
+      setState(() {
+        _world = initial;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = error;
+        _loading = false;
+      });
+    }
+  }
+
+  ParcelWorldState _newWorld() => newParcelWorldState(
+    seed: DateTime.now().microsecondsSinceEpoch & 0x7FFFFFFF,
+    terrainProvider: _terrain,
+  );
+
+  void _commit(ParcelWorldState next, {bool replace = false}) {
+    setState(() {
+      _world = next;
+      _legacySaveNeedsChoice = false;
+      _loadError = null;
+    });
+    final write = replace
+        ? _saveCoordinator.replace(next)
+        : _saveCoordinator.save(next);
+    unawaited(
+      write
+          .then<void>((_) {
+            if (mounted) setState(() => _saveError = null);
+          })
+          .catchError((Object error) {
+            if (mounted) setState(() => _saveError = error.toString());
+          }),
+    );
+  }
+
+  void _runAction(ParcelWorldState Function(ParcelWorldState) action) {
+    final world = _world;
+    if (world == null) return;
+    try {
+      _commit(action(world));
+    } on WorldRuleViolation catch (error) {
+      _showMessage(error.message);
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _onCellTap(CellCoord cell, String? structureId) {
+    final world = _world;
+    if (world == null) return;
+    if (_tool == _WorldTool.road) {
+      final roadProject = world.constructions
+          .where((job) => job.kind == WorldConstructionKind.road)
+          .firstOrNull;
+      if (roadProject != null) {
+        setState(() {
+          _selectedCell = cell;
+          _selectedParcel = null;
+          _bridgeStartCell = null;
+        });
+        return;
+      }
+      if (world.constructions.length >= world.builderCapacity) {
+        _showMessage('Your builder is assigned to another project.');
+        return;
+      }
+      final proposed = [..._roadPlanCells, cell];
+      try {
+        quoteRoadStretch(world, _terrain, cells: proposed, style: _roadStyle);
+        setState(() {
+          _roadPlanCells = proposed;
+          _selectedCell = cell;
+          _selectedParcel = null;
+          _selectedCatalogueId = null;
+          _bridgeStartCell = null;
+        });
+      } on WorldRuleViolation catch (error) {
+        _showMessage(error.message);
+      }
+      return;
+    }
+    setState(() {
+      _selectedCell = cell;
+      if (_tool == _WorldTool.parcel) {
+        _selectedParcel = parcelForCell(cell);
+        _selectedCatalogueId = null;
+        _bridgeStartCell = null;
+      } else if (_tool == _WorldTool.bridge) {
+        _selectedParcel = null;
+        _selectedCatalogueId = null;
+        if (_bridgeStartCell == null || _bridgeStartCell == cell) {
+          _bridgeStartCell = cell;
+        }
+      } else if (_tool == _WorldTool.building || _tool == _WorldTool.decor) {
+        _selectedParcel = null;
+        _bridgeStartCell = null;
+      } else {
+        _selectedParcel = null;
+        _selectedCatalogueId = null;
+        _bridgeStartCell = null;
+      }
+      if (structureId != null && _tool == _WorldTool.inspect) {
+        _selectedCatalogueId = null;
+      }
+    });
+  }
+
+  void _selectTool(_WorldTool tool) {
+    setState(() {
+      _tool = tool;
+      _selectedCell = null;
+      _selectedParcel = null;
+      _bridgeStartCell = null;
+      _selectedCatalogueId = null;
+      if (tool != _WorldTool.road) _roadPlanCells = const [];
+    });
+  }
+
+  List<CellCoord> _activeRoadPlan(ParcelWorldState world) {
+    final project = world.constructions
+        .where((job) => job.kind == WorldConstructionKind.road)
+        .firstOrNull;
+    return project?.roadCells ?? _roadPlanCells;
+  }
+
+  Set<CellCoord> _fundableRoadCells(ParcelWorldState world) {
+    final project = world.constructions
+        .where((job) => job.kind == WorldConstructionKind.road)
+        .firstOrNull;
+    if (project == null) return const <CellCoord>{};
+    final fundable = <CellCoord>{};
+    for (final cell in project.roadCells) {
+      try {
+        quoteRoadTileFunding(
+          world,
+          terrainProvider: _terrain,
+          projectId: project.id,
+          cell: cell,
+        );
+        fundable.add(cell);
+      } on WorldRuleViolation {
+        // Unfinished tiles away from the completed road frontier stay dim.
+      }
+    }
+    return fundable;
+  }
+
+  Future<void> _startParcelWorld() async {
+    final fresh = _newWorld();
+    try {
+      await _saveCoordinator.replace(fresh);
+      if (!mounted) return;
+      setState(() {
+        _world = fresh;
+        _legacySaveNeedsChoice = false;
+        _loading = false;
+        _saveError = null;
+        _roadPlanCells = const [];
+        _selectedCell = null;
+        _selectedParcel = null;
+        _selectedCatalogueId = null;
+        _bridgeStartCell = null;
+        _tool = _WorldTool.inspect;
+      });
+      _showMessage('New parcel world started. The previous save is preserved.');
+    } catch (error) {
+      if (mounted) setState(() => _loadError = error);
+    }
+  }
+
+  Future<void> _resetWorld() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start a new parcel world?'),
+        content: const Text(
+          'This replaces only the parcel-world V2 save. Any older fixed-lot '
+          'preview save remains untouched.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep this world'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Start new world'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _startParcelWorld();
+  }
+
+  Future<void> _confirmParcelPurchase(ParcelCoord coord) async {
+    final world = _world;
+    if (world == null) return;
+    try {
+      final quote = quoteParcelPurchase(world, _terrain, coord);
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Buy parcel ${coord.key}?'),
+          content: Text(
+            '${quote.price} coins · ${quote.landCellCount} land cells and '
+            '${quote.cells.length - quote.landCellCount} water cells.\n\n'
+            'Buildings and roads are not included.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Buy parcel'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      _runAction((state) => purchaseAdjacentParcel(state, _terrain, coord));
+      setState(() => _selectedParcel = null);
+    } on WorldRuleViolation catch (error) {
+      _showMessage(error.message);
+    }
+  }
+
+  Future<void> _confirmStructure() async {
+    final world = _world;
+    final catalogueId = _selectedCatalogueId;
+    final cell = _selectedCell;
+    if (world == null || catalogueId == null || cell == null) return;
+    try {
+      final quote = quoteStructurePlacement(
+        world,
+        _terrain,
+        catalogueId: catalogueId,
+        origin: cell,
+      );
+      final definition = structureById[catalogueId]!;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(
+            definition.kind == StructureKind.decoration
+                ? 'Place ${definition.name.toLowerCase()}?'
+                : 'Plan ${definition.name.toLowerCase()}?',
+          ),
+          content: Text(
+            definition.kind == StructureKind.decoration
+                ? '${quote.price} coins · placed immediately.'
+                : '${quote.price} coins to fully fund. No coins are spent now, '
+                      'but your builder is assigned until the site is fully funded.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(
+                definition.kind == StructureKind.decoration
+                    ? 'Place decoration'
+                    : 'Plan and assign builder',
+              ),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      _runAction(
+        (state) => startStructureConstruction(
+          state,
+          _terrain,
+          catalogueId: catalogueId,
+          origin: cell,
+        ),
+      );
+      setState(() {
+        _selectedCell = null;
+        _selectedCatalogueId = null;
+      });
+    } on WorldRuleViolation catch (error) {
+      _showMessage(error.message);
+    }
+  }
+
+  Future<void> _confirmBridge() async {
+    final world = _world;
+    final nearBank = _bridgeStartCell;
+    final farBank = _selectedCell;
+    if (world == null || nearBank == null || farBank == null) return;
+    try {
+      final quote = quoteRiverBridge(
+        world,
+        _terrain,
+        nearBank: nearBank,
+        farBank: farBank,
+      );
+      final parcelDetail = quote.parcelsToAcquire.isEmpty
+          ? 'No additional parcels are needed.'
+          : '${quote.parcelCost} coins will buy ${quote.parcelsToAcquire.length} '
+                'crossing parcel(s) now.';
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Plan river bridge?'),
+          content: Text(
+            '$parcelDetail The bridge itself costs ${quote.bridgeCost} coins '
+            'to fund. Your builder will stay assigned until it is complete.\n\n'
+            'The far-bank landing road is included in the bridge project.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Plan and assign builder'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      _runAction(
+        (state) => startRiverBridgeConstruction(
+          state,
+          _terrain,
+          nearBank: nearBank,
+          farBank: farBank,
+        ),
+      );
+      setState(() {
+        _bridgeStartCell = null;
+        _selectedCell = null;
+      });
+    } on WorldRuleViolation catch (error) {
+      _showMessage(error.message);
+    }
+  }
+
+  void _startRoadProject() {
+    final world = _world;
+    if (world == null || _roadPlanCells.isEmpty) return;
+    _runAction(
+      (state) => planRoadStretch(
+        state,
+        _terrain,
+        cells: _roadPlanCells,
+        style: _roadStyle,
+      ),
+    );
+    setState(() {
+      _roadPlanCells = const [];
+      _selectedCell = null;
+    });
+  }
+
+  void _undoRoadPlanCell() {
+    if (_roadPlanCells.isEmpty) return;
+    setState(() {
+      _roadPlanCells = _roadPlanCells.sublist(0, _roadPlanCells.length - 1);
+      _selectedCell = _roadPlanCells.isEmpty ? null : _roadPlanCells.last;
+    });
+  }
+
+  void _fundSelectedRoadTile(WorldConstruction project) {
+    final cell = _selectedCell;
+    if (cell == null) return;
+    _runAction(
+      (state) =>
+          fundRoadTile(state, _terrain, projectId: project.id, cell: cell),
+    );
+    setState(() => _selectedCell = null);
+  }
+
+  void _fundProject(WorldConstruction project, int amount) {
+    if (project.kind == WorldConstructionKind.structure) {
+      _runAction(
+        (state) =>
+            fundStructureProject(state, projectId: project.id, amount: amount),
+      );
+    } else if (project.kind == WorldConstructionKind.bridge) {
+      _runAction(
+        (state) =>
+            fundBridgeProject(state, projectId: project.id, amount: amount),
+      );
+    }
+  }
+
+  void _advanceDays(int days) =>
+      _runAction((state) => advanceWorldDays(state, days));
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_loadError case final error?) {
+      return _WorldErrorScreen(
+        error: error,
+        onRetry: () => setState(() {
+          _loadError = null;
+          _loading = true;
+          unawaited(_loadWorld());
+        }),
+        onReset: _resetWorld,
+      );
+    }
+    if (_legacySaveNeedsChoice) return _legacyChoiceScreen();
+    final world = _world;
+    if (world == null) {
+      return const Scaffold(
+        body: Center(child: Text('No parcel world loaded.')),
+      );
+    }
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            children: [
+              _WorldHeader(
+                state: world,
+                saveError: _saveError,
+                canCheckIn: canCheckInWorldToday(world),
+                onCheckIn: () => _runAction(checkInWorldForToday),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth >= 980) {
+                      return Row(
+                        children: [
+                          Expanded(child: _mapPanel(world)),
+                          const SizedBox(width: 12),
+                          SizedBox(width: 360, child: _controlPanel(world)),
+                        ],
+                      );
+                    }
+                    return Column(
+                      children: [
+                        Expanded(flex: 5, child: _mapPanel(world)),
+                        const SizedBox(height: 10),
+                        Expanded(flex: 4, child: _controlPanel(world)),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _legacyChoiceScreen() => Scaffold(
+    body: Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.map_rounded, size: 42, color: Color(0xFF276B58)),
+              const SizedBox(height: 12),
+              Text(
+                'Start the parcel-world preview?',
+                style: Theme.of(context).textTheme.headlineSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'A saved fixed-lot preview was found. The new world starts with '
+                'an empty parcel and one dirt-road tile. Your earlier save is '
+                'preserved under its original key and will not be converted or '
+                'overwritten.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              FilledButton(
+                onPressed: _startParcelWorld,
+                child: const Text('Start new parcel world'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _mapPanel(ParcelWorldState world) => Container(
+    decoration: BoxDecoration(
+      color: const Color(0xFFB5DCCF),
+      borderRadius: BorderRadius.circular(22),
+      border: Border.all(color: const Color(0xFFD6E1D6)),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: Stack(
+      children: [
+        Positioned.fill(
+          child: ParcelWorldView(
+            state: world,
+            terrainProvider: _terrain,
+            selectedCell: _selectedCell,
+            selectedParcel: _tool == _WorldTool.parcel ? _selectedParcel : null,
+            selectedCatalogueId: _selectedCatalogueId,
+            bridgeStartCell: _bridgeStartCell,
+            roadPlanCells: _activeRoadPlan(world),
+            fundableRoadCells: _fundableRoadCells(world),
+            cameraResetToken: _cameraResetToken,
+            onCellTap: _onCellTap,
+          ),
+        ),
+        Positioned(
+          left: 12,
+          top: 12,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xEFFFFFFF),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '${world.parcels.length} parcel${world.parcels.length == 1 ? '' : 's'}'
+              ' · ${world.structures.length} structures',
+              style: const TextStyle(
+                color: Color(0xFF244F41),
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          right: 10,
+          top: 10,
+          child: IconButton.filledTonal(
+            tooltip: 'Reset camera',
+            onPressed: () => setState(() => _cameraResetToken++),
+            icon: const Icon(Icons.center_focus_strong_rounded),
+          ),
+        ),
+        Positioned(
+          left: 12,
+          bottom: 12,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0xEFFFFFFF),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              _mapHint(world),
+              style: const TextStyle(color: Color(0xFF416655), fontSize: 11),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  String _mapHint(ParcelWorldState world) => switch (_tool) {
+    _WorldTool.inspect => 'Drag to pan · pinch to zoom · inspect any tile',
+    _WorldTool.parcel => 'Choose a highlighted neighboring parcel',
+    _WorldTool.road =>
+      world.constructions.any((job) => job.kind == WorldConstructionKind.road)
+          ? 'Select one planned road tile beside a finished road to fund it'
+          : 'Tap connected empty tiles to plan a road stretch; planning is free',
+    _WorldTool.building ||
+    _WorldTool.decor => 'Choose an empty tile for the selected footprint',
+    _WorldTool.bridge =>
+      _bridgeStartCell == null
+          ? 'Choose a connected road tile on the near river bank'
+          : 'Choose a dry landing cell on the far bank',
+  };
+
+  Widget _controlPanel(ParcelWorldState world) => Container(
+    decoration: BoxDecoration(
+      color: const Color(0xFFFCFBF6),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0xFFE5E3D9)),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        _ToolPicker(selected: _tool, onSelected: _selectTool),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 8),
+          child: Text(
+            '${world.builderCapacity - world.constructions.length} of '
+            '${world.builderCapacity} builders available',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF617267)),
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (_tool == _WorldTool.road) _roadControls(world),
+        if (_tool == _WorldTool.parcel && _selectedParcel != null)
+          _parcelAction(world, _selectedParcel!),
+        if ((_tool == _WorldTool.building || _tool == _WorldTool.decor) &&
+            _selectedCatalogueId != null)
+          _structureAction(world),
+        if (_tool == _WorldTool.bridge) _bridgeAction(world),
+        if (_tool == _WorldTool.inspect || _selectedCell == null)
+          _cellInspector(world),
+        if (_tool == _WorldTool.building || _tool == _WorldTool.decor)
+          _catalogue(world),
+        for (final job in world.constructions)
+          if (job.kind != WorldConstructionKind.road)
+            _projectFundingCard(world, job),
+        const SizedBox(height: 12),
+        _ClockControls(
+          state: world,
+          onAdvance: _advanceDays,
+          onRewind: () => _runAction(
+            (state) => setWorldCalendarDate(
+              state,
+              state.simulatedDate.subtract(const Duration(days: 1)),
+            ),
+          ),
+          onDebugGrant: () =>
+              _runAction((state) => grantWorldDebugCoins(state, 10)),
+          onCheckIn: () => _runAction(checkInWorldForToday),
+          canCheckIn: canCheckInWorldToday(world),
+        ),
+        if (world.constructions.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _ConstructionList(state: world),
+        ],
+        const SizedBox(height: 12),
+        _RecentEvents(events: world.events),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _resetWorld,
+            icon: const Icon(Icons.restart_alt_rounded, size: 17),
+            label: const Text('Reset parcel-world save'),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _roadControls(ParcelWorldState world) {
+    final activeRoad = world.constructions
+        .where((job) => job.kind == WorldConstructionKind.road)
+        .firstOrNull;
+    if (activeRoad != null) return _roadFundingCard(world, activeRoad);
+
+    if (world.constructions.length >= world.builderCapacity) {
+      return _PanelCard(
+        title: 'Road plan',
+        child: Text(
+          'Your builder is assigned to ${_projectName(world.constructions.first)}. '
+          'Finish funding it before assigning another project.',
+        ),
+      );
+    }
+
+    String? failure;
+    RoadProjectQuote? quote;
+    if (_roadPlanCells.isNotEmpty) {
+      try {
+        quote = quoteRoadStretch(
+          world,
+          _terrain,
+          cells: _roadPlanCells,
+          style: _roadStyle,
+        );
+      } on WorldRuleViolation catch (error) {
+        failure = error.message;
+      }
+    }
+    return _PanelCard(
+      title: 'Roads',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 6,
+            children: [
+              ChoiceChip(
+                label: const Text('Dirt path'),
+                selected: _roadStyle == RoadStyle.dirt,
+                onSelected: (_) => setState(() => _roadStyle = RoadStyle.dirt),
+              ),
+              ChoiceChip(
+                label: const Text('Asphalt'),
+                selected: _roadStyle == RoadStyle.asphalt,
+                onSelected: (_) =>
+                    setState(() => _roadStyle = RoadStyle.asphalt),
+              ),
+            ],
+          ),
+          Text(
+            _roadPlanCells.isEmpty
+                ? 'Tap a connected empty tile, then continue to draw a four-way road stretch.'
+                : failure ??
+                      '${_roadPlanCells.length} road tiles · '
+                          '${quote!.totalCost} coins total. Plans are free; '
+                          'fund each eligible tile individually.',
+          ),
+          if (quote != null && world.coins == 0)
+            const Text(
+              'Road tiles cost 1 coin each; check in or use a test grant to fund them.',
+            ),
+          if (quote != null)
+            Wrap(
+              spacing: 6,
+              children: [
+                OutlinedButton(
+                  onPressed: _undoRoadPlanCell,
+                  child: const Text('Undo last tile'),
+                ),
+                OutlinedButton(
+                  onPressed: () => setState(() {
+                    _roadPlanCells = const [];
+                    _selectedCell = null;
+                  }),
+                  child: const Text('Clear plan'),
+                ),
+                FilledButton(
+                  onPressed: () => _startRoadProject(),
+                  child: const Text('Assign builder · plan free'),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _roadFundingCard(ParcelWorldState world, WorldConstruction project) {
+    final cell = _selectedCell;
+    RoadTileFundingQuote? quote;
+    String? failure;
+    if (cell != null) {
+      try {
+        quote = quoteRoadTileFunding(
+          world,
+          terrainProvider: _terrain,
+          projectId: project.id,
+          cell: cell,
+        );
+      } on WorldRuleViolation catch (error) {
+        failure = error.message;
+      }
+    }
+    final completedTiles = world.roads
+        .where((road) => road.projectId == project.id)
+        .length;
+    return _PanelCard(
+      title: 'Road construction',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$completedTiles/${project.roadCells.length} tiles completed · '
+            '${project.coinsFunded}/${project.totalCostCoins} coins funded',
+          ),
+          LinearProgressIndicator(value: project.progress),
+          Text(
+            cell == null
+                ? 'Select a planned tile that touches a finished road tile.'
+                : failure ?? 'Fund tile ${cell.key} for 1 coin.',
+          ),
+          if (quote != null)
+            FilledButton(
+              onPressed: world.coins >= quote.price
+                  ? () => _fundSelectedRoadTile(project)
+                  : null,
+              child: const Text('Fund selected road tile · 1 coin'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _projectFundingCard(
+    ParcelWorldState world,
+    WorldConstruction project,
+  ) {
+    final definition = structureById[project.catalogueId];
+    final isBridge = project.kind == WorldConstructionKind.bridge;
+    final title = isBridge ? 'River bridge' : definition?.name ?? 'Building';
+    final available = world.coins < project.coinsRemaining
+        ? world.coins
+        : project.coinsRemaining;
+    final canFund = available > 0;
+    return _PanelCard(
+      title: '$title · Builder ${project.builderSlot + 1}',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${project.coinsFunded}/${project.totalCostCoins} coins funded · '
+            '${project.coinsRemaining} remaining',
+          ),
+          LinearProgressIndicator(value: project.progress),
+          if (!canFund)
+            const Text('Earn a coin with an eligible check-in to continue.'),
+          Wrap(
+            spacing: 6,
+            children: [
+              OutlinedButton(
+                onPressed: canFund ? () => _fundProject(project, 1) : null,
+                child: const Text('Contribute 1 coin'),
+              ),
+              if (available > 1)
+                FilledButton(
+                  onPressed: () => _fundProject(project, available),
+                  child: Text('Contribute $available coins'),
+                ),
+            ],
+          ),
+          const Text(
+            'This builder stays assigned until the project is fully funded.',
+            style: TextStyle(fontSize: 11, color: Color(0xFF617267)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _projectName(WorldConstruction project) {
+    if (project.kind == WorldConstructionKind.road) {
+      return 'a ${project.roadCells.length}-tile road stretch';
+    }
+    if (project.kind == WorldConstructionKind.bridge) return 'a river bridge';
+    return structureById[project.catalogueId]?.name ?? 'a building';
+  }
+
+  Widget _parcelAction(ParcelWorldState world, ParcelCoord parcel) {
+    ParcelPurchaseQuote? quote;
+    String? failure;
+    try {
+      quote = quoteParcelPurchase(world, _terrain, parcel);
+    } on WorldRuleViolation catch (error) {
+      failure = error.message;
+    }
+    return _PanelCard(
+      title: 'Neighboring parcel ${parcel.key}',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (quote != null) ...[
+            Text(
+              '${quote.landCellCount} land cells · ${quote.cells.length - quote.landCellCount} water cells',
+            ),
+            Text(
+              '${quote.price} coins · parcel only; roads and buildings cost extra.',
+            ),
+            if (world.coins < quote.price)
+              Text('Check in for ${quote.price - world.coins} more coin(s).'),
+            const SizedBox(height: 6),
+            FilledButton(
+              onPressed: world.coins >= quote.price
+                  ? () => _confirmParcelPurchase(parcel)
+                  : null,
+              child: const Text('Review parcel purchase'),
+            ),
+          ] else
+            Text(failure ?? 'This parcel is not available.'),
+        ],
+      ),
+    );
+  }
+
+  Widget _structureAction(ParcelWorldState world) {
+    final cell = _selectedCell;
+    final catalogueId = _selectedCatalogueId!;
+    final definition = structureById[catalogueId]!;
+    StructurePlacementQuote? quote;
+    String? failure;
+    if (cell != null) {
+      try {
+        quote = quoteStructurePlacement(
+          world,
+          _terrain,
+          catalogueId: catalogueId,
+          origin: cell,
+        );
+      } on WorldRuleViolation catch (error) {
+        failure = error.message;
+      }
+    }
+    return _PanelCard(
+      title: definition.name,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(definition.description),
+          const SizedBox(height: 4),
+          Text(
+            '${definition.footprintColumns}×${definition.footprintRows} footprint · '
+            '${definition.costLabel} · '
+            '${definition.kind == StructureKind.decoration ? 'placed instantly' : 'funded manually'}',
+          ),
+          const SizedBox(height: 6),
+          Text(
+            cell == null
+                ? 'Select a placement tile.'
+                : failure ?? 'Selected origin ${cell.key}.',
+          ),
+          if (quote != null && world.coins < quote.price)
+            if (definition.kind == StructureKind.decoration)
+              Text('Check in for ${quote.price - world.coins} more coin(s).'),
+          if (quote != null)
+            FilledButton(
+              onPressed:
+                  definition.kind == StructureKind.building ||
+                      world.coins >= quote.price
+                  ? _confirmStructure
+                  : null,
+              child: Text(
+                definition.kind == StructureKind.decoration
+                    ? 'Place instantly'
+                    : 'Plan and assign builder',
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bridgeAction(ParcelWorldState world) {
+    final near = _bridgeStartCell;
+    final far = _selectedCell;
+    BridgeQuote? quote;
+    String? failure;
+    if (near != null && far != null && near != far) {
+      try {
+        quote = quoteRiverBridge(world, _terrain, nearBank: near, farBank: far);
+      } on WorldRuleViolation catch (error) {
+        failure = error.message;
+      }
+    }
+    return _PanelCard(
+      title: 'River bridge',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            near == null
+                ? 'Choose a connected road tile on the near bank.'
+                : far == null || far == near
+                ? 'Now choose a dry tile on the opposite river bank.'
+                : failure ??
+                      '${quote!.waterCells.length} river tiles · '
+                          '${quote.parcelCost} parcel coins now · '
+                          '${quote.bridgeCost} bridge coins to fund.',
+          ),
+          if (quote != null && world.coins < quote.parcelCost)
+            Text(
+              'Check in for ${quote.parcelCost - world.coins} more coin(s) to buy the crossing parcels.',
+            ),
+          if (quote != null)
+            FilledButton(
+              onPressed: world.coins >= quote.parcelCost
+                  ? _confirmBridge
+                  : null,
+              child: const Text('Plan bridge and buy crossing parcels'),
+            ),
+          if (near != null)
+            TextButton(
+              onPressed: () => setState(() {
+                _bridgeStartCell = null;
+                _selectedCell = null;
+              }),
+              child: const Text('Choose near bank again'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _catalogue(ParcelWorldState world) {
+    final definitions = structureCatalogue.where(
+      (definition) =>
+          definition.kind ==
+          (_tool == _WorldTool.decor
+              ? StructureKind.decoration
+              : StructureKind.building),
+    );
+    return _PanelCard(
+      title: _tool == _WorldTool.decor ? 'Decor catalogue' : 'Building models',
+      child: Column(
+        children: [
+          for (final definition in definitions)
+            Builder(
+              builder: (context) {
+                final unlocked = world.unlockedCatalogueIds.contains(
+                  definition.id,
+                );
+                return Material(
+                  color: Colors.transparent,
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    selected: _selectedCatalogueId == definition.id,
+                    leading: Icon(
+                      definition.kind == StructureKind.decoration
+                          ? Icons.local_florist_rounded
+                          : Icons.home_work_rounded,
+                    ),
+                    title: Text(definition.name),
+                    subtitle: Text(
+                      unlocked
+                          ? '${definition.costLabel} · '
+                                '${definition.kind == StructureKind.decoration ? 'instant placement' : 'coin-funded project'}'
+                          : 'Unlock at ${definition.milestoneBuildings} completed buildings',
+                    ),
+                    trailing: unlocked
+                        ? (_selectedCatalogueId == definition.id
+                              ? const Icon(Icons.check_circle_rounded)
+                              : const Icon(Icons.chevron_right_rounded))
+                        : const Icon(Icons.lock_outline_rounded),
+                    onTap: unlocked
+                        ? () => setState(() {
+                            _selectedCatalogueId = definition.id;
+                            _selectedCell = null;
+                            _selectedParcel = null;
+                            _bridgeStartCell = null;
+                          })
+                        : null,
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cellInspector(ParcelWorldState world) {
+    final cell = _selectedCell;
+    if (cell == null) {
+      return const _PanelCard(
+        title: 'World tools',
+        child: Text('Choose parcels, connect roads, then place buildings.'),
+      );
+    }
+    final queries = WorldQueries(world, _terrain);
+    final terrain = queries.terrainAt(cell);
+    final parcel = parcelForCell(cell, parcelSize: world.parcelSize);
+    final road = queries.roadsByCell[cell];
+    final structure = queries.structuresByCell[cell];
+    final job = world.constructions
+        .where(
+          (entry) =>
+              entry.footprint.contains(cell) ||
+              entry.roadCells.contains(cell) ||
+              entry.waterCells.contains(cell) ||
+              entry.nearBank == cell ||
+              entry.farBank == cell,
+        )
+        .firstOrNull;
+    return _PanelCard(
+      title: 'Tile ${cell.key}',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Parcel ${parcel.key} · ${terrain.kind.name}'),
+          Text(queries.ownsCell(cell) ? 'Owned land' : 'Unowned frontier'),
+          if (road != null) Text('${road.style.name} road'),
+          if (structure != null)
+            Text(structureById[structure.catalogueId]?.name ?? 'Structure'),
+          if (job != null)
+            Text(
+              '${job.coinsFunded}/${job.totalCostCoins} coins funded · '
+              '${job.coinsRemaining} remaining',
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorldHeader extends StatelessWidget {
+  const _WorldHeader({
+    required this.state,
+    required this.saveError,
+    required this.canCheckIn,
+    required this.onCheckIn,
+  });
+
+  final ParcelWorldState state;
+  final String? saveError;
+  final bool canCheckIn;
+  final VoidCallback onCheckIn;
+
+  @override
+  Widget build(BuildContext context) {
+    final checkedIn = state.creditedDates.contains(state.dateKey);
+    final brand = Row(
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1D6653),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Icon(Icons.map_rounded, color: Colors.white),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'PARCEL WORLD · SYNTHETIC PREVIEW',
+                style: TextStyle(fontSize: 10, letterSpacing: 1.1),
+              ),
+              Text(
+                'Day ${state.constructionDay} · ${state.dateKey}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final actions = Wrap(
+      spacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Chip(
+          avatar: const Icon(Icons.toll_rounded, color: Color(0xFFAC7C20)),
+          label: Text('${state.coins} coins'),
+          backgroundColor: const Color(0xFFFFF8DA),
+        ),
+        FilledButton.icon(
+          onPressed: canCheckIn ? onCheckIn : null,
+          icon: Icon(checkedIn ? Icons.check_rounded : Icons.add_rounded),
+          label: Text(
+            checkedIn
+                ? 'Checked in'
+                : canCheckIn
+                ? 'Check in · +1'
+                : 'Past day',
+          ),
+        ),
+      ],
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (constraints.maxWidth < 600) ...[
+            brand,
+            Align(alignment: Alignment.centerRight, child: actions),
+          ] else
+            Row(
+              children: [
+                Expanded(child: brand),
+                actions,
+              ],
+            ),
+          if (saveError != null)
+            Text(
+              'Save warning: $saveError',
+              style: const TextStyle(color: Colors.red),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolPicker extends StatelessWidget {
+  const _ToolPicker({required this.selected, required this.onSelected});
+
+  final _WorldTool selected;
+  final ValueChanged<_WorldTool> onSelected;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 5,
+    runSpacing: 5,
+    children: [
+      for (final tool in _WorldTool.values)
+        ChoiceChip(
+          visualDensity: VisualDensity.compact,
+          label: Text(switch (tool) {
+            _WorldTool.inspect => 'Inspect',
+            _WorldTool.parcel => 'Parcels',
+            _WorldTool.road => 'Roads',
+            _WorldTool.building => 'Buildings',
+            _WorldTool.decor => 'Decor',
+            _WorldTool.bridge => 'Bridge',
+          }),
+          selected: selected == tool,
+          onSelected: (_) => onSelected(tool),
+        ),
+    ],
+  );
+}
+
+class _PanelCard extends StatelessWidget {
+  const _PanelCard({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: 9),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF2F3EC),
+      borderRadius: BorderRadius.circular(15),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 5),
+        child,
+      ],
+    ),
+  );
+}
+
+class _ClockControls extends StatelessWidget {
+  const _ClockControls({
+    required this.state,
+    required this.onAdvance,
+    required this.onRewind,
+    required this.onDebugGrant,
+    required this.onCheckIn,
+    required this.canCheckIn,
+  });
+
+  final ParcelWorldState state;
+  final ValueChanged<int> onAdvance;
+  final VoidCallback onRewind;
+  final VoidCallback onDebugGrant;
+  final VoidCallback onCheckIn;
+  final bool canCheckIn;
+
+  @override
+  Widget build(BuildContext context) => _PanelCard(
+    title: 'Paused simulation clock',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${state.totalCoinsEarned} earned · ${state.totalCoinsSpent} spent · ${state.creditedDayCount} check-ins',
+        ),
+        Wrap(
+          spacing: 5,
+          children: [
+            OutlinedButton(
+              onPressed: onRewind,
+              child: const Text('−1 calendar day'),
+            ),
+            OutlinedButton(
+              onPressed: () => onAdvance(1),
+              child: const Text('+1 day'),
+            ),
+            OutlinedButton(
+              onPressed: () => onAdvance(7),
+              child: const Text('+7 days'),
+            ),
+            OutlinedButton(
+              onPressed: () => onAdvance(30),
+              child: const Text('+30 days'),
+            ),
+          ],
+        ),
+        TextButton.icon(
+          onPressed: canCheckIn ? onCheckIn : null,
+          icon: const Icon(Icons.task_alt_rounded),
+          label: Text(
+            canCheckIn
+                ? 'Check in current day'
+                : state.creditedDates.contains(state.dateKey)
+                ? 'Today already credited'
+                : 'Past day cannot be credited',
+          ),
+        ),
+        OutlinedButton(
+          onPressed: onDebugGrant,
+          child: const Text('Grant +10 test coins'),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ConstructionList extends StatelessWidget {
+  const _ConstructionList({required this.state});
+
+  final ParcelWorldState state;
+
+  @override
+  Widget build(BuildContext context) => _PanelCard(
+    title: 'Under construction',
+    child: Column(
+      children: [
+        for (final job in state.constructions)
+          Material(
+            color: Colors.transparent,
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(switch (job.kind) {
+                WorldConstructionKind.structure =>
+                  structureById[job.catalogueId]?.name ?? 'Building',
+                WorldConstructionKind.road =>
+                  '${job.roadCells.length}-tile road stretch',
+                WorldConstructionKind.bridge => 'River bridge',
+              }),
+              subtitle: Text(
+                '${job.coinsFunded}/${job.totalCostCoins} coins funded · '
+                '${job.coinsRemaining} remaining',
+              ),
+              trailing: SizedBox(
+                width: 64,
+                child: LinearProgressIndicator(value: job.progress),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+class _RecentEvents extends StatelessWidget {
+  const _RecentEvents({required this.events});
+
+  final List<WorldEvent> events;
+
+  @override
+  Widget build(BuildContext context) {
+    final recent = events.reversed.take(4).toList();
+    return _PanelCard(
+      title: 'Recent changes',
+      child: recent.isEmpty
+          ? const Text('Check in, buy a parcel, or connect a road to begin.')
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final event in recent) Text('• ${event.description}'),
+              ],
+            ),
+    );
+  }
+}
+
+class _WorldErrorScreen extends StatelessWidget {
+  const _WorldErrorScreen({
+    required this.error,
+    required this.onRetry,
+    required this.onReset,
+  });
+
+  final Object error;
+  final VoidCallback onRetry;
+  final VoidCallback onReset;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.warning_amber_rounded, size: 42),
+            const Text('The parcel-world save could not be loaded.'),
+            Text('$error', textAlign: TextAlign.center),
+            FilledButton(onPressed: onRetry, child: const Text('Try again')),
+            TextButton(
+              onPressed: onReset,
+              child: const Text('Start a new parcel world…'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
