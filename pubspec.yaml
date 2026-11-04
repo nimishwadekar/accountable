@@ -72,12 +72,6 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/config.json
-    - assets/citysim/buggy_studio/
-    - assets/citysim/buggy_studio/Buildings/
-    - assets/citysim/buggy_studio/Characters/
-    - assets/citysim/buggy_studio/Props/
-    - assets/citysim/buggy_studio/Roads and Grounds/
-    - assets/citysim/buggy_studio/Vehicles/
     - test_sheets/
   #   - images/a_dot_ham.jpeg
 
