@@ -1,0 +1,37 @@
+{
+  "ambientTimeScale": 1,
+  "pedestrians": {
+    "lateralWanderX": 10,
+    "lateralWanderY": 6,
+    "maxCount": 10,
+    "roadCellsPerPerson": 6,
+    "speedMin": 0.55,
+    "speedRange": 0.35,
+    "spriteScale": 0.7,
+    "walkFrameRate": 7
+  },
+  "unownedLandWash": {
+    "alpha": 79,
+    "colorRgb": [
+      181,
+      220,
+      207
+    ]
+  },
+  "vegetationSway": {
+    "baseFrequency": 1.1,
+    "frequencyStep": 0.13,
+    "frequencySteps": 7,
+    "maxAngleRadians": 0.045
+  },
+  "waterShimmer": {
+    "bands": 6,
+    "colorRgb": [
+      235,
+      245,
+      250
+    ],
+    "maxOpacity": 0.08,
+    "periodSeconds": 6.5
+  }
+}

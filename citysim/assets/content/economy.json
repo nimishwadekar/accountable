@@ -1,0 +1,15 @@
+{
+  "bridgeCost": {
+    "baseCoins": 4,
+    "perWaterTileCoins": 2
+  },
+  "builderProgression": [],
+  "parcelCost": {
+    "baseCoins": 8,
+    "distanceStepCells": 8,
+    "ownedStepParcels": 12
+  },
+  "roadTileCostCoins": 1,
+  "startingBuilderCapacity": 1,
+  "startingWalletCoins": 0
+}

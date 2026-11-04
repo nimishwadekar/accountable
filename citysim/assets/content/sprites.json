@@ -1,0 +1,969 @@
+{
+  "sprites": {
+    "apartments-brick-brown": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/apartments/bld_apartments_brickbrown_a.png",
+        "right": "sprites/buildings/apartments/bld_apartments_brickbrown_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "apartments",
+      "sways": false
+    },
+    "apartments-brick-white": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/apartments/bld_apartments_brickwhite_a.png",
+        "right": "sprites/buildings/apartments/bld_apartments_brickwhite_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "apartments",
+      "sways": false
+    },
+    "bridge.body.se": {
+      "baseOffsetY": 12,
+      "category": "bridges",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/bridges/body/tile_road_bridge_body_SE_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "body",
+      "sways": false
+    },
+    "bridge.body.sw": {
+      "baseOffsetY": 12,
+      "category": "bridges",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/bridges/body/tile_road_bridge_body_SW_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "body",
+      "sways": false
+    },
+    "bridge.ramp.ne": {
+      "baseOffsetY": 0,
+      "category": "bridges",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/bridges/ramp/tile_road_bridge_ramp_NE_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "ramp",
+      "sways": false
+    },
+    "bridge.ramp.nw": {
+      "baseOffsetY": 0,
+      "category": "bridges",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/bridges/ramp/tile_road_bridge_ramp_NW_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "ramp",
+      "sways": false
+    },
+    "bridge.ramp.se": {
+      "baseOffsetY": 0,
+      "category": "bridges",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/bridges/ramp/tile_road_bridge_ramp_SE_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "ramp",
+      "sways": false
+    },
+    "bridge.ramp.sw": {
+      "baseOffsetY": 0,
+      "category": "bridges",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/bridges/ramp/tile_road_bridge_ramp_SW_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "ramp",
+      "sways": false
+    },
+    "cafe": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/commerce/bld_cafe_a.png",
+        "right": "sprites/buildings/commerce/bld_cafe_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "commerce",
+      "sways": false
+    },
+    "clinic": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/civic/bld_clinic_a.png",
+        "right": "sprites/buildings/civic/bld_clinic_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "civic",
+      "sways": false
+    },
+    "flowers-pink": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/flowers/prop_flowers_pink.png",
+      "renderScale": 1,
+      "subcategory": "flowers",
+      "sways": true
+    },
+    "flowers-red": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/flowers/prop_flowers_red.png",
+      "renderScale": 1,
+      "subcategory": "flowers",
+      "sways": true
+    },
+    "flowers-yellow": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        0.95
+      ],
+      "path": "sprites/props/flowers/prop_flowers_yellow.png",
+      "renderScale": 1,
+      "subcategory": "flowers",
+      "sways": true
+    },
+    "fruit-market": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/commerce/bld_fruitstand_a.png",
+        "right": "sprites/buildings/commerce/bld_fruitstand_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "commerce",
+      "sways": false
+    },
+    "home-medium-blue": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_medium_blue_a.png",
+        "right": "sprites/buildings/houses/bld_house_medium_blue_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-medium-brickwhite": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_medium_brickwhite_a.png",
+        "right": "sprites/buildings/houses/bld_house_medium_brickwhite_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-medium-brown": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_medium_brown_a.png",
+        "right": "sprites/buildings/houses/bld_house_medium_brown_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-small-blue": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_small_blue_a.png",
+        "right": "sprites/buildings/houses/bld_house_small_blue_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-small-red": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_small_red_a.png",
+        "right": "sprites/buildings/houses/bld_house_small_red_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-small-yellow": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_small_yellow_a.png",
+        "right": "sprites/buildings/houses/bld_house_small_yellow_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "office-medium-blue": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/offices/bld_office_medium_blue_a.png",
+        "right": "sprites/buildings/offices/bld_office_medium_blue_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "offices",
+      "sways": false
+    },
+    "office-medium-brickred": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/offices/bld_office_medium_brickred_a.png",
+        "right": "sprites/buildings/offices/bld_office_medium_brickred_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "offices",
+      "sways": false
+    },
+    "office-medium-green": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/offices/bld_office_medium_green_a.png",
+        "right": "sprites/buildings/offices/bld_office_medium_green_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "offices",
+      "sways": false
+    },
+    "pine-medium": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/trees/prop_tree_pine_medium.png",
+      "renderScale": 0.5,
+      "subcategory": "trees",
+      "sways": true
+    },
+    "pine-small": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/trees/prop_tree_pine_small.png",
+      "renderScale": 0.5,
+      "subcategory": "trees",
+      "sways": true
+    },
+    "pine-tall": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/trees/prop_tree_pine_tall.png",
+      "renderScale": 0.5,
+      "subcategory": "trees",
+      "sways": true
+    },
+    "road.corner.e": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/corner/tile_road_corner_E_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "corner",
+      "sways": false
+    },
+    "road.corner.n": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/corner/tile_road_corner_N_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "corner",
+      "sways": false
+    },
+    "road.corner.s": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/corner/tile_road_corner_S_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "corner",
+      "sways": false
+    },
+    "road.corner.w": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/corner/tile_road_corner_W_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "corner",
+      "sways": false
+    },
+    "road.cross": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/cross/tile_road_xsing_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "cross",
+      "sways": false
+    },
+    "road.end.ne": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/end/tile_road_end_NE_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "end",
+      "sways": false
+    },
+    "road.end.nw": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/end/tile_road_end_NW_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "end",
+      "sways": false
+    },
+    "road.end.se": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/end/tile_road_end_SE_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "end",
+      "sways": false
+    },
+    "road.end.sw": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/end/tile_road_end_SW_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "end",
+      "sways": false
+    },
+    "road.straight.se": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/straight/tile_road_straight_SE_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "straight",
+      "sways": false
+    },
+    "road.straight.sw": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/straight/tile_road_straight_SW_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "straight",
+      "sways": false
+    },
+    "road.t.ne": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/t/tile_road_intersection_NE_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "t",
+      "sways": false
+    },
+    "road.t.nw": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/t/tile_road_intersection_NW_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "t",
+      "sways": false
+    },
+    "road.t.se": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/t/tile_road_intersection_SE_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "t",
+      "sways": false
+    },
+    "road.t.sw": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/t/tile_road_intersection_SW_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "t",
+      "sways": false
+    },
+    "shore.dirt.corner.e": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/corner/tile_ground_dirt_watercorner_E_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "corner",
+      "sways": false
+    },
+    "shore.dirt.corner.n": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/corner/tile_ground_dirt_watercorner_N_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "corner",
+      "sways": false
+    },
+    "shore.dirt.corner.s": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/corner/tile_ground_dirt_watercorner_S_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "corner",
+      "sways": false
+    },
+    "shore.dirt.corner.w": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/corner/tile_ground_dirt_watercorner_W_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "corner",
+      "sways": false
+    },
+    "shore.dirt.edge.e": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/edge/tile_ground_dirt_wateredge_E_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "edge",
+      "sways": false
+    },
+    "shore.dirt.edge.n": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/edge/tile_ground_dirt_wateredge_N_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "edge",
+      "sways": false
+    },
+    "shore.dirt.edge.s": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/edge/tile_ground_dirt_wateredge_S_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "edge",
+      "sways": false
+    },
+    "shore.dirt.edge.w": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/edge/tile_ground_dirt_wateredge_W_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "edge",
+      "sways": false
+    },
+    "shore.dirt.quarter.ne": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/quarter/tile_ground_dirt_water_NE_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "quarter",
+      "sways": false
+    },
+    "shore.dirt.quarter.nw": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/quarter/tile_ground_dirt_water_NW_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "quarter",
+      "sways": false
+    },
+    "shore.dirt.quarter.se": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/quarter/tile_ground_dirt_water_SE_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "quarter",
+      "sways": false
+    },
+    "shore.dirt.quarter.sw": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/quarter/tile_ground_dirt_water_SW_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "quarter",
+      "sways": false
+    },
+    "shore.grass.corner.e": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/corner/tile_ground_grass_watercorner_E_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "corner",
+      "sways": false
+    },
+    "shore.grass.corner.n": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/corner/tile_ground_grass_watercorner_N_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "corner",
+      "sways": false
+    },
+    "shore.grass.corner.s": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/corner/tile_ground_grass_watercorner_S_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "corner",
+      "sways": false
+    },
+    "shore.grass.corner.w": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/corner/tile_ground_grass_watercorner_W_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "corner",
+      "sways": false
+    },
+    "shore.grass.edge.e": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/edge/tile_ground_grass_wateredge_E_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "edge",
+      "sways": false
+    },
+    "shore.grass.edge.n": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/edge/tile_ground_grass_wateredge_N_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "edge",
+      "sways": false
+    },
+    "shore.grass.edge.s": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/edge/tile_ground_grass_wateredge_S_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "edge",
+      "sways": false
+    },
+    "shore.grass.edge.w": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/edge/tile_ground_grass_wateredge_W_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "edge",
+      "sways": false
+    },
+    "shore.grass.quarter.ne": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/quarter/tile_ground_grass_water_NE_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "quarter",
+      "sways": false
+    },
+    "shore.grass.quarter.nw": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/quarter/tile_ground_grass_water_NW_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "quarter",
+      "sways": false
+    },
+    "shore.grass.quarter.se": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/quarter/tile_ground_grass_water_SE_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "quarter",
+      "sways": false
+    },
+    "shore.grass.quarter.sw": {
+      "baseOffsetY": 0,
+      "category": "shores",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/shores/quarter/tile_ground_grass_water_SW_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "quarter",
+      "sways": false
+    },
+    "terrain.asphalt": {
+      "baseOffsetY": 0,
+      "category": "ground",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/ground/asphalt/tile_ground_asphalt.png",
+      "renderScale": 0.5,
+      "subcategory": "asphalt",
+      "sways": false
+    },
+    "terrain.concrete": {
+      "baseOffsetY": 0,
+      "category": "ground",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/ground/concrete/tile_ground_concrete.png",
+      "renderScale": 0.5,
+      "subcategory": "concrete",
+      "sways": false
+    },
+    "terrain.dirt": {
+      "baseOffsetY": 0,
+      "category": "ground",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/ground/dirt/tile_ground_dirt.png",
+      "renderScale": 0.5,
+      "subcategory": "dirt",
+      "sways": false
+    },
+    "terrain.grass": {
+      "baseOffsetY": 0,
+      "category": "ground",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/ground/grass/tile_ground_grass.png",
+      "renderScale": 0.5,
+      "subcategory": "grass",
+      "sways": false
+    },
+    "terrain.grass.puddle": {
+      "baseOffsetY": 0,
+      "category": "ground",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/ground/grass/tile_ground_grass_puddle_clean.png",
+      "renderScale": 0.5,
+      "subcategory": "grass",
+      "sways": false
+    },
+    "terrain.water": {
+      "baseOffsetY": 0,
+      "category": "ground",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/ground/water/tile_ground_water.png",
+      "renderScale": 0.5,
+      "subcategory": "water",
+      "sways": false
+    }
+  }
+}

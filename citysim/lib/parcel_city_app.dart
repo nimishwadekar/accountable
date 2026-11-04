@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'content/asset_content_source.dart';
+import 'content/content_bundle.dart';
+import 'rendering/parcel_world_view.dart';
 import 'world/coordinates.dart';
 import 'world/terrain_provider.dart';
 import 'world/world_content.dart';
@@ -10,14 +13,18 @@ import 'world/world_reducer.dart';
 import 'world/world_rules.dart';
 import 'world/world_save_store.dart';
 import 'world/world_state.dart';
-import 'rendering/parcel_world_view.dart';
 
 enum _WorldTool { inspect, parcel, road, building, decor, bridge }
 
 class ParcelCityApp extends StatelessWidget {
-  const ParcelCityApp({super.key, this.store});
+  const ParcelCityApp({super.key, this.store, this.content});
 
   final ParcelWorldStore? store;
+
+  /// Pre-loaded content bundle; loaded from bundled assets when null.
+  /// Widget tests inject one loaded in `setUpAll` because per-test asset
+  /// loading is unreliable after a prior test ran the app.
+  final ContentBundle? content;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -37,14 +44,15 @@ class ParcelCityApp extends StatelessWidget {
         ),
       ),
     ),
-    home: ParcelCityPage(store: store),
+    home: ParcelCityPage(store: store, content: content),
   );
 }
 
 class ParcelCityPage extends StatefulWidget {
-  const ParcelCityPage({super.key, this.store});
+  const ParcelCityPage({super.key, this.store, this.content});
 
   final ParcelWorldStore? store;
+  final ContentBundle? content;
 
   @override
   State<ParcelCityPage> createState() => _ParcelCityPageState();
@@ -52,16 +60,13 @@ class ParcelCityPage extends StatefulWidget {
 
 class _ParcelCityPageState extends State<ParcelCityPage> {
   final TerrainProvider _terrain = const DemoTerrainProvider();
-  late final ParcelWorldStore _store =
-      widget.store ??
-      SharedPreferencesParcelWorldStore(terrainProvider: _terrain);
-  late final ParcelWorldSaveCoordinator _saveCoordinator =
-      ParcelWorldSaveCoordinator(_store);
+  ContentBundle? _content;
+  ParcelWorldStore? _store;
+  ParcelWorldSaveCoordinator? _saveCoordinator;
 
   ParcelWorldState? _world;
   Object? _loadError;
   String? _saveError;
-  bool _legacySaveNeedsChoice = false;
   bool _loading = true;
 
   _WorldTool _tool = _WorldTool.inspect;
@@ -73,15 +78,53 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   List<CellCoord> _roadPlanCells = const [];
   int _cameraResetToken = 0;
 
+  /// Pre-placement door-side choice for the building preview, toggled by
+  /// the floating swap button while roads touch both halves of the
+  /// footprint. Cleared whenever the target cell, model, or tool changes.
+  String? _facingOverride;
+
+  ContentBundle get _requireContent => _content!;
+
   @override
   void initState() {
     super.initState();
-    unawaited(_loadWorld());
+    unawaited(_bootstrap());
+  }
+
+  /// Content loads before anything else: the store needs it for
+  /// reconciliation, and every rule and reducer call reads from it. Tests
+  /// may inject a pre-loaded bundle to avoid per-test asset loading.
+  Future<void> _bootstrap() async {
+    try {
+      final content =
+          widget.content ?? await loadContentBundle(const AssetContentSource());
+      final store =
+          widget.store ??
+          SharedPreferencesParcelWorldStore(
+            content: content,
+            terrainProvider: _terrain,
+          );
+      if (!mounted) return;
+      setState(() {
+        _content = content;
+        _store = store;
+        _saveCoordinator = ParcelWorldSaveCoordinator(store);
+      });
+      await _loadWorld();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = error;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _loadWorld() async {
+    final store = _store;
+    if (store == null) return;
     try {
-      final loaded = await _store.load();
+      final loaded = await store.load();
       if (loaded != null) {
         if (!mounted) return;
         setState(() {
@@ -90,17 +133,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         });
         return;
       }
-      final hasLegacy = await _store.hasLegacyV1Save();
-      if (hasLegacy) {
-        if (!mounted) return;
-        setState(() {
-          _legacySaveNeedsChoice = true;
-          _loading = false;
-        });
-        return;
-      }
       final initial = _newWorld();
-      await _store.save(initial);
+      await store.save(initial);
       if (!mounted) return;
       setState(() {
         _world = initial;
@@ -116,6 +150,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   }
 
   ParcelWorldState _newWorld() => newParcelWorldState(
+    content: _requireContent,
     seed: DateTime.now().microsecondsSinceEpoch & 0x7FFFFFFF,
     terrainProvider: _terrain,
   );
@@ -123,12 +158,11 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   void _commit(ParcelWorldState next, {bool replace = false}) {
     setState(() {
       _world = next;
-      _legacySaveNeedsChoice = false;
       _loadError = null;
     });
-    final write = replace
-        ? _saveCoordinator.replace(next)
-        : _saveCoordinator.save(next);
+    final coordinator = _saveCoordinator;
+    if (coordinator == null) return;
+    final write = replace ? coordinator.replace(next) : coordinator.save(next);
     unawaited(
       write
           .then<void>((_) {
@@ -177,7 +211,13 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       }
       final proposed = [..._roadPlanCells, cell];
       try {
-        quoteRoadStretch(world, _terrain, cells: proposed, style: _roadStyle);
+        quoteRoadStretch(
+          world,
+          _requireContent,
+          _terrain,
+          cells: proposed,
+          style: _roadStyle,
+        );
         setState(() {
           _roadPlanCells = proposed;
           _selectedCell = cell;
@@ -205,6 +245,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       } else if (_tool == _WorldTool.building || _tool == _WorldTool.decor) {
         _selectedParcel = null;
         _bridgeStartCell = null;
+        _facingOverride = null;
       } else {
         _selectedParcel = null;
         _selectedCatalogueId = null;
@@ -223,6 +264,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       _selectedParcel = null;
       _bridgeStartCell = null;
       _selectedCatalogueId = null;
+      _facingOverride = null;
       if (tool != _WorldTool.road) _roadPlanCells = const [];
     });
   }
@@ -244,6 +286,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       try {
         quoteRoadTileFunding(
           world,
+          _requireContent,
           terrainProvider: _terrain,
           projectId: project.id,
           cell: cell,
@@ -256,27 +299,76 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     return fundable;
   }
 
-  Future<void> _startParcelWorld() async {
-    final fresh = _newWorld();
-    try {
-      await _saveCoordinator.replace(fresh);
-      if (!mounted) return;
-      setState(() {
-        _world = fresh;
-        _legacySaveNeedsChoice = false;
-        _loading = false;
-        _saveError = null;
-        _roadPlanCells = const [];
-        _selectedCell = null;
-        _selectedParcel = null;
-        _selectedCatalogueId = null;
-        _bridgeStartCell = null;
-        _tool = _WorldTool.inspect;
-      });
-      _showMessage('New parcel world started. The previous save is preserved.');
-    } catch (error) {
-      if (mounted) setState(() => _loadError = error);
+  /// The door-swap target under the current selection: an unfinished
+  /// building plan when the selected cell sits on one, otherwise the
+  /// pre-placement preview when a building model and cell are selected.
+  /// Null while the door side is fixed — the road touches only one half
+  /// of the footprint, or the sprite has no door facings.
+  ({WorldConstruction? job, String facing})? _doorSwapTarget(
+    ParcelWorldState world,
+  ) {
+    final cell = _selectedCell;
+    if (cell == null) return null;
+    final content = _requireContent;
+
+    for (final job in world.constructions) {
+      if (job.kind != WorldConstructionKind.structure ||
+          !job.footprint.contains(cell)) {
+        continue;
+      }
+      final definition = content.structure(job.catalogueId ?? '');
+      final role = job.assetRole ?? definition?.assetRoles.first;
+      final sprite = role == null ? null : content.sprite(role);
+      if (definition == null ||
+          definition.kind != StructureKind.building ||
+          sprite == null ||
+          !sprite.hasFacings ||
+          job.facing == null) {
+        return null;
+      }
+      final sides = WorldQueries(
+        world,
+        _terrain,
+      ).adjacentDoorSides(job.footprint);
+      return sides.length >= 2 ? (job: job, facing: job.facing!) : null;
     }
+
+    final catalogueId = _selectedCatalogueId;
+    if (_tool != _WorldTool.building || catalogueId == null) return null;
+    final definition = content.structure(catalogueId);
+    if (definition == null || definition.kind != StructureKind.building) {
+      return null;
+    }
+    final role =
+        definition.assetRoles[(world.seed + world.nextEntityNumber) %
+            definition.assetRoles.length];
+    final sprite = content.sprite(role);
+    if (sprite == null || !sprite.hasFacings) return null;
+    final footprint = structureFootprint(definition, cell);
+    final sides = WorldQueries(world, _terrain).adjacentDoorSides(footprint);
+    if (sides.length < 2) return null;
+    return (job: null, facing: _facingOverride ?? doorFacingForSides(sides));
+  }
+
+  /// Flips the door side: an unfinished plan updates through the reducer
+  /// (validated, saved, and recorded as an event); the pre-placement
+  /// preview just flips the local override that placement will honour.
+  void _swapDoorSide(({WorldConstruction? job, String facing}) target) {
+    final job = target.job;
+    if (job != null) {
+      _runAction(
+        (state) => swapStructureFacing(
+          state,
+          _requireContent,
+          _terrain,
+          projectId: job.id,
+        ),
+      );
+      return;
+    }
+    setState(
+      () => _facingOverride = target.facing == 'left' ? 'right' : 'left',
+    );
   }
 
   Future<void> _resetWorld() async {
@@ -285,8 +377,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       builder: (context) => AlertDialog(
         title: const Text('Start a new parcel world?'),
         content: const Text(
-          'This replaces only the parcel-world V2 save. Any older fixed-lot '
-          'preview save remains untouched.',
+          'This replaces the current settlement with a fresh starter parcel.',
         ),
         actions: [
           TextButton(
@@ -301,14 +392,37 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await _startParcelWorld();
+    final fresh = _newWorld();
+    try {
+      await _saveCoordinator?.replace(fresh);
+      if (!mounted) return;
+      setState(() {
+        _world = fresh;
+        _loading = false;
+        _saveError = null;
+        _roadPlanCells = const [];
+        _selectedCell = null;
+        _selectedParcel = null;
+        _selectedCatalogueId = null;
+        _bridgeStartCell = null;
+        _facingOverride = null;
+        _tool = _WorldTool.inspect;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _loadError = error);
+    }
   }
 
   Future<void> _confirmParcelPurchase(ParcelCoord coord) async {
     final world = _world;
     if (world == null) return;
     try {
-      final quote = quoteParcelPurchase(world, _terrain, coord);
+      final quote = quoteParcelPurchase(
+        world,
+        _requireContent,
+        _terrain,
+        coord,
+      );
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -331,7 +445,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         ),
       );
       if (confirmed != true || !mounted) return;
-      _runAction((state) => purchaseAdjacentParcel(state, _terrain, coord));
+      _runAction(
+        (state) =>
+            purchaseAdjacentParcel(state, _requireContent, _terrain, coord),
+      );
       setState(() => _selectedParcel = null);
     } on WorldRuleViolation catch (error) {
       _showMessage(error.message);
@@ -346,11 +463,12 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     try {
       final quote = quoteStructurePlacement(
         world,
+        _requireContent,
         _terrain,
         catalogueId: catalogueId,
         origin: cell,
       );
-      final definition = structureById[catalogueId]!;
+      final definition = _requireContent.structure(catalogueId)!;
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -385,14 +503,20 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       _runAction(
         (state) => startStructureConstruction(
           state,
+          _requireContent,
           _terrain,
           catalogueId: catalogueId,
           origin: cell,
+          preferredFacing: _facingOverride,
         ),
       );
       setState(() {
-        _selectedCell = null;
+        // Keep the site selected after planning a building so the door
+        // arrow and the swap button stay visible while it is unfinished;
+        // decorations place instantly and clear the selection.
+        _selectedCell = definition.kind == StructureKind.building ? cell : null;
         _selectedCatalogueId = null;
+        _facingOverride = null;
       });
     } on WorldRuleViolation catch (error) {
       _showMessage(error.message);
@@ -407,6 +531,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     try {
       final quote = quoteRiverBridge(
         world,
+        _requireContent,
         _terrain,
         nearBank: nearBank,
         farBank: farBank,
@@ -440,6 +565,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       _runAction(
         (state) => startRiverBridgeConstruction(
           state,
+          _requireContent,
           _terrain,
           nearBank: nearBank,
           farBank: farBank,
@@ -460,6 +586,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     _runAction(
       (state) => planRoadStretch(
         state,
+        _requireContent,
         _terrain,
         cells: _roadPlanCells,
         style: _roadStyle,
@@ -483,8 +610,13 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     final cell = _selectedCell;
     if (cell == null) return;
     _runAction(
-      (state) =>
-          fundRoadTile(state, _terrain, projectId: project.id, cell: cell),
+      (state) => fundRoadTile(
+        state,
+        _requireContent,
+        _terrain,
+        projectId: project.id,
+        cell: cell,
+      ),
     );
     setState(() => _selectedCell = null);
   }
@@ -492,8 +624,12 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   void _fundProject(WorldConstruction project, int amount) {
     if (project.kind == WorldConstructionKind.structure) {
       _runAction(
-        (state) =>
-            fundStructureProject(state, projectId: project.id, amount: amount),
+        (state) => fundStructureProject(
+          state,
+          _requireContent,
+          projectId: project.id,
+          amount: amount,
+        ),
       );
     } else if (project.kind == WorldConstructionKind.bridge) {
       _runAction(
@@ -522,7 +658,6 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         onReset: _resetWorld,
       );
     }
-    if (_legacySaveNeedsChoice) return _legacyChoiceScreen();
     final world = _world;
     if (world == null) {
       return const Scaffold(
@@ -571,42 +706,6 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     );
   }
 
-  Widget _legacyChoiceScreen() => Scaffold(
-    body: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.map_rounded, size: 42, color: Color(0xFF276B58)),
-              const SizedBox(height: 12),
-              Text(
-                'Start the parcel-world preview?',
-                style: Theme.of(context).textTheme.headlineSmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'A saved fixed-lot preview was found. The new world starts with '
-                'an empty parcel and one dirt-road tile. Your earlier save is '
-                'preserved under its original key and will not be converted or '
-                'overwritten.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 18),
-              FilledButton(
-                onPressed: _startParcelWorld,
-                child: const Text('Start new parcel world'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-
   Widget _mapPanel(ParcelWorldState world) => Container(
     decoration: BoxDecoration(
       color: const Color(0xFFB5DCCF),
@@ -622,14 +721,35 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             terrainProvider: _terrain,
             selectedCell: _selectedCell,
             selectedParcel: _tool == _WorldTool.parcel ? _selectedParcel : null,
+            content: _requireContent,
             selectedCatalogueId: _selectedCatalogueId,
             bridgeStartCell: _bridgeStartCell,
             roadPlanCells: _activeRoadPlan(world),
             fundableRoadCells: _fundableRoadCells(world),
+            facingOverride: _facingOverride,
             cameraResetToken: _cameraResetToken,
             onCellTap: _onCellTap,
           ),
         ),
+        if (_doorSwapTarget(world) case final target?)
+          Positioned(
+            right: 12,
+            bottom: 46,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF1E6552),
+                elevation: 3,
+              ),
+              onPressed: () => _swapDoorSide(target),
+              icon: const Icon(Icons.swap_horiz_rounded),
+              label: Text(
+                target.facing == 'left'
+                    ? 'Door faces left · swap'
+                    : 'Door faces right · swap',
+              ),
+            ),
+          ),
         Positioned(
           left: 12,
           top: 12,
@@ -744,7 +864,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         ),
         if (world.constructions.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _ConstructionList(state: world),
+          _ConstructionList(state: world, content: _requireContent),
         ],
         const SizedBox(height: 12),
         _RecentEvents(events: world.events),
@@ -783,6 +903,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       try {
         quote = quoteRoadStretch(
           world,
+          _requireContent,
           _terrain,
           cells: _roadPlanCells,
           style: _roadStyle,
@@ -858,6 +979,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       try {
         quote = quoteRoadTileFunding(
           world,
+          _requireContent,
           terrainProvider: _terrain,
           projectId: project.id,
           cell: cell,
@@ -900,7 +1022,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     ParcelWorldState world,
     WorldConstruction project,
   ) {
-    final definition = structureById[project.catalogueId];
+    final definition = _requireContent.structure(project.catalogueId ?? '');
     final isBridge = project.kind == WorldConstructionKind.bridge;
     final title = isBridge ? 'River bridge' : definition?.name ?? 'Building';
     final available = world.coins < project.coinsRemaining
@@ -947,14 +1069,15 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       return 'a ${project.roadCells.length}-tile road stretch';
     }
     if (project.kind == WorldConstructionKind.bridge) return 'a river bridge';
-    return structureById[project.catalogueId]?.name ?? 'a building';
+    return _requireContent.structure(project.catalogueId ?? '')?.name ??
+        'a building';
   }
 
   Widget _parcelAction(ParcelWorldState world, ParcelCoord parcel) {
     ParcelPurchaseQuote? quote;
     String? failure;
     try {
-      quote = quoteParcelPurchase(world, _terrain, parcel);
+      quote = quoteParcelPurchase(world, _requireContent, _terrain, parcel);
     } on WorldRuleViolation catch (error) {
       failure = error.message;
     }
@@ -989,13 +1112,14 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   Widget _structureAction(ParcelWorldState world) {
     final cell = _selectedCell;
     final catalogueId = _selectedCatalogueId!;
-    final definition = structureById[catalogueId]!;
+    final definition = _requireContent.structure(catalogueId)!;
     StructurePlacementQuote? quote;
     String? failure;
     if (cell != null) {
       try {
         quote = quoteStructurePlacement(
           world,
+          _requireContent,
           _terrain,
           catalogueId: catalogueId,
           origin: cell,
@@ -1050,7 +1174,13 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     String? failure;
     if (near != null && far != null && near != far) {
       try {
-        quote = quoteRiverBridge(world, _terrain, nearBank: near, farBank: far);
+        quote = quoteRiverBridge(
+          world,
+          _requireContent,
+          _terrain,
+          nearBank: near,
+          farBank: far,
+        );
       } on WorldRuleViolation catch (error) {
         failure = error.message;
       }
@@ -1095,7 +1225,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   }
 
   Widget _catalogue(ParcelWorldState world) {
-    final definitions = structureCatalogue.where(
+    final definitions = _requireContent.purchaseableModels.where(
       (definition) =>
           definition.kind ==
           (_tool == _WorldTool.decor
@@ -1128,7 +1258,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                       unlocked
                           ? '${definition.costLabel} · '
                                 '${definition.kind == StructureKind.decoration ? 'instant placement' : 'coin-funded project'}'
-                          : 'Unlock at ${definition.milestoneBuildings} completed buildings',
+                          : 'Unlocks at ${definition.unlockAtPopulation} population',
                     ),
                     trailing: unlocked
                         ? (_selectedCatalogueId == definition.id
@@ -1184,7 +1314,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           Text(queries.ownsCell(cell) ? 'Owned land' : 'Unowned frontier'),
           if (road != null) Text('${road.style.name} road'),
           if (structure != null)
-            Text(structureById[structure.catalogueId]?.name ?? 'Structure'),
+            Text(
+              _requireContent.structure(structure.catalogueId)?.name ??
+                  'Structure',
+            ),
           if (job != null)
             Text(
               '${job.coinsFunded}/${job.totalCostCoins} coins funded · '
@@ -1249,6 +1382,11 @@ class _WorldHeader extends StatelessWidget {
           avatar: const Icon(Icons.toll_rounded, color: Color(0xFFAC7C20)),
           label: Text('${state.coins} coins'),
           backgroundColor: const Color(0xFFFFF8DA),
+        ),
+        Chip(
+          avatar: const Icon(Icons.groups_rounded, color: Color(0xFF35695A)),
+          label: Text('${state.population} population'),
+          backgroundColor: const Color(0xFFE3F2EA),
         ),
         FilledButton.icon(
           onPressed: canCheckIn ? onCheckIn : null,
@@ -1410,9 +1548,10 @@ class _ClockControls extends StatelessWidget {
 }
 
 class _ConstructionList extends StatelessWidget {
-  const _ConstructionList({required this.state});
+  const _ConstructionList({required this.state, required this.content});
 
   final ParcelWorldState state;
+  final ContentBundle content;
 
   @override
   Widget build(BuildContext context) => _PanelCard(
@@ -1427,7 +1566,7 @@ class _ConstructionList extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               title: Text(switch (job.kind) {
                 WorldConstructionKind.structure =>
-                  structureById[job.catalogueId]?.name ?? 'Building',
+                  content.structure(job.catalogueId ?? '')?.name ?? 'Building',
                 WorldConstructionKind.road =>
                   '${job.roadCells.length}-tile road stretch',
                 WorldConstructionKind.bridge => 'River bridge',

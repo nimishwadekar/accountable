@@ -2,25 +2,27 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../content/content_bundle.dart';
 import 'terrain_provider.dart';
+import 'world_reducer.dart';
 import 'world_rules.dart';
 import 'world_state.dart';
 
 abstract interface class ParcelWorldStore {
   Future<ParcelWorldState?> load();
   Future<void> save(ParcelWorldState state);
-  Future<bool> hasLegacyV1Save();
 }
 
 class SharedPreferencesParcelWorldStore implements ParcelWorldStore {
   SharedPreferencesParcelWorldStore({
+    required this.content,
     required this.terrainProvider,
     this.preferences,
   });
 
-  static const storageKey = 'citysim.parcel-world.v2';
-  static const legacyV1StorageKey = 'citysim.prototype.v1';
+  static const storageKey = 'citysim.parcel-world';
 
+  final ContentBundle content;
   final TerrainProvider terrainProvider;
   final SharedPreferences? preferences;
 
@@ -38,13 +40,16 @@ class SharedPreferencesParcelWorldStore implements ParcelWorldStore {
     final state = ParcelWorldState.fromJson(
       decoded.map((key, value) => MapEntry(key as String, value)),
     );
-    validateParcelWorldState(state, terrainProvider);
-    return state;
+    // Reconcile progression (population-gated unlocks and builder grants)
+    // before validating so content edits can only ever move a save forward.
+    final reconciled = reconcileWorldProgression(state, content);
+    validateParcelWorldState(reconciled, content, terrainProvider);
+    return reconciled;
   }
 
   @override
   Future<void> save(ParcelWorldState state) async {
-    validateParcelWorldState(state, terrainProvider);
+    validateParcelWorldState(state, content, terrainProvider);
     final saved = await (await _store).setString(
       storageKey,
       jsonEncode(state.toJson()),
@@ -53,14 +58,10 @@ class SharedPreferencesParcelWorldStore implements ParcelWorldStore {
       throw StateError('The browser did not confirm saving the parcel world.');
     }
   }
-
-  @override
-  Future<bool> hasLegacyV1Save() async =>
-      (await _store).containsKey(legacyV1StorageKey);
 }
 
 /// Serializes persistence and makes reset/scenario replacement win over stale
-/// queued snapshots. It only ever writes the parcel-world V2 key.
+/// queued snapshots. It only ever writes the parcel-world key.
 class ParcelWorldSaveCoordinator {
   ParcelWorldSaveCoordinator(this.store);
 

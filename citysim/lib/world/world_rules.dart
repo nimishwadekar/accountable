@@ -4,6 +4,8 @@ import 'world_content.dart';
 import 'world_queries.dart';
 import 'world_state.dart';
 
+import '../content/content_bundle.dart';
+
 class WorldRuleViolation implements Exception {
   const WorldRuleViolation(this.message);
 
@@ -120,6 +122,7 @@ class BridgeQuote {
 
 ParcelPurchaseQuote quoteParcelPurchase(
   ParcelWorldState state,
+  ContentBundle content,
   TerrainProvider terrainProvider,
   ParcelCoord candidate, {
   WorldRules rules = const WorldRules(),
@@ -149,13 +152,14 @@ ParcelPurchaseQuote quoteParcelPurchase(
   }
   return ParcelPurchaseQuote(
     coord: candidate,
-    price: parcelCost(candidate, state.parcels.length),
+    price: content.parcelCost(candidate, state.parcels.length),
     cells: cells,
   );
 }
 
 RoadProjectQuote quoteRoadStretch(
   ParcelWorldState state,
+  ContentBundle content,
   TerrainProvider terrainProvider, {
   required List<CellCoord> cells,
   required RoadStyle style,
@@ -195,13 +199,14 @@ RoadProjectQuote quoteRoadStretch(
   return RoadProjectQuote(
     cells: List.unmodifiable(cells),
     style: style,
-    totalCost: cells.length * roadCost(style),
+    totalCost: cells.length * content.roadTileCost(),
     builderSlot: builderSlot,
   );
 }
 
 RoadTileFundingQuote quoteRoadTileFunding(
-  ParcelWorldState state, {
+  ParcelWorldState state,
+  ContentBundle content, {
   required TerrainProvider terrainProvider,
   required String projectId,
   required CellCoord cell,
@@ -219,7 +224,11 @@ RoadTileFundingQuote quoteRoadTileFunding(
       'Fund only the next road tile touching a completed road tile.',
     );
   }
-  return RoadTileFundingQuote(jobId: projectId, cell: cell, price: 1);
+  return RoadTileFundingQuote(
+    jobId: projectId,
+    cell: cell,
+    price: content.economy.roadTileCostCoins,
+  );
 }
 
 StructureFundingQuote quoteStructureFunding(
@@ -243,13 +252,16 @@ StructureFundingQuote quoteStructureFunding(
 
 StructurePlacementQuote quoteStructurePlacement(
   ParcelWorldState state,
+  ContentBundle content,
   TerrainProvider terrainProvider, {
   required String catalogueId,
   required CellCoord origin,
   int quarterTurns = 0,
 }) {
-  final definition = structureById[catalogueId];
-  if (definition == null || !state.unlockedCatalogueIds.contains(catalogueId)) {
+  final definition = content.structure(catalogueId);
+  if (definition == null ||
+      !definition.enabled ||
+      !state.unlockedCatalogueIds.contains(catalogueId)) {
     throw const WorldRuleViolation('That model has not been unlocked.');
   }
   final builderSlot = definition.kind == StructureKind.building
@@ -292,6 +304,7 @@ StructurePlacementQuote quoteStructurePlacement(
 
 BridgeQuote quoteRiverBridge(
   ParcelWorldState state,
+  ContentBundle content,
   TerrainProvider terrainProvider, {
   required CellCoord nearBank,
   required CellCoord farBank,
@@ -396,7 +409,7 @@ BridgeQuote quoteRiverBridge(
     parcelQuotes.add(
       ParcelPurchaseQuote(
         coord: parcel,
-        price: parcelCost(parcel, ownedCount),
+        price: content.parcelCost(parcel, ownedCount),
         cells: terrain,
       ),
     );
@@ -408,7 +421,7 @@ BridgeQuote quoteRiverBridge(
     waterCells: waterCells,
     riverBodyId: bodyId,
     parcelsToAcquire: parcelQuotes,
-    bridgeCost: bridgeCost(spanLength),
+    bridgeCost: content.economy.bridgeCost(spanLength),
     builderSlot: builderSlot,
   );
 }
@@ -445,6 +458,7 @@ WorldConstruction _structureProject(ParcelWorldState state, String projectId) {
 
 void validateParcelWorldState(
   ParcelWorldState state,
+  ContentBundle content,
   TerrainProvider terrainProvider,
 ) {
   if (state.parcelSize != defaultParcelSize ||
@@ -453,6 +467,10 @@ void validateParcelWorldState(
       state.contentVersion != parcelWorldContentVersion ||
       state.worldId.isEmpty ||
       state.builderCapacity < 1 ||
+      // Progression grants reconcile upward on load; a capacity below the
+      // progression floor means the save was never reconciled.
+      state.builderCapacity <
+          content.economy.builderCapacityForPopulation(state.population) ||
       state.constructions.length > state.builderCapacity ||
       state.constructionDay < 0 ||
       worldDateKey(state.checkInHighWaterDate).compareTo(state.dateKey) < 0 ||
@@ -506,6 +524,18 @@ void validateParcelWorldState(
   }
 
   final queries = WorldQueries(state, terrainProvider);
+  // Door sides must match the sprite they render: a left/right facing is
+  // only valid on a sprite that has facings, and facings sprites must
+  // carry one.
+  bool facingMatchesSprite(String? facing, String? role) {
+    if (facing != null && facing != 'left' && facing != 'right') {
+      return false;
+    }
+    final sprite = role == null ? null : content.sprite(role);
+    final hasFacings = sprite != null && sprite.hasFacings;
+    return hasFacings ? facing != null : facing == null;
+  }
+
   final occupied = <CellCoord>{};
   for (final road in state.roads) {
     if (road.pricePaid < 0 ||
@@ -521,7 +551,7 @@ void validateParcelWorldState(
     }
   }
   for (final structure in state.structures) {
-    final definition = structureById[structure.catalogueId];
+    final definition = content.structure(structure.catalogueId);
     final expected = definition == null
         ? const <CellCoord>[]
         : structureFootprint(
@@ -537,6 +567,10 @@ void validateParcelWorldState(
         structure.quarterTurns < 0 ||
         structure.quarterTurns > 3 ||
         !state.unlockedCatalogueIds.contains(structure.catalogueId) ||
+        !facingMatchesSprite(
+          structure.facing,
+          structure.assetRole ?? definition.assetRoles.first,
+        ) ||
         !_sameCells(expected, structure.footprint) ||
         structure.footprint.any(
           (cell) =>
@@ -599,7 +633,7 @@ void validateParcelWorldState(
     if (job.kind == WorldConstructionKind.structure) {
       final definition = job.catalogueId == null
           ? null
-          : structureById[job.catalogueId];
+          : content.structure(job.catalogueId!);
       if (definition == null ||
           definition.kind != StructureKind.building ||
           job.totalCostCoins != definition.costCoins ||
@@ -611,6 +645,10 @@ void validateParcelWorldState(
           job.farBank != null ||
           job.quarterTurns < 0 ||
           job.quarterTurns > 3 ||
+          !facingMatchesSprite(
+            job.facing,
+            job.assetRole ?? definition.assetRoles.first,
+          ) ||
           !_sameCells(
             structureFootprint(
               definition,
@@ -688,7 +726,8 @@ void validateParcelWorldState(
           job.roadCells.isNotEmpty ||
           job.nearBank == null ||
           job.farBank == null ||
-          job.totalCostCoins != bridgeCost(job.waterCells.length) ||
+          job.totalCostCoins !=
+              content.economy.bridgeCost(job.waterCells.length) ||
           !_validBridgeGeometry(
             job.nearBank!,
             job.farBank!,
@@ -717,15 +756,15 @@ void validateParcelWorldState(
     }
   }
 
-  final expectedUnlocks = structureCatalogue
-      .where(
-        (definition) =>
-            state.completedBuildingCount >= definition.milestoneBuildings,
-      )
-      .map((definition) => definition.id)
+  // Population gates: enabled models whose unlock threshold the settlement's
+  // derived population has reached must be unlocked. Disabled models stay
+  // valid in the unlock set (disable-not-delete keeps old saves loadable).
+  final expectedUnlocks = content.purchaseableModels
+      .where((model) => state.population >= model.unlockAtPopulation)
+      .map((model) => model.id)
       .toSet();
   if (!state.unlockedCatalogueIds.containsAll(expectedUnlocks) ||
-      state.unlockedCatalogueIds.any((id) => !structureById.containsKey(id))) {
+      state.unlockedCatalogueIds.any((id) => content.structure(id) == null)) {
     throw const FormatException('The parcel-world model unlocks are invalid.');
   }
 

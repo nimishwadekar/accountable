@@ -11,6 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
 
+  http: ^1.2.2
   shared_preferences: ^2.5.6
 
 dev_dependencies:
@@ -23,9 +24,32 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/content/
+    - assets/characters/
+    - assets/sprites/buildings/apartments/
+    - assets/sprites/buildings/civic/
+    - assets/sprites/buildings/commerce/
+    - assets/sprites/buildings/houses/
+    - assets/sprites/buildings/offices/
+    - assets/sprites/props/flowers/
+    - assets/sprites/props/trees/
+    - assets/sprites/ground/asphalt/
+    - assets/sprites/ground/concrete/
+    - assets/sprites/ground/dirt/
+    - assets/sprites/ground/grass/
+    - assets/sprites/ground/water/
+    - assets/sprites/shores/corner/
+    - assets/sprites/shores/edge/
+    - assets/sprites/shores/quarter/
+    - assets/sprites/roads/corner/
+    - assets/sprites/roads/cross/
+    - assets/sprites/roads/end/
+    - assets/sprites/roads/straight/
+    - assets/sprites/roads/t/
+    - assets/sprites/bridges/body/
+    - assets/sprites/bridges/ramp/
     - assets/buggy_studio/
     - assets/buggy_studio/Buildings/
-    - assets/buggy_studio/Characters/
     - assets/buggy_studio/Props/
     - assets/buggy_studio/Roads and Grounds/
     - assets/buggy_studio/Vehicles/

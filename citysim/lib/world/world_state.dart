@@ -1,11 +1,13 @@
 import 'coordinates.dart';
 import 'terrain_provider.dart';
+
+import '../content/content_bundle.dart';
 import 'world_content.dart';
 
-const parcelWorldSchemaVersion = 3;
+const parcelWorldSchemaVersion = 4;
 const parcelWorldGeneratorVersion = 1;
 const parcelWorldRulesVersion = 2;
-const parcelWorldContentVersion = 2;
+const parcelWorldContentVersion = 3;
 
 class OwnedParcel {
   OwnedParcel({
@@ -83,6 +85,9 @@ class PlacedStructure {
     required List<CellCoord> footprint,
     required this.pricePaid,
     required this.completedAtDay,
+    required this.population,
+    this.assetRole,
+    this.facing,
   }) : footprint = List.unmodifiable(footprint);
 
   final String id;
@@ -94,6 +99,23 @@ class PlacedStructure {
   final int pricePaid;
   final int completedAtDay;
 
+  /// Population contributed by this structure, snapshotted from content at
+  /// placement time (like the footprint) so later content edits do not
+  /// rewrite history. Defaults by kind for saves predating the field.
+  final int population;
+
+  /// Which of the model's sprite variants this structure renders as,
+  /// rolled deterministically at placement. Null on saves predating
+  /// variants — the model's first role is used.
+  final String? assetRole;
+
+  /// Door side snapshotted at plan time from the road-side rule: 'right'
+  /// when the adjacent road sits on the footprint's screen-right half
+  /// (grid north/east), 'left' for the screen-left half (grid south/west).
+  /// Null when the chosen sprite has no facings or for decorations with a
+  /// single facing.
+  final String? facing;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'catalogueId': catalogueId,
@@ -103,23 +125,33 @@ class PlacedStructure {
     'footprint': footprint.map((cell) => cell.toJson()).toList(),
     'pricePaid': pricePaid,
     'completedAtDay': completedAtDay,
+    'population': population,
+    'assetRole': assetRole,
+    'facing': facing,
   };
 
-  factory PlacedStructure.fromJson(Map<String, Object?> json) =>
-      PlacedStructure(
-        id: json['id']! as String,
-        catalogueId: json['catalogueId']! as String,
-        kind: StructureKind.values.firstWhere(
-          (value) => value.name == json['kind'],
-        ),
-        origin: CellCoord.fromJson(worldJsonMap(json['origin'])),
-        quarterTurns: json['quarterTurns']! as int,
-        footprint: (json['footprint']! as List)
-            .map((value) => CellCoord.fromJson(worldJsonMap(value)))
-            .toList(),
-        pricePaid: json['pricePaid']! as int,
-        completedAtDay: json['completedAtDay']! as int,
-      );
+  factory PlacedStructure.fromJson(Map<String, Object?> json) {
+    final kind = StructureKind.values.firstWhere(
+      (value) => value.name == json['kind'],
+    );
+    return PlacedStructure(
+      id: json['id']! as String,
+      catalogueId: json['catalogueId']! as String,
+      kind: kind,
+      origin: CellCoord.fromJson(worldJsonMap(json['origin'])),
+      quarterTurns: json['quarterTurns']! as int,
+      footprint: (json['footprint']! as List)
+          .map((value) => CellCoord.fromJson(worldJsonMap(value)))
+          .toList(),
+      pricePaid: json['pricePaid']! as int,
+      completedAtDay: json['completedAtDay']! as int,
+      population:
+          json['population'] as int? ??
+          (kind == StructureKind.building ? 1 : 0),
+      assetRole: json['assetRole'] as String?,
+      facing: json['facing'] as String?,
+    );
+  }
 }
 
 class CompletedBridge {
@@ -181,6 +213,9 @@ class WorldConstruction {
     List<CellCoord> waterCells = const [],
     this.nearBank,
     this.farBank,
+    this.population = 0,
+    this.assetRole,
+    this.facing,
   }) : footprint = List.unmodifiable(footprint),
        roadCells = List.unmodifiable(roadCells),
        waterCells = List.unmodifiable(waterCells);
@@ -201,6 +236,20 @@ class WorldConstruction {
   final int coinsFunded;
   final int builderSlot;
   final int startedAtDay;
+
+  /// Population the finished building will contribute, snapshotted from
+  /// content at plan time alongside the footprint and cost.
+  final int population;
+
+  /// Sprite variant rolled at plan time; transferred to the placed
+  /// structure on completion. Null for non-structure jobs and saves
+  /// predating variants.
+  final String? assetRole;
+
+  /// Door side chosen at plan time from the adjacent road; transferred to
+  /// the placed structure on completion. Null for sprites without
+  /// facings. The player may flip it while the plan is unfinished.
+  final String? facing;
 
   int get coinsRemaining => totalCostCoins - coinsFunded;
   double get progress =>
@@ -223,6 +272,9 @@ class WorldConstruction {
     'coinsFunded': coinsFunded,
     'builderSlot': builderSlot,
     'startedAtDay': startedAtDay,
+    'population': population,
+    'assetRole': assetRole,
+    'facing': facing,
   };
 
   factory WorldConstruction.fromJson(Map<String, Object?> json) =>
@@ -265,6 +317,9 @@ class WorldConstruction {
         coinsFunded: json['coinsFunded']! as int,
         builderSlot: json['builderSlot']! as int,
         startedAtDay: json['startedAtDay']! as int,
+        population: json['population'] as int? ?? 0,
+        assetRole: json['assetRole'] as String?,
+        facing: json['facing'] as String?,
       );
 }
 
@@ -366,6 +421,11 @@ class ParcelWorldState {
   int get completedBuildingCount => structures
       .where((structure) => structure.kind == StructureKind.building)
       .length;
+
+  /// Derived progression metric: the population of every completed
+  /// structure (snapshotted at placement). Never stored.
+  int get population =>
+      structures.fold<int>(0, (sum, structure) => sum + structure.population);
   int get creditedDayCount => creditedDates.length;
 
   Map<ParcelCoord, OwnedParcel> get parcelsByCoord => {
@@ -530,6 +590,7 @@ String worldDateKey(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
 ParcelWorldState newParcelWorldState({
+  required ContentBundle content,
   required int seed,
   required TerrainProvider terrainProvider,
   DateTime? today,
@@ -551,21 +612,20 @@ ParcelWorldState newParcelWorldState({
     rulesVersion: parcelWorldRulesVersion,
     contentVersion: parcelWorldContentVersion,
     parcelSize: defaultParcelSize,
-    builderCapacity: 1,
+    builderCapacity: content.economy.startingBuilderCapacity,
     simulatedDate: DateTime.utc(date.year, date.month, date.day),
     checkInHighWaterDate: DateTime.utc(date.year, date.month, date.day),
     constructionDay: 0,
-    coins: 0,
+    coins: content.economy.startingWalletCoins,
     totalCoinsEarned: 0,
     totalCoinsSpent: 0,
     nextEntityNumber: 1,
     nextEventNumber: 1,
     creditedDates: const {},
-    unlockedCatalogueIds: const {
-      'small-home',
-      'cafe',
-      'flower-garden',
-      'pine-tree',
+    // Derived: every enabled model that unlocks at population 0.
+    unlockedCatalogueIds: {
+      for (final model in content.purchaseableModels)
+        if (model.unlockAtPopulation == 0) model.id,
     },
     parcels: [
       OwnedParcel(

@@ -30,16 +30,15 @@ includes citysim code or tests.
 ## Layout
 
 - `lib/` — game code (`world/` rules and state, `rendering/` isometric
-  canvas, `content/`-`domain/`-`data/` legacy V1 preview, entry points).
+  canvas, `content/` the JSON content layer, `editor/` the dashboard).
 - `test/` — rule, save, and widget tests.
-- `assets/` — CC0 Buggy Studio art pack (see `assets/ASSET_NOTICE.md` for
-  provenance) and, later, the JSON content layer.
+- `assets/` — organized sprite tree, character frames, the JSON content
+  layer, and the unused pack remainder (see `assets/ASSET_NOTICE.md`).
 - `docs/` — game mechanics, technical, and content-editor plans.
 - `web/` — Flutter web platform scaffolding.
 
-Local saves use the `citysim.parcel-world.v2` (V2) and
-`citysim.prototype.v1` (legacy) browser-storage keys; a V2 reset never
-touches the V1 key or any Accountable data.
+Local saves use the `citysim.parcel-world` browser-storage key only; a
+reset never touches any Accountable data.
 
 The planned content editor dashboard will run on port 9200 from
 `tool/content_editor/`.

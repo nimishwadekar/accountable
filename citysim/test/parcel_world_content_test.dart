@@ -1,49 +1,90 @@
+import 'package:citysim/content/asset_content_source.dart';
+import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/world/coordinates.dart';
 import 'package:citysim/world/road_sprite_resolver.dart';
 import 'package:citysim/world/terrain_provider.dart';
-import 'package:citysim/world/world_content.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  late ContentBundle content;
+
+  setUpAll(() async {
+    content = await loadContentBundle(const AssetContentSource());
+  });
+
   test(
     'all logical catalogue and road-mask roles resolve to supplied art',
     () async {
       final roles = <String>{
-        ...structureCatalogue.map((definition) => definition.assetRole),
+        ...content.catalogue.expand((definition) => definition.assetRoles),
         for (var mask = 0; mask < 16; mask++) roadSpriteRole(mask),
-        'terrain.grass',
-        'terrain.grass.puddle',
-        'terrain.dirt',
-        'terrain.water',
-        'shore.grass.edge.n',
-        'shore.dirt.edge.n',
-        'shore.grass.corner.n',
-        'shore.dirt.corner.w',
-        'shore.grass.quarter.ne',
-        'shore.grass.quarter.sw',
-        'shore.dirt.quarter.se',
-        'shore.dirt.quarter.nw',
-        'bridge.body.se',
-        'bridge.body.sw',
-        'bridge.ramp.ne',
-        'bridge.ramp.nw',
-        'bridge.ramp.se',
-        'bridge.ramp.sw',
+        ...requiredSpriteRoles,
       };
       for (final role in roles) {
-        final definition = spriteManifest[role];
+        final definition = content.sprite(role);
         expect(definition, isNotNull, reason: role);
-        expect(
-          await rootBundle.load(citysimAssetPath(role)),
-          isNotNull,
-          reason: role,
-        );
+        // Every door facing of the sprite must bundle as a loadable asset.
+        for (final path in content.allAssetPaths(role)) {
+          expect(await rootBundle.load(path), isNotNull, reason: path);
+        }
       }
     },
   );
+
+  test('content seed replicates the pre-content hardcoded game exactly', () {
+    // Snapshot guard: these values are the seeded defaults the dashboard
+    // starts from. Editing them in the editor is expected; editing them by
+    // accident in the JSON is not.
+    expect(content.catalogue, hasLength(9));
+    final byId = {for (final model in content.catalogue) model.id: model};
+    expect(byId['small-home']!.costCoins, 3);
+    expect(byId['small-home']!.population, 1);
+    expect(byId['small-home']!.unlockAtPopulation, 0);
+    expect(byId['cafe']!.costCoins, 3);
+    expect(byId['flower-garden']!.costCoins, 1);
+    expect(byId['flower-garden']!.kind, StructureKind.decoration);
+    expect(byId['flower-garden']!.population, 0);
+    expect(byId['pine-tree']!.costCoins, 2);
+    expect(byId['medium-home']!.costCoins, 4);
+    expect(byId['medium-home']!.unlockAtPopulation, 5);
+    expect(byId['fruit-market']!.costCoins, 5);
+    expect(byId['community-clinic']!.costCoins, 6);
+    expect(byId['community-clinic']!.unlockAtPopulation, 10);
+    expect(byId['apartments']!.costCoins, 8);
+    expect(byId['apartments']!.footprintColumns, 2);
+    expect(byId['apartments']!.footprintRows, 2);
+    expect(byId['apartments']!.unlockAtPopulation, 20);
+    expect(byId['city-office']!.costCoins, 8);
+
+    expect(content.economy.startingWalletCoins, 0);
+    expect(content.economy.startingBuilderCapacity, 1);
+    expect(content.economy.roadTileCostCoins, 1);
+    expect(content.economy.bridgeCost(1), 6);
+    expect(content.economy.bridgeCost(4), 12);
+    expect(
+      content.parcelCost(const ParcelCoord(0, 0), 1),
+      8,
+      reason: 'base parcel price',
+    );
+    expect(
+      content.parcelCost(const ParcelCoord(8, 0), 2),
+      9,
+      reason: 'distance step raises the second ring',
+    );
+    expect(content.economy.builderProgression, isEmpty);
+    expect(
+      content.economy.builderCapacityForPopulation(1000),
+      1,
+      reason: 'an empty progression keeps one builder forever',
+    );
+
+    expect(content.ambience.ambientTimeScale, 1.0);
+    expect(content.ambience.pedestrians.spriteScale, closeTo(0.7, 0.001));
+    expect(content.ambience.waterShimmer.bands, 6);
+  });
 
   test('negative cell coordinates map to the correct neighboring parcels', () {
     expect(parcelForCell(const CellCoord(-1, 0)), const ParcelCoord(-1, 0));
@@ -73,7 +114,7 @@ void main() {
       for (final direction in ['NE', 'NW', 'SE', 'SW']) {
         for (final frame in [1, 2, 3, 4]) {
           final path =
-              'assets/buggy_studio/Characters/'
+              'assets/characters/'
               'char_${character}_walk_${direction}_f0$frame.png';
           expect(await rootBundle.load(path), isNotNull, reason: path);
         }

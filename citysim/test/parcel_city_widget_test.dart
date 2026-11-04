@@ -1,3 +1,5 @@
+import 'package:citysim/content/asset_content_source.dart';
+import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/parcel_city_app.dart';
 import 'package:citysim/rendering/parcel_world_view.dart';
 import 'package:citysim/world/coordinates.dart';
@@ -7,13 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _MemoryParcelStore implements ParcelWorldStore {
-  _MemoryParcelStore({this.legacy = false});
+  _MemoryParcelStore();
 
   ParcelWorldState? state;
-  final bool legacy;
-
-  @override
-  Future<bool> hasLegacyV1Save() async => legacy;
 
   @override
   Future<ParcelWorldState?> load() async => state;
@@ -25,6 +23,14 @@ class _MemoryParcelStore implements ParcelWorldStore {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  // Asset loading inside fake-async tests is unreliable once a prior test
+  // has run the app, so the content bundle is loaded once with real async
+  // before any test starts and injected into the app under test.
+  late ContentBundle content;
+  setUpAll(() async {
+    content = await loadContentBundle(const AssetContentSource());
+  });
+
   testWidgets(
     'parcel preview check-in and manual day controls render at mobile widths',
     (tester) async {
@@ -34,7 +40,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final store = _MemoryParcelStore();
 
-      await tester.pumpWidget(ParcelCityApp(store: store));
+      await tester.pumpWidget(ParcelCityApp(store: store, content: content));
       for (var i = 0; i < 50; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
@@ -95,26 +101,6 @@ void main() {
     },
   );
 
-  testWidgets('legacy V1 save requires an explicit new-world choice', (
-    tester,
-  ) async {
-    final store = _MemoryParcelStore(legacy: true);
-    await tester.pumpWidget(ParcelCityApp(store: store));
-    await tester.pump(const Duration(milliseconds: 10));
-    await tester.pump(const Duration(milliseconds: 10));
-
-    expect(find.text('Start the parcel-world preview?'), findsOneWidget);
-    expect(find.text('Start new parcel world'), findsOneWidget);
-    expect(store.state, isNull);
-
-    await tester.tap(find.text('Start new parcel world'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 10));
-    expect(store.state, isNotNull);
-    expect(store.state!.parcels, hasLength(1));
-    expect(store.state!.structures, isEmpty);
-  });
-
   testWidgets(
     'catalogue tiles paint their selection splash above panel cards',
     (tester) async {
@@ -123,7 +109,9 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(ParcelCityApp(store: _MemoryParcelStore()));
+      await tester.pumpWidget(
+        ParcelCityApp(store: _MemoryParcelStore(), content: content),
+      );
       for (var i = 0; i < 20; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
@@ -134,7 +122,17 @@ void main() {
 
       await tester.tap(find.text('Buildings').first);
       await tester.pump();
-      final cottage = find.text('Sunny cottage');
+      // Model names are dashboard-editable content, so the tile is located
+      // through the loaded bundle instead of a hardcoded display name.
+      final cottageName = content.catalogue
+          .firstWhere(
+            (model) =>
+                model.kind == StructureKind.building &&
+                model.enabled &&
+                model.unlockAtPopulation == 0,
+          )
+          .name;
+      final cottage = find.text(cottageName);
       await tester.ensureVisible(cottage);
       await tester.pump(const Duration(milliseconds: 100));
       await tester.tap(cottage);

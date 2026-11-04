@@ -1,3 +1,5 @@
+import 'package:citysim/content/asset_content_source.dart';
+import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/world/terrain_provider.dart';
 import 'package:citysim/world/world_save_store.dart';
 import 'package:citysim/world/world_state.dart';
@@ -9,9 +11,6 @@ class _MemoryWorldStore implements ParcelWorldStore {
 
   ParcelWorldState? current;
   final writes = <ParcelWorldState>[];
-
-  @override
-  Future<bool> hasLegacyV1Save() async => false;
 
   @override
   Future<ParcelWorldState?> load() async => current;
@@ -26,21 +25,26 @@ class _MemoryWorldStore implements ParcelWorldStore {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const terrain = DemoTerrainProvider();
+  late ContentBundle content;
 
-  test('V2 uses its own key and leaves a V1 city save untouched', () async {
+  setUpAll(() async {
+    content = await loadContentBundle(const AssetContentSource());
+  });
+
+  test('the store round-trips a world under its own key', () async {
     SharedPreferences.setMockInitialValues({
-      SharedPreferencesParcelWorldStore.legacyV1StorageKey: 'legacy-snapshot',
       'accountable.settings': 'untouched',
     });
     final preferences = await SharedPreferences.getInstance();
     final store = SharedPreferencesParcelWorldStore(
+      content: content,
       terrainProvider: terrain,
       preferences: preferences,
     );
 
     expect(await store.load(), isNull);
-    expect(await store.hasLegacyV1Save(), isTrue);
     final world = newParcelWorldState(
+      content: content,
       seed: 9,
       terrainProvider: terrain,
       today: DateTime.utc(2026, 11, 2),
@@ -48,12 +52,6 @@ void main() {
     await store.save(world);
 
     expect((await store.load())?.toJson(), world.toJson());
-    expect(
-      preferences.getString(
-        SharedPreferencesParcelWorldStore.legacyV1StorageKey,
-      ),
-      'legacy-snapshot',
-    );
     expect(preferences.getString('accountable.settings'), 'untouched');
   });
 
@@ -63,11 +61,13 @@ void main() {
       final store = _MemoryWorldStore();
       final coordinator = ParcelWorldSaveCoordinator(store);
       final oldWorld = newParcelWorldState(
+        content: content,
         seed: 1,
         terrainProvider: terrain,
         today: DateTime.utc(2026, 11, 2),
       );
       final newWorld = newParcelWorldState(
+        content: content,
         seed: 2,
         terrainProvider: terrain,
         today: DateTime.utc(2026, 11, 3),
@@ -90,6 +90,7 @@ void main() {
       });
       final preferences = await SharedPreferences.getInstance();
       final store = SharedPreferencesParcelWorldStore(
+        content: content,
         terrainProvider: terrain,
         preferences: preferences,
       );

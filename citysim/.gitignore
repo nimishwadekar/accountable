@@ -12,6 +12,9 @@
 .swiftpm/
 migrate_working_dir/
 
+# Editor server state
+tool/content_editor/backups/
+
 # IntelliJ related
 *.iml
 *.ipr

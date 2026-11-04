@@ -7,9 +7,7 @@
 
 This document describes what the player can do and how the game is intended to
 feel. Code structure, data formats, renderer design, and test procedures belong
-in the technical plan. The older [research and concept note](README.md) and
-[fixed-lot V1 plan](IMPLEMENTATION_PLAN.md) are background/history, not the
-current parcel-world specification.
+in the technical plan.
 
 ## 1. Experience and guardrails
 
@@ -129,6 +127,23 @@ funding its tiles individually. This is the active implementation behavior.
   road. Every footprint cell must be owned, accessible, dry, vacant, and outside
   other reservations.
 - Planning is free and immediately reserves the footprint and a builder.
+- Each model lists several sprite variants (e.g. the cottage in yellow, blue,
+  and red); one is rolled deterministically per placement and snapshotted onto
+  the structure, so repeated builds of the same model look varied while
+  staying stable across reloads. Variants are content — editable in the
+  dashboard.
+- **Door sides face the road.** A building sprite carries two hand-drawn
+  door facings (left and right). At planning the game looks at which half of
+  the footprint the adjacent finished road touches: grid north/east frontage
+  (the screen-right half) faces the door right, grid south/west frontage
+  (the screen-left half) faces it left, and a road behind the building still
+  counts — the door lands on the visible facade around the corner from it,
+  on the same screen side. A road on only one half fixes the door; roads on
+  both halves leave the choice to the player, who can flip it with a
+  floating swap button while the plan is unfinished. The chosen side is
+  snapshotted onto the plan and survives funding, saves, and reloads. While
+  a building plan is unfinished, a bobbing arrow above the site points at
+  the door side; it disappears once the building completes.
 - Contribute coins manually; the building appears when fully funded.
 - Unfinished buildings do not provide road access or count toward model-unlock
   milestones.
@@ -190,8 +205,6 @@ the current slice.
 - Manual calendar controls, explicit check-in, and a clearly labelled test-only
   coin grant.
 - Recent event history and a separate local parcel-world save.
-- An explicit new-world choice when an older V1 save is detected; the V1 save
-  remains separate and untouched.
 - Ambient life that is presentation-only: pedestrians wander connected roads
   using the pack's walk cycles, water carries a gentle travelling shimmer, and
   vegetation (trees, flowers) sways slightly in the wind. Ambience is muted

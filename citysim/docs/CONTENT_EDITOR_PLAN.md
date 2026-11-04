@@ -1,6 +1,9 @@
 # Parcel World — Content Editor Dashboard Plan
 
-**Status:** design plan; no implementation yet.  
+**Status:** implemented (phases A–D). The JSON content layer drives the game,
+the editor server runs on port 9200, and the dashboard edits catalogue,
+sprites, economy, and ambience with live animation previews. Phase E (asset
+browser for unused pack art and debug live-reload) remains future work.  
 **Date:** 2026-11-03  
 **Scope:** a JSON content layer for the parcel-world game plus a local editor dashboard, so progression (which models exist, what they cost, when they unlock) and art/animation parameters can be edited without touching Dart code.
 
@@ -13,10 +16,10 @@
   numeric fields with validation.
 - Editing content must never silently break existing saves — the dashboard
   warns, validates, and keeps backups.
-- V1 data contains only what the game currently uses. Browsing the rest of
+- The data contains only what the game currently uses. Browsing the rest of
   the asset pack to enable new art comes later.
 
-### Non-goals (V1)
+### Non-goals
 
 - No terrain/world-template editing — a dedicated **world map editor is the
   planned next project after this asset editor** (per the confirmed
@@ -33,20 +36,19 @@
 | Data | Current location | Moves to JSON? |
 |---|---|---|
 | Structure catalogue (ids, names, descriptions, kind, footprints, costs, population, unlock thresholds) | `world_content.dart` `structureCatalogue` | ✅ `catalogue.json` |
-| Sprite manifest (role → file, scale, anchors, baseOffsetY, sway flag) | `world_content.dart` `spriteManifest` | ✅ `sprites.json` |
+| Sprite manifest (role → file or facings, scale, anchors, baseOffsetY, sway flag) | `world_content.dart` `spriteManifest` | ✅ `sprites.json` |
 | Road / bridge / parcel cost formulas' values | `world_content.dart` (`roadCost`, `bridgeCost`, `parcelCost`) | ✅ `economy.json` (values; formula shapes stay code) |
 | Starting wallet, builder progression, starting unlocks | `world_state.dart` `newParcelWorldState` | ✅ `economy.json` + derived (see §4.5) |
 | Ambient animation + camera tuning | `parcel_world_tuning.dart` | ✅ `ambience.json` (camera stays code — see §9) |
-| Terrain fixtures, parcel size, seed | `terrain_provider.dart`, `world_state.dart` | ❌ read-only in V1 |
+| Terrain fixtures, parcel size, seed | `terrain_provider.dart`, `world_state.dart` | ❌ read-only |
 | Check-in coin amount (1) | `world_reducer.dart` | ❌ product rule, not content |
 | Schema/rules/content *format* versions | `world_state.dart` constants | ❌ code (see §8) |
-| V1 fixed-lot preview content | `content/city_content.dart` | ❌ untouched (separate game) |
 
 ## 3. Architecture
 
 ```text
 assets/content/            JSON source of truth (git-committed)
-  manifest.json                    schema version + content revision
+  manifest.json                    content format version
   catalogue.json                   structure models
   sprites.json                     sprite roles & render metadata
   economy.json                     costs, wallet, builder progression
@@ -74,9 +76,9 @@ so the same loader works in both, and in tests.
 ## 4. Data model
 
 Files live in `assets/content/`. Each file is one category; each is
-editable as a unit in the dashboard. `manifest.json` records the schema
-version and a monotonically increasing content revision (bumped by the
-editor on every save).
+editable as a unit in the dashboard. `manifest.json` records the content
+format version. There is no save-revision counter — content history is
+tracked by git like any other source file.
 
 ### catalogue.json — structure models
 
@@ -88,7 +90,10 @@ editor on every save).
       "name": "Sunny cottage",
       "description": "A welcoming home beside a connected road.",
       "kind": "building",
-      "assetRole": "home-small-yellow",
+      "assetRoles": [
+        "home-small-yellow",
+        "home-small-blue"
+      ],
       "footprint": { "columns": 1, "rows": 1 },
       "costCoins": 3,
       "population": 1,
@@ -100,7 +105,13 @@ editor on every save).
 ```
 
 - `id` is the save-stable identity (what saves reference) — never reused.
-- `assetRole` points into `sprites.json`; renaming it is save-safe.
+- `assetRoles` lists the sprite variants this model can render as; one is
+  rolled deterministically per placement and snapshotted onto the placed
+  structure, so a single catalogue entry yields visual variety (colors).
+  Each role names a sprite *entity* — its door facings are part of the
+  sprite, not separate variants. Buildings additionally pick a door side
+  from the adjacent road (see the mechanics plan). Renaming a role is
+  save-safe.
 - `population` is how much this model adds to the settlement's population
   once completed (see §4.5). Decorations default to 0 but remain editable.
 - `unlockAtPopulation: 0` means unlocked from the start; the starting
@@ -108,33 +119,45 @@ editor on every save).
 - `enabled: false` hides a model from new purchases and unlocks while
   keeping it loadable for existing saves (see §8 — delete is never offered).
 
-### sprites.json — sprite roles and render metadata
+### sprites.json — sprite entities and render metadata
 
 ```json
 {
   "sprites": {
     "home-small-yellow": {
-      "path": "Buildings/bld_house_small_yellow_a.png",
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_small_yellow_a.png",
+        "right": "sprites/buildings/houses/bld_house_small_yellow_b.png"
+      },
       "renderScale": 0.5,
       "groundAnchor": [0.5, 1.0],
       "baseOffsetY": 0,
       "sways": false,
       "category": "buildings",
+      "subcategory": "houses",
       "codeReferenced": false
     },
     "shore.grass.quarter.ne": {
-      "path": "Roads and Grounds/tile_ground_grass_water_NE_clean.png",
+      "path": "sprites/shores/quarter/tile_ground_grass_water_NE_clean.png",
       "renderScale": 0.5,
       "groundAnchor": [0.5, 1.0],
       "baseOffsetY": 0,
       "sways": false,
-      "category": "ground",
+      "category": "shores",
+      "subcategory": "quarter",
       "codeReferenced": true
     }
   }
 }
 ```
 
+- A sprite is either single-facing (`path`) or a left/right door pair
+  (`facings`) — never both, never neither, and a pair is always complete.
+  Facings are one entity: every setting is shared by both sides, the
+  dashboard edits them together, and only the art differs. The game picks
+  the side from the adjacent road at planning time.
+- `sways` (wind ambience) is offered only for the `props` category;
+  validation warns when any other category carries it.
 - `category` drives the dashboard grouping: ground, roads, shores, bridges,
   buildings, props, characters, water.
 - `codeReferenced: true` marks roles whose *names* are constructed in code
@@ -160,7 +183,7 @@ editor on every save).
 
 Formula *shapes* (e.g. how distance steps into parcel price) stay in code;
 the numbers are content. If a shape change is ever wanted, that is a code
-change plus a content revision.
+change.
 
 `startingBuilderCapacity` is fixed at 1 — the dashboard shows it read-only,
 like the check-in coin rule. Builder *progression* is editable: whenever
@@ -202,7 +225,7 @@ density, cap, wander, sprite scale), and the unowned-land wash colour.
 
 Layout: category sidebar + content pane + persistent validation bar.
 
-- **Overview** — content revision, save-compatibility summary, quick budget
+- **Overview** — save-compatibility summary, quick budget
   table (average building cost vs. the ~1-building-per-5-check-ins target
   from the mechanics plan), and a population curve preview (models sorted by
   `unlockAtPopulation` with their population contribution, so unlock pacing
@@ -237,7 +260,7 @@ Layout: category sidebar + content pane + persistent validation bar.
 - `dart run tool/content_editor/server.dart` → **port 9200**, bound to
   127.0.0.1 only.
 - Endpoints: `GET /api/content`; `PUT /api/content/{category}` (validate →
-  backup → atomic write → bump revision); `POST /api/validate`;
+  backup → atomic write); `POST /api/validate`;
   `GET /api/pack/{path}` (serves pack images for thumbnails, paths
   sanitized and restricted to `assets/`); `GET /api/backups` /
   restore; later `GET /api/assets/scan` for the unused-art browser.
@@ -251,7 +274,7 @@ Layout: category sidebar + content pane + persistent validation bar.
 
 1. `dart run tool/content_editor/server.dart` (9200) and the game preview
    (`flutter run … --web-port=9101`, or the built web app).
-2. Edit in the dashboard → diff → validate → save (backup + revision bump).
+2. Edit in the dashboard → diff → validate → save (with a backup).
 3. Hot-restart the game (`R` in `flutter run`) to load the new JSON —
    bundled assets are read at startup, so running games do not see file
    changes live. (Documented friction; a debug-mode fetch-from-server mode
@@ -268,9 +291,9 @@ Layout: category sidebar + content pane + persistent validation bar.
 | Rename/delete a model `id` | **Breaks saves** (unlocks/placements reference it) | Blocked: rename offered as disable + new model; delete not offered |
 | Change content *format* (add fields) | Needs `contentVersion` bump + migration decision | Warn + require version bump |
 
-`manifest.json`'s content revision is informational (audit/diff); it does
-not gate saves. The `contentVersion` in world state remains a **code**
-constant describing the format, exactly as today.
+There is no content revision counter; git history is the audit trail.
+The `contentVersion` in world state remains a **code** constant describing
+the save format, exactly as today.
 
 ## 9. Corner cases & decisions
 
@@ -304,9 +327,9 @@ constant describing the format, exactly as today.
    editor planned as the next project.
 9. **Road/shore/bridge role names are code-constructed** — locked names,
    editable metadata (handled via `codeReferenced`).
-10. **Two editors / stale game** — single-writer server, last-write-wins
-    with a stale-revision check; an already-running game keeps its loaded
-    content until restart (workflow §7).
+10. **Two editors / stale game** — single-writer server, last-write-wins;
+    an already-running game keeps its loaded content until restart
+    (workflow §7).
 11. **Validation before every save** — duplicate ids, unknown assetRole,
     missing files on disk, cost < 0, population < 0, footprint < 1,
     unlock-threshold ordering, monotonic builder progression, at-least-one
@@ -334,20 +357,19 @@ constant describing the format, exactly as today.
 
 ## 10. Implementation phases
 
-- **A. Content layer + population** — JSON files seeded with today's exact
-  values; `ContentBundle` loader + `ContentSource`; validation; game/tests
-  load the bundle; derived starting unlocks; the population metric with
-  uniform `population: 1`, unlock thresholds seeded at 5/10/20 (replicating
-  the current building-count milestones), an empty builder progression,
-  load-time unlock/capacity reconciliation, and a population readout in the
-  game header. *Exit: full analyze/test/web-build green with zero gameplay
-  behaviour change.*
-- **B. Editor server** — port 9200, API, backups, atomic writes, pack
-  image serving.
-- **C. Dashboard core** — catalogue, economy & progression, sprite editors
-  with image previews, validation bar, diffs.
-- **D. Ambience editor** — tuning moves to JSON; sliders with live
-  animation previews.
+- **A. Content layer + population** — ✅ done. JSON files seeded with the
+  pre-content values; `ContentBundle` loader + `ContentSource`; validation;
+  game/tests load the bundle; derived starting unlocks; the population
+  metric with uniform `population: 1`, unlock thresholds seeded at 5/10/20
+  (replicating the current building-count milestones), an empty builder
+  progression, load-time unlock/capacity reconciliation, and a population
+  readout in the game header.
+- **B. Editor server** — ✅ done. Port 9200, API, backups, atomic writes,
+  pack image serving, `--root` argument for test isolation.
+- **C. Dashboard core** — ✅ done. Catalogue, economy & progression, sprite
+  editors with image previews, validation bar, diff summary.
+- **D. Ambience editor** — ✅ done. Tuning moved to JSON; sliders with live
+  animation previews (water shimmer, vegetation sway, walk cycle).
 - **E. (Future) Asset browser** — scan unused pack art, thumbnails, promote
   to manifest + catalogue; debug live-reload of content into a running
   game.
@@ -356,6 +378,21 @@ The hand-authored **world map editor** (terrain, water bodies, parcels) is
 a separate project planned immediately after this one; the content editor
 is deliberately structured so its server/dashboard shell can be reused for
 it.
+
+### Running it
+
+From the `citysim/` folder:
+
+```sh
+dart run tool/content_editor/server.dart       # API + dashboard on :9200
+flutter run -d web-server --web-port=9101      # the game (hot-restart to
+                                              # pick up content edits)
+```
+
+The dashboard is prebuilt into `build/editor`; rebuild it after changing
+dashboard code with `flutter build web -t lib/editor/main.dart -o
+build/editor`. Widget tests inject a content bundle loaded in `setUpAll`
+(per-test asset loading is unreliable once a prior test ran the app).
 
 ## 11. Port map
 

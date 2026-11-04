@@ -1,6 +1,6 @@
 # Parcel World — Technical Implementation Plan
 
-**Status:** V2 vertical slice implemented; regional terrain, long-run persistence resilience, and scale work remain.  
+**Status:** vertical slice implemented; regional terrain, long-run persistence resilience, and scale work remain.  
 **Date:** 2026-11-03  
 **Entry point:** `lib/main.dart` (run commands from the `citysim/` package folder)  
 **Mechanics and features:** [Game Mechanics Plan](GAME_MECHANICS_PLAN.md)
@@ -9,7 +9,7 @@ This document covers code architecture, data contracts, rendering, persistence, 
 
 ## 1. Current technical status
 
-- **Implemented:** separate V2 Flutter entry point; typed parcel-world state; versioned rules/content; reducers, queries, and validation; isolated V2 persistence with explicit V1-save detection; deterministic fixture terrain; canvas-based isometric rendering; rule/widget/save tests.
+- **Implemented:** standalone Flutter entry point; typed parcel-world state; versioned rules/content; reducers, queries, and validation; isolated persistence; deterministic fixture terrain; canvas-based isometric rendering; rule/widget/save tests.
 - **Limitations:** terrain is an authored fixture, not a seeded regional generator. Local browser storage is not a decades-long archive. Sprite alignment, large-world performance, and long-run persistence need review.
 - **Verified:** from the `citysim/` folder, `flutter analyze`, full `flutter test`, and `flutter build web` pass.
 
@@ -25,7 +25,7 @@ This document covers code architecture, data contracts, rendering, persistence, 
 | Derived indexes and graph queries | `lib/world/world_queries.dart` |
 | Quotes and snapshot validation | `lib/world/world_rules.dart` |
 | State transitions | `lib/world/world_reducer.dart` |
-| V2 persistence/write coordinator | `lib/world/world_save_store.dart` |
+| Persistence/write coordinator | `lib/world/world_save_store.dart` |
 | Isometric canvas, camera, hit testing | `lib/rendering/parcel_world_view.dart` |
 
 Keep behavioral acceptance cases in the [game mechanics plan](GAME_MECHANICS_PLAN.md); do not duplicate its feature descriptions or tuning discussion here.
@@ -95,8 +95,8 @@ Future generator work should preserve a stable provider API and pinned version; 
 
 ## 7. Persistence and compatibility
 
-- V2 storage key: `citysim.parcel-world.v2`. V1 key: `citysim.prototype.v1`. V2 reset must never clear or write the V1 key.
-- Current V2 JSON schema is 3; rules and content versions are 2. Timer-based schema-2 V2 snapshots are incompatible and are not automatically migrated. Report them as unsupported and leave them untouched unless the user explicitly chooses a V2 reset.
+- Storage key: `citysim.parcel-world`.
+- Current JSON schema is 4 (structures and building plans carry a snapshotted door `facing` alongside their sprite role); rules version is 2 and content version is 3. Older snapshots are incompatible and are not automatically migrated. Report them as unsupported and leave them untouched unless the user explicitly chooses a reset.
 - Validate the complete decoded snapshot before publishing it. Corrupt/unsupported data needs recoverable diagnostics and an explicit reset path.
 - Serialize saves and resets through `ParcelWorldSaveCoordinator`; a generation token prevents stale queued writes from undoing reset.
 - Save after state transitions, not render frames. Surface quota/write errors and allow retry.
@@ -134,7 +134,7 @@ Manually audit terrain/road/shore/bridge artwork. Profile representative large w
 
 ### Regression checks
 
-Maintain pure rule/reducer coverage, persistence/compatibility tests, responsive widget checks, and V1-save-preservation tests. Keep scenario/pacing tools synthetic and separate from the production finance app.
+Maintain pure rule/reducer coverage, persistence tests, and responsive widget checks. Keep scenario/pacing tools synthetic and separate from the production finance app.
 
 ## 10. Required verification
 
@@ -147,4 +147,4 @@ flutter test
 flutter build web
 ```
 
-Also verify negative-coordinate conversion; atomic quote/reducer behavior; wallet receipt reconciliation; JSON/store round-trips for funded projects and reservations; visible failure for unsupported schemas; V1 preservation; stable road/bridge connectivity; camera gestures that do not trigger purchases; desktop/mobile hit testing; and city-sim preview isolation from port 9000.
+Also verify negative-coordinate conversion; atomic quote/reducer behavior; wallet receipt reconciliation; JSON/store round-trips for funded projects and reservations; visible failure for unsupported schemas; stable road/bridge connectivity; camera gestures that do not trigger purchases; desktop/mobile hit testing; and city-sim preview isolation from port 9000.

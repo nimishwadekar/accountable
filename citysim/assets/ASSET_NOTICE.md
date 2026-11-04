@@ -1,7 +1,29 @@
-# City simulation prototype assets
+# Citysim assets
 
-`buggy_studio/` contains the **Isometric City - Starter Pack** by Buggy Studio, downloaded from <https://buggystudio.itch.io/isometric-city-starter-pack> on 2026-11-02.
+Active game art lives in a category-organized tree that mirrors the content
+editor's grouping:
 
-The creator states in the pack's itch.io comments that the pack is CC0 and may be used in personal or commercial projects. The current pack page lists the supplied sprite categories but does not include a license file in the ZIP. Source/license confirmation: <https://buggystudio.itch.io/isometric-city-starter-pack>.
+- `sprites/<category>/<subcategory>/` — every sprite referenced by
+  `assets/content/sprites.json`, organized exactly as the editor displays
+  it (buildings/houses, props/trees, ground/grass, roads/end, …).
+- `characters/` — ambient pedestrian walk and idle frames, loaded directly
+  by the renderer.
+- `content/` — the JSON content layer (catalogue, sprites, economy,
+  ambience).
+- `buggy_studio/` — the remainder of the downloaded art pack: unused
+  variants, damaged versions, and vehicles, kept for the planned asset
+  browser that will promote them into the organized tree.
 
-This is a prototype asset pack, not Accountable-created artwork. Keep its origin clear if assets are later moved or the project is redistributed. The city simulation reads no financial data.
+## Provenance
+
+`buggy_studio/` contains the **Isometric City - Starter Pack** by Buggy
+Studio, downloaded from <https://buggystudio.itch.io/isometric-city-starter-pack>
+on 2026-11-02. The creator states in the pack's itch.io comments that the
+pack is CC0 and may be used in personal or commercial projects. The current
+pack page lists the supplied sprite categories but does not include a
+license file in the ZIP. Source/license confirmation:
+<https://buggystudio.itch.io/isometric-city-starter-pack>.
+
+Sprites moved into `sprites/` and `characters/` originate from that same
+pack; this is a reorganization, not new artwork. Keep the origin clear if
+assets are later moved or the project is redistributed.

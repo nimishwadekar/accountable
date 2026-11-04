@@ -1,0 +1,177 @@
+{
+  "models": [
+    {
+      "assetRoles": [
+        "home-small-yellow",
+        "home-small-blue",
+        "home-small-red"
+      ],
+      "costCoins": 3,
+      "description": "A welcoming home beside a connected road.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "small-home",
+      "kind": "building",
+      "name": "Small House",
+      "population": 1,
+      "subcategory": "houses",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "cafe"
+      ],
+      "costCoins": 3,
+      "description": "A neighborhood stop along the road.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "cafe",
+      "kind": "building",
+      "name": "Caf\u00e9",
+      "population": 1,
+      "subcategory": "commerce",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "flowers-yellow",
+        "flowers-pink",
+        "flowers-red"
+      ],
+      "costCoins": 1,
+      "description": "A small patch of color for an open corner.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "flower-garden",
+      "kind": "decoration",
+      "name": "Flowers",
+      "population": 0,
+      "subcategory": "flowers",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "pine-medium",
+        "pine-small",
+        "pine-tall"
+      ],
+      "costCoins": 2,
+      "description": "A quiet evergreen on vacant land.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "pine-tree",
+      "kind": "decoration",
+      "name": "Pine Tree",
+      "population": 0,
+      "subcategory": "trees",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "home-medium-blue",
+        "home-medium-brickwhite",
+        "home-medium-brown"
+      ],
+      "costCoins": 4,
+      "description": "A larger home unlocked by a growing settlement.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "medium-home",
+      "kind": "building",
+      "name": "Medium House",
+      "population": 1,
+      "subcategory": "houses",
+      "unlockAtPopulation": 5
+    },
+    {
+      "assetRoles": [
+        "fruit-market"
+      ],
+      "costCoins": 5,
+      "description": "A colorful market for a connected neighborhood.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "fruit-market",
+      "kind": "building",
+      "name": "Fruit Market",
+      "population": 1,
+      "subcategory": "commerce",
+      "unlockAtPopulation": 5
+    },
+    {
+      "assetRoles": [
+        "clinic"
+      ],
+      "costCoins": 6,
+      "description": "A civic building unlocked as the settlement grows.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "community-clinic",
+      "kind": "building",
+      "name": "Community Clinic",
+      "population": 1,
+      "subcategory": "civic",
+      "unlockAtPopulation": 10
+    },
+    {
+      "assetRoles": [
+        "apartments-brick-brown",
+        "apartments-brick-white"
+      ],
+      "costCoins": 8,
+      "description": "A denser home for a larger city center.",
+      "enabled": true,
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "id": "apartments",
+      "kind": "building",
+      "name": "Brick Apartment Building",
+      "population": 1,
+      "subcategory": "apartments",
+      "unlockAtPopulation": 20
+    },
+    {
+      "assetRoles": [
+        "office-medium-green",
+        "office-medium-blue",
+        "office-medium-brickred"
+      ],
+      "costCoins": 8,
+      "description": "A compact workplace for an established city.",
+      "enabled": true,
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "id": "city-office",
+      "kind": "building",
+      "name": "Medium Office Building",
+      "population": 1,
+      "subcategory": "offices",
+      "unlockAtPopulation": 20
+    }
+  ]
+}
