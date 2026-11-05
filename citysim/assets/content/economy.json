@@ -4,11 +4,7 @@
     "perWaterTileCoins": 2
   },
   "builderProgression": [],
-  "parcelCost": {
-    "baseCoins": 8,
-    "distanceStepCells": 8,
-    "ownedStepParcels": 12
-  },
+  "parcelBaseCoins": 8,
   "roadTileCostCoins": 1,
   "startingBuilderCapacity": 1,
   "startingWalletCoins": 0

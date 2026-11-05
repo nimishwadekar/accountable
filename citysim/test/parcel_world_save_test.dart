@@ -24,11 +24,12 @@ class _HardcodedSheetSource implements SheetSource {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const terrain = DemoTerrainProvider();
+  late ContentTerrainProvider terrain;
   late ContentBundle content;
 
   setUpAll(() async {
     content = await loadContentBundle(const AssetContentSource());
+    terrain = ContentTerrainProvider(content.terrain);
   });
 
   ParcelWorldState newWorld() => newParcelWorldState(
@@ -60,13 +61,11 @@ void main() {
       world,
       content,
       terrain,
-      cells: [
-        for (var column = 5; column <= 11; column++) CellCoord(column, 4),
-      ],
+      cells: [for (var column = 5; column <= 7; column++) CellCoord(column, 4)],
       style: RoadStyle.asphalt,
     );
     final roadProject = world.constructions.single;
-    for (var column = 5; column <= 9; column++) {
+    for (var column = 5; column <= 6; column++) {
       world = fundRoadTile(
         world,
         content,
@@ -81,8 +80,8 @@ void main() {
     await store.save(world);
     final midProject = (await store.load())!;
     expect(midProject.constructions, hasLength(1));
-    expect(midProject.constructions.single.roadCells, hasLength(7));
-    expect(midProject.constructions.single.coinsFunded, 5);
+    expect(midProject.constructions.single.roadCells, hasLength(3));
+    expect(midProject.constructions.single.coinsFunded, 2);
     expect(midProject.coins, world.coins);
     expect(midProject.checkInCount, 1);
     expect(midProject.lastCheckInDate, DateTime.utc(2026, 11, 2));
@@ -90,13 +89,13 @@ void main() {
     // Continue playing on the reloaded world: finish the road, build a
     // cottage, bridge the river, and start a café.
     var played = midProject;
-    for (var column = 10; column <= 11; column++) {
+    {
       played = fundRoadTile(
         played,
         content,
         terrain,
         projectId: played.constructions.single.id,
-        cell: CellCoord(column, 4),
+        cell: const CellCoord(7, 4),
       );
     }
     played = startStructureConstruction(
@@ -112,12 +111,12 @@ void main() {
       projectId: played.constructions.single.id,
       amount: played.constructions.single.totalCostCoins,
     );
-    played = startRiverBridgeConstruction(
+    played = startBridgeConstruction(
       played,
       content,
       terrain,
-      nearBank: const CellCoord(11, 4),
-      farBank: const CellCoord(13, 4),
+      nearBank: const CellCoord(7, 4),
+      farBank: const CellCoord(16, 4),
     );
     played = fundBridgeProject(
       played,
@@ -134,11 +133,11 @@ void main() {
 
     await store.save(played);
     final finalWorld = (await store.load())!;
-    expect(finalWorld.roads, hasLength(9), reason: 'starter + 7 + approach');
+    expect(finalWorld.roads, hasLength(5), reason: 'starter + 3 + approach');
     expect(finalWorld.structures, hasLength(1));
     expect(finalWorld.structures.single.catalogueId, 'small-home');
-    expect(finalWorld.bridges.single.nearBank, const CellCoord(11, 4));
-    expect(finalWorld.bridges.single.farBank, const CellCoord(13, 4));
+    expect(finalWorld.bridges.single.nearBank, const CellCoord(7, 4));
+    expect(finalWorld.bridges.single.farBank, const CellCoord(16, 4));
     expect(finalWorld.constructions.single.catalogueId, 'cafe');
     expect(finalWorld.checkInCount, 1);
 

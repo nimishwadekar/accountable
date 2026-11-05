@@ -140,15 +140,6 @@ class WorldQueries {
 
   bool isRoadConnected(CellCoord cell) => connectedRoadCells.contains(cell);
 
-  bool parcelTouchesAccessibleLand(ParcelCoord candidate) {
-    final reachable = reachableLandCells;
-    for (final cell in candidate.cells(state.parcelSize)) {
-      if (!terrainAt(cell).isLand) continue;
-      if (cell.neighbors.any(reachable.contains)) return true;
-    }
-    return false;
-  }
-
   bool footprintIsVacant(Iterable<CellCoord> cells) {
     final occupied = <CellCoord>{
       ...roadsByCell.keys,

@@ -61,7 +61,7 @@ class ParcelCityPage extends StatefulWidget {
 }
 
 class _ParcelCityPageState extends State<ParcelCityPage> {
-  final TerrainProvider _terrain = const DemoTerrainProvider();
+  late TerrainProvider _terrain;
   ContentBundle? _content;
   ParcelWorldStore? _store;
   ParcelWorldSaveCoordinator? _saveCoordinator;
@@ -100,6 +100,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     try {
       final content =
           widget.content ?? await loadContentBundle(const AssetContentSource());
+      _terrain = ContentTerrainProvider(content.terrain);
       // The store comes from the config's data source unless a test
       // injects one. The CSV source persists the four sheet documents in
       // local browser storage; the Google Spreadsheet is wired later.
@@ -543,7 +544,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     final farBank = _selectedCell;
     if (world == null || nearBank == null || farBank == null) return;
     try {
-      final quote = quoteRiverBridge(
+      final quote = quoteBridge(
         world,
         _requireContent,
         _terrain,
@@ -577,7 +578,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       );
       if (confirmed != true || !mounted) return;
       _runAction(
-        (state) => startRiverBridgeConstruction(
+        (state) => startBridgeConstruction(
           state,
           _requireContent,
           _terrain,
@@ -1038,7 +1039,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   ) {
     final definition = _requireContent.structure(project.catalogueId ?? '');
     final isBridge = project.kind == WorldConstructionKind.bridge;
-    final title = isBridge ? 'River bridge' : definition?.name ?? 'Building';
+    final title = isBridge ? 'Bridge' : definition?.name ?? 'Building';
     final available = world.coins < project.coinsRemaining
         ? world.coins
         : project.coinsRemaining;
@@ -1082,7 +1083,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     if (project.kind == WorldConstructionKind.road) {
       return 'a ${project.roadCells.length}-tile road stretch';
     }
-    if (project.kind == WorldConstructionKind.bridge) return 'a river bridge';
+    if (project.kind == WorldConstructionKind.bridge) return 'a bridge';
     return _requireContent.structure(project.catalogueId ?? '')?.name ??
         'a building';
   }
@@ -1188,7 +1189,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     String? failure;
     if (near != null && far != null && near != far) {
       try {
-        quote = quoteRiverBridge(
+        quote = quoteBridge(
           world,
           _requireContent,
           _terrain,
@@ -1200,7 +1201,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       }
     }
     return _PanelCard(
-      title: 'River bridge',
+      title: 'Bridge',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1586,7 +1587,7 @@ class _ConstructionList extends StatelessWidget {
                   content.structure(job.catalogueId ?? '')?.name ?? 'Building',
                 WorldConstructionKind.road =>
                   '${job.roadCells.length}-tile road stretch',
-                WorldConstructionKind.bridge => 'River bridge',
+                WorldConstructionKind.bridge => 'Bridge',
               }),
               subtitle: Text(
                 '${job.coinsFunded}/${job.totalCostCoins} coins funded · '

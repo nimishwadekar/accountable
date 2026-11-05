@@ -22,6 +22,7 @@ const categoryFiles = [
   'manifest.json',
   'catalogue.json',
   'sprites.json',
+  'terrain.json',
   'economy.json',
   'ambience.json',
 ];
@@ -215,6 +216,7 @@ Map<String, Object?> _validateBundleMaps(
     final manifest = _asMap(body, 'manifest.json');
     final catalogue = _asMap(body, 'catalogue.json');
     final sprites = _asMap(body, 'sprites.json');
+    final terrain = _asMap(body, 'terrain.json');
     final economy = _asMap(body, 'economy.json');
     final ambience = _asMap(body, 'ambience.json');
     final bundle = parseContentBundle(
@@ -223,6 +225,7 @@ Map<String, Object?> _validateBundleMaps(
       sprites: sprites,
       economy: economy,
       ambience: ambience,
+      terrain: terrain,
     );
     final issues =
         validateContentData(
@@ -230,6 +233,7 @@ Map<String, Object?> _validateBundleMaps(
           sprites: bundle.sprites,
           economy: bundle.economy,
           ambience: bundle.ambience,
+          terrain: bundle.terrain,
         ).map((issue) => issue.toString()).toList()..addAll(
           checkSpriteFiles(sprites: bundle.sprites, packDirectory: assetsDir),
         );

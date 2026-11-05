@@ -16,12 +16,8 @@ class WorldRuleViolation implements Exception {
 }
 
 class WorldRules {
-  const WorldRules({
-    this.maximumBridgeSpan = 4,
-    this.maximumCoordinate = 1000000,
-  });
+  const WorldRules({this.maximumCoordinate = 1000000});
 
-  final int maximumBridgeSpan;
   final int maximumCoordinate;
 }
 
@@ -101,7 +97,6 @@ class BridgeQuote {
     required this.nearBank,
     required this.farBank,
     required this.waterCells,
-    required this.riverBodyId,
     required this.parcelsToAcquire,
     required this.bridgeCost,
     required this.builderSlot,
@@ -110,7 +105,6 @@ class BridgeQuote {
   final CellCoord nearBank;
   final CellCoord farBank;
   final List<CellCoord> waterCells;
-  final String riverBodyId;
   final List<ParcelPurchaseQuote> parcelsToAcquire;
   final int bridgeCost;
   final int builderSlot;
@@ -138,21 +132,19 @@ ParcelPurchaseQuote quoteParcelPurchase(
   if (!candidate.neighbors.any(queries.ownsParcel)) {
     throw const WorldRuleViolation('Buy a neighboring parcel to expand there.');
   }
-  if (!queries.parcelTouchesAccessibleLand(candidate)) {
-    throw const WorldRuleViolation(
-      'That parcel has no land connection from your accessible territory.',
-    );
+  // Buyable means authored on the terrain map — grass or water alike.
+  // Owning a parcel and being able to build on it are different things:
+  // building stays gated by land reachability, which bridges grant.
+  if (!content.terrain.isOnMap(candidate)) {
+    throw const WorldRuleViolation('That parcel is open ocean.');
   }
   final cells = candidate
       .cells(state.parcelSize)
       .map((cell) => terrainProvider.sample(cell, state.seed))
       .toList();
-  if (cells.every((cell) => !cell.isLand)) {
-    throw const WorldRuleViolation('An all-water parcel cannot be purchased.');
-  }
   return ParcelPurchaseQuote(
     coord: candidate,
-    price: content.parcelCost(candidate, state.parcels.length),
+    price: content.economy.parcelBaseCoins,
     cells: cells,
   );
 }
@@ -302,7 +294,7 @@ StructurePlacementQuote quoteStructurePlacement(
   );
 }
 
-BridgeQuote quoteRiverBridge(
+BridgeQuote quoteBridge(
   ParcelWorldState state,
   ContentBundle content,
   TerrainProvider terrainProvider, {
@@ -332,9 +324,9 @@ BridgeQuote quoteRiverBridge(
   }
   final distance = dx.abs() + dy.abs();
   final spanLength = distance - 1;
-  if (spanLength < 1 || spanLength > rules.maximumBridgeSpan) {
-    throw WorldRuleViolation(
-      'This bridge must span between 1 and ${rules.maximumBridgeSpan} water tiles.',
+  if (spanLength < 1) {
+    throw const WorldRuleViolation(
+      'A bridge needs at least one water tile between its banks.',
     );
   }
   if (!queries.terrainAt(nearBank).isLand ||
@@ -351,19 +343,19 @@ BridgeQuote quoteRiverBridge(
 
   final step = CellCoord(dx.sign, dy.sign);
   final waterCells = <CellCoord>[];
-  String? bodyId;
   for (var index = 1; index < distance; index++) {
     final cell = nearBank.offset(step.column * index, step.row * index);
-    final terrain = terrainProvider.sample(cell, state.seed);
-    if (terrain.kind != TerrainKind.river || terrain.waterBodyId == null) {
+    final parcel = parcelForCell(cell, parcelSize: state.parcelSize);
+    // Crossings must be water, and the ocean is not for sale: every
+    // crossed parcel must be authored on the terrain map.
+    if (!queries.terrainAt(cell).isLand && !content.terrain.isOnMap(parcel)) {
       throw const WorldRuleViolation(
-        'Bridges may span one continuous river only—not lakes or oceans.',
+        'Bridges cannot cross open ocean—only authored water.',
       );
     }
-    bodyId ??= terrain.waterBodyId;
-    if (bodyId != terrain.waterBodyId) {
+    if (queries.terrainAt(cell).isLand) {
       throw const WorldRuleViolation(
-        'A bridge cannot join separate water bodies.',
+        'A bridge may only cross water between its banks.',
       );
     }
     if (queries.reservedCells.contains(cell) ||
@@ -374,10 +366,6 @@ BridgeQuote quoteRiverBridge(
       );
     }
     waterCells.add(cell);
-  }
-
-  if (bodyId == null) {
-    throw const WorldRuleViolation('No river was found between those banks.');
   }
   final requiredParcels =
       <ParcelCoord>{
@@ -400,7 +388,6 @@ BridgeQuote quoteRiverBridge(
       });
 
   final parcelQuotes = <ParcelPurchaseQuote>[];
-  var ownedCount = state.parcels.length;
   for (final parcel in requiredParcels) {
     final terrain = parcel
         .cells(state.parcelSize)
@@ -409,17 +396,15 @@ BridgeQuote quoteRiverBridge(
     parcelQuotes.add(
       ParcelPurchaseQuote(
         coord: parcel,
-        price: content.parcelCost(parcel, ownedCount),
+        price: content.economy.parcelBaseCoins,
         cells: terrain,
       ),
     );
-    ownedCount++;
   }
   return BridgeQuote(
     nearBank: nearBank,
     farBank: farBank,
     waterCells: waterCells,
-    riverBodyId: bodyId,
     parcelsToAcquire: parcelQuotes,
     bridgeCost: content.economy.bridgeCost(spanLength),
     builderSlot: builderSlot,
@@ -592,7 +577,6 @@ void validateParcelWorldState(
   }
   for (final bridge in state.bridges) {
     if (bridge.waterCells.isEmpty ||
-        bridge.waterCells.length > const WorldRules().maximumBridgeSpan ||
         bridge.pricePaid < 0 ||
         bridge.completedAtDay < 0 ||
         bridge.completedAtDay > state.constructionDay ||
@@ -773,18 +757,14 @@ bool _validBridgeGeometry(
   final distance = dx.abs() + dy.abs();
   if (waterCells.length != distance - 1) return false;
   final step = CellCoord(dx.sign, dy.sign);
-  String? bodyId;
   for (var index = 1; index < distance; index++) {
     final expected = nearBank.offset(step.column * index, step.row * index);
     final cell = waterCells[index - 1];
-    final terrain = queries.terrainAt(cell);
     if (cell != expected ||
-        terrain.kind != TerrainKind.river ||
-        terrain.waterBodyId == null) {
+        queries.terrainAt(cell).isLand ||
+        !queries.ownsCell(cell)) {
       return false;
     }
-    bodyId ??= terrain.waterBodyId;
-    if (bodyId != terrain.waterBodyId || !queries.ownsCell(cell)) return false;
   }
   return queries.ownsCell(nearBank) &&
       queries.ownsCell(farBank) &&
@@ -793,10 +773,7 @@ bool _validBridgeGeometry(
 }
 
 bool _sameTerrain(TerrainCell a, TerrainCell b) =>
-    a.coord == b.coord &&
-    a.kind == b.kind &&
-    a.groundStyle == b.groundStyle &&
-    a.waterBodyId == b.waterBodyId;
+    a.coord == b.coord && a.kind == b.kind && a.groundStyle == b.groundStyle;
 
 bool _sameCells(List<CellCoord> a, List<CellCoord> b) {
   if (a.length != b.length) return false;

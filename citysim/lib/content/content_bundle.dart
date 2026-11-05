@@ -8,7 +8,6 @@ library;
 
 import 'dart:convert';
 
-import '../world/coordinates.dart';
 import 'content_models.dart';
 
 export 'content_models.dart';
@@ -26,6 +25,7 @@ class ContentBundle {
     required this.sprites,
     required this.economy,
     required this.ambience,
+    required this.terrain,
   });
 
   final ContentManifest manifest;
@@ -33,6 +33,7 @@ class ContentBundle {
   final Map<String, SpriteDefinition> sprites;
   final EconomyContent economy;
   final AmbienceContent ambience;
+  final TerrainContent terrain;
 
   /// Root that sprite paths are resolved against.
   static const packRoot = 'assets';
@@ -72,11 +73,6 @@ class ContentBundle {
 
   int roadTileCost() => economy.roadTileCostCoins;
 
-  int parcelCost(ParcelCoord coord, int ownedCount) =>
-      economy.parcelBaseCoins +
-      ((coord.x.abs() + coord.y.abs()) ~/ economy.parcelDistanceStepCells) +
-      (((ownedCount - 1).clamp(0, 100)) ~/ economy.parcelOwnedStepParcels);
-
   /// Population-sorted model list for progression previews.
   List<StructureDefinition> get progressionOrder {
     final models = [...catalogue];
@@ -99,6 +95,7 @@ class ContentBundle {
     },
     'economy': economy.toJson(),
     'ambience': ambience.toJson(),
+    'terrain': terrain.toJson(),
   };
 }
 
@@ -111,6 +108,7 @@ ContentBundle parseContentBundle({
   required Map<String, Object?> sprites,
   required Map<String, Object?> economy,
   required Map<String, Object?> ambience,
+  required Map<String, Object?> terrain,
 }) {
   final bundle = ContentBundle(
     manifest: ContentManifest.fromJson(manifest),
@@ -126,12 +124,14 @@ ContentBundle parseContentBundle({
     },
     economy: EconomyContent.fromJson(economy),
     ambience: AmbienceContent.fromJson(ambience),
+    terrain: TerrainContent.fromJson(terrain),
   );
   final issues = validateContentData(
     catalogue: bundle.catalogue,
     sprites: bundle.sprites,
     economy: bundle.economy,
     ambience: bundle.ambience,
+    terrain: bundle.terrain,
   );
   final errors = issues.where((issue) => issue.severity == 'error').toList();
   if (errors.isNotEmpty) {
@@ -147,12 +147,14 @@ Future<ContentBundle> loadContentBundle(ContentSource source) async {
   final sprites = await source.readCategory('sprites.json');
   final economy = await source.readCategory('economy.json');
   final ambience = await source.readCategory('ambience.json');
+  final terrain = await source.readCategory('terrain.json');
   return parseContentBundle(
     manifest: manifest,
     catalogue: catalogue,
     sprites: sprites,
     economy: economy,
     ambience: ambience,
+    terrain: terrain,
   );
 }
 

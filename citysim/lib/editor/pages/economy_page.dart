@@ -23,7 +23,6 @@ class _EconomyPageState extends State<EconomyPage> {
   Widget build(BuildContext context) {
     final economy = economyMap(widget.categories);
     final bridge = subMap(economy, 'bridgeCost');
-    final parcel = subMap(economy, 'parcelCost');
     final progression =
         (economy['builderProgression'] as List?)?.cast<Map>() ?? const [];
 
@@ -88,40 +87,13 @@ class _EconomyPageState extends State<EconomyPage> {
             SizedBox(
               width: 150,
               child: IntField(
-                label: 'Parcel base cost',
-                value: asInt(parcel['baseCoins']),
+                label: 'Parcel price (flat)',
+                value: asInt(economy['parcelBaseCoins']),
                 min: 0,
                 help:
                     'Coins for the closest neighboring parcel, before '
                     'distance and portfolio surcharges.',
-                onChanged: (v) =>
-                    _edit((e) => (e['parcelCost'] as Map)['baseCoins'] = v),
-              ),
-            ),
-            SizedBox(
-              width: 190,
-              child: IntField(
-                label: 'Parcel step per N cells dist.',
-                value: asInt(parcel['distanceStepCells'], 8),
-                min: 1,
-                help:
-                    'Adds one coin for every N cells of grid distance '
-                    'from the origin parcel.',
-                onChanged: (v) => _edit(
-                  (e) => (e['parcelCost'] as Map)['distanceStepCells'] = v,
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 200,
-              child: IntField(
-                label: 'Parcel step per N owned parcels',
-                value: asInt(parcel['ownedStepParcels'], 12),
-                min: 1,
-                help: 'Adds one coin for every N parcels already owned.',
-                onChanged: (v) => _edit(
-                  (e) => (e['parcelCost'] as Map)['ownedStepParcels'] = v,
-                ),
+                onChanged: (v) => _edit((e) => e['parcelBaseCoins'] = v),
               ),
             ),
           ],
@@ -130,7 +102,7 @@ class _EconomyPageState extends State<EconomyPage> {
         Text(
           'Derived: bridge span 1 = ${asInt(bridge['baseCoins']) + asInt(bridge['perWaterTileCoins'])} coins · '
           'span 4 = ${asInt(bridge['baseCoins']) + 4 * asInt(bridge['perWaterTileCoins'])} coins · '
-          'first-ring parcel = ${asInt(parcel['baseCoins'])} coins',
+          'every parcel = ${asInt(economy['parcelBaseCoins'])} coins',
           style: const TextStyle(fontSize: 11, color: Colors.black54),
         ),
         const SizedBox(height: 12),

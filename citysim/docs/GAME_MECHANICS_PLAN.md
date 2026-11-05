@@ -39,7 +39,9 @@ volume, optimization, or constant attendance:
 
 The starter world has one empty 8×8 parcel, one free dirt-road tile at its
 center, no buildings, and zero coins. Current geography is a deterministic
-river/lake/coast fixture; broad regional generation is future work.
+authored parcel map in `terrain.json` (grass and water parcels on a
+  bounded map with open ocean beyond it); the map editor and finer
+  detail layers are future work.
 
 ## 3. Coins, check-ins, and calendar
 
@@ -163,10 +165,12 @@ funding its tiles individually. This is the active implementation behavior.
 - They require owned, accessible, vacant dry land but do not require road
   adjacency.
 
-### River bridges
+### Bridges
 
-- A bridge must start at a connected road, end on dry land, and cross one
-  continuous straight river span. Current maximum span is four water tiles.
+- A bridge starts at a connected road, ends on vacant dry land, and crosses a
+  straight line of water tiles. Any span length is allowed — cost per water
+  tile is the limiter.
+- Crossings must be authored water parcels; bridges cannot cross open ocean.
 - Planning reserves the crossing and assigns a builder. Any quoted crossing
   parcels are bought when the plan is committed.
 - Bridge coins are contributed manually. The bridge opens in one transition

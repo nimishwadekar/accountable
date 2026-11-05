@@ -7,6 +7,8 @@
 /// server) modifies these files.
 library;
 
+import '../world/coordinates.dart';
+
 // ---------------------------------------------------------------------------
 // Shared enums (also used inside saved world state)
 // ---------------------------------------------------------------------------
@@ -14,6 +16,10 @@ library;
 enum RoadStyle { dirt, asphalt }
 
 enum StructureKind { building, decoration }
+
+enum TerrainKind { grass, water }
+
+enum GroundStyle { grass, grassPuddle, dirt, asphalt, concrete }
 
 // ---------------------------------------------------------------------------
 // Catalogue
@@ -308,8 +314,6 @@ class EconomyContent {
     required this.bridgeBaseCoins,
     required this.bridgePerWaterTileCoins,
     required this.parcelBaseCoins,
-    required this.parcelDistanceStepCells,
-    required this.parcelOwnedStepParcels,
     required this.builderProgression,
   });
 
@@ -320,9 +324,9 @@ class EconomyContent {
   final int roadTileCostCoins;
   final int bridgeBaseCoins;
   final int bridgePerWaterTileCoins;
+
+  /// Flat parcel price: every parcel on the map costs the same.
   final int parcelBaseCoins;
-  final int parcelDistanceStepCells;
-  final int parcelOwnedStepParcels;
   final List<BuilderProgressionStep> builderProgression;
 
   int bridgeCost(int waterSpanLength) =>
@@ -348,11 +352,7 @@ class EconomyContent {
       'baseCoins': bridgeBaseCoins,
       'perWaterTileCoins': bridgePerWaterTileCoins,
     },
-    'parcelCost': {
-      'baseCoins': parcelBaseCoins,
-      'distanceStepCells': parcelDistanceStepCells,
-      'ownedStepParcels': parcelOwnedStepParcels,
-    },
+    'parcelBaseCoins': parcelBaseCoins,
     'builderProgression': builderProgression
         .map((step) => step.toJson())
         .toList(),
@@ -360,16 +360,13 @@ class EconomyContent {
 
   static EconomyContent fromJson(Map<String, Object?> json) {
     final bridge = json['bridgeCost'] as Map<String, Object?>;
-    final parcel = json['parcelCost'] as Map<String, Object?>;
     return EconomyContent(
       startingWalletCoins: json['startingWalletCoins']! as int,
       startingBuilderCapacity: json['startingBuilderCapacity']! as int,
       roadTileCostCoins: json['roadTileCostCoins']! as int,
       bridgeBaseCoins: bridge['baseCoins']! as int,
       bridgePerWaterTileCoins: bridge['perWaterTileCoins']! as int,
-      parcelBaseCoins: parcel['baseCoins']! as int,
-      parcelDistanceStepCells: parcel['distanceStepCells']! as int,
-      parcelOwnedStepParcels: parcel['ownedStepParcels']! as int,
+      parcelBaseCoins: json['parcelBaseCoins']! as int,
       builderProgression: [
         for (final step in json['builderProgression']! as List)
           BuilderProgressionStep.fromJson(
@@ -543,6 +540,64 @@ class AmbienceContent {
 }
 
 // ---------------------------------------------------------------------------
+// Terrain
+// ---------------------------------------------------------------------------
+
+/// One authored water body. The list is ordered: the first body whose
+/// shape contains a cell determines that cell's water; land otherwise.
+/// Authored geography: the `terrain.json` category. The map *is* the
+/// entries — every authored parcel maps to its base terrain, and any
+/// parcel without an entry is open ocean (unbuyable, unbridgeable,
+/// rendered as sea). Cell-level detail layers will be added on top of
+/// this later.
+class TerrainContent {
+  const TerrainContent({required this.generatorVersion, required this.parcels});
+
+  final int generatorVersion;
+  final Map<ParcelCoord, TerrainKind> parcels;
+
+  /// Whether a parcel is authored on the map (buyable, bridgeable).
+  bool isOnMap(ParcelCoord coord) => parcels.containsKey(coord);
+
+  Map<String, Object?> toJson() => {
+    'generatorVersion': generatorVersion,
+    'parcels': {
+      for (final entry in parcels.entries)
+        '${entry.key.x},${entry.key.y}': entry.value.name,
+    },
+  };
+
+  static TerrainContent fromJson(Map<String, Object?> json) {
+    final raw = json['parcels']! as Map;
+    return TerrainContent(
+      generatorVersion: json['generatorVersion']! as int,
+      parcels: {
+        for (final entry in raw.entries)
+          _parcelCoord(entry.key as String): _terrainKind(
+            entry.value as String,
+          ),
+      },
+    );
+  }
+}
+
+ParcelCoord _parcelCoord(String key) {
+  final parts = key.split(',');
+  if (parts.length != 2) {
+    throw FormatException('"$key" is not a valid parcel key.');
+  }
+  final x = int.tryParse(parts[0].trim());
+  final y = int.tryParse(parts[1].trim());
+  if (x == null || y == null) {
+    throw FormatException('"$key" is not a valid parcel key.');
+  }
+  return ParcelCoord(x, y);
+}
+
+TerrainKind _terrainKind(String name) =>
+    TerrainKind.values.firstWhere((value) => value.name == name);
+
+// ---------------------------------------------------------------------------
 // Manifest
 // ---------------------------------------------------------------------------
 
@@ -608,10 +663,21 @@ List<ContentIssue> validateContentData({
   required Map<String, SpriteDefinition> sprites,
   required EconomyContent economy,
   required AmbienceContent ambience,
+  required TerrainContent terrain,
 }) {
   final issues = <ContentIssue>[];
   void error(String message) => issues.add(ContentIssue('error', message));
   void warning(String message) => issues.add(ContentIssue('warning', message));
+
+  if (terrain.generatorVersion < 1) {
+    error('Terrain generator version must be positive.');
+  }
+  if (terrain.parcels.isEmpty) {
+    error('The terrain map needs at least one parcel.');
+  }
+  if (terrain.parcels[const ParcelCoord(0, 0)] != TerrainKind.grass) {
+    error('The starter parcel (0,0) must be authored on the map as grass.');
+  }
 
   if (catalogue.isEmpty) {
     error('The catalogue needs at least one model.');
@@ -740,10 +806,8 @@ List<ContentIssue> validateContentData({
   if (economy.bridgeBaseCoins < 0 || economy.bridgePerWaterTileCoins < 0) {
     error('Bridge costs must not be negative.');
   }
-  if (economy.parcelBaseCoins < 0 ||
-      economy.parcelDistanceStepCells < 1 ||
-      economy.parcelOwnedStepParcels < 1) {
-    error('Parcel cost parameters are out of range.');
+  if (economy.parcelBaseCoins < 0) {
+    error('The parcel price must not be negative.');
   }
   var lastPopulation = -1;
   var lastCapacity = economy.startingBuilderCapacity;

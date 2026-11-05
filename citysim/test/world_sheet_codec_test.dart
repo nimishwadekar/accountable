@@ -10,17 +10,18 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const terrain = DemoTerrainProvider();
+  late ContentTerrainProvider terrain;
   late ContentBundle content;
 
   setUpAll(() async {
     content = await loadContentBundle(const AssetContentSource());
+    terrain = ContentTerrainProvider(content.terrain);
   });
 
   /// Hand-authored tables in the main app's test style: literal rows, no
   /// fixtures. A starter road, a paved road to the river, a completed
   /// bridge over it, a completed cottage, and a half-funded café project.
-  SheetTables handwrittenTables() => const SheetTables(
+  SheetTables handwrittenTables() => SheetTables(
     userData: {
       'seed': '7',
       'coins': '3',
@@ -35,18 +36,16 @@ void main() {
     ownedParcels: [
       ['0', '0'],
       ['1', '0'],
+      ['2', '0'],
     ],
     tiles: [
       ['4', '4', 'road', 'complete', 'dirt', '', '', ''],
       ['5', '4', 'road', 'complete', 'asphalt', '', '', ''],
       ['6', '4', 'road', 'complete', 'asphalt', '', '', ''],
       ['7', '4', 'road', 'complete', 'asphalt', '', '', ''],
-      ['8', '4', 'road', 'complete', 'asphalt', '', '', ''],
-      ['9', '4', 'road', 'complete', 'asphalt', '', '', ''],
-      ['10', '4', 'road', 'complete', 'asphalt', '', '', ''],
-      ['11', '4', 'road', 'complete', 'asphalt', '', '', ''],
-      ['12', '4', 'bridge', 'complete', '', '', '', ''],
-      ['13', '4', 'road', 'complete', 'asphalt', '', '', ''],
+      for (var column = 8; column <= 15; column++)
+        ['$column', '4', 'bridge', 'complete', '', '', '', ''],
+      ['16', '4', 'road', 'complete', 'asphalt', '', '', ''],
       [
         '3',
         '4',
@@ -76,20 +75,23 @@ void main() {
     expect(world.checkInCount, 1);
     expect(world.constructionDay, 5);
     expect(world.lastCheckInDate, DateTime.utc(2026, 11, 2));
-    expect(world.parcels, hasLength(2));
+    expect(world.parcels, hasLength(3));
 
     // The starter road is identified by its position at the parcel centre.
     expect(
       world.roads.firstWhere((road) => road.id == 'road-start').cell,
       const CellCoord(4, 4),
     );
-    expect(world.roads, hasLength(9));
+    expect(world.roads, hasLength(5));
 
-    // The bridge run derives its banks from the roads at its ends.
+    // The bridge run derives its banks from the roads at its ends — the
+    // full eight-tile crossing of the east water parcel.
     final bridge = world.bridges.single;
-    expect(bridge.nearBank, const CellCoord(11, 4));
-    expect(bridge.farBank, const CellCoord(13, 4));
-    expect(bridge.waterCells, [const CellCoord(12, 4)]);
+    expect(bridge.nearBank, const CellCoord(7, 4));
+    expect(bridge.farBank, const CellCoord(16, 4));
+    expect(bridge.waterCells, [
+      for (var column = 8; column <= 15; column++) CellCoord(column, 4),
+    ]);
 
     // Structures rebuild with their content-derived footprint, variant,
     // and door side; the café is still a half-funded project.

@@ -65,14 +65,9 @@ void main() {
     expect(content.economy.bridgeCost(1), 6);
     expect(content.economy.bridgeCost(4), 12);
     expect(
-      content.parcelCost(const ParcelCoord(0, 0), 1),
+      content.economy.parcelBaseCoins,
       8,
-      reason: 'base parcel price',
-    );
-    expect(
-      content.parcelCost(const ParcelCoord(8, 0), 2),
-      9,
-      reason: 'distance step raises the second ring',
+      reason: 'flat parcel price: every parcel on the map costs the same',
     );
     expect(content.economy.builderProgression, isEmpty);
     expect(
@@ -122,24 +117,24 @@ void main() {
     }
   });
 
-  test('terrain stays fixed for a seed and agrees across parcel edges', () {
-    const provider = DemoTerrainProvider();
-    const seed = 145;
-    final westEdge = provider.sample(const CellCoord(7, 4), seed);
-    final eastEdge = provider.sample(const CellCoord(8, 4), seed);
-    expect(provider.sample(const CellCoord(7, 4), seed).kind, westEdge.kind);
-    expect(provider.sample(const CellCoord(8, 4), seed).kind, eastEdge.kind);
+  test('terrain samples the authored parcel map with ocean beyond it', () {
+    final provider = ContentTerrainProvider(content.terrain);
+    // Authored parcels return their base terrain, seed-independent.
+    expect(provider.sample(const CellCoord(4, 4), 145).kind, TerrainKind.grass);
+    expect(provider.sample(const CellCoord(4, 4), 999).kind, TerrainKind.grass);
+    // The east and west authored water parcels.
+    expect(provider.sample(const CellCoord(8, 4), 145).kind, TerrainKind.water);
     expect(
-      provider.sample(const CellCoord(12, 4), seed).kind,
-      TerrainKind.river,
+      provider.sample(const CellCoord(-4, 2), 145).kind,
+      TerrainKind.water,
     );
+    // Beyond the authored map is open ocean.
     expect(
-      provider.sample(const CellCoord(-4, 2), seed).kind,
-      TerrainKind.lake,
+      provider.sample(const CellCoord(40, 2), 145).kind,
+      TerrainKind.water,
     );
-    expect(
-      provider.sample(const CellCoord(24, 2), seed).kind,
-      TerrainKind.ocean,
-    );
+    expect(content.terrain.isOnMap(const ParcelCoord(1, 0)), isTrue);
+    expect(content.terrain.isOnMap(const ParcelCoord(9, 9)), isFalse);
+    expect(content.terrain.parcels, hasLength(49));
   });
 }

@@ -13,11 +13,12 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const terrain = DemoTerrainProvider();
+  late ContentTerrainProvider terrain;
   late ContentBundle content;
 
   setUpAll(() async {
     content = await loadContentBundle(const AssetContentSource());
+    terrain = ContentTerrainProvider(content.terrain);
   });
 
   ParcelWorldState newWorld() => newParcelWorldState(
@@ -593,6 +594,7 @@ void main() {
       // granted at population 2.
       final lowered = ContentBundle(
         manifest: content.manifest,
+        terrain: content.terrain,
         catalogue: [
           for (final model in content.catalogue)
             model.id == 'medium-home'
@@ -622,6 +624,7 @@ void main() {
   group('parcel purchase and natural terrain', () {
     test('parcels are neighboring purchases and owning land is not access', () {
       var world = grantWorldDebugCoins(newWorld(), 30);
+      // Authored water parcels are buyable like any other map parcel.
       world = purchaseAdjacentParcel(
         world,
         content,
@@ -629,44 +632,69 @@ void main() {
         const ParcelCoord(1, 0),
       );
       expect(world.parcels, hasLength(2));
+      // So is the grass parcel across the water — adjacency is the only
+      // purchase requirement now.
+      world = purchaseAdjacentParcel(
+        world,
+        content,
+        terrain,
+        const ParcelCoord(2, 0),
+      );
+      expect(world.parcels, hasLength(3));
+      // Ownership is not access: nothing beyond the water is reachable
+      // or road-connected until a bridge opens.
       expect(
-        WorldQueries(world, terrain).isLandReachable(const CellCoord(11, 4)),
-        isTrue,
+        WorldQueries(world, terrain).isLandReachable(const CellCoord(16, 4)),
+        isFalse,
       );
       expect(
-        WorldQueries(world, terrain).isRoadConnected(const CellCoord(13, 4)),
+        WorldQueries(world, terrain).isRoadConnected(const CellCoord(16, 4)),
         isFalse,
         reason: 'land reachability is not road connectivity',
+      );
+    });
+
+    test('water parcels are buyable but open ocean beyond the map is not', () {
+      var world = grantWorldDebugCoins(newWorld(), 100);
+      world = purchaseAdjacentParcel(
+        world,
+        content,
+        terrain,
+        const ParcelCoord(-1, 0),
+      );
+      final queries = WorldQueries(world, terrain);
+      expect(queries.terrainAt(const CellCoord(-4, 2)).kind, TerrainKind.water);
+      expect(
+        queries.isLandReachable(const CellCoord(-6, 2)),
+        isFalse,
+        reason:
+            'owning the west water parcel does not reach the land '
+            'beyond it',
+      );
+      // Buy out to the authored edge, then the ocean refuses.
+      world = purchaseAdjacentParcel(
+        world,
+        content,
+        terrain,
+        const ParcelCoord(-2, 0),
+      );
+      world = purchaseAdjacentParcel(
+        world,
+        content,
+        terrain,
+        const ParcelCoord(-3, 0),
       );
       expect(
         () => purchaseAdjacentParcel(
           world,
           content,
           terrain,
-          const ParcelCoord(2, 0),
+          const ParcelCoord(-4, 0),
         ),
         throwsA(isA<WorldRuleViolation>()),
+        reason: 'beyond the authored map is open ocean',
       );
     });
-
-    test(
-      'lake land is routeable around, but ocean-only parcels cannot be bought',
-      () {
-        var world = grantWorldDebugCoins(newWorld(), 100);
-        world = purchaseAdjacentParcel(
-          world,
-          content,
-          terrain,
-          const ParcelCoord(-1, 0),
-        );
-        final queries = WorldQueries(world, terrain);
-        expect(
-          queries.terrainAt(const CellCoord(-4, 2)).kind,
-          TerrainKind.lake,
-        );
-        expect(queries.isLandReachable(const CellCoord(-6, 2)), isTrue);
-      },
-    );
   });
 
   test('a bridge project needs manual funding before opening the far bank', () {
@@ -681,13 +709,11 @@ void main() {
       world,
       content,
       terrain,
-      cells: [
-        for (var column = 5; column <= 11; column++) CellCoord(column, 4),
-      ],
+      cells: [for (var column = 5; column <= 7; column++) CellCoord(column, 4)],
       style: RoadStyle.asphalt,
     );
     final roadProject = world.constructions.single;
-    for (var column = 5; column <= 11; column++) {
+    for (var column = 5; column <= 7; column++) {
       world = fundRoadTile(
         world,
         content,
@@ -696,26 +722,36 @@ void main() {
         cell: CellCoord(column, 4),
       );
     }
-    final quote = quoteRiverBridge(
+    // The east water parcel spans cells x 8..15: a full eight-tile
+    // crossing with banks on the grass parcels either side.
+    final quote = quoteBridge(
       world,
       content,
       terrain,
-      nearBank: const CellCoord(11, 4),
-      farBank: const CellCoord(13, 4),
+      nearBank: const CellCoord(7, 4),
+      farBank: const CellCoord(16, 4),
     );
-    expect(quote.waterCells, [const CellCoord(12, 4)]);
+    expect(quote.waterCells, [
+      for (var column = 8; column <= 15; column++) CellCoord(column, 4),
+    ]);
 
-    world = startRiverBridgeConstruction(
+    world = startBridgeConstruction(
       world,
       content,
       terrain,
-      nearBank: const CellCoord(11, 4),
-      farBank: const CellCoord(13, 4),
+      nearBank: const CellCoord(7, 4),
+      farBank: const CellCoord(16, 4),
     );
     final bridgeProject = world.constructions.single;
-    expect(world.coins, 85, reason: 'parcel (8) and road tiles (7) were paid');
     expect(
-      WorldQueries(world, terrain).isRoadConnected(const CellCoord(13, 4)),
+      world.coins,
+      81,
+      reason:
+          'water parcel (8), road tiles (3), and the far parcel (8) '
+          'were paid',
+    );
+    expect(
+      WorldQueries(world, terrain).isRoadConnected(const CellCoord(16, 4)),
       isFalse,
     );
     world = advanceWorldDays(world, 100);
@@ -728,15 +764,15 @@ void main() {
     );
     final queries = WorldQueries(world, terrain);
     expect(world.bridges, hasLength(1));
-    expect(queries.isLandReachable(const CellCoord(13, 4)), isTrue);
-    expect(queries.isRoadConnected(const CellCoord(13, 4)), isTrue);
+    expect(queries.isLandReachable(const CellCoord(16, 4)), isTrue);
+    expect(queries.isRoadConnected(const CellCoord(16, 4)), isTrue);
     expect(
       quoteStructurePlacement(
         world,
         content,
         terrain,
         catalogueId: 'small-home',
-        origin: const CellCoord(14, 4),
+        origin: const CellCoord(17, 4),
       ).price,
       3,
     );
@@ -744,17 +780,17 @@ void main() {
       world,
       content,
       terrain,
-      const ParcelCoord(2, 0),
+      const ParcelCoord(3, 0),
     );
     expect(
       () => purchaseAdjacentParcel(
         world,
         content,
         terrain,
-        const ParcelCoord(3, 0),
+        const ParcelCoord(4, 0),
       ),
       throwsA(isA<WorldRuleViolation>()),
-      reason: 'the ocean-only coast cannot be acquired',
+      reason: 'beyond the authored map is open ocean',
     );
     validateParcelWorldState(world, content, terrain);
   });
@@ -808,15 +844,13 @@ EconomyContent _economyWithProgression(
   bridgeBaseCoins: content.economy.bridgeBaseCoins,
   bridgePerWaterTileCoins: content.economy.bridgePerWaterTileCoins,
   parcelBaseCoins: content.economy.parcelBaseCoins,
-  parcelDistanceStepCells: content.economy.parcelDistanceStepCells,
-  parcelOwnedStepParcels: content.economy.parcelOwnedStepParcels,
   builderProgression: progression,
 );
 
 ParcelWorldState _buildCottage(
   ParcelWorldState world,
   ContentBundle content,
-  DemoTerrainProvider terrain,
+  TerrainProvider terrain,
   CellCoord origin,
 ) {
   world = startStructureConstruction(

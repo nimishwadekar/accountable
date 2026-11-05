@@ -69,9 +69,16 @@ history. Do not emit an event per render or clock tick.
 
 ## 4. Terrain and derived queries
 
-`DemoTerrainProvider` supplies deterministic grass plus authored river, lake, and coast fixtures. It is a preview fixture, not the final country generator.
+Terrain is authored content: `terrain.json` maps every parcel on the map
+to grass or water, `ContentTerrainProvider` samples it (seed-independent
+until detail layers land), and any parcel without an entry is open ocean
+— unbuyable, unbridgeable, rendered as sea with natural coastlines.
+There are no water-body identities or kinds beyond land/water.
 
-Future generator work should preserve a stable provider API and pinned version; evaluate regional features in global coordinates; keep water-body identities stable; make shores independent of ownership/reveal order; and avoid rerolling acquired terrain. A usable start is required, but infinite land is not promised.
+Future work: the map editor (paint parcels, validate on save against
+the current world), finer cell-level detail layers drawn on top of
+parcel terrain, and regional generation beyond authored maps. Preserve
+the stable provider API; keep shores independent of ownership order.
 
 `WorldQueries` derives entity lookup, reservations, land reachability, road connectivity, and render-chunk groupings. Rebuild/update indexes after topology-changing actions. These are caches, not durable state. Keep land reachability and road connectivity separate, and avoid world-wide scans in paint/layout loops.
 
@@ -196,7 +203,13 @@ Today's geography is a code fixture: infinite featureless grass with three hardc
 - **Water bodies are entities, not painted cells.** Bridge rules depend on body identity and continuity (rivers only, spans 1–4, one body per bridge). The editor authors bodies — shapes carrying an id and a kind — and save validation enforces unique ids, bridgeable river widths, and no accidental body merges. Shore rendering already keys off per-cell water-neighbour geometry and carries over unchanged.
 - **Starter-experience guarantees as editor validation.** The starter parcel has land and a road spot, a bridgeable river within a few parcels, and shoreline variety nearby — enforced by the same validate-before-save pattern as the other dashboard pages.
 
-Sequencing: snapshot-trust refactor (with tests) → terrain content schema and provider-from-content → migrate the current fixture into authored content with no visible change → editor MVP (the first canvas-based dashboard page: paint ground and water, define bodies, place the starter parcel) → regional procedural generation later, with seam, reveal-order, water-body identity, and pinned-version tests.
+Landed: the terrain content schema and provider-from-content (a
+49-parcel starter map with east and west water channels), the bridge
+relaxation (any authored water, straight line, land banks, no span cap),
+buyable water parcels with ownership decoupled from access, and constant
+parcel pricing. Remaining: the editor MVP — the first canvas-based
+dashboard page (paint parcels, place the starter parcel, validate on
+save) — then cell-level detail layers and regional generation.
 
 ### Content breadth
 

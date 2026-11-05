@@ -37,7 +37,7 @@ browser for unused pack art and debug live-reload) remains future work.
 |---|---|---|
 | Structure catalogue (ids, names, descriptions, kind, footprints, costs, population, unlock thresholds) | `world_content.dart` `structureCatalogue` | ✅ `catalogue.json` |
 | Sprite manifest (role → file or facings, scale, anchors, baseOffsetY, sway flag) | `world_content.dart` `spriteManifest` | ✅ `sprites.json` |
-| Road / bridge / parcel cost formulas' values | `world_content.dart` (`roadCost`, `bridgeCost`, `parcelCost`) | ✅ `economy.json` (values; formula shapes stay code) |
+| Road / bridge / parcel cost values | `world_content.dart` (`roadCost`, `bridgeCost`) | ✅ `economy.json` (parcel price is a flat value) |
 | Starting wallet, builder progression, starting unlocks | `world_state.dart` `newParcelWorldState` | ✅ `economy.json` + derived (see §4.5) |
 | Ambient animation + camera tuning | `parcel_world_tuning.dart` | ✅ `ambience.json` (camera stays code — see §9) |
 | Terrain fixtures, parcel size, seed | `terrain_provider.dart`, `world_state.dart` | ❌ read-only |
@@ -173,7 +173,7 @@ tracked by git like any other source file.
   "startingBuilderCapacity": 1,
   "roadTileCostCoins": 1,
   "bridgeCost": { "baseCoins": 4, "perWaterTileCoins": 2 },
-  "parcelCost": { "baseCoins": 8, "distanceStepCells": 8, "ownedStepParcels": 12 },
+  "parcelBaseCoins": 8,
   "builderProgression": [
     { "atPopulation": 12, "capacity": 2 },
     { "atPopulation": 30, "capacity": 3 }

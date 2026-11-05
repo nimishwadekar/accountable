@@ -573,14 +573,14 @@ ParcelWorldState reconcileWorldProgression(
 
 /// Buys the quoted bridge corridor immediately, then assigns a builder to the
 /// bridge project. Bridge coins themselves are contributed explicitly later.
-ParcelWorldState startRiverBridgeConstruction(
+ParcelWorldState startBridgeConstruction(
   ParcelWorldState state,
   ContentBundle content,
   TerrainProvider terrainProvider, {
   required CellCoord nearBank,
   required CellCoord farBank,
 }) {
-  final quote = quoteRiverBridge(
+  final quote = quoteBridge(
     state,
     content,
     terrainProvider,
