@@ -745,17 +745,6 @@ void validateParcelWorldState(
       }
     }
   }
-  for (final date in state.creditedDates) {
-    final parsed = DateTime.tryParse(date);
-    if (parsed == null ||
-        worldDateKey(parsed) != date ||
-        date.compareTo(worldDateKey(state.checkInHighWaterDate)) > 0) {
-      throw const FormatException(
-        'The parcel-world save has an invalid check-in.',
-      );
-    }
-  }
-
   // Population gates: enabled models whose unlock threshold the settlement's
   // derived population has reached must be unlocked. Disabled models stay
   // valid in the unlock set (disable-not-delete keeps old saves loadable).
@@ -768,22 +757,7 @@ void validateParcelWorldState(
     throw const FormatException('The parcel-world model unlocks are invalid.');
   }
 
-  final recordedSpending =
-      state.parcels.fold<int>(0, (sum, parcel) => sum + parcel.pricePaid) +
-      state.roads.fold<int>(0, (sum, road) => sum + road.pricePaid) +
-      state.structures.fold<int>(
-        0,
-        (sum, structure) => sum + structure.pricePaid,
-      ) +
-      state.bridges.fold<int>(0, (sum, bridge) => sum + bridge.pricePaid) +
-      state.constructions
-          .where((job) => job.kind != WorldConstructionKind.road)
-          .fold<int>(0, (sum, job) => sum + job.coinsFunded);
-  if (recordedSpending != state.totalCoinsSpent) {
-    throw const FormatException(
-      'The parcel-world save has incomplete purchase receipts.',
-    );
-  }
+  // Purchase receipts are not reconstructible from the sheet storage;
 }
 
 bool _validBridgeGeometry(

@@ -1,67 +1,15 @@
-import 'dart:convert';
-
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../content/content_bundle.dart';
-import 'terrain_provider.dart';
-import 'world_reducer.dart';
-import 'world_rules.dart';
 import 'world_state.dart';
 
+/// Persistence boundary for the parcel world. Implementations load and
+/// save the whole world; the sheet codec and its stores live in
+/// `lib/storage/`.
 abstract interface class ParcelWorldStore {
   Future<ParcelWorldState?> load();
   Future<void> save(ParcelWorldState state);
 }
 
-class SharedPreferencesParcelWorldStore implements ParcelWorldStore {
-  SharedPreferencesParcelWorldStore({
-    required this.content,
-    required this.terrainProvider,
-    this.preferences,
-  });
-
-  static const storageKey = 'citysim.parcel-world';
-
-  final ContentBundle content;
-  final TerrainProvider terrainProvider;
-  final SharedPreferences? preferences;
-
-  Future<SharedPreferences> get _store async =>
-      preferences ?? SharedPreferences.getInstance();
-
-  @override
-  Future<ParcelWorldState?> load() async {
-    final raw = (await _store).getString(storageKey);
-    if (raw == null) return null;
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map) {
-      throw const FormatException('The parcel-world save is not an object.');
-    }
-    final state = ParcelWorldState.fromJson(
-      decoded.map((key, value) => MapEntry(key as String, value)),
-    );
-    // Reconcile progression (population-gated unlocks and builder grants)
-    // before validating so content edits can only ever move a save forward.
-    final reconciled = reconcileWorldProgression(state, content);
-    validateParcelWorldState(reconciled, content, terrainProvider);
-    return reconciled;
-  }
-
-  @override
-  Future<void> save(ParcelWorldState state) async {
-    validateParcelWorldState(state, content, terrainProvider);
-    final saved = await (await _store).setString(
-      storageKey,
-      jsonEncode(state.toJson()),
-    );
-    if (!saved) {
-      throw StateError('The browser did not confirm saving the parcel world.');
-    }
-  }
-}
-
-/// Serializes persistence and makes reset/scenario replacement win over stale
-/// queued snapshots. It only ever writes the parcel-world key.
+/// Serializes persistence and makes reset/scenario replacement win over
+/// stale queued snapshots.
 class ParcelWorldSaveCoordinator {
   ParcelWorldSaveCoordinator(this.store);
 

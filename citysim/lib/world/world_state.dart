@@ -2,9 +2,7 @@ import 'coordinates.dart';
 import 'terrain_provider.dart';
 
 import '../content/content_bundle.dart';
-import 'world_content.dart';
 
-const parcelWorldSchemaVersion = 4;
 const parcelWorldGeneratorVersion = 1;
 const parcelWorldRulesVersion = 2;
 const parcelWorldContentVersion = 3;
@@ -21,22 +19,6 @@ class OwnedParcel {
   final int pricePaid;
   final int purchasedAtDay;
   final List<TerrainCell> terrain;
-
-  Map<String, Object?> toJson() => {
-    'coord': coord.toJson(),
-    'pricePaid': pricePaid,
-    'purchasedAtDay': purchasedAtDay,
-    'terrain': terrain.map((cell) => cell.toJson()).toList(),
-  };
-
-  factory OwnedParcel.fromJson(Map<String, Object?> json) => OwnedParcel(
-    coord: ParcelCoord.fromJson(worldJsonMap(json['coord'])),
-    pricePaid: json['pricePaid']! as int,
-    purchasedAtDay: json['purchasedAtDay']! as int,
-    terrain: (json['terrain']! as List)
-        .map((value) => TerrainCell.fromJson(worldJsonMap(value)))
-        .toList(),
-  );
 }
 
 class RoadSegment {
@@ -55,24 +37,6 @@ class RoadSegment {
   final int pricePaid;
   final int completedAtDay;
   final String? projectId;
-
-  Map<String, Object?> toJson() => {
-    'id': id,
-    'cell': cell.toJson(),
-    'style': style.name,
-    'pricePaid': pricePaid,
-    'completedAtDay': completedAtDay,
-    'projectId': projectId,
-  };
-
-  factory RoadSegment.fromJson(Map<String, Object?> json) => RoadSegment(
-    id: json['id']! as String,
-    cell: CellCoord.fromJson(worldJsonMap(json['cell'])),
-    style: RoadStyle.values.firstWhere((value) => value.name == json['style']),
-    pricePaid: json['pricePaid']! as int,
-    completedAtDay: json['completedAtDay']! as int,
-    projectId: json['projectId'] as String?,
-  );
 }
 
 class PlacedStructure {
@@ -115,43 +79,6 @@ class PlacedStructure {
   /// Null when the chosen sprite has no facings or for decorations with a
   /// single facing.
   final String? facing;
-
-  Map<String, Object?> toJson() => {
-    'id': id,
-    'catalogueId': catalogueId,
-    'kind': kind.name,
-    'origin': origin.toJson(),
-    'quarterTurns': quarterTurns,
-    'footprint': footprint.map((cell) => cell.toJson()).toList(),
-    'pricePaid': pricePaid,
-    'completedAtDay': completedAtDay,
-    'population': population,
-    'assetRole': assetRole,
-    'facing': facing,
-  };
-
-  factory PlacedStructure.fromJson(Map<String, Object?> json) {
-    final kind = StructureKind.values.firstWhere(
-      (value) => value.name == json['kind'],
-    );
-    return PlacedStructure(
-      id: json['id']! as String,
-      catalogueId: json['catalogueId']! as String,
-      kind: kind,
-      origin: CellCoord.fromJson(worldJsonMap(json['origin'])),
-      quarterTurns: json['quarterTurns']! as int,
-      footprint: (json['footprint']! as List)
-          .map((value) => CellCoord.fromJson(worldJsonMap(value)))
-          .toList(),
-      pricePaid: json['pricePaid']! as int,
-      completedAtDay: json['completedAtDay']! as int,
-      population:
-          json['population'] as int? ??
-          (kind == StructureKind.building ? 1 : 0),
-      assetRole: json['assetRole'] as String?,
-      facing: json['facing'] as String?,
-    );
-  }
 }
 
 class CompletedBridge {
@@ -170,27 +97,6 @@ class CompletedBridge {
   final CellCoord farBank;
   final int pricePaid;
   final int completedAtDay;
-
-  Map<String, Object> toJson() => {
-    'id': id,
-    'waterCells': waterCells.map((cell) => cell.toJson()).toList(),
-    'nearBank': nearBank.toJson(),
-    'farBank': farBank.toJson(),
-    'pricePaid': pricePaid,
-    'completedAtDay': completedAtDay,
-  };
-
-  factory CompletedBridge.fromJson(Map<String, Object?> json) =>
-      CompletedBridge(
-        id: json['id']! as String,
-        waterCells: (json['waterCells']! as List)
-            .map((value) => CellCoord.fromJson(worldJsonMap(value)))
-            .toList(),
-        nearBank: CellCoord.fromJson(worldJsonMap(json['nearBank'])),
-        farBank: CellCoord.fromJson(worldJsonMap(json['farBank'])),
-        pricePaid: json['pricePaid']! as int,
-        completedAtDay: json['completedAtDay']! as int,
-      );
 }
 
 enum WorldConstructionKind { structure, road, bridge }
@@ -254,73 +160,6 @@ class WorldConstruction {
   int get coinsRemaining => totalCostCoins - coinsFunded;
   double get progress =>
       totalCostCoins <= 0 ? 1 : (coinsFunded / totalCostCoins).clamp(0.0, 1.0);
-
-  Map<String, Object?> toJson() => {
-    'id': id,
-    'kind': kind.name,
-    'catalogueId': catalogueId,
-    'structureKind': structureKind?.name,
-    'origin': origin?.toJson(),
-    'quarterTurns': quarterTurns,
-    'footprint': footprint.map((cell) => cell.toJson()).toList(),
-    'roadStyle': roadStyle?.name,
-    'roadCells': roadCells.map((cell) => cell.toJson()).toList(),
-    'waterCells': waterCells.map((cell) => cell.toJson()).toList(),
-    'nearBank': nearBank?.toJson(),
-    'farBank': farBank?.toJson(),
-    'totalCostCoins': totalCostCoins,
-    'coinsFunded': coinsFunded,
-    'builderSlot': builderSlot,
-    'startedAtDay': startedAtDay,
-    'population': population,
-    'assetRole': assetRole,
-    'facing': facing,
-  };
-
-  factory WorldConstruction.fromJson(Map<String, Object?> json) =>
-      WorldConstruction(
-        id: json['id']! as String,
-        kind: WorldConstructionKind.values.firstWhere(
-          (value) => value.name == json['kind'],
-        ),
-        catalogueId: json['catalogueId'] as String?,
-        structureKind: json['structureKind'] == null
-            ? null
-            : StructureKind.values.firstWhere(
-                (value) => value.name == json['structureKind'],
-              ),
-        origin: json['origin'] == null
-            ? null
-            : CellCoord.fromJson(worldJsonMap(json['origin'])),
-        quarterTurns: json['quarterTurns']! as int,
-        footprint: (json['footprint']! as List)
-            .map((value) => CellCoord.fromJson(worldJsonMap(value)))
-            .toList(),
-        roadStyle: json['roadStyle'] == null
-            ? null
-            : RoadStyle.values.firstWhere(
-                (value) => value.name == json['roadStyle'],
-              ),
-        roadCells: (json['roadCells']! as List)
-            .map((value) => CellCoord.fromJson(worldJsonMap(value)))
-            .toList(),
-        waterCells: (json['waterCells']! as List)
-            .map((value) => CellCoord.fromJson(worldJsonMap(value)))
-            .toList(),
-        nearBank: json['nearBank'] == null
-            ? null
-            : CellCoord.fromJson(worldJsonMap(json['nearBank'])),
-        farBank: json['farBank'] == null
-            ? null
-            : CellCoord.fromJson(worldJsonMap(json['farBank'])),
-        totalCostCoins: json['totalCostCoins']! as int,
-        coinsFunded: json['coinsFunded']! as int,
-        builderSlot: json['builderSlot']! as int,
-        startedAtDay: json['startedAtDay']! as int,
-        population: json['population'] as int? ?? 0,
-        assetRole: json['assetRole'] as String?,
-        facing: json['facing'] as String?,
-      );
 }
 
 class WorldEvent {
@@ -339,24 +178,6 @@ class WorldEvent {
   final int constructionDay;
   final String description;
   final Map<String, Object?> payload;
-
-  Map<String, Object> toJson() => {
-    'id': id,
-    'kind': kind,
-    'dateKey': dateKey,
-    'constructionDay': constructionDay,
-    'description': description,
-    'payload': payload,
-  };
-
-  factory WorldEvent.fromJson(Map<String, Object?> json) => WorldEvent(
-    id: json['id']! as String,
-    kind: json['kind']! as String,
-    dateKey: json['dateKey']! as String,
-    constructionDay: json['constructionDay']! as int,
-    description: json['description']! as String,
-    payload: json['payload'] == null ? const {} : worldJsonMap(json['payload']),
-  );
 }
 
 class ParcelWorldState {
@@ -376,7 +197,8 @@ class ParcelWorldState {
     required this.totalCoinsSpent,
     required this.nextEntityNumber,
     required this.nextEventNumber,
-    required Set<String> creditedDates,
+    required this.lastCheckInDate,
+    required this.checkInCount,
     required Set<String> unlockedCatalogueIds,
     required List<OwnedParcel> parcels,
     required List<RoadSegment> roads,
@@ -384,8 +206,7 @@ class ParcelWorldState {
     required List<CompletedBridge> bridges,
     required List<WorldConstruction> constructions,
     required List<WorldEvent> events,
-  }) : creditedDates = Set.unmodifiable(creditedDates),
-       unlockedCatalogueIds = Set.unmodifiable(unlockedCatalogueIds),
+  }) : unlockedCatalogueIds = Set.unmodifiable(unlockedCatalogueIds),
        parcels = List.unmodifiable(parcels),
        roads = List.unmodifiable(roads),
        structures = List.unmodifiable(structures),
@@ -408,7 +229,16 @@ class ParcelWorldState {
   final int totalCoinsSpent;
   final int nextEntityNumber;
   final int nextEventNumber;
-  final Set<String> creditedDates;
+
+  /// The most recent date a check-in was credited. Check-in is allowed
+  /// only on the high-water date and only if that date was not already
+  /// credited — together with [checkInHighWaterDate] this reproduces the
+  /// no-backfill rule without storing a dated ledger.
+  final DateTime? lastCheckInDate;
+
+  /// Total check-ins ever credited. The dated ledger itself is not
+  /// stored; only this count and [lastCheckInDate] persist.
+  final int checkInCount;
   final Set<String> unlockedCatalogueIds;
   final List<OwnedParcel> parcels;
   final List<RoadSegment> roads;
@@ -426,7 +256,6 @@ class ParcelWorldState {
   /// structure (snapshotted at placement). Never stored.
   int get population =>
       structures.fold<int>(0, (sum, structure) => sum + structure.population);
-  int get creditedDayCount => creditedDates.length;
 
   Map<ParcelCoord, OwnedParcel> get parcelsByCoord => {
     for (final parcel in parcels) parcel.coord: parcel,
@@ -458,7 +287,8 @@ class ParcelWorldState {
     int? totalCoinsSpent,
     int? nextEntityNumber,
     int? nextEventNumber,
-    Set<String>? creditedDates,
+    DateTime? lastCheckInDate,
+    int? checkInCount,
     Set<String>? unlockedCatalogueIds,
     List<OwnedParcel>? parcels,
     List<RoadSegment>? roads,
@@ -482,7 +312,8 @@ class ParcelWorldState {
     totalCoinsSpent: totalCoinsSpent ?? this.totalCoinsSpent,
     nextEntityNumber: nextEntityNumber ?? this.nextEntityNumber,
     nextEventNumber: nextEventNumber ?? this.nextEventNumber,
-    creditedDates: creditedDates ?? this.creditedDates,
+    lastCheckInDate: lastCheckInDate ?? this.lastCheckInDate,
+    checkInCount: checkInCount ?? this.checkInCount,
     unlockedCatalogueIds: unlockedCatalogueIds ?? this.unlockedCatalogueIds,
     parcels: parcels ?? this.parcels,
     roads: roads ?? this.roads,
@@ -491,99 +322,6 @@ class ParcelWorldState {
     constructions: constructions ?? this.constructions,
     events: events ?? this.events,
   );
-
-  Map<String, Object?> toJson() => {
-    'schemaVersion': parcelWorldSchemaVersion,
-    'worldId': worldId,
-    'generatorVersion': generatorVersion,
-    'rulesVersion': rulesVersion,
-    'contentVersion': contentVersion,
-    'seed': seed,
-    'parcelSize': parcelSize,
-    'builderCapacity': builderCapacity,
-    'simulatedDate': dateKey,
-    'checkInHighWaterDate': worldDateKey(checkInHighWaterDate),
-    'constructionDay': constructionDay,
-    'coins': coins,
-    'totalCoinsEarned': totalCoinsEarned,
-    'totalCoinsSpent': totalCoinsSpent,
-    'nextEntityNumber': nextEntityNumber,
-    'nextEventNumber': nextEventNumber,
-    'creditedDates': creditedDates.toList()..sort(),
-    'unlockedCatalogueIds': unlockedCatalogueIds.toList()..sort(),
-    'parcels': parcels.map((parcel) => parcel.toJson()).toList(),
-    'roads': roads.map((road) => road.toJson()).toList(),
-    'structures': structures.map((structure) => structure.toJson()).toList(),
-    'bridges': bridges.map((bridge) => bridge.toJson()).toList(),
-    'constructions': constructions
-        .map((construction) => construction.toJson())
-        .toList(),
-    'events': events.map((event) => event.toJson()).toList(),
-  };
-
-  factory ParcelWorldState.fromJson(Map<String, Object?> json) {
-    if (json['schemaVersion'] != parcelWorldSchemaVersion) {
-      throw const FormatException('Unsupported parcel-world save version.');
-    }
-    final dateKey = json['simulatedDate']! as String;
-    final highWaterKey = json['checkInHighWaterDate']! as String;
-    final parsedDate = DateTime.tryParse(dateKey);
-    final parsedHighWater = DateTime.tryParse(highWaterKey);
-    if (parsedDate == null ||
-        worldDateKey(parsedDate) != dateKey ||
-        parsedHighWater == null ||
-        worldDateKey(parsedHighWater) != highWaterKey ||
-        highWaterKey.compareTo(dateKey) < 0) {
-      throw const FormatException('Invalid simulated date in world save.');
-    }
-    return ParcelWorldState(
-      worldId: json['worldId']! as String,
-      seed: json['seed']! as int,
-      generatorVersion: json['generatorVersion']! as int,
-      rulesVersion: json['rulesVersion']! as int,
-      contentVersion: json['contentVersion']! as int,
-      parcelSize: json['parcelSize']! as int,
-      builderCapacity: json['builderCapacity']! as int,
-      simulatedDate: DateTime.utc(
-        parsedDate.year,
-        parsedDate.month,
-        parsedDate.day,
-      ),
-      checkInHighWaterDate: DateTime.utc(
-        parsedHighWater.year,
-        parsedHighWater.month,
-        parsedHighWater.day,
-      ),
-      constructionDay: json['constructionDay']! as int,
-      coins: json['coins']! as int,
-      totalCoinsEarned: json['totalCoinsEarned']! as int,
-      totalCoinsSpent: json['totalCoinsSpent']! as int,
-      nextEntityNumber: json['nextEntityNumber']! as int,
-      nextEventNumber: json['nextEventNumber']! as int,
-      creditedDates: Set<String>.from(json['creditedDates']! as List),
-      unlockedCatalogueIds: Set<String>.from(
-        json['unlockedCatalogueIds']! as List,
-      ),
-      parcels: (json['parcels']! as List)
-          .map((value) => OwnedParcel.fromJson(worldJsonMap(value)))
-          .toList(),
-      roads: (json['roads']! as List)
-          .map((value) => RoadSegment.fromJson(worldJsonMap(value)))
-          .toList(),
-      structures: (json['structures']! as List)
-          .map((value) => PlacedStructure.fromJson(worldJsonMap(value)))
-          .toList(),
-      bridges: (json['bridges']! as List)
-          .map((value) => CompletedBridge.fromJson(worldJsonMap(value)))
-          .toList(),
-      constructions: (json['constructions']! as List)
-          .map((value) => WorldConstruction.fromJson(worldJsonMap(value)))
-          .toList(),
-      events: (json['events']! as List)
-          .map((value) => WorldEvent.fromJson(worldJsonMap(value)))
-          .toList(),
-    );
-  }
 }
 
 String worldDateKey(DateTime date) =>
@@ -621,7 +359,8 @@ ParcelWorldState newParcelWorldState({
     totalCoinsSpent: 0,
     nextEntityNumber: 1,
     nextEventNumber: 1,
-    creditedDates: const {},
+    lastCheckInDate: null,
+    checkInCount: 0,
     // Derived: every enabled model that unlocks at population 0.
     unlockedCatalogueIds: {
       for (final model in content.purchaseableModels)

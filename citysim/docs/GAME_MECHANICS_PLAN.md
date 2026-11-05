@@ -53,6 +53,8 @@ river/lake/coast fixture; broad regional generation is future work.
 - Rewinding the displayed date does not make already-passed, uncredited dates
   eligible again.
 - Test-only debug grants are not part of normal play or progression.
+- Check-in state persists as the last credited date and a total count; the
+  dated ledger itself is not stored.
 
 ### Spending and project funding
 
@@ -75,7 +77,10 @@ river/lake/coast fixture; broad regional generation is future work.
 - The player pays for a parcel before developing it. New parcels contain no
   placed buildings, roads, or decorations.
 - Lakes can be routed around; the current rules do not allow bridging lakes or
-  oceans. Rivers require a valid bridge where no land route exists.
+  oceans. Rivers require a valid bridge where no land route exists. Decided
+  direction: bridges will eventually span any water body — straight line,
+  both ends on land, starting from a road — with cost as the limiter; see
+  the implementation plan.
 - A bridge plan can quote and purchase needed crossing parcels as part of
   committing that bridge plan; the bridge itself remains unfinished until its
   cost is funded.
@@ -215,11 +220,18 @@ the current slice.
 
 These are candidates, not promises or requirements for the current prototype:
 
-- Seeded regional terrain and expansion across a country-scale world.
+- World map editor for authored terrain — the agreed next project (design and
+  sequencing in the implementation plan) — with seeded regional generation
+  beyond the authored map as a later phase.
 - Additional builders and the milestones/costs for increasing builder capacity.
 - More settlement regions, naming, historical snapshots, and a regional overview.
 - Additional building models, footprints, and progression milestones.
-- Long-term save export/backup and resilience for years of play.
+- Google Sheets sync for game data: the four-sheet storage (CSV documents
+  for now, the game's own spreadsheet once created) replaces ad-hoc
+  export/backup.
+- Tap-picking improvements for targets behind buildings: per-pixel picking,
+  click cycling, tool-based pick priority, and x-ray dimming (spec in the
+  implementation plan).
 - Optional ambience, residents, or seasonal presentation that never penalizes
   absence or makes residents a resource-optimization system. Deferred
   animation follow-ups: a true water-flow shader, a wind-gust sweep over
@@ -239,6 +251,10 @@ Before committing to additional mechanics, decide:
 4. Which regional features, if any, are required for country-scale expansion?
 5. Which long-term presentation features belong in the game, versus remaining
    visual ideas only?
+6. Permanence policy: no demolition is deliberate for buildings — it fits the
+   accountability theme — but decide consciously whether road removal exists
+   for dead-end cleanup in long-running settlements.
+7. Should asphalt roads be population-gated rather than a freely chosen style?
 
 ## 9. Product boundaries
 

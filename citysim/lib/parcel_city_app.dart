@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'content/asset_content_source.dart';
+import 'config/citysim_config.dart';
 import 'content/content_bundle.dart';
 import 'rendering/parcel_world_view.dart';
+import 'storage/csv_sheet_store.dart';
 import 'world/coordinates.dart';
 import 'world/terrain_provider.dart';
 import 'world/world_content.dart';
@@ -98,12 +100,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     try {
       final content =
           widget.content ?? await loadContentBundle(const AssetContentSource());
-      final store =
-          widget.store ??
-          SharedPreferencesParcelWorldStore(
-            content: content,
-            terrainProvider: _terrain,
-          );
+      // The store comes from the config's data source unless a test
+      // injects one. The CSV source persists the four sheet documents in
+      // local browser storage; the Google Spreadsheet is wired later.
+      final store = widget.store ?? await _storeFromConfig(content);
       if (!mounted) return;
       setState(() {
         _content = content;
@@ -118,6 +118,20 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         _loading = false;
       });
     }
+  }
+
+  Future<ParcelWorldStore> _storeFromConfig(ContentBundle content) async {
+    final config = await CitysimConfig.load();
+    if (config.dataSource == CitysimDataSource.sheets) {
+      throw UnsupportedError(
+        'Google Sheets storage is not wired yet; set citysim.dataSource '
+        'to "csv" in assets/config.json.',
+      );
+    }
+    return CsvSheetParcelWorldStore(
+      content: content,
+      terrainProvider: _terrain,
+    );
   }
 
   Future<void> _loadWorld() async {
@@ -1344,7 +1358,9 @@ class _WorldHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final checkedIn = state.creditedDates.contains(state.dateKey);
+    final checkedIn =
+        state.lastCheckInDate != null &&
+        worldDateKey(state.lastCheckInDate!) == state.dateKey;
     final brand = Row(
       children: [
         Container(
@@ -1504,7 +1520,7 @@ class _ClockControls extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${state.totalCoinsEarned} earned · ${state.totalCoinsSpent} spent · ${state.creditedDayCount} check-ins',
+          '${state.totalCoinsEarned} earned · ${state.totalCoinsSpent} spent · ${state.checkInCount} check-ins',
         ),
         Wrap(
           spacing: 5,
@@ -1533,7 +1549,8 @@ class _ClockControls extends StatelessWidget {
           label: Text(
             canCheckIn
                 ? 'Check in current day'
-                : state.creditedDates.contains(state.dateKey)
+                : state.lastCheckInDate != null &&
+                      worldDateKey(state.lastCheckInDate!) == state.dateKey
                 ? 'Today already credited'
                 : 'Past day cannot be credited',
           ),

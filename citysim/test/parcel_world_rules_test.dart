@@ -1,5 +1,7 @@
 import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
+import 'package:citysim/storage/sheet_tables.dart';
+import 'package:citysim/storage/world_sheet_codec.dart';
 import 'package:citysim/world/coordinates.dart';
 import 'package:citysim/world/terrain_provider.dart';
 import 'package:citysim/world/world_queries.dart';
@@ -385,11 +387,15 @@ void main() {
       }
       expect(replayRoles, rolled.take(3), reason: 'same seed, same rolls');
 
-      final decoded = ParcelWorldState.fromJson(world.toJson());
+      final decoded = sheetTablesToWorld(
+        worldToSheetTables(world),
+        content: content,
+        terrainProvider: terrain,
+      );
       expect(
         decoded.structures.map((s) => s.assetRole).toList(),
         structureRoles,
-        reason: 'variant snapshots survive the save round-trip',
+        reason: 'variant snapshots survive the sheet round-trip',
       );
     });
 
@@ -513,12 +519,16 @@ void main() {
         returnsNormally,
       );
 
-      // The chosen sides survive the save round-trip.
-      final decoded = ParcelWorldState.fromJson(world.toJson());
+      // The chosen sides survive the sheet round-trip.
+      final decoded = sheetTablesToWorld(
+        worldToSheetTables(world),
+        content: content,
+        terrainProvider: terrain,
+      );
       expect(
         decoded.structures.map((s) => s.facing).toList(),
         world.structures.map((s) => s.facing).toList(),
-        reason: 'door-side snapshots survive the save round-trip',
+        reason: 'door-side snapshots survive the sheet round-trip',
       );
     });
 
@@ -773,9 +783,18 @@ void main() {
       cell: const CellCoord(5, 4),
     );
 
-    final decoded = ParcelWorldState.fromJson(world.toJson());
+    final decoded = sheetTablesToWorld(
+      worldToSheetTables(world),
+      content: content,
+      terrainProvider: terrain,
+    );
     validateParcelWorldState(decoded, content, terrain);
-    expect(decoded.toJson(), world.toJson());
+    // Round-tripping the rebuilt world again is a fixed point: the same
+    // tables come back out.
+    expect(
+      encodeSheetTables(worldToSheetTables(decoded)),
+      encodeSheetTables(worldToSheetTables(world)),
+    );
   });
 }
 

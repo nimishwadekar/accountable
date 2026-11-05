@@ -1,29 +1,29 @@
 import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
+import 'package:citysim/storage/csv_sheet_store.dart';
+import 'package:citysim/storage/sheet_tables.dart';
+import 'package:citysim/storage/world_sheet_codec.dart';
+import 'package:citysim/world/coordinates.dart';
 import 'package:citysim/world/terrain_provider.dart';
-import 'package:citysim/world/world_save_store.dart';
+import 'package:citysim/world/world_reducer.dart';
 import 'package:citysim/world/world_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class _MemoryWorldStore implements ParcelWorldStore {
-  _MemoryWorldStore();
+/// A sheet source backed by in-memory documents — the test analogue of
+/// the bundled CSV sheets.
+class _HardcodedSheetSource implements SheetSource {
+  _HardcodedSheetSource(this.documents);
 
-  ParcelWorldState? current;
-  final writes = <ParcelWorldState>[];
-
-  @override
-  Future<ParcelWorldState?> load() async => current;
+  final Map<String, String> documents;
 
   @override
-  Future<void> save(ParcelWorldState state) async {
-    writes.add(state);
-    current = state;
-  }
+  Future<String?> readSheet(String name) async => documents[name];
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
   const terrain = DemoTerrainProvider();
   late ContentBundle content;
 
@@ -31,75 +31,188 @@ void main() {
     content = await loadContentBundle(const AssetContentSource());
   });
 
-  test('the store round-trips a world under its own key', () async {
-    SharedPreferences.setMockInitialValues({
-      'accountable.settings': 'untouched',
-    });
+  ParcelWorldState newWorld() => newParcelWorldState(
+    content: content,
+    seed: 99,
+    terrainProvider: terrain,
+    today: DateTime.utc(2026, 11, 2),
+  );
+
+  test('the store round-trips a played world through its sheets', () async {
+    SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
-    final store = SharedPreferencesParcelWorldStore(
+    final store = CsvSheetParcelWorldStore(
       content: content,
       terrainProvider: terrain,
       preferences: preferences,
     );
 
-    expect(await store.load(), isNull);
-    final world = newParcelWorldState(
-      content: content,
-      seed: 9,
-      terrainProvider: terrain,
-      today: DateTime.utc(2026, 11, 2),
+    // Play: check in, expand, build a partially funded road, then save
+    // and reload mid-project.
+    var world = grantWorldDebugCoins(checkInWorldForToday(newWorld()), 100);
+    world = purchaseAdjacentParcel(
+      world,
+      content,
+      terrain,
+      const ParcelCoord(1, 0),
     );
-    await store.save(world);
+    world = planRoadStretch(
+      world,
+      content,
+      terrain,
+      cells: [
+        for (var column = 5; column <= 11; column++) CellCoord(column, 4),
+      ],
+      style: RoadStyle.asphalt,
+    );
+    final roadProject = world.constructions.single;
+    for (var column = 5; column <= 9; column++) {
+      world = fundRoadTile(
+        world,
+        content,
+        terrain,
+        projectId: roadProject.id,
+        cell: CellCoord(column, 4),
+      );
+    }
 
-    expect((await store.load())?.toJson(), world.toJson());
-    expect(preferences.getString('accountable.settings'), 'untouched');
+    final reloaded = await store.load();
+    expect(reloaded, isNull, reason: 'nothing saved yet');
+    await store.save(world);
+    final midProject = (await store.load())!;
+    expect(midProject.constructions, hasLength(1));
+    expect(midProject.constructions.single.roadCells, hasLength(7));
+    expect(midProject.constructions.single.coinsFunded, 5);
+    expect(midProject.coins, world.coins);
+    expect(midProject.checkInCount, 1);
+    expect(midProject.lastCheckInDate, DateTime.utc(2026, 11, 2));
+
+    // Continue playing on the reloaded world: finish the road, build a
+    // cottage, bridge the river, and start a café.
+    var played = midProject;
+    for (var column = 10; column <= 11; column++) {
+      played = fundRoadTile(
+        played,
+        content,
+        terrain,
+        projectId: played.constructions.single.id,
+        cell: CellCoord(column, 4),
+      );
+    }
+    played = startStructureConstruction(
+      played,
+      content,
+      terrain,
+      catalogueId: 'small-home',
+      origin: const CellCoord(3, 4),
+    );
+    played = fundStructureProject(
+      played,
+      content,
+      projectId: played.constructions.single.id,
+      amount: played.constructions.single.totalCostCoins,
+    );
+    played = startRiverBridgeConstruction(
+      played,
+      content,
+      terrain,
+      nearBank: const CellCoord(11, 4),
+      farBank: const CellCoord(13, 4),
+    );
+    played = fundBridgeProject(
+      played,
+      projectId: played.constructions.single.id,
+      amount: played.constructions.single.totalCostCoins,
+    );
+    played = startStructureConstruction(
+      played,
+      content,
+      terrain,
+      catalogueId: 'cafe',
+      origin: const CellCoord(6, 5),
+    );
+
+    await store.save(played);
+    final finalWorld = (await store.load())!;
+    expect(finalWorld.roads, hasLength(9), reason: 'starter + 7 + approach');
+    expect(finalWorld.structures, hasLength(1));
+    expect(finalWorld.structures.single.catalogueId, 'small-home');
+    expect(finalWorld.bridges.single.nearBank, const CellCoord(11, 4));
+    expect(finalWorld.bridges.single.farBank, const CellCoord(13, 4));
+    expect(finalWorld.constructions.single.catalogueId, 'cafe');
+    expect(finalWorld.checkInCount, 1);
+
+    // Saving the reloaded world produces the same documents again.
+    expect(
+      encodeSheetTables(worldToSheetTables(finalWorld)),
+      encodeSheetTables(worldToSheetTables(played)),
+    );
   });
 
-  test(
-    'save coordinator ignores queued stale snapshots during replacement',
-    () async {
-      final store = _MemoryWorldStore();
-      final coordinator = ParcelWorldSaveCoordinator(store);
-      final oldWorld = newParcelWorldState(
-        content: content,
-        seed: 1,
-        terrainProvider: terrain,
-        today: DateTime.utc(2026, 11, 2),
-      );
-      final newWorld = newParcelWorldState(
-        content: content,
-        seed: 2,
-        terrainProvider: terrain,
-        today: DateTime.utc(2026, 11, 3),
-      );
+  test('a bundled seed loads when nothing is saved locally', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final seeded = checkInWorldForToday(newWorld());
+    final documents = encodeSheetTables(worldToSheetTables(seeded));
+    final store = CsvSheetParcelWorldStore(
+      content: content,
+      terrainProvider: terrain,
+      preferences: preferences,
+      seedSource: _HardcodedSheetSource(documents),
+    );
 
-      final oldWrite = coordinator.save(oldWorld);
-      final replaceWrite = coordinator.replace(newWorld);
-      await Future.wait([oldWrite, replaceWrite]);
+    final world = await store.load();
+    expect(world, isNotNull, reason: 'the seed provides a world');
+    expect(world!.coins, seeded.coins);
+    expect(world.checkInCount, 1);
+  });
 
-      expect(store.current?.seed, 2);
-      expect(store.writes, [newWorld]);
-    },
-  );
+  test('an empty seed means a brand-new game', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = CsvSheetParcelWorldStore(
+      content: content,
+      terrainProvider: terrain,
+      preferences: preferences,
+      seedSource: _HardcodedSheetSource(const {}),
+    );
 
-  test(
-    'invalid content is surfaced and does not become a fresh silent save',
-    () async {
-      SharedPreferences.setMockInitialValues({
-        SharedPreferencesParcelWorldStore.storageKey: '{bad json',
-      });
-      final preferences = await SharedPreferences.getInstance();
-      final store = SharedPreferencesParcelWorldStore(
-        content: content,
-        terrainProvider: terrain,
-        preferences: preferences,
-      );
+    expect(await store.load(), isNull);
+  });
 
-      expect(store.load(), throwsFormatException);
-      expect(
-        preferences.getString(SharedPreferencesParcelWorldStore.storageKey),
-        '{bad json',
-      );
-    },
-  );
+  test('a local save wins over the bundled seed', () async {
+    final seeded = checkInWorldForToday(newWorld());
+    final local = newWorld();
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = CsvSheetParcelWorldStore(
+      content: content,
+      terrainProvider: terrain,
+      preferences: preferences,
+      seedSource: _HardcodedSheetSource(
+        encodeSheetTables(worldToSheetTables(seeded)),
+      ),
+    );
+    await store.save(local);
+
+    final world = await store.load();
+    expect(world!.seed, local.seed, reason: 'the local sheet set wins');
+  });
+
+  test('corrupt sheet documents fail loudly on load', () async {
+    SharedPreferences.setMockInitialValues({
+      'citysim.sheets.Tiles':
+          'x,y,kind,status,detail,variant,facing,project\n'
+          '4,4,alien,complete,,,,\n',
+      'citysim.sheets.UserData': 'key,value\nseed,7\n',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final store = CsvSheetParcelWorldStore(
+      content: content,
+      terrainProvider: terrain,
+      preferences: preferences,
+    );
+
+    expect(store.load(), throwsA(isA<FormatException>()));
+  });
 }

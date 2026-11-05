@@ -11,7 +11,8 @@ ParcelWorldState checkInWorldForToday(ParcelWorldState state) {
   return state.copyWith(
     coins: state.coins + 1,
     totalCoinsEarned: state.totalCoinsEarned + 1,
-    creditedDates: {...state.creditedDates, state.dateKey},
+    lastCheckInDate: state.simulatedDate,
+    checkInCount: state.checkInCount + 1,
     events: [
       ...state.events,
       _event(
@@ -27,7 +28,8 @@ ParcelWorldState checkInWorldForToday(ParcelWorldState state) {
 
 bool canCheckInWorldToday(ParcelWorldState state) =>
     state.dateKey == worldDateKey(state.checkInHighWaterDate) &&
-    !state.creditedDates.contains(state.dateKey);
+    (state.lastCheckInDate == null ||
+        worldDateKey(state.lastCheckInDate!) != state.dateKey);
 
 ParcelWorldState setWorldCalendarDate(ParcelWorldState state, DateTime date) {
   final normalized = DateTime.utc(date.year, date.month, date.day);
