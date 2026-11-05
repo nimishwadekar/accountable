@@ -3,10 +3,11 @@
 /// game once it runs inside the Accountable app.
 ///
 /// `dataSource` selects where game data lives: `csv` (the four sheet
-/// tables persisted as CSV documents — local browser storage for now,
-/// the same format the real spreadsheet will use) or `sheets` (the game's
-/// own Google Spreadsheet). `spreadsheetId` stays empty until that
-/// spreadsheet is created.
+/// tables persisted as CSV documents through the local editor server,
+/// `serverUrl`, which writes `assets/test_sheets/` — the same format the
+/// real spreadsheet will use) or `sheets` (the game's own Google
+/// Spreadsheet). `spreadsheetId` stays empty until that spreadsheet is
+/// created.
 library;
 
 import 'dart:convert';
@@ -29,10 +30,17 @@ enum CitysimDataSource {
 }
 
 class CitysimConfig {
-  const CitysimConfig({required this.dataSource, this.spreadsheetId = ''});
+  const CitysimConfig({
+    required this.dataSource,
+    this.spreadsheetId = '',
+    this.serverUrl = '',
+  });
 
   final CitysimDataSource dataSource;
   final String spreadsheetId;
+
+  /// Base URL of the local editor server — the CSV-mode save transport.
+  final String serverUrl;
 
   static Future<CitysimConfig> load() async {
     final contents = await rootBundle.loadString('assets/config.json');
@@ -56,5 +64,6 @@ class CitysimConfig {
   factory CitysimConfig.fromJson(Map<String, Object?> json) => CitysimConfig(
     dataSource: CitysimDataSource.fromJsonValue(json['dataSource']),
     spreadsheetId: json['spreadsheetId'] as String? ?? '',
+    serverUrl: json['serverUrl'] as String? ?? '',
   );
 }

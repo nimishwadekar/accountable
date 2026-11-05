@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../storage/world_usage.dart';
+
 /// Talks to the content editor server (see tool/content_editor/server.dart).
 class ContentApi {
   ContentApi({http.Client? client, this.baseUrl = 'http://localhost:9200'})
@@ -52,6 +54,23 @@ class ContentApi {
   /// URL for an asset file (sprite or character art) served by the
   /// editor server from the package's assets directory.
   String assetUrl(String path) => '$baseUrl/api/asset/${Uri.encodeFull(path)}';
+
+  /// Fetches the current world's occupied cells and owned parcels for
+  /// the map editor's locks; null when no world exists or the server is
+  /// unreachable.
+  Future<WorldUsage?> fetchWorldUsage() async {
+    try {
+      final response = await _get('/api/world/summary');
+      if (response.statusCode != 200) return null;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) return null;
+      return WorldUsage.fromJson(
+        decoded.map((key, value) => MapEntry('$key', value)),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<http.Response> _get(String path) async {
     final response = await _client.get(Uri.parse('$baseUrl$path'));

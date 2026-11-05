@@ -37,9 +37,11 @@ includes citysim code or tests.
 - `docs/` — game mechanics, technical, and content-editor plans.
 - `web/` — Flutter web platform scaffolding.
 
-Local saves are the four CSV sheet documents (`UserData`, `Tiles`,
-`OwnedParcels`, `Projects`) persisted under `citysim.sheets.*` in the
-browser's local storage; a reset never touches any Accountable data. The
+Saves are the four CSV sheet documents (`UserData`, `Tiles`,
+`OwnedParcels`, `Projects`) written by the editor server to
+`assets/test_sheets/` — the game holds the world in memory and pushes
+every save through the server; a reset never touches any Accountable
+data. The
 content editor dashboard runs on port 9200 from `tool/content_editor/`
 (`dart run tool/content_editor/server.dart`, with the dashboard built via
 `flutter build web -t lib/editor/main.dart -o build/editor`).

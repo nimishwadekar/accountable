@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'content_api.dart';
 import 'pages/ambience_page.dart';
+import 'pages/map_page.dart';
 import 'pages/catalogue_page.dart';
 import 'pages/economy_page.dart';
 import 'pages/overview_page.dart';
@@ -66,6 +67,7 @@ class _EditorShellState extends State<EditorShell> {
   /// The category file each page edits; null for read-only pages.
   static const _pageCategories = <String?>[
     null,
+    'terrain.json',
     'catalogue.json',
     'sprites.json',
     'economy.json',
@@ -90,6 +92,10 @@ class _EditorShellState extends State<EditorShell> {
         _issues = [];
         _issuesStatus = '';
       });
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_showStartWarning());
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -97,6 +103,30 @@ class _EditorShellState extends State<EditorShell> {
         _loading = false;
       });
     }
+  }
+
+  /// The game loads its content once at startup; saving content while
+  /// it runs can corrupt its save. Interim protection until proper
+  /// session locking lands: warn when the dashboard starts.
+  Future<void> _showStartWarning() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Before you edit'),
+        content: const Text(
+          'Make sure the game is not running anywhere. The game loads its '
+          'content once at startup — saving content while it runs can '
+          'corrupt its save. Stop the game first, edit, then relaunch it '
+          'with dart run tool/run_game.dart.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Understood'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _mutate(void Function(Map<String, Object?> categories) edit) {
@@ -194,7 +224,7 @@ class _EditorShellState extends State<EditorShell> {
   void _openSpriteEditor(String role) {
     setState(() {
       _focusSpriteRole = role;
-      _pageIndex = 2;
+      _pageIndex = 3;
     });
   }
 
@@ -282,6 +312,14 @@ class _EditorShellState extends State<EditorShell> {
     final pages = [
       ('Overview', OverviewPage(categories: _categories)),
       (
+        'Map',
+        MapPage(
+          key: ValueKey('map-$_rebuildToken'),
+          categories: _categories,
+          onChanged: _mutate,
+        ),
+      ),
+      (
         'Catalogue',
         CataloguePage(
           key: ValueKey('catalogue-$_rebuildToken'),
@@ -329,6 +367,11 @@ class _EditorShellState extends State<EditorShell> {
                 icon: Icon(Icons.dashboard_outlined),
                 selectedIcon: Icon(Icons.dashboard_rounded),
                 label: Text('Overview'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.map_outlined),
+                selectedIcon: Icon(Icons.map_rounded),
+                label: Text('Map'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.home_work_outlined),

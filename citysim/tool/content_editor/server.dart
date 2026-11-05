@@ -14,10 +14,19 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:citysim/content/content_bundle.dart';
+import 'package:citysim/storage/sheet_tables.dart';
+import 'package:citysim/storage/world_usage.dart';
+import 'package:citysim/world/coordinates.dart';
 
 import 'file_content_source.dart';
 
 const editorPort = 9200;
+const worldSheetNames = [
+  userDataSheetName,
+  tilesSheetName,
+  ownedParcelsSheetName,
+  projectsSheetName,
+];
 const categoryFiles = [
   'manifest.json',
   'catalogue.json',
@@ -110,6 +119,31 @@ Future<void> _handle(
   required Directory backupDir,
 }) async {
   final path = request.uri.path;
+  if (request.method == 'OPTIONS') {
+    _addCorsHeaders(request);
+    request.response.statusCode = 204;
+    return;
+  }
+  if (path == '/api/world' || path == '/api/world/summary') {
+    _addCorsHeaders(request);
+    switch (request.method) {
+      case 'GET':
+        if (path == '/api/world') {
+          await _getWorld(request, assetsDir);
+        } else {
+          await _getWorldSummary(request, contentDir, assetsDir);
+        }
+      case 'PUT':
+        if (path == '/api/world') {
+          await _putWorld(request, assetsDir);
+        } else {
+          _respondJson(request, 405, {'error': 'Method not allowed'});
+        }
+      default:
+        _respondJson(request, 405, {'error': 'Method not allowed'});
+    }
+    return;
+  }
   switch (request.method) {
     case 'GET':
       if (path == '/api/content') {
@@ -148,6 +182,76 @@ Future<void> _handle(
     default:
       _respondJson(request, 405, {'error': 'Method not allowed'});
   }
+}
+
+void _addCorsHeaders(HttpRequest request) {
+  // The game runs on a different origin (9101); its saves and loads go
+  // through these endpoints.
+  request.response.headers.set('Access-Control-Allow-Origin', '*');
+  request.response.headers.set(
+    'Access-Control-Allow-Methods',
+    'GET, PUT, OPTIONS',
+  );
+  request.response.headers.set('Access-Control-Allow-Headers', 'content-type');
+}
+
+Directory _testSheetsDir(Directory assetsDir) =>
+    Directory('${assetsDir.path}/test_sheets');
+
+/// Reads the four world sheet documents; missing files read as empty.
+Map<String, String> _readWorldDocuments(Directory assetsDir) => {
+  for (final name in worldSheetNames) name: _readWorldDocument(assetsDir, name),
+};
+
+String _readWorldDocument(Directory assetsDir, String name) {
+  final file = File('${_testSheetsDir(assetsDir).path}/$name.csv');
+  return file.existsSync() ? file.readAsStringSync() : '';
+}
+
+Future<void> _getWorld(HttpRequest request, Directory assetsDir) async {
+  _respondJson(request, 200, _readWorldDocuments(assetsDir));
+}
+
+Future<void> _putWorld(HttpRequest request, Directory assetsDir) async {
+  final body = await _readJsonBody(request);
+  if (body == null) return;
+  for (final entry in body.entries) {
+    if (!worldSheetNames.contains(entry.key) || entry.value is! String) {
+      _respondJson(request, 400, {
+        'error': 'Unexpected sheet "${entry.key}" in the world documents.',
+      });
+      return;
+    }
+  }
+  final dir = _testSheetsDir(assetsDir)..createSync(recursive: true);
+  for (final name in worldSheetNames) {
+    final text = body[name];
+    if (text is! String) continue;
+    final file = File('${dir.path}/$name.csv');
+    final temp = File('${file.path}.tmp');
+    await temp.writeAsString(text);
+    await temp.rename(file.path);
+  }
+  _respondJson(request, 200, {'ok': true});
+}
+
+Future<void> _getWorldSummary(
+  HttpRequest request,
+  Directory contentDir,
+  Directory assetsDir,
+) async {
+  final tables = decodeSheetTables(
+    userData: _readWorldDocument(assetsDir, userDataSheetName),
+    tiles: _readWorldDocument(assetsDir, tilesSheetName),
+    ownedParcels: _readWorldDocument(assetsDir, ownedParcelsSheetName),
+    projects: _readWorldDocument(assetsDir, projectsSheetName),
+  );
+  if (tables.isEmpty) {
+    _respondJson(request, 200, null);
+    return;
+  }
+  final bundle = await loadContentBundle(FileContentSource(contentDir));
+  _respondJson(request, 200, computeWorldUsage(tables, bundle).toJson());
 }
 
 Future<void> _getContent(HttpRequest request, Directory contentDir) async {
@@ -229,14 +333,16 @@ Map<String, Object?> _validateBundleMaps(
     );
     final issues =
         validateContentData(
-          catalogue: bundle.catalogue,
-          sprites: bundle.sprites,
-          economy: bundle.economy,
-          ambience: bundle.ambience,
-          terrain: bundle.terrain,
-        ).map((issue) => issue.toString()).toList()..addAll(
-          checkSpriteFiles(sprites: bundle.sprites, packDirectory: assetsDir),
-        );
+            catalogue: bundle.catalogue,
+            sprites: bundle.sprites,
+            economy: bundle.economy,
+            ambience: bundle.ambience,
+            terrain: bundle.terrain,
+          ).map((issue) => issue.toString()).toList()
+          ..addAll(
+            checkSpriteFiles(sprites: bundle.sprites, packDirectory: assetsDir),
+          )
+          ..addAll(_terrainOccupationIssues(body, terrain, assetsDir, bundle));
     return {
       'ok': issues.every((issue) => !issue.startsWith('[error]')),
       'issues': issues,
@@ -247,6 +353,51 @@ Map<String, Object?> _validateBundleMaps(
       'issues': ['[error] ${error.message}'],
     };
   }
+}
+
+/// Terrain edits are live updates validated against the current save:
+/// a parcel deleted or re-typed while containing occupied cells would
+/// strand the game's roads, structures, and plans on the wrong terrain.
+List<String> _terrainOccupationIssues(
+  Map<String, Object?> body,
+  Map<String, Object?> incomingTerrain,
+  Directory assetsDir,
+  ContentBundle bundle,
+) {
+  final currentFile = File('${assetsDir.path}/content/terrain.json');
+  if (!currentFile.existsSync()) return const [];
+  final currentParcels = (readJsonFile(currentFile)['parcels'] as Map?)
+      ?.cast<String, Object?>();
+  final incomingParcels = (incomingTerrain['parcels'] as Map?)
+      ?.cast<String, Object?>();
+  if (currentParcels == null || incomingParcels == null) return const [];
+
+  final tables = decodeSheetTables(
+    userData: _readWorldDocument(assetsDir, userDataSheetName),
+    tiles: _readWorldDocument(assetsDir, tilesSheetName),
+    ownedParcels: _readWorldDocument(assetsDir, ownedParcelsSheetName),
+    projects: _readWorldDocument(assetsDir, projectsSheetName),
+  );
+  if (tables.isEmpty) return const [];
+  final usage = computeWorldUsage(tables, bundle);
+
+  final issues = <String>[];
+  for (final entry in currentParcels.entries) {
+    if (incomingParcels[entry.key] == entry.value) continue;
+    final parts = entry.key.split(',');
+    if (parts.length != 2) continue;
+    final x = int.tryParse(parts[0]);
+    final y = int.tryParse(parts[1]);
+    if (x == null || y == null) continue;
+    final parcel = ParcelCoord(x, y);
+    if (parcel.cells(8).any(usage.occupiedCells.contains)) {
+      issues.add(
+        '[error] Parcel ${entry.key} has occupied cells in the current '
+        'save; clear them in the game before changing its terrain.',
+      );
+    }
+  }
+  return issues;
 }
 
 Map<String, Object?> _asMap(Map<String, Object?> body, String name) {

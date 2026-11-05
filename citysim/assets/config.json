@@ -1,6 +1,7 @@
 {
   "citysim": {
     "dataSource": "csv",
-    "spreadsheetId": ""
+    "spreadsheetId": "",
+    "serverUrl": "http://localhost:9200"
   }
 }

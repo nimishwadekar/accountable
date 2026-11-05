@@ -123,6 +123,69 @@ void main() {
     expect((backups['backups'] as List), isNotEmpty);
   });
 
+  test('world documents round-trip through the server', () async {
+    final response = await _put('/api/world', {
+      'UserData': 'key,value\nseed,7\n',
+      'Tiles': 'x,y,kind,status,detail,variant,facing,project\n',
+      'OwnedParcels': 'x,y\n',
+      'Projects': 'id,kind,detail,target,funded\n',
+    });
+    expect(response.statusCode, 200);
+    final documents = await _decode(await _get('/api/world'));
+    expect(documents['UserData'] as String, contains('seed,7'));
+  });
+
+  test('world summary expands footprints and bridge spans', () async {
+    await _put('/api/world', {
+      'UserData': 'key,value\nseed,7\n',
+      'Tiles':
+          'x,y,kind,status,detail,variant,facing,project\n'
+          '3,4,structure,complete,apartments,,,\n'
+          '5,6,road,complete,dirt,,,\n',
+      'OwnedParcels': 'x,y\n0,0\n',
+      'Projects':
+          'id,kind,detail,target,funded\n'
+          '1,bridge,,7:4:16:4,0\n',
+    });
+    final summary = await _decode(await _get('/api/world/summary'));
+    final occupied = {
+      for (final pair in summary['occupiedCells'] as List)
+        '${(pair as List)[0]},${pair[1]}',
+    };
+    // The 2×2 apartments footprint at (3,4).
+    expect(occupied, containsAll(['3,4', '4,4', '3,5', '4,5']));
+    // The road tile.
+    expect(occupied, contains('5,6'));
+    // The bridge span between banks (7,4) and (16,4).
+    expect(occupied, containsAll(['8,4', '12,4', '15,4']));
+    expect(summary['ownedParcels'], [
+      [0, 0],
+    ]);
+  });
+
+  test('terrain edits under occupied cells are rejected', () async {
+    await _put('/api/world', {
+      'UserData': 'key,value\nseed,7\n',
+      'Tiles':
+          'x,y,kind,status,detail,variant,facing,project\n'
+          '10,4,road,complete,dirt,,,\n',
+      'OwnedParcels': 'x,y\n0,0\n',
+      'Projects': 'id,kind,detail,target,funded\n',
+    });
+    final content = await _decode(await _get('/api/content'));
+    // Re-type the occupied east water parcel (the road at (10,4) sits
+    // in parcel (1,0)).
+    (content['terrain.json'] as Map)['parcels']['1,0'] = 'grass';
+    final rejected = await _post('/api/content', content);
+    expect(rejected.statusCode, 422);
+    final body = await _decode(rejected);
+    expect((body['issues'] as List).join('\n'), contains('occupied cells'));
+
+    // The files on disk are untouched.
+    final fresh = await _decode(await _get('/api/content'));
+    expect((fresh['terrain.json'] as Map)['parcels'], isNotEmpty);
+  });
+
   test('pack endpoint rejects traversal', () async {
     // Plain ../ gets normalized away by the HTTP client; the encoded form
     // reaches the server, which must reject it.
@@ -185,6 +248,15 @@ Future<HttpClientResponse> _get(String path) => (_testClient ??= HttpClient())
 
 Future<HttpClientResponse> _post(String path, Object body) async {
   final request = await (_testClient ??= HttpClient()).postUrl(
+    Uri.parse('http://localhost:$testPort$path'),
+  );
+  request.headers.contentType = ContentType.json;
+  request.write(jsonEncode(body));
+  return request.close();
+}
+
+Future<HttpClientResponse> _put(String path, Object body) async {
+  final request = await (_testClient ??= HttpClient()).putUrl(
     Uri.parse('http://localhost:$testPort$path'),
   );
   request.headers.contentType = ContentType.json;

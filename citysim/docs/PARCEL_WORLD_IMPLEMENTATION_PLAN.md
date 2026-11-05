@@ -134,12 +134,14 @@ used cells cannot change unless cleared). Structural corruption still
 fails loudly: the codec rejects unknown kinds/statuses, duplicate cells,
 and orphan planned tiles before any derivation runs.
 
-Current wiring: `CsvSheetParcelWorldStore` persists the four CSV
-documents in local browser storage (`citysim.sheets.*`), seeds from
-bundled `assets/test_sheets/` when a non-empty sheet set ships, and is
-selected by `assets/config.json`'s `citysim.dataSource`. The Google
-Sheets data source (the game's own spreadsheet, `citysim.spreadsheetId`)
-reuses the same codec and documents; only the transport changes.
+Current wiring: `ServerSheetParcelWorldStore` holds the world in
+memory and reads/writes the four CSV documents through the editor
+server (`GET/PUT /api/world`, selected by `assets/config.json`'s
+`citysim.dataSource` and `citysim.serverUrl`). The server writes
+`assets/test_sheets/*.csv`, which are the save and the crash-recovery
+seed for a fresh browser. The Google Sheets data source (the game's own
+spreadsheet, `citysim.spreadsheetId`) reuses the same codec and
+documents; only the transport changes.
 
 - Validate the complete decoded world before publishing it; corrupt data
   needs recoverable diagnostics and an explicit reset path.
@@ -154,11 +156,16 @@ The game is a self-contained Flutter package in `citysim/` — it declares its
 own dependencies, assets, and tests, and shares nothing with the root
 Accountable package. All commands below run from the `citysim/` folder.
 
-Run the standalone city-sim preview with:
+Run the game preview with the editor server it saves through:
 
 ```sh
-flutter run -d web-server --web-port=9101
+dart run tool/run_game.dart
 ```
+
+This starts the server on 9200 (reusing one that is already running)
+and the preview on 9101, stopping the server it started when the game
+session ends. Plain `flutter run -d web-server --web-port=9101` still
+works when a server is already up.
 
 Accountable's development port is 9000. Do not stop or reconfigure it to launch the preview. If 9101 is occupied, choose another explicit port rather than terminating an unrelated process. The city-sim stays synthetic: no OAuth, Sheets, transaction reads, or financial writes. Do not automatically restart a preview server the user has stopped.
 
@@ -200,16 +207,41 @@ Today's geography is a code fixture: infinite featureless grass with three hardc
   Owned-but-vacant land stays editable. The same validate-against-save
   rule extends to other content editors (a model's footprint cannot
   change while structures of that model are placed).
-- **Water bodies are entities, not painted cells.** Bridge rules depend on body identity and continuity (rivers only, spans 1–4, one body per bridge). The editor authors bodies — shapes carrying an id and a kind — and save validation enforces unique ids, bridgeable river widths, and no accidental body merges. Shore rendering already keys off per-cell water-neighbour geometry and carries over unchanged.
-- **Starter-experience guarantees as editor validation.** The starter parcel has land and a road spot, a bridgeable river within a few parcels, and shoreline variety nearby — enforced by the same validate-before-save pattern as the other dashboard pages.
+- **Parcel-level map, ocean by default.** Terrain is a parcel → grass/water map in `terrain.json`; any parcel without an entry is open ocean — rendered as sea, unbuyable, unbridgeable. There are no water-body entities or water kinds; cell-level detail layers come later on top of parcel terrain.
+- **Starter-experience guarantees as editor validation.** The starter parcel (0,0) must be authored as grass — already enforced by content validation; the editor's map page hard-locks it.
 
 Landed: the terrain content schema and provider-from-content (a
 49-parcel starter map with east and west water channels), the bridge
 relaxation (any authored water, straight line, land banks, no span cap),
-buyable water parcels with ownership decoupled from access, and constant
-parcel pricing. Remaining: the editor MVP — the first canvas-based
-dashboard page (paint parcels, place the starter parcel, validate on
-save) — then cell-level detail layers and regional generation.
+buyable water parcels with ownership decoupled from access, constant
+parcel pricing, and the editor MVP — the Map page: an isometric canvas
+of authored parcels with + growth on void-facing edges, kind
+re-typing and deletion with locks (occupied cells block both, ownership
+blocks deletion, the starter parcel is always locked), occupied-cell
+grey-out from the current save (`/api/world/summary`, with structure
+footprints and bridge spans expanded), and save-time validation refusing
+terrain edits under occupied cells. The dashboard warns at startup to
+stop the game before editing. Remaining: cell-level detail layers and
+regional generation.
+
+### Concurrent editing protection (future work)
+
+A running game holds content in memory from startup. If the editor saves
+content underneath it, the still-running game keeps acting on the old
+content and pushes worlds that can be invalid under the new content
+(roads on now-water parcels, structures with now-changed footprints) —
+the save then fails loudly on next load. Interim protection: the
+dashboard warns at save time to make sure the game is not running
+anywhere, and save-time validation refuses terrain edits under occupied
+cells. Proper protection is future work: an exclusive live-game session
+arbitrated by the save store. In CSV mode the local server holds the
+session (the game heartbeats ~10s; the dashboard refuses content saves
+while the session is live). In Sheets mode the lock lives in the
+spreadsheet (the game heartbeats a lock row; the editor reads it before
+saving content, using the main app's Sheets auth). Only the editor is
+blocked — the game never needs blocking: the two write different files
+through a single-threaded server, and save-time validation covers the
+reverse direction.
 
 ### Content breadth
 

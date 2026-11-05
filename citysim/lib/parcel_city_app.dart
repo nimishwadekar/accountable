@@ -6,7 +6,7 @@ import 'content/asset_content_source.dart';
 import 'config/citysim_config.dart';
 import 'content/content_bundle.dart';
 import 'rendering/parcel_world_view.dart';
-import 'storage/csv_sheet_store.dart';
+import 'storage/server_sheet_store.dart';
 import 'world/coordinates.dart';
 import 'world/terrain_provider.dart';
 import 'world/world_content.dart';
@@ -129,9 +129,16 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         'to "csv" in assets/config.json.',
       );
     }
-    return CsvSheetParcelWorldStore(
+    if (config.serverUrl.isEmpty) {
+      throw const FormatException(
+        'assets/config.json citysim.serverUrl must be set for the csv '
+        'data source.',
+      );
+    }
+    return ServerSheetParcelWorldStore(
       content: content,
       terrainProvider: _terrain,
+      api: HttpWorldDocumentsApi(config.serverUrl),
     );
   }
 
