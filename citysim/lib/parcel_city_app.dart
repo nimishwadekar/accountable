@@ -749,6 +749,9 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             roadPlanCells: _activeRoadPlan(world),
             fundableRoadCells: _fundableRoadCells(world),
             facingOverride: _facingOverride,
+            structurePicking: _tool == _WorldTool.inspect,
+            dimStructures:
+                _tool == _WorldTool.road || _tool == _WorldTool.bridge,
             cameraResetToken: _cameraResetToken,
             onCellTap: _onCellTap,
           ),

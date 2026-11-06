@@ -49,6 +49,8 @@ class ParcelWorldView extends StatefulWidget {
     this.fundableRoadCells = const {},
     this.cameraResetToken = 0,
     this.facingOverride,
+    this.structurePicking = true,
+    this.dimStructures = false,
     super.key,
   });
 
@@ -67,6 +69,17 @@ class ParcelWorldView extends StatefulWidget {
   /// Player's pre-placement door-side choice for the footprint preview,
   /// toggled by the floating swap button while roads touch both halves.
   final String? facingOverride;
+
+  /// Whether taps pick standing structures by their sprites. Only the
+  /// inspect tool wants that; every other tool targets the tapped cell
+  /// directly, so a road planned over a roof lands on the roof's cell
+  /// rather than the building's origin.
+  final bool structurePicking;
+
+  /// Whether standing structures draw translucent (x-ray), used by the
+  /// road and bridge tools so fundable tiles and banks behind
+  /// buildings stay visible.
+  final bool dimStructures;
 
   @override
   State<ParcelWorldView> createState() => _ParcelWorldViewState();
@@ -280,6 +293,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   roadPlanCells: widget.roadPlanCells,
                   fundableRoadCells: widget.fundableRoadCells,
                   facingOverride: widget.facingOverride,
+                  dimStructures: widget.dimStructures,
                   ambient: _ambient,
                   terrainCache: _terrainCache,
                   pixelRatio: _pixelRatio,
@@ -332,18 +346,48 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     _offset = Offset(-world.dx * _scale, -world.dy * _scale);
   }
 
+  /// Click cycling: a repeated tap near the previous one (within a
+  /// quarter tile, a couple of seconds) advances to the next target in
+  /// the front-to-back chain — the front structure, what it hides,
+  /// then the ground cell — and wraps around.
+  static const _cycleTapWorldRadius = 16.0;
+  static const _cycleTapWindowMillis = 2500;
+
+  Offset? _lastTapWorld;
+  int _lastTapAtMillis = 0;
+  int _tapCycleIndex = 0;
+
   void _dispatchTap(Offset position, Size size) {
-    final hit = _hitTest(
-      position,
-      size,
-      _scale,
-      _offset,
-      _queries,
-      _images,
-      _masks,
-      _spriteReachCells,
-      widget.content,
-    );
+    final world = _screenToWorld(position, size, _scale, _offset);
+    final structureHits = widget.structurePicking
+        ? _hitStructures(
+            position,
+            size,
+            _scale,
+            _offset,
+            _queries,
+            _images,
+            _masks,
+            _spriteReachCells,
+            widget.content,
+          )
+        : const <_WorldHit>[];
+    // The chain every tap walks: pixel-hit structures front to back,
+    // then the ground diamond under the tap.
+    final chain = [...structureHits, _WorldHit(_nearestCell(world), null)];
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final lastWorld = _lastTapWorld;
+    final sameSpot =
+        lastWorld != null &&
+        (world - lastWorld).distance < _cycleTapWorldRadius &&
+        now - _lastTapAtMillis < _cycleTapWindowMillis;
+    final index = sameSpot ? (_tapCycleIndex + 1) % chain.length : 0;
+    _lastTapWorld = world;
+    _lastTapAtMillis = now;
+    _tapCycleIndex = index;
+
+    final hit = chain[index];
     widget.onCellTap(hit.cell, hit.structureId);
   }
 
@@ -524,7 +568,9 @@ class _WorldHit {
   final String? structureId;
 }
 
-_WorldHit _hitTest(
+/// Every structure hit by a tap, in front-to-back painter order —
+/// each entry is one sprite with an opaque pixel under the tap point.
+List<_WorldHit> _hitStructures(
   Offset position,
   Size size,
   double scale,
@@ -539,14 +585,17 @@ _WorldHit _hitTest(
   final cell = _nearestCell(world);
   // Candidates are every structure whose art could reach the tap,
   // ordered exactly as the painter draws them (back to front) and
-  // walked front to back. The first sprite with an opaque pixel under
-  // the tap wins; the ground diamond below is the fallback.
+  // walked front to back. Every sprite with an opaque pixel under the
+  // tap joins the result in that order, so repeated taps can cycle
+  // through what the front one hides; the ground diamond below is the
+  // caller's fallback.
   final structures = queries.structuresInBounds(
     left: cell.column - reachCells,
     right: cell.column + reachCells,
     top: cell.row - reachCells,
     bottom: cell.row + reachCells,
   )..sort(_compareStructureDepth);
+  final hits = <_WorldHit>[];
   for (final structure in structures.reversed) {
     final definition = content.structure(structure.catalogueId)!;
     final role = structure.assetRole ?? definition.assetRoles.first;
@@ -563,13 +612,14 @@ _WorldHit _hitTest(
     final mask = masks[path];
     if (mask == null) {
       // Mask still decoding: fall back to the rect until it lands.
-      return _WorldHit(structure.origin, structure.id);
+      hits.add(_WorldHit(structure.origin, structure.id));
+      continue;
     }
     if (spritePixelHit(mask, screenRect, position)) {
-      return _WorldHit(structure.origin, structure.id);
+      hits.add(_WorldHit(structure.origin, structure.id));
     }
   }
-  return _WorldHit(cell, null);
+  return hits;
 }
 
 /// The painter's depth for a structure — the deepest footprint cell —
@@ -596,6 +646,7 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.roadPlanCells,
     required this.fundableRoadCells,
     required this.facingOverride,
+    required this.dimStructures,
     required this.ambient,
     required this.terrainCache,
     required this.pixelRatio,
@@ -616,6 +667,11 @@ class _ParcelWorldPainter extends CustomPainter {
   final List<CellCoord> roadPlanCells;
   final Set<CellCoord> fundableRoadCells;
   final String? facingOverride;
+
+  /// Whether standing structures draw translucent (x-ray) so tiles and
+  /// banks behind them stay visible while the road and bridge tools
+  /// are active.
+  final bool dimStructures;
   final _AmbientClock ambient;
   final _TerrainChunkCache terrainCache;
   final double pixelRatio;
@@ -1142,6 +1198,12 @@ class _ParcelWorldPainter extends CustomPainter {
       image.height.toDouble(),
     );
     final paint = Paint()..filterQuality = FilterQuality.medium;
+    if (dimStructures) {
+      // X-ray: modulate the sprite's alpha (white at 40%) so tiles
+      // and banks behind the structure show through — one draw call,
+      // no offscreen layer.
+      paint.color = const Color(0x66FFFFFF);
+    }
     if (!sprite.sways) {
       canvas.drawImageRect(image, source, rect, paint);
       return;
@@ -1691,6 +1753,7 @@ class _ParcelWorldPainter extends CustomPainter {
       oldDelegate.selectedCatalogueId != selectedCatalogueId ||
       oldDelegate.bridgeStartCell != bridgeStartCell ||
       oldDelegate.facingOverride != facingOverride ||
+      oldDelegate.dimStructures != dimStructures ||
       !listEquals(oldDelegate.roadPlanCells, roadPlanCells) ||
       !setEquals(oldDelegate.fundableRoadCells, fundableRoadCells);
 }

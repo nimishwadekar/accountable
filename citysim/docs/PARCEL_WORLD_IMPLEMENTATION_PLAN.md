@@ -200,6 +200,13 @@ by the CSV-mode store is never migrated or pushed. (Writes made while in
 sheets mode that fail mid-sync still retry through the outbox — that is
 the sync, not a migration.)
 
+**Content edits validate against every save that exists.** When the
+Google Sheets data source lands, editor content changes must be
+validated against *both* the local CSV save and the Google Sheets
+save: either copy can exist, and an invalidating change (a footprint
+or terrain edit under placed content) must be caught no matter which
+store holds the affected world.
+
 ### World map editor and terrain design
 
 Today's geography is a code fixture: infinite featureless grass with three hardcoded water features (a river column at x=12, a 4×4 western lake, an eastern ocean rectangle). Decisions made:
@@ -259,12 +266,27 @@ Manually audit terrain/road/shore/bridge artwork. Profile representative large w
 
 ### Selection and occluded-target picking
 
-Taps currently hit the frontmost structure whose sprite *bounding rectangle* contains the point — transparent sky included — so buildings steal taps from roads peeking out beside or behind them, and fully occluded targets (a road behind a dense block of houses) cannot be selected at all. Camera rotation is not an option (fixed-view art, no back facings). Planned techniques, in the order they should land:
+Landed, in order:
 
-- **Per-pixel picking.** Cache one byte of alpha per image pixel alongside the image cache (computed after load; picking falls back to rectangle hits until a mask arrives). A structure is only a tap candidate when the point lands on an opaque pixel, with a small (~3 image-pixel) neighbourhood so thin art — antennas, poles — stays clickable.
-- **Click cycling.** Repeated taps at the same world spot (within roughly a quarter tile and a few seconds) cycle front-to-back through the candidates — the front structure, then what it hides, then the ground cell — and wrap. Selection outlines already paint above structures, so the cycled target stays visible.
-- **Tool-based pick priority.** Only the inspect tool should pick structures; the road, parcel, bridge, and placement tools target cells directly, since no one wields the road tool intending to select a house.
-- **X-ray dimming.** While the road or bridge tool is active, render structures at reduced opacity so fundable tiles and banks behind buildings are visible as well as tappable.
+- **Per-pixel picking.** One byte of alpha per image pixel is cached
+  alongside the image cache (computed after load; picking fell back to
+  rectangle hits until a mask arrived). A structure is only a tap
+  candidate when the point lands on an opaque pixel, with a small
+  (~3 image-pixel) neighbourhood so thin art — antennas, poles — stays
+  clickable.
+- **Click cycling.** Repeated taps at the same world spot (within
+  roughly a quarter tile and 2.5 seconds) cycle front-to-back through
+  the candidates — the front structure, then what it hides, then the
+  ground cell — and wrap. Selection outlines and the selection tint
+  paint above structures, so the cycled target stays visible.
+- **Tool-based pick priority.** Only the inspect tool picks
+  structures; the road, parcel, bridge, and placement tools target
+  the tapped cell directly, so a road planned over a roof lands on
+  the roof's cell rather than the building's origin.
+- **X-ray dimming.** While the road or bridge tool is active,
+  standing structures render at reduced opacity (paint-alpha
+  modulation — one draw call, no offscreen layer) so fundable tiles
+  and banks behind buildings are visible as well as tappable.
 
 ### Free prop placement (future work)
 
@@ -285,6 +307,24 @@ toggle a prop's mirror, cycle a prop's variant through its model's
 `assetRoles`, and remove a prop (the small, reversible cousin of the
 deferred demolition decision). Intra-cell draw order is deterministic
 (placement order) at first; player reordering is a later option.
+
+**Subtile placement granularity.** Each tile divides into subtiles —
+4×4 or 8×8 per tile, decision pending (4×4 gives 16 subtiles of
+16×8 world units; 8×8 gives 64 of 8×4 — finer placement versus more
+state per prop and a busier placement grid). Props place at subtile
+granularity, and a prop model's footprint is expressed in subtiles.
+The subtile grid is invisible during normal play; while placing a
+prop, the tile under the cursor (or the selected tile) shows its
+subtile grid so placements can be aimed precisely.
+
+**Editor-tunable footprints.** Every placeable catalogue model
+carries a manually tunable footprint — props in subtiles, buildings
+and other large models in tiles — editable on the dashboard. Editor
+validation must reject a footprint change that conflicts with
+existing placements in *any* save the editor can see (the local CSV
+save today, the Google Sheets save in Sheets mode), extending the
+existing "a model's footprint cannot change while structures of that
+model are placed" rule to the new field.
 
 **State model.** Structures stay single-occupancy
 (`structuresByCell`); props become their own lightweight entity
@@ -331,7 +371,9 @@ direction, so mirrored props carry flipped shadows — acceptable for
 props, and direction variants (for example the traffic light's)
 should be preferred where the art provides them. Fence-like props
 snapping or rotating to tile edges is a separate later idea, out of
-scope here.
+scope here. Prop art sizing is a manual dashboard task (renderScale
+and ground anchors per sprite), deliberately not automated — a
+resizing pass over the promoted props is planned by hand.
 
 **Tests.** A placement-rules matrix (grass/road/deck/water/building
 cell; single and stacked), codec round-trip plus old-save migration,
