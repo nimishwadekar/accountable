@@ -285,6 +285,50 @@ void main() {
       validateParcelWorldState(world, content, terrain);
     });
 
+    test('promoted prop decorations place instantly with rolled variants', () {
+      var world = grantWorldDebugCoins(newWorld(), 8);
+      for (final (index, catalogueId) in [
+        'street-lamp',
+        'rocks',
+        'common-tree',
+      ].indexed) {
+        world = startStructureConstruction(
+          world,
+          content,
+          terrain,
+          catalogueId: catalogueId,
+          origin: CellCoord(2 + index, 2),
+        );
+      }
+
+      final placed = world.structures;
+      expect(placed, hasLength(3));
+      expect(
+        placed.every((structure) => structure.kind == StructureKind.decoration),
+        isTrue,
+      );
+      for (final catalogueId in ['street-lamp', 'rocks', 'common-tree']) {
+        final structure = placed.singleWhere(
+          (structure) => structure.catalogueId == catalogueId,
+        );
+        expect(
+          content.structure(catalogueId)!.assetRoles,
+          contains(structure.assetRole),
+          reason: 'the rolled variant must be one of the model\'s roles',
+        );
+      }
+      // No builder project for any of them; only the coin costs hit.
+      expect(world.constructions, isEmpty);
+      expect(
+        world.coins,
+        8 -
+            content.structure('street-lamp')!.costCoins -
+            content.structure('rocks')!.costCoins -
+            content.structure('common-tree')!.costCoins,
+      );
+      validateParcelWorldState(world, content, terrain);
+    });
+
     test('placements roll sprite variants deterministically', () {
       var world = grantWorldDebugCoins(newWorld(), 30);
       // Three cottages fit beside the starter road without blocking the

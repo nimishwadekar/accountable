@@ -64,6 +64,16 @@ Future<ParcelWorldState> _loadSampleTown(ContentBundle content) async {
 }
 
 void main() {
+  // Content loads in setUpAll (real async): asset reads inside a
+  // testWidgets body run in fake-async, where they are unreliable —
+  // see the note in parcel_city_widget_test.dart.
+  late ContentBundle content;
+  late ParcelWorldState sampleTown;
+  setUpAll(() async {
+    content = await loadContentBundle(const AssetContentSource());
+    sampleTown = await _loadSampleTown(content);
+  });
+
   // Viewport matching the analysis: a typical laptop browser window at
   // DPR 1 (logical pixels).
   const viewport = Size(1500, 850);
@@ -76,8 +86,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      final content = await loadContentBundle(const AssetContentSource());
-      final world = await _loadSampleTown(content);
+      final world = sampleTown;
       ParcelWorldProbe.recording = true;
       ParcelWorldProbe.reset();
       await tester.pumpWidget(

@@ -82,6 +82,14 @@ Future<ui.Image?> _capture(WidgetTester tester, GlobalKey boundaryKey) =>
     });
 
 void main() {
+  // Content loads in setUpAll (real async): asset reads inside a
+  // testWidgets body run in fake-async, where they are unreliable —
+  // see the note in parcel_city_widget_test.dart.
+  late ContentBundle content;
+  setUpAll(() async {
+    content = await loadContentBundle(const AssetContentSource());
+  });
+
   testWidgets(
     'terrain chunks render at their world positions through both draw '
     'paths',
@@ -92,7 +100,6 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       addTearDown(() => debugDrawChunksViaPictures = false);
 
-      final content = await loadContentBundle(const AssetContentSource());
       final world = _anchorWorld(content);
       ParcelWorldProbe.recording = true;
       ParcelWorldProbe.reset();

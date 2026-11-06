@@ -11,12 +11,18 @@ editor's grouping:
 - `content/` — the JSON content layer (catalogue, sprites, economy,
   ambience).
 - `buggy_studio/` — the remainder of the downloaded art pack: damaged
-  versions, the gunshop (deliberately not promoted), vehicles, and urban
-  props, kept for the planned asset browser that will promote them into
-  the organized tree. The pack's clean building art (35 entities, both
-  door facings) was promoted into `sprites/buildings/` and wired into the
-  catalogue's houses, commerce, offices, civic, industrial, and sites
-  subcategories.
+  versions, the gunshop (deliberately not promoted), and vehicles,
+  kept for the planned asset browser that will promote them into
+  the organized tree. The pack is **disk-only**: it is not listed in
+  the pubspec asset bundle, so builds ship only promoted art — the
+  browser will read it server-side from disk, like content
+  validation already does. The pack's clean building art (35
+  entities, both door facings) was promoted into
+  `sprites/buildings/` and wired into the catalogue's houses,
+  commerce, offices, civic, industrial, and sites subcategories;
+  all 46 clean props were promoted into `sprites/props/` as
+  decoration models. Promotions copy files, so the pack originals
+  remain here.
 
 ## Unused pack remainder — category inventory
 
@@ -30,16 +36,14 @@ copies in `sprites/buildings/`.)
 - Gunshop, both door facings (`bld_gunshop_a/b`) — deliberately
   skipped for the cozy tone; revisit only if that decision changes.
 
-### Props — 46 clean, 18 damaged/toppled
-Instant-decoration candidates (no builder or economy questions):
-- **Streetside**: light poles, traffic lights (3 variants), stop and
-  caution signs, wire fence, wood fence, trash cans (blue/green,
-  plus toppled), trash bags (black/white, large/small).
-- **Natural**: common trees (large/medium — a rounder second tree
-  family next to the pines), trunks/stumps (3), rocks (brown/gray,
-  3 each), weeds (large/medium/small, plus dry variants).
-- **Clutter**: cardboard boxes (open/closed), drop box, scattered
-  papers (3), tires (single, stack, buried ×2).
+### Props — promoted in full
+All 46 clean pack props are promoted into `sprites/props/` as instant
+decoration models (16 catalogue entries): streetside (lamps, traffic
+lights, signs, fences, trash cans and bags), natural (common trees,
+trunks, rocks, wild grass — the grass joined `flowers/`), and clutter
+(boxes, drop box, papers, tires). Only the 18 damaged/toppled variants
+remain in the pack remainder, parked for demolition/abandonment
+visuals.
 
 ### Roads and Grounds — 37 clean, 22 damaged
 - **Pelican crossings** (4 orientations) — zebra-crossing road

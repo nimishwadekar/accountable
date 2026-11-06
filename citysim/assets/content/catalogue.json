@@ -101,6 +101,324 @@
     },
     {
       "assetRoles": [
+        "tree-common-large",
+        "tree-common-medium"
+      ],
+      "costCoins": 2,
+      "description": "A round-canopy tree for shade and colour.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "common-tree",
+      "kind": "decoration",
+      "name": "Leafy Tree",
+      "population": 0,
+      "subcategory": "trees",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "trunk-a",
+        "trunk-b",
+        "trunk-c"
+      ],
+      "costCoins": 1,
+      "description": "A weathered trunk, a seat for idle afternoons.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "tree-stump",
+      "kind": "decoration",
+      "name": "Tree Stump",
+      "population": 0,
+      "subcategory": "trees",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "weed-large-a",
+        "weed-large-b",
+        "weed-medium",
+        "weed-small"
+      ],
+      "costCoins": 1,
+      "description": "Let a corner grow a little wild.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "wild-grass",
+      "kind": "decoration",
+      "name": "Wild Grass",
+      "population": 0,
+      "subcategory": "flowers",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "lightpole-a",
+        "lightpole-b"
+      ],
+      "costCoins": 3,
+      "description": "A lamp to light the pavement come evening.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "street-lamp",
+      "kind": "decoration",
+      "name": "Street Lamp",
+      "population": 0,
+      "subcategory": "streetside",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "trafficlight-a",
+        "trafficlight-b",
+        "trafficlight-c"
+      ],
+      "costCoins": 5,
+      "description": "Directs the flow at busy crossings.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "traffic-light",
+      "kind": "decoration",
+      "name": "Traffic Light",
+      "population": 0,
+      "subcategory": "streetside",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "sign-stop-a",
+        "sign-stop-b"
+      ],
+      "costCoins": 2,
+      "description": "A firm reminder at quiet corners.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "stop-sign",
+      "kind": "decoration",
+      "name": "Stop Sign",
+      "population": 0,
+      "subcategory": "streetside",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "sign-caution-a",
+        "sign-caution-b"
+      ],
+      "costCoins": 2,
+      "description": "Marks a spot worth watching.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "caution-sign",
+      "kind": "decoration",
+      "name": "Caution Sign",
+      "population": 0,
+      "subcategory": "streetside",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "fence-wood-a",
+        "fence-wood-b"
+      ],
+      "costCoins": 2,
+      "description": "A tidy picket line for yards and gardens.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "wood-fence",
+      "kind": "decoration",
+      "name": "Wood Fence",
+      "population": 0,
+      "subcategory": "streetside",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "fence-wire-a"
+      ],
+      "costCoins": 2,
+      "description": "A humble boundary for fields and lots.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "wire-fence",
+      "kind": "decoration",
+      "name": "Wire Fence",
+      "population": 0,
+      "subcategory": "streetside",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "trashcan-blue-a",
+        "trashcan-blue-b",
+        "trashcan-green-a",
+        "trashcan-green-b"
+      ],
+      "costCoins": 1,
+      "description": "Keeps the streets tidy.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "trash-can",
+      "kind": "decoration",
+      "name": "Trash Can",
+      "population": 0,
+      "subcategory": "streetside",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "trashbag-black-large",
+        "trashbag-black-small",
+        "trashbag-white-large",
+        "trashbag-white-small"
+      ],
+      "costCoins": 1,
+      "description": "Set out on collection day.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "trash-bags",
+      "kind": "decoration",
+      "name": "Trash Bags",
+      "population": 0,
+      "subcategory": "streetside",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "rocks-brown-a",
+        "rocks-brown-b",
+        "rocks-brown-c",
+        "rocks-gray-a",
+        "rocks-gray-b",
+        "rocks-gray-c"
+      ],
+      "costCoins": 1,
+      "description": "A scattering of stones for rugged corners.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "rocks",
+      "kind": "decoration",
+      "name": "Rocks",
+      "population": 0,
+      "subcategory": "rocks",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "box-cardboard-closed",
+        "box-cardboard-open"
+      ],
+      "costCoins": 1,
+      "description": "Moving day never quite ends.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "cardboard-boxes",
+      "kind": "decoration",
+      "name": "Cardboard Boxes",
+      "population": 0,
+      "subcategory": "clutter",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "dropbox-a",
+        "dropbox-b"
+      ],
+      "costCoins": 2,
+      "description": "A neighbourhood post for parcels and letters.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "drop-box",
+      "kind": "decoration",
+      "name": "Drop Box",
+      "population": 0,
+      "subcategory": "clutter",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "papers-a",
+        "papers-b",
+        "papers-c"
+      ],
+      "costCoins": 1,
+      "description": "The wind's unfinished filing.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "scattered-papers",
+      "kind": "decoration",
+      "name": "Scattered Papers",
+      "population": 0,
+      "subcategory": "clutter",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "tire",
+        "tires",
+        "tire-buried-a",
+        "tire-buried-b"
+      ],
+      "costCoins": 1,
+      "description": "Left behind, half-forgotten.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "tires",
+      "kind": "decoration",
+      "name": "Tires",
+      "population": 0,
+      "subcategory": "clutter",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
         "construction-site"
       ],
       "costCoins": 2,

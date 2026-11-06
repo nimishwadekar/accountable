@@ -48,6 +48,32 @@
       "subcategory": "commerce",
       "sways": false
     },
+    "box-cardboard-closed": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/clutter/prop_box_cardboard_closed.png",
+      "renderScale": 1,
+      "subcategory": "clutter",
+      "sways": false
+    },
+    "box-cardboard-open": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/clutter/prop_box_cardboard_open.png",
+      "renderScale": 1,
+      "subcategory": "clutter",
+      "sways": false
+    },
     "bridge.body.se": {
       "baseOffsetY": -12,
       "category": "bridges",
@@ -188,6 +214,71 @@
       ],
       "renderScale": 0.5,
       "subcategory": "sites",
+      "sways": false
+    },
+    "dropbox-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/clutter/prop_dropbox_a.png",
+      "renderScale": 1,
+      "subcategory": "clutter",
+      "sways": false
+    },
+    "dropbox-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/clutter/prop_dropbox_b.png",
+      "renderScale": 1,
+      "subcategory": "clutter",
+      "sways": false
+    },
+    "fence-wire-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_fence_wire_a.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "fence-wood-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_fence_wood_a.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "fence-wood-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_fence_wood_b.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
       "sways": false
     },
     "fire-station": {
@@ -613,6 +704,32 @@
       "subcategory": "commerce",
       "sways": false
     },
+    "lightpole-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_lightpole_a.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "lightpole-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_lightpole_b.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
     "office-medium-blue": {
       "baseOffsetY": 0,
       "category": "buildings",
@@ -803,6 +920,45 @@
       ],
       "renderScale": 0.5,
       "subcategory": "offices",
+      "sways": false
+    },
+    "papers-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/clutter/prop_papers_a.png",
+      "renderScale": 1,
+      "subcategory": "clutter",
+      "sways": false
+    },
+    "papers-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/clutter/prop_papers_b.png",
+      "renderScale": 1,
+      "subcategory": "clutter",
+      "sways": false
+    },
+    "papers-c": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/clutter/prop_papers_c.png",
+      "renderScale": 1,
+      "subcategory": "clutter",
       "sways": false
     },
     "pine-medium": {
@@ -1069,6 +1225,84 @@
       "path": "sprites/roads/t/tile_road_intersection_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "t",
+      "sways": false
+    },
+    "rocks-brown-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/rocks/prop_rocks_brown_a.png",
+      "renderScale": 1,
+      "subcategory": "rocks",
+      "sways": false
+    },
+    "rocks-brown-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/rocks/prop_rocks_brown_b.png",
+      "renderScale": 1,
+      "subcategory": "rocks",
+      "sways": false
+    },
+    "rocks-brown-c": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/rocks/prop_rocks_brown_c.png",
+      "renderScale": 1,
+      "subcategory": "rocks",
+      "sways": false
+    },
+    "rocks-gray-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/rocks/prop_rocks_gray_a.png",
+      "renderScale": 1,
+      "subcategory": "rocks",
+      "sways": false
+    },
+    "rocks-gray-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/rocks/prop_rocks_gray_b.png",
+      "renderScale": 1,
+      "subcategory": "rocks",
+      "sways": false
+    },
+    "rocks-gray-c": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/rocks/prop_rocks_gray_c.png",
+      "renderScale": 1,
+      "subcategory": "rocks",
       "sways": false
     },
     "shore.dirt.corner.e": {
@@ -1383,6 +1617,58 @@
       "subcategory": "quarter",
       "sways": false
     },
+    "sign-caution-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_sign_caution_a.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "sign-caution-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_sign_caution_b.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "sign-stop-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_sign_stop_a.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "sign-stop-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_sign_stop_b.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
     "terrain.asphalt": {
       "baseOffsetY": 0,
       "category": "ground",
@@ -1461,6 +1747,266 @@
       "subcategory": "water",
       "sways": false
     },
+    "tire": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/clutter/prop_tire.png",
+      "renderScale": 1,
+      "subcategory": "clutter",
+      "sways": false
+    },
+    "tire-buried-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/clutter/prop_tire_buried_a.png",
+      "renderScale": 1,
+      "subcategory": "clutter",
+      "sways": false
+    },
+    "tire-buried-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/clutter/prop_tire_buried_b.png",
+      "renderScale": 1,
+      "subcategory": "clutter",
+      "sways": false
+    },
+    "tires": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/clutter/prop_tires.png",
+      "renderScale": 1,
+      "subcategory": "clutter",
+      "sways": false
+    },
+    "trafficlight-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_trafficlight_a.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "trafficlight-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_trafficlight_b.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "trafficlight-c": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_trafficlight_c.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "trashbag-black-large": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_trashbag_black_large.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "trashbag-black-small": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_trashbag_black_small.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "trashbag-white-large": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_trashbag_white_large.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "trashbag-white-small": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_trashbag_white_small.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "trashcan-blue-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_trashcan_blue_a.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "trashcan-blue-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_trashcan_blue_b.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "trashcan-green-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_trashcan_green_a.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "trashcan-green-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/streetside/prop_trashcan_green_b.png",
+      "renderScale": 1,
+      "subcategory": "streetside",
+      "sways": false
+    },
+    "tree-common-large": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/trees/prop_tree_common_large.png",
+      "renderScale": 0.5,
+      "subcategory": "trees",
+      "sways": true
+    },
+    "tree-common-medium": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/trees/prop_tree_common_medium.png",
+      "renderScale": 0.5,
+      "subcategory": "trees",
+      "sways": true
+    },
+    "trunk-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/trees/prop_trunk_a.png",
+      "renderScale": 0.5,
+      "subcategory": "trees",
+      "sways": false
+    },
+    "trunk-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/trees/prop_trunk_b.png",
+      "renderScale": 0.5,
+      "subcategory": "trees",
+      "sways": false
+    },
+    "trunk-c": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/trees/prop_trunk_c.png",
+      "renderScale": 0.5,
+      "subcategory": "trees",
+      "sways": false
+    },
     "warehouse-blue": {
       "baseOffsetY": 0,
       "category": "buildings",
@@ -1524,6 +2070,58 @@
       "renderScale": 0.5,
       "subcategory": "civic",
       "sways": false
+    },
+    "weed-large-a": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/flowers/prop_weed_large_a.png",
+      "renderScale": 1,
+      "subcategory": "flowers",
+      "sways": true
+    },
+    "weed-large-b": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/flowers/prop_weed_large_b.png",
+      "renderScale": 1,
+      "subcategory": "flowers",
+      "sways": true
+    },
+    "weed-medium": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/flowers/prop_weed_medium.png",
+      "renderScale": 1,
+      "subcategory": "flowers",
+      "sways": true
+    },
+    "weed-small": {
+      "baseOffsetY": 0,
+      "category": "props",
+      "codeReferenced": false,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/props/flowers/prop_weed_small.png",
+      "renderScale": 1,
+      "subcategory": "flowers",
+      "sways": true
     }
   }
 }

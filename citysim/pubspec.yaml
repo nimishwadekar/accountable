@@ -40,6 +40,9 @@ flutter:
     - assets/sprites/buildings/sites/
     - assets/sprites/props/flowers/
     - assets/sprites/props/trees/
+    - assets/sprites/props/streetside/
+    - assets/sprites/props/rocks/
+    - assets/sprites/props/clutter/
     - assets/sprites/ground/asphalt/
     - assets/sprites/ground/concrete/
     - assets/sprites/ground/dirt/
@@ -55,8 +58,3 @@ flutter:
     - assets/sprites/roads/t/
     - assets/sprites/bridges/body/
     - assets/sprites/bridges/ramp/
-    - assets/buggy_studio/
-    - assets/buggy_studio/Buildings/
-    - assets/buggy_studio/Props/
-    - assets/buggy_studio/Roads and Grounds/
-    - assets/buggy_studio/Vehicles/

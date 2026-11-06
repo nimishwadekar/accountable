@@ -36,10 +36,10 @@ void main() {
 
   test('content seed snapshot holds the seeded defaults', () {
     // Snapshot guard: these values are the seeded defaults the dashboard
-    // starts from — the original nine models plus the promoted Buggy
-    // Studio pack art. Editing them in the editor is expected; editing
-    // them by accident in the JSON is not.
-    expect(content.catalogue, hasLength(24));
+    // starts from — the original nine models, the promoted Buggy
+    // Studio pack art, and the promoted props. Editing them in the
+    // editor is expected; editing them by accident in the JSON is not.
+    expect(content.catalogue, hasLength(40));
     final byId = {for (final model in content.catalogue) model.id: model};
     expect(byId['small-home']!.costCoins, 3);
     expect(byId['small-home']!.population, 1);
@@ -73,6 +73,18 @@ void main() {
     expect(byId['construction-site']!.kind, StructureKind.building);
     expect(byId['construction-site']!.population, 0);
     expect(byId['hospital']!.unlockAtPopulation, 30);
+
+    // Promoted props: representative snapshot of the decoration batch.
+    expect(byId['common-tree']!.kind, StructureKind.decoration);
+    expect(byId['common-tree']!.costCoins, 2);
+    expect(byId['common-tree']!.assetRoles, hasLength(2));
+    expect(byId['street-lamp']!.costCoins, 3);
+    expect(byId['street-lamp']!.subcategory, 'streetside');
+    expect(byId['traffic-light']!.costCoins, 5);
+    expect(byId['rocks']!.assetRoles, hasLength(6));
+    expect(byId['rocks']!.subcategory, 'rocks');
+    expect(byId['tires']!.subcategory, 'clutter');
+    expect(byId['wild-grass']!.costCoins, 1);
 
     expect(content.economy.startingWalletCoins, 0);
     expect(content.economy.startingBuilderCapacity, 1);
