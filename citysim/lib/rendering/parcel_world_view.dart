@@ -18,6 +18,7 @@ import '../world/road_sprite_resolver.dart';
 import '../world/terrain_provider.dart';
 import '../world/world_content.dart';
 import '../world/world_queries.dart';
+import '../world/world_rules.dart';
 import '../world/world_state.dart';
 
 const _logicalTileWidth = 64.0;
@@ -45,8 +46,10 @@ class ParcelWorldView extends StatefulWidget {
     this.selectedParcel,
     this.selectedCatalogueId,
     this.bridgeStartCell,
+    this.bridgeEndCell,
     this.roadPlanCells = const [],
-    this.fundableRoadCells = const {},
+    this.roadStartCell,
+    this.highlightCells = const {},
     this.cameraResetToken = 0,
     this.facingOverride,
     this.structurePicking = true,
@@ -62,8 +65,13 @@ class ParcelWorldView extends StatefulWidget {
   final ParcelCoord? selectedParcel;
   final String? selectedCatalogueId;
   final CellCoord? bridgeStartCell;
+  final CellCoord? bridgeEndCell;
   final List<CellCoord> roadPlanCells;
-  final Set<CellCoord> fundableRoadCells;
+  final CellCoord? roadStartCell;
+
+  /// Cells highlighted as a selection group — a road section between
+  /// junctions or a whole active project.
+  final Set<CellCoord> highlightCells;
   final int cameraResetToken;
 
   /// Player's pre-placement door-side choice for the footprint preview,
@@ -134,6 +142,16 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   /// merged path drawing.
   ui.FragmentProgram? _shimmerProgram;
   final _PedestrianSim _pedestrians = _PedestrianSim();
+
+  /// Hovered cell for desktop live previews (touch never hovers).
+  CellCoord? _hoverCell;
+
+  void _updateHover(Offset position, Size size) {
+    final world = _screenToWorld(position, size, _scale, _offset);
+    final cell = _nearestCell(world);
+    if (cell == _hoverCell) return;
+    setState(() => _hoverCell = cell);
+  }
 
   @override
   void initState() {
@@ -231,6 +249,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                 math.exp(-event.scrollDelta.dy * cameraWheelZoomSensitivity),
               );
             },
+            onPointerHover: (event) => _updateHover(event.localPosition, size),
             onPointerPanZoomStart: (event) {
               _panZoomStartScale = _scale;
               _panZoomStartOffset = _offset;
@@ -290,8 +309,11 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   selectedParcel: widget.selectedParcel,
                   selectedCatalogueId: widget.selectedCatalogueId,
                   bridgeStartCell: widget.bridgeStartCell,
+                  bridgeEndCell: widget.bridgeEndCell,
                   roadPlanCells: widget.roadPlanCells,
-                  fundableRoadCells: widget.fundableRoadCells,
+                  roadStartCell: widget.roadStartCell,
+                  highlightCells: widget.highlightCells,
+                  hoverCell: _hoverCell,
                   facingOverride: widget.facingOverride,
                   dimStructures: widget.dimStructures,
                   ambient: _ambient,
@@ -643,8 +665,11 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.selectedParcel,
     required this.selectedCatalogueId,
     required this.bridgeStartCell,
+    required this.bridgeEndCell,
     required this.roadPlanCells,
-    required this.fundableRoadCells,
+    required this.roadStartCell,
+    required this.highlightCells,
+    required this.hoverCell,
     required this.facingOverride,
     required this.dimStructures,
     required this.ambient,
@@ -664,8 +689,11 @@ class _ParcelWorldPainter extends CustomPainter {
   final ParcelCoord? selectedParcel;
   final String? selectedCatalogueId;
   final CellCoord? bridgeStartCell;
+  final CellCoord? bridgeEndCell;
   final List<CellCoord> roadPlanCells;
-  final Set<CellCoord> fundableRoadCells;
+  final CellCoord? roadStartCell;
+  final Set<CellCoord> highlightCells;
+  final CellCoord? hoverCell;
   final String? facingOverride;
 
   /// Whether standing structures draw translucent (x-ray) so tiles and
@@ -704,12 +732,63 @@ class _ParcelWorldPainter extends CustomPainter {
     ParcelWorldProbe.beginTerrain();
     _drawTerrainChunks(canvas, size, bounds, viewport);
     ParcelWorldProbe.endTerrain();
+    _drawPlannedGround(canvas, size);
     _drawActors(canvas, size, bounds, ambient.seconds);
     _drawPendingConstructions(canvas, size);
-    _drawRoadPlan(canvas, size);
+    _drawLinePreview(canvas, size);
     _drawSelection(canvas, size, queries);
     ParcelWorldProbe.endFrame();
     ParcelWorldProbe.paintHud(canvas, size);
+  }
+
+  /// Under-construction tiles render as dirt ground: planned road and
+  /// bridge cells show the dirt texture until their coins arrive.
+  void _drawPlannedGround(Canvas canvas, Size size) {
+    final path = content.tryAssetPath('terrain.dirt');
+    final image = path == null ? null : images[path];
+    for (final job in state.constructions) {
+      if (job.kind == WorldConstructionKind.structure) continue;
+      final cells = job.kind == WorldConstructionKind.road
+          ? job.roadCells
+          : [...job.waterCells, job.nearBank!, job.farBank!];
+      for (final cell in cells) {
+        if (state.roadsByCell.containsKey(cell)) continue;
+        if (state.bridges.any((bridge) => bridge.waterCells.contains(cell))) {
+          continue;
+        }
+        final center = _worldToScreen(
+          _cellWorldCenter(cell),
+          size,
+          scale,
+          offset,
+        );
+        if (image != null) {
+          canvas.drawImageRect(
+            image,
+            Rect.fromLTWH(
+              0,
+              0,
+              image.width.toDouble(),
+              image.height.toDouble(),
+            ),
+            Rect.fromCenter(
+              center: center,
+              width: _logicalTileWidth * scale,
+              height: _logicalTileHeight * scale,
+            ),
+            Paint()..filterQuality = FilterQuality.medium,
+          );
+        } else {
+          _drawCellOutline(
+            canvas,
+            center,
+            const Color(0xFF8B682A),
+            scale,
+            fill: const Color(0x33836D30),
+          );
+        }
+      }
+    }
   }
 
   /// Draws the visible terrain chunks and the water shimmer. Chunks
@@ -901,11 +980,9 @@ class _ParcelWorldPainter extends CustomPainter {
       }
       final road = queries.roadsByCell[cell];
       if (road != null) {
-        final path = road.style == RoadStyle.dirt
-            ? content.tryAssetPath('terrain.dirt')
-            : content.tryAssetPath(
-                roadSpriteRole(roadNeighborMask(cell, roadCells)),
-              );
+        final path = content.tryAssetPath(
+          roadSpriteRole(roadNeighborMask(cell, roadCells)),
+        );
         final image = path == null ? null : images[path];
         if (image != null) {
           ParcelWorldProbe.countRoad();
@@ -1161,6 +1238,48 @@ class _ParcelWorldPainter extends CustomPainter {
             _drawTileRole(canvas, farRamp, bridge.farBank, size, scale, offset),
       ));
     }
+    // Bridges still under construction: the near ramp rises with the
+    // near-bank road (the first coin), then each funded span tile of
+    // the deck appears in order, rising out of the dirt path. The far
+    // ramp only draws on the completed bridge — its bank road arrives
+    // with the final coin, and a ramp never stands on a non-road tile.
+    for (final job in state.constructions) {
+      if (job.kind != WorldConstructionKind.bridge) continue;
+      if (!boundsOverlapsCells(bounds, [
+        ...job.waterCells,
+        job.nearBank!,
+        job.farBank!,
+      ])) {
+        continue;
+      }
+      final fundedTiles = _bridgeFundedSpanCount(job);
+      final nearBankFunded =
+          job.coinsFunded >= content.economy.roadTileCostCoins;
+      if (!nearBankFunded && fundedTiles <= 0) continue;
+      if (fundedTiles > 0) {
+        final bodyRole = bridgeBodyRole(job.nearBank!, job.farBank!);
+        for (final cell in job.waterCells.take(fundedTiles)) {
+          actors.add((
+            (cell.column + cell.row).toDouble(),
+            () => _drawTileRole(canvas, bodyRole, cell, size, scale, offset),
+          ));
+        }
+      }
+      if (nearBankFunded) {
+        final nearRamp = bridgeRampRole(job.nearBank!, job.waterCells.first);
+        actors.add((
+          (job.nearBank!.column + job.nearBank!.row).toDouble(),
+          () => _drawTileRole(
+            canvas,
+            nearRamp,
+            job.nearBank!,
+            size,
+            scale,
+            offset,
+          ),
+        ));
+      }
+    }
     for (final pedestrian in pedestrians.list) {
       actors.add((
         pedestrian.depth,
@@ -1171,6 +1290,30 @@ class _ParcelWorldPainter extends CustomPainter {
     for (final actor in actors) {
       actor.$2();
     }
+  }
+
+  /// How many span tiles of a bridge project are complete at its
+  /// funded coin count: the near bank completes first, then span
+  /// tiles, then the far bank.
+  int _bridgeFundedSpanCount(WorldConstruction job) {
+    final roadTileCost = content.economy.roadTileCostCoins;
+    final bridgeTileCost = content.economy.bridgeTileCostCoins;
+    var remaining = job.coinsFunded;
+    if (remaining < roadTileCost) return 0;
+    remaining -= roadTileCost;
+    return (remaining ~/ bridgeTileCost).clamp(0, job.waterCells.length);
+  }
+
+  bool boundsOverlapsCells(_CellBounds bounds, List<CellCoord> cells) {
+    for (final cell in cells) {
+      if (cell.column >= bounds.left - 5 &&
+          cell.column <= bounds.right + 5 &&
+          cell.row >= bounds.top - 5 &&
+          cell.row <= bounds.bottom + 5) {
+        return true;
+      }
+    }
+    return false;
   }
 
   void _drawStructure(
@@ -1425,8 +1568,10 @@ class _ParcelWorldPainter extends CustomPainter {
         ],
       };
       for (final cell in cells) {
-        if (job.kind == WorldConstructionKind.road &&
-            state.roadsByCell.containsKey(cell)) {
+        // Funded tiles are real roads now — road project tiles and
+        // bridge banks alike — so the pending outline skips them,
+        // matching how planned dirt ground skips completed cells.
+        if (state.roadsByCell.containsKey(cell)) {
           continue;
         }
         _drawCellOutline(
@@ -1545,18 +1690,74 @@ class _ParcelWorldPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawRoadPlan(Canvas canvas, Size size) {
-    final hasRoadProject = state.constructions.any(
-      (job) => job.kind == WorldConstructionKind.road,
-    );
-    if (!hasRoadProject) {
-      for (final cell in roadPlanCells) {
-        final center = _worldToScreen(
-          _cellWorldCenter(cell),
-          size,
-          scale,
-          offset,
+  /// Translucent preview of the road or bridge line under
+  /// construction by the active tool: the projected tiles show as
+  /// translucent road art, and tiles that would make the quote fail
+  /// (water, unowned, occupied) carry a red mark. The preview follows
+  /// the cursor on desktop (hover); on touch it appears once the end
+  /// tile is committed.
+  void _drawLinePreview(Canvas canvas, Size size) {
+    final roadPath = content.tryAssetPath('road.straight.se');
+    final roadImage = roadPath == null ? null : images[roadPath];
+    List<CellCoord>? line;
+    var isBridge = false;
+    if (roadStartCell case final start?) {
+      line = roadPlanCells.isNotEmpty
+          ? roadPlanCells
+          : (hoverCell == null ? null : straightLineBetween(start, hoverCell!));
+    } else if (bridgeStartCell case final start?) {
+      isBridge = true;
+      final end = bridgeEndCell ?? hoverCell;
+      if (end != null && end != start) {
+        line = straightLineBetween(start, end);
+      }
+    }
+    if (line == null) return;
+
+    bool validRoadCell(CellCoord cell) =>
+        queries.ownsCell(cell) &&
+        queries.terrainAt(cell).isLand &&
+        !queries.roadsByCell.containsKey(cell) &&
+        !queries.structuresByCell.containsKey(cell) &&
+        !queries.reservedCells.contains(cell);
+    bool validBridgeCell(CellCoord cell, bool isBank) =>
+        queries.ownsCell(cell) &&
+        (!isBank || queries.terrainAt(cell).isLand) &&
+        !queries.roadsByCell.containsKey(cell) &&
+        !queries.structuresByCell.containsKey(cell) &&
+        !queries.reservedCells.contains(cell);
+
+    for (var index = 0; index < line.length; index++) {
+      final cell = line[index];
+      final center = _worldToScreen(
+        _cellWorldCenter(cell),
+        size,
+        scale,
+        offset,
+      );
+      final valid = isBridge
+          ? validBridgeCell(cell, index == 0 || index == line.length - 1)
+          : validRoadCell(cell);
+      final rect = Rect.fromCenter(
+        center: center,
+        width: _logicalTileWidth * scale,
+        height: _logicalTileHeight * scale,
+      );
+      if (roadImage != null) {
+        canvas.drawImageRect(
+          roadImage,
+          Rect.fromLTWH(
+            0,
+            0,
+            roadImage.width.toDouble(),
+            roadImage.height.toDouble(),
+          ),
+          rect,
+          Paint()
+            ..filterQuality = FilterQuality.medium
+            ..color = const Color(0x73FFFFFF),
         );
+      } else {
         _drawCellOutline(
           canvas,
           center,
@@ -1565,21 +1766,15 @@ class _ParcelWorldPainter extends CustomPainter {
           fill: const Color(0x447BBE92),
         );
       }
-    }
-    for (final cell in fundableRoadCells) {
-      final center = _worldToScreen(
-        _cellWorldCenter(cell),
-        size,
-        scale,
-        offset,
-      );
-      _drawCellOutline(
-        canvas,
-        center,
-        const Color(0xFF178064),
-        scale,
-        fill: const Color(0x3389DDB6),
-      );
+      if (!valid) {
+        _drawCellOutline(
+          canvas,
+          center,
+          const Color(0xFFB3261E),
+          scale,
+          fill: const Color(0x66B3261E),
+        );
+      }
     }
   }
 
@@ -1619,6 +1814,24 @@ class _ParcelWorldPainter extends CustomPainter {
         offset,
       );
       _drawCellOutline(canvas, center, const Color(0xFF8C512D), scale);
+    }
+    // Section and project selections: road stretches between
+    // junctions, whole bridge crossings, or an active project's span.
+    for (final cell in highlightCells) {
+      if (cell == selectedCell) continue;
+      final center = _worldToScreen(
+        _cellWorldCenter(cell),
+        size,
+        scale,
+        offset,
+      );
+      _drawCellOutline(
+        canvas,
+        center,
+        const Color(0xFF1E6552),
+        scale,
+        fill: const Color(0x224BC69B),
+      );
     }
     if (selectedParcel case final parcel?) {
       final owned = queries.ownsParcel(parcel);
@@ -1752,10 +1965,13 @@ class _ParcelWorldPainter extends CustomPainter {
       oldDelegate.selectedParcel != selectedParcel ||
       oldDelegate.selectedCatalogueId != selectedCatalogueId ||
       oldDelegate.bridgeStartCell != bridgeStartCell ||
+      oldDelegate.bridgeEndCell != bridgeEndCell ||
       oldDelegate.facingOverride != facingOverride ||
       oldDelegate.dimStructures != dimStructures ||
       !listEquals(oldDelegate.roadPlanCells, roadPlanCells) ||
-      !setEquals(oldDelegate.fundableRoadCells, fundableRoadCells);
+      oldDelegate.roadStartCell != roadStartCell ||
+      !setEquals(oldDelegate.highlightCells, highlightCells) ||
+      oldDelegate.hoverCell != hoverCell;
 }
 
 class _CellBounds {
@@ -2167,10 +2383,10 @@ class _PedestrianSim {
     WorldQueries queries,
     PedestrianContent pedestrians,
   ) {
-    final roadCells = <CellCoord>{
-      for (final road in state.roads)
-        if (queries.connectedRoadCells.contains(road.cell)) road.cell,
-    };
+    // Pedestrians wander every completed ground road — connectivity to
+    // the starter road no longer exists as a rule. Bridge decks are
+    // elevated, so they stay off them.
+    final roadCells = <CellCoord>{for (final road in state.roads) road.cell};
     if (roadCells.length != _roadCount) {
       _roadCount = roadCells.length;
       _lastSeconds = seconds;

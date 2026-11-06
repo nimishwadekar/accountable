@@ -111,27 +111,33 @@ shop price.
 
 ### Road stretches
 
-- Planning a four-connected road stretch is free and reserves one builder for
-  that whole stretch.
-- The player manually selects each planned road tile to fund it. Each tile costs
-  one coin, regardless of dirt/asphalt style.
-- Only an unfinished tile adjacent to a finished connected road tile can be
-  funded. A newly finished tile extends the frontier, allowing the next tile to
-  be funded; unfinished plans cannot be used to jump ahead.
-- Each funded tile becomes a completed road immediately. Buildings require
-  access to the completed connected road network, not just a planned road.
-- Dirt and asphalt are visually different but connect equally. Road upgrades,
-  demolition, and road-type bonuses are not part of the current feature set.
-
-The current prototype treats a drawn road stretch as one builder project, while
-funding its tiles individually. This is the active implementation behavior.
+- Planning a straight road stretch is free and reserves one builder for
+  that whole stretch. Roads place anywhere on owned, vacant, dry land —
+  they no longer need to attach to the existing road network.
+- Planning is a two-click tool: the first click sets the start tile, the
+  next click sets the end tile projected onto the closer axis (ties go
+  horizontal), and further clicks move the end. A translucent preview
+  shows the final tiles — following the cursor on desktop, fixed after
+  the end click on touch — with invalid tiles marked.
+- Funding is per project: selecting any tile of an active project selects
+  the whole project, and each coin completes the next tile in order from
+  the start. Under-construction tiles render as dirt ground until their
+  coin arrives.
+- All roads are asphalt; the dirt ground texture is the
+  under-construction visual only.
+- Each funded tile becomes a completed road immediately. Buildings
+  require a road beside them — any completed road, connected or not.
+- Tapping a completed road selects its section: the straight run between
+  the nearest junctions, turns, or dead ends.
+- Road upgrades, demolition, and cancellation are not part of the
+  current feature set.
 
 ## 6. Buildings, decorations, and bridges
 
 ### Buildings
 
-- Select a catalogue model and a legal footprint beside a completed connected
-  road. Every footprint cell must be owned, accessible, dry, vacant, and outside
+- Select a catalogue model and a legal footprint beside a completed
+  road. Every footprint cell must be owned, dry, vacant, and outside
   other reservations.
 - Planning is free and immediately reserves the footprint and a builder.
 - Each model lists several sprite variants (e.g. the cottage in yellow, blue,
@@ -162,25 +168,30 @@ funding its tiles individually. This is the active implementation behavior.
 
 - Decorations are paid and placed instantly, use no builder, and do not wait for
   simulated days.
-- They require owned, accessible, vacant dry land but do not require road
+- They require owned, vacant dry land but do not require road
   adjacency.
 
 ### Bridges
 
-- A bridge starts at a connected road, ends on vacant dry land, and crosses a
-  straight line of water tiles. Any span length is allowed — cost per water
-  tile is the limiter.
-- Crossings must be authored water parcels; bridges cannot cross open ocean.
-- Planning reserves the crossing and assigns a builder. Any quoted crossing
-  parcels are bought when the plan is committed.
-- Bridge coins are contributed manually. The bridge opens in one transition
-  when fully funded; no half-built bridge provides access.
-- The far-bank landing becomes part of the connected road/access network at
-  completion.
+- A bridge is planned with the same two-click straight tool as roads:
+  both banks need owned, vacant, dry land, and the span between them
+  may cross water and land alike. Bridges can go anywhere — including
+  entirely over land.
+- Everything under a bridge must already be owned. Nothing is
+  auto-acquired: water parcels are bought before bridging, like land.
+  Spans cannot cross roads, buildings, or other bridges.
+- Planning is free and reserves a builder. Funding is per project,
+  coin by coin: the near bank completes as a road tile first, then each
+  span tile (flat per-tile price, content-tunable), then the far bank.
+  Under-construction span tiles render as dirt ground; funded tiles
+  appear as bridge deck one at a time.
+- The bridge opens when fully funded; the far-bank landing joins the
+  road network at completion.
 
-Current bridge price is length-based. Parcel, building, and bridge price values
-should be tuned through playtesting; do not compensate for a slow economy with
-automatic coin rewards.
+Current bridge pricing is flat per span tile with road-priced banks.
+Parcel, building, and bridge price values should be tuned through
+playtesting; do not compensate for a slow economy with automatic coin
+rewards.
 
 ## 7. Catalogue progression and features
 

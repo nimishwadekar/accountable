@@ -80,8 +80,8 @@ class StructureFundingQuote {
   final int coinsFunded;
 }
 
-class RoadTileFundingQuote {
-  const RoadTileFundingQuote({
+class RoadProjectFundingQuote {
+  const RoadProjectFundingQuote({
     required this.jobId,
     required this.cell,
     required this.price,
@@ -96,22 +96,51 @@ class BridgeQuote {
   const BridgeQuote({
     required this.nearBank,
     required this.farBank,
-    required this.waterCells,
-    required this.parcelsToAcquire,
+    required this.spanCells,
     required this.bridgeCost,
     required this.builderSlot,
+    required this.roadTileCost,
+    required this.bridgeTileCost,
   });
 
   final CellCoord nearBank;
   final CellCoord farBank;
-  final List<CellCoord> waterCells;
-  final List<ParcelPurchaseQuote> parcelsToAcquire;
+
+  /// The cells between the banks — water or land alike.
+  final List<CellCoord> spanCells;
   final int bridgeCost;
   final int builderSlot;
+  final int roadTileCost;
+  final int bridgeTileCost;
 
-  int get parcelCost =>
-      parcelsToAcquire.fold<int>(0, (sum, parcel) => sum + parcel.price);
-  int get totalPrice => bridgeCost + parcelCost;
+  /// The funding order and per-cell price: near bank, span tiles, far
+  /// bank. A cell completes when the funded coins reach its cumulative
+  /// cost.
+  List<(CellCoord, int)> get cellCosts => [
+    (nearBank, roadTileCost),
+    for (final cell in spanCells) (cell, bridgeTileCost),
+    (farBank, roadTileCost),
+  ];
+}
+
+/// Projects a two-click road or bridge line onto the closer axis: the
+/// line runs straight from [start] along the axis with the larger
+/// delta (ties go horizontal), ending at [end]'s coordinate on that
+/// axis. Includes both endpoints; start == end yields a single tile.
+List<CellCoord> straightLineBetween(CellCoord start, CellCoord end) {
+  final dx = end.column - start.column;
+  final dy = end.row - start.row;
+  final last = dx.abs() >= dy.abs()
+      ? CellCoord(end.column, start.row)
+      : CellCoord(start.column, end.row);
+  final stepX = last.column.compareTo(start.column);
+  final stepY = last.row.compareTo(start.row);
+  final length =
+      (last.column - start.column).abs() + (last.row - start.row).abs();
+  return [
+    for (var index = 0; index <= length; index++)
+      CellCoord(start.column + stepX * index, start.row + stepY * index),
+  ];
 }
 
 ParcelPurchaseQuote quoteParcelPurchase(
@@ -154,7 +183,6 @@ RoadProjectQuote quoteRoadStretch(
   ContentBundle content,
   TerrainProvider terrainProvider, {
   required List<CellCoord> cells,
-  required RoadStyle style,
 }) {
   if (cells.isEmpty) {
     throw const WorldRuleViolation('A road stretch needs at least one tile.');
@@ -164,18 +192,10 @@ RoadProjectQuote quoteRoadStretch(
   }
   final builderSlot = _freeBuilderSlot(state);
   final queries = WorldQueries(state, terrainProvider);
-  final completedRoads = queries.connectedRoadCells;
-  if (!cells.first.neighbors.any(completedRoads.contains)) {
-    throw const WorldRuleViolation(
-      'Start the stretch beside a completed connected road.',
-    );
-  }
   for (var index = 0; index < cells.length; index++) {
     final cell = cells[index];
-    if (!queries.ownsCell(cell) ||
-        !queries.terrainAt(cell).isLand ||
-        !queries.isLandReachable(cell)) {
-      throw const WorldRuleViolation('Roads need owned, reachable dry land.');
+    if (!queries.ownsCell(cell) || !queries.terrainAt(cell).isLand) {
+      throw const WorldRuleViolation('Roads need owned dry land.');
     }
     if (queries.roadsByCell.containsKey(cell) ||
         queries.structuresByCell.containsKey(cell) ||
@@ -190,36 +210,27 @@ RoadProjectQuote quoteRoadStretch(
   }
   return RoadProjectQuote(
     cells: List.unmodifiable(cells),
-    style: style,
+    style: RoadStyle.asphalt,
     totalCost: cells.length * content.roadTileCost(),
     builderSlot: builderSlot,
   );
 }
 
-RoadTileFundingQuote quoteRoadTileFunding(
+RoadProjectFundingQuote quoteRoadProjectFunding(
   ParcelWorldState state,
   ContentBundle content, {
-  required TerrainProvider terrainProvider,
   required String projectId,
-  required CellCoord cell,
 }) {
   final project = _roadProject(state, projectId);
-  if (!project.roadCells.contains(cell) ||
-      state.roadsByCell.containsKey(cell)) {
-    throw const WorldRuleViolation(
-      'Select an unfinished tile in the road plan.',
-    );
+  final price = content.economy.roadTileCostCoins;
+  final tileIndex = project.coinsFunded ~/ price;
+  if (tileIndex >= project.roadCells.length) {
+    throw const WorldRuleViolation('That road project is already complete.');
   }
-  final completed = WorldQueries(state, terrainProvider).connectedRoadCells;
-  if (!cell.neighbors.any(completed.contains)) {
-    throw const WorldRuleViolation(
-      'Fund only the next road tile touching a completed road tile.',
-    );
-  }
-  return RoadTileFundingQuote(
+  return RoadProjectFundingQuote(
     jobId: projectId,
-    cell: cell,
-    price: content.economy.roadTileCostCoins,
+    cell: project.roadCells[tileIndex],
+    price: price,
   );
 }
 
@@ -268,10 +279,8 @@ StructurePlacementQuote quoteStructurePlacement(
   if (footprint.any((cell) => !queries.ownsCell(cell))) {
     throw const WorldRuleViolation('Every footprint cell needs owned land.');
   }
-  if (footprint.any(
-    (cell) => !queries.terrainAt(cell).isLand || !queries.isLandReachable(cell),
-  )) {
-    throw const WorldRuleViolation('Buildings need accessible dry land.');
+  if (footprint.any((cell) => !queries.terrainAt(cell).isLand)) {
+    throw const WorldRuleViolation('Buildings need dry land.');
   }
   if (!queries.footprintIsVacant(footprint)) {
     throw const WorldRuleViolation(
@@ -280,9 +289,7 @@ StructurePlacementQuote quoteStructurePlacement(
   }
   if (definition.kind == StructureKind.building &&
       !queries.buildingHasRoadAccess(footprint)) {
-    throw const WorldRuleViolation(
-      'Place the building beside a connected road first.',
-    );
+    throw const WorldRuleViolation('Place the building beside a road first.');
   }
   return StructurePlacementQuote(
     catalogueId: catalogueId,
@@ -310,11 +317,6 @@ BridgeQuote quoteBridge(
       farBank.row.abs() > rules.maximumCoordinate) {
     throw const WorldRuleViolation('That bridge is outside the supported map.');
   }
-  if (!queries.isRoadConnected(nearBank)) {
-    throw const WorldRuleViolation(
-      'Start the bridge from a connected road on the near bank.',
-    );
-  }
   final dx = farBank.column - nearBank.column;
   final dy = farBank.row - nearBank.row;
   if ((dx == 0) == (dy == 0)) {
@@ -323,91 +325,53 @@ BridgeQuote quoteBridge(
     );
   }
   final distance = dx.abs() + dy.abs();
-  final spanLength = distance - 1;
-  if (spanLength < 1) {
+  if (distance < 2) {
     throw const WorldRuleViolation(
-      'A bridge needs at least one water tile between its banks.',
+      'A bridge needs at least one tile between its banks.',
     );
   }
-  if (!queries.terrainAt(nearBank).isLand ||
-      !terrainProvider.sample(farBank, state.seed).isLand) {
-    throw const WorldRuleViolation(
-      'A bridge must land on dry ground at both ends.',
-    );
-  }
-  if (queries.roadsByCell.containsKey(farBank) ||
-      queries.structuresByCell.containsKey(farBank) ||
-      queries.reservedCells.contains(farBank)) {
-    throw const WorldRuleViolation('The far-bank landing cell is occupied.');
+  bool occupied(CellCoord cell) =>
+      queries.roadsByCell.containsKey(cell) ||
+      queries.structuresByCell.containsKey(cell) ||
+      queries.reservedCells.contains(cell);
+  for (final bank in [nearBank, farBank]) {
+    if (!queries.terrainAt(bank).isLand || !queries.ownsCell(bank)) {
+      throw const WorldRuleViolation('Bridge banks need owned dry land.');
+    }
+    if (occupied(bank)) {
+      throw const WorldRuleViolation('A bridge bank landing cell is occupied.');
+    }
   }
 
+  // The span may cross water and land alike, but everything under the
+  // bridge must already be owned — nothing is auto-acquired.
   final step = CellCoord(dx.sign, dy.sign);
-  final waterCells = <CellCoord>[];
+  final spanCells = <CellCoord>[];
   for (var index = 1; index < distance; index++) {
     final cell = nearBank.offset(step.column * index, step.row * index);
-    final parcel = parcelForCell(cell, parcelSize: state.parcelSize);
-    // Crossings must be water, and the ocean is not for sale: every
-    // crossed parcel must be authored on the terrain map.
-    if (!queries.terrainAt(cell).isLand && !content.terrain.isOnMap(parcel)) {
+    if (!queries.ownsCell(cell)) {
       throw const WorldRuleViolation(
-        'Bridges cannot cross open ocean—only authored water.',
+        'Everything under a bridge must be owned — buy the crossing '
+        'parcels first.',
       );
     }
-    if (queries.terrainAt(cell).isLand) {
+    if (occupied(cell)) {
       throw const WorldRuleViolation(
-        'A bridge may only cross water between its banks.',
+        'Part of that bridge span is already occupied.',
       );
     }
-    if (queries.reservedCells.contains(cell) ||
-        queries.roadsByCell.containsKey(cell) ||
-        queries.structuresByCell.containsKey(cell)) {
-      throw const WorldRuleViolation(
-        'Part of that bridge span is already reserved.',
-      );
-    }
-    waterCells.add(cell);
+    spanCells.add(cell);
   }
-  final requiredParcels =
-      <ParcelCoord>{
-        ...waterCells.map(
-          (cell) => parcelForCell(cell, parcelSize: state.parcelSize),
-        ),
-        parcelForCell(farBank, parcelSize: state.parcelSize),
-      }.where((parcel) => !queries.ownsParcel(parcel)).toList()..sort((a, b) {
-        final aDistance =
-            (a.x - parcelForCell(nearBank, parcelSize: state.parcelSize).x)
-                .abs() +
-            (a.y - parcelForCell(nearBank, parcelSize: state.parcelSize).y)
-                .abs();
-        final bDistance =
-            (b.x - parcelForCell(nearBank, parcelSize: state.parcelSize).x)
-                .abs() +
-            (b.y - parcelForCell(nearBank, parcelSize: state.parcelSize).y)
-                .abs();
-        return aDistance.compareTo(bDistance);
-      });
-
-  final parcelQuotes = <ParcelPurchaseQuote>[];
-  for (final parcel in requiredParcels) {
-    final terrain = parcel
-        .cells(state.parcelSize)
-        .map((cell) => terrainProvider.sample(cell, state.seed))
-        .toList();
-    parcelQuotes.add(
-      ParcelPurchaseQuote(
-        coord: parcel,
-        price: content.economy.parcelBaseCoins,
-        cells: terrain,
-      ),
-    );
-  }
+  final roadTileCost = content.economy.roadTileCostCoins;
+  final bridgeTileCost = content.economy.bridgeTileCostCoins;
   return BridgeQuote(
     nearBank: nearBank,
     farBank: farBank,
-    waterCells: waterCells,
-    parcelsToAcquire: parcelQuotes,
-    bridgeCost: content.economy.bridgeCost(spanLength),
+    spanCells: spanCells,
+    bridgeCost: spanCells.length * bridgeTileCost + 2 * roadTileCost,
     builderSlot: builderSlot,
+    roadTileCost: roadTileCost,
+    bridgeTileCost: bridgeTileCost,
   );
 }
 
@@ -492,10 +456,9 @@ void validateParcelWorldState(
     (road) =>
         road.id == 'road-start' &&
         road.cell == startCell &&
-        road.style == RoadStyle.dirt &&
         road.pricePaid == 0,
   )) {
-    throw const FormatException('The free starting dirt road is missing.');
+    throw const FormatException('The free starting road is missing.');
   }
   if (!_unique(state.parcels.map((parcel) => parcel.coord.key)) ||
       !_unique(state.roads.map((road) => road.cell.key)) ||
@@ -528,7 +491,6 @@ void validateParcelWorldState(
         road.completedAtDay > state.constructionDay ||
         !queries.ownsCell(road.cell) ||
         !queries.terrainAt(road.cell).isLand ||
-        !queries.isRoadConnected(road.cell) ||
         !occupied.add(road.cell)) {
       throw const FormatException(
         'The parcel-world save contains an invalid road.',
@@ -561,7 +523,6 @@ void validateParcelWorldState(
           (cell) =>
               !queries.ownsCell(cell) ||
               !queries.terrainAt(cell).isLand ||
-              !queries.isLandReachable(cell) ||
               !occupied.add(cell),
         )) {
       throw const FormatException(
@@ -576,6 +537,10 @@ void validateParcelWorldState(
     }
   }
   for (final bridge in state.bridges) {
+    // Bridges may stand anywhere — disconnected crossings included —
+    // so the only bank requirement is that both landings are road
+    // tiles once the bridge opens. Connectivity to the starter road
+    // stopped being a rule with free road placement.
     if (bridge.waterCells.isEmpty ||
         bridge.pricePaid < 0 ||
         bridge.completedAtDay < 0 ||
@@ -586,7 +551,7 @@ void validateParcelWorldState(
           bridge.waterCells,
           queries,
         ) ||
-        !queries.isRoadConnected(bridge.nearBank) ||
+        !queries.roadsByCell.containsKey(bridge.nearBank) ||
         !queries.roadsByCell.containsKey(bridge.farBank)) {
       throw const FormatException(
         'The parcel-world save contains an invalid bridge.',
@@ -646,7 +611,6 @@ void validateParcelWorldState(
             (cell) =>
                 !queries.ownsCell(cell) ||
                 !queries.terrainAt(cell).isLand ||
-                !queries.isLandReachable(cell) ||
                 occupied.contains(cell) ||
                 !reserved.add(cell),
           ) ||
@@ -659,10 +623,9 @@ void validateParcelWorldState(
       final projectRoads = state.roads
           .where((road) => road.projectId == job.id)
           .toList();
-      final projectRoadCells = projectRoads.map((road) => road.cell).toSet();
-      final completedBeforeProject = queries.completedRoadCells.difference(
-        projectRoadCells,
-      );
+      // Funding completes tiles in order from the start: the funded
+      // roads are exactly the first coinsFunded tiles of the plan.
+      final fundedPrefix = job.roadCells.take(job.coinsFunded).toList();
       if (job.catalogueId != null ||
           job.structureKind != null ||
           job.origin != null ||
@@ -674,11 +637,12 @@ void validateParcelWorldState(
           job.roadCells.isEmpty ||
           !_unique(job.roadCells.map((cell) => cell.key)) ||
           job.totalCostCoins != job.roadCells.length ||
-          job.coinsFunded != projectRoads.length ||
-          projectRoads.any((road) => !job.roadCells.contains(road.cell)) ||
-          !job.roadCells.first.neighbors.any(completedBeforeProject.contains)) {
+          projectRoads.length != fundedPrefix.length ||
+          !fundedPrefix.every(
+            (cell) => projectRoads.any((road) => road.cell == cell),
+          )) {
         throw const FormatException(
-          'The parcel-world save has an invalid road plan.',
+          'The parcel-world save contains an invalid road plan.',
         );
       }
       for (var index = 0; index < job.roadCells.length; index++) {
@@ -687,20 +651,27 @@ void validateParcelWorldState(
         final fundedByThisProject = fundedRoad?.projectId == job.id;
         if (!queries.ownsCell(cell) ||
             !queries.terrainAt(cell).isLand ||
-            !queries.isLandReachable(cell) ||
             (fundedRoad != null && !fundedByThisProject) ||
             (fundedByThisProject &&
-                (fundedRoad!.style != job.roadStyle ||
-                    fundedRoad.pricePaid != 1)) ||
+                (fundedRoad!.pricePaid != 1 || index >= job.coinsFunded)) ||
             (!fundedByThisProject && occupied.contains(cell)) ||
             !reserved.add(cell) ||
             (index > 0 && !job.roadCells[index - 1].neighbors.contains(cell))) {
           throw const FormatException(
-            'The parcel-world save has an invalid road tile.',
+            'The parcel-world save contains an invalid road tile.',
           );
         }
       }
     } else if (job.kind == WorldConstructionKind.bridge) {
+      final roadTileCost = content.economy.roadTileCostCoins;
+      final bridgeTileCost = content.economy.bridgeTileCostCoins;
+      final nearBankRoad = queries.roadsByCell[job.nearBank!];
+      // The near bank completes as a road tile once its coins are
+      // funded; the far bank only completes with the project itself.
+      // The funded amount and the bank road must agree.
+      final nearBankFunded =
+          nearBankRoad != null && nearBankRoad.projectId == job.id;
+      final nearBankDue = job.coinsFunded >= roadTileCost;
       if (job.catalogueId != null ||
           job.structureKind != null ||
           job.origin != null ||
@@ -711,20 +682,21 @@ void validateParcelWorldState(
           job.nearBank == null ||
           job.farBank == null ||
           job.totalCostCoins !=
-              content.economy.bridgeCost(job.waterCells.length) ||
+              job.waterCells.length * bridgeTileCost + 2 * roadTileCost ||
           !_validBridgeGeometry(
             job.nearBank!,
             job.farBank!,
             job.waterCells,
             queries,
           ) ||
-          !queries.isRoadConnected(job.nearBank!) ||
+          (nearBankRoad != null && !nearBankFunded) ||
+          nearBankFunded != nearBankDue ||
           queries.roadsByCell.containsKey(job.farBank) ||
           occupied.contains(job.farBank) ||
           job.waterCells.any((cell) => !reserved.add(cell)) ||
           !reserved.add(job.farBank!)) {
         throw const FormatException(
-          'The parcel-world save has an invalid bridge reservation.',
+          'The parcel-world save contains an invalid bridge reservation.',
         );
       }
     }
@@ -760,9 +732,8 @@ bool _validBridgeGeometry(
   for (var index = 1; index < distance; index++) {
     final expected = nearBank.offset(step.column * index, step.row * index);
     final cell = waterCells[index - 1];
-    if (cell != expected ||
-        queries.terrainAt(cell).isLand ||
-        !queries.ownsCell(cell)) {
+    // Spans may cross water and land alike; ownership is the rule.
+    if (cell != expected || !queries.ownsCell(cell)) {
       return false;
     }
   }

@@ -1,7 +1,6 @@
 {
   "bridgeCost": {
-    "baseCoins": 4,
-    "perWaterTileCoins": 2
+    "bridgeTileCostCoins": 2
   },
   "builderProgression": [],
   "parcelBaseCoins": 8,

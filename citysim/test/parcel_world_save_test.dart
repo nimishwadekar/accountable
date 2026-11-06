@@ -61,30 +61,27 @@ void main() {
       terrain,
       const ParcelCoord(1, 0),
     );
+    world = purchaseAdjacentParcel(
+      world,
+      content,
+      terrain,
+      const ParcelCoord(2, 0),
+    );
     world = planRoadStretch(
       world,
       content,
       terrain,
-      cells: [for (var column = 5; column <= 7; column++) CellCoord(column, 4)],
-      style: RoadStyle.asphalt,
+      cells: [for (var column = 5; column <= 6; column++) CellCoord(column, 4)],
     );
     final roadProject = world.constructions.single;
-    for (var column = 5; column <= 6; column++) {
-      world = fundRoadTile(
-        world,
-        content,
-        terrain,
-        projectId: roadProject.id,
-        cell: CellCoord(column, 4),
-      );
-    }
+    world = fundRoadProject(world, content, terrain, projectId: roadProject.id);
 
     final reloaded = await store.load();
     expect(reloaded, isNull, reason: 'no documents yet');
     await store.save(world);
     final midProject = (await store.load())!;
-    expect(midProject.constructions.single.roadCells, hasLength(3));
-    expect(midProject.constructions.single.coinsFunded, 2);
+    expect(midProject.constructions.single.roadCells, hasLength(2));
+    expect(midProject.constructions.single.coinsFunded, 1);
     expect(midProject.coins, world.coins);
     expect(midProject.checkInCount, 1);
     expect(midProject.lastCheckInDate, DateTime.utc(2026, 11, 2));
@@ -92,12 +89,11 @@ void main() {
     // Continue playing on the reloaded world: finish the road, build a
     // cottage, bridge the east channel, and start a café.
     var played = midProject;
-    played = fundRoadTile(
+    played = fundRoadProject(
       played,
       content,
       terrain,
       projectId: played.constructions.single.id,
-      cell: const CellCoord(7, 4),
     );
     played = startStructureConstruction(
       played,
@@ -112,6 +108,8 @@ void main() {
       projectId: played.constructions.single.id,
       amount: played.constructions.single.totalCostCoins,
     );
+    // The bridge spans the east channel from vacant banks: the road
+    // stops at (7,4) so both bridge banks are free land.
     played = startBridgeConstruction(
       played,
       content,
@@ -121,6 +119,7 @@ void main() {
     );
     played = fundBridgeProject(
       played,
+      content,
       projectId: played.constructions.single.id,
       amount: played.constructions.single.totalCostCoins,
     );
@@ -195,17 +194,10 @@ void main() {
       content,
       terrain,
       cells: [for (var column = 5; column <= 7; column++) CellCoord(column, 4)],
-      style: RoadStyle.asphalt,
     );
     final finishedId = world.constructions.single.id;
     for (var column = 5; column <= 7; column++) {
-      world = fundRoadTile(
-        world,
-        content,
-        terrain,
-        projectId: finishedId,
-        cell: CellCoord(column, 4),
-      );
+      world = fundRoadProject(world, content, terrain, projectId: finishedId);
     }
     expect(world.constructions, isEmpty);
     expect(
@@ -238,15 +230,13 @@ void main() {
       content,
       terrain,
       cells: [const CellCoord(4, 5), const CellCoord(4, 6)],
-      style: RoadStyle.dirt,
     );
     expect(played.constructions.single.id, finishedId);
-    played = fundRoadTile(
+    played = fundRoadProject(
       played,
       content,
       terrain,
       projectId: played.constructions.single.id,
-      cell: const CellCoord(4, 5),
     );
 
     await store.save(played);

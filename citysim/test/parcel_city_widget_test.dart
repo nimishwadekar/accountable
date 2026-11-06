@@ -65,9 +65,13 @@ void main() {
       await tester.tap(find.text('Roads').first);
       await tester.pump();
       final mapRect = tester.getRect(find.byType(ParcelWorldView));
+      // Two-click planning: the first click sets the start tile, the
+      // second sets the end tile projected onto the closer axis.
       await tester.tapAt(mapRect.center + const Offset(32, 16));
       await tester.pump();
-      expect(find.textContaining('1 road tiles'), findsOneWidget);
+      await tester.tapAt(mapRect.center + const Offset(64, 32));
+      await tester.pump();
+      expect(find.textContaining('2 road tiles'), findsOneWidget);
       final planButton = find.text('Assign builder · plan free');
       await tester.ensureVisible(planButton);
       for (var i = 0; i < 10; i++) {
@@ -78,18 +82,18 @@ void main() {
       expect(store.state?.coins, 1, reason: 'planning the road costs no coins');
       expect(store.state?.constructions.single.roadCells, [
         const CellCoord(5, 4),
+        const CellCoord(6, 4),
       ]);
       expect(store.state?.roads, hasLength(1));
 
-      final updatedMapRect = tester.getRect(find.byType(ParcelWorldView));
-      await tester.tapAt(updatedMapRect.center + const Offset(32, 16));
+      // Funding builds one tile at a time from the start of the plan.
+      final fundButton = find.text('Fund road · 1 coin');
+      await tester.scrollUntilVisible(
+        fundButton,
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
       await tester.pump();
-      await tester.drag(find.byType(ListView).last, const Offset(0, 600));
-      await tester.pump();
-      final fundButton = find.text('Fund selected road tile · 1 coin');
-      await tester.drag(find.byType(ListView).last, const Offset(0, -100));
-      await tester.pump();
-      await tester.ensureVisible(fundButton);
       await tester.tap(fundButton);
       await tester.pump();
       expect(store.state?.coins, 0);
@@ -97,6 +101,7 @@ void main() {
         store.state?.roads.any((road) => road.cell == const CellCoord(5, 4)),
         isTrue,
       );
+      expect(store.state?.constructions.single.coinsFunded, 1);
 
       tester.view.physicalSize = const Size(320, 800);
       await tester.pump();

@@ -72,12 +72,14 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   bool _loading = true;
 
   _WorldTool _tool = _WorldTool.inspect;
-  RoadStyle _roadStyle = RoadStyle.dirt;
   String? _selectedCatalogueId;
   CellCoord? _selectedCell;
   ParcelCoord? _selectedParcel;
   CellCoord? _bridgeStartCell;
+  CellCoord? _bridgeEndCell;
   List<CellCoord> _roadPlanCells = const [];
+  CellCoord? _roadStartCell;
+  Set<CellCoord> _highlightCells = const {};
   int _cameraResetToken = 0;
 
   /// Pre-placement door-side choice for the building preview, toggled by
@@ -220,10 +222,23 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           .where((job) => job.kind == WorldConstructionKind.road)
           .firstOrNull;
       if (roadProject != null) {
+        // A road project is active: any tap on its tiles selects the
+        // whole project for funding.
+        final onProject =
+            roadProject.roadCells.contains(cell) ||
+            world.roads.any(
+              (road) => road.projectId == roadProject.id && road.cell == cell,
+            );
         setState(() {
           _selectedCell = cell;
-          _selectedParcel = null;
-          _bridgeStartCell = null;
+          _highlightCells = onProject
+              ? {
+                  ...roadProject.roadCells,
+                  ...world.roads
+                      .where((road) => road.projectId == roadProject.id)
+                      .map((road) => road.cell),
+                }
+              : const {};
         });
         return;
       }
@@ -231,25 +246,29 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         _showMessage('Your builder is assigned to another project.');
         return;
       }
-      final proposed = [..._roadPlanCells, cell];
-      try {
-        quoteRoadStretch(
-          world,
-          _requireContent,
-          _terrain,
-          cells: proposed,
-          style: _roadStyle,
-        );
+      if (_roadStartCell == null) {
+        // First click: the start tile.
         setState(() {
-          _roadPlanCells = proposed;
+          _roadStartCell = cell;
+          _roadPlanCells = const [];
           _selectedCell = cell;
+          _highlightCells = const {};
           _selectedParcel = null;
           _selectedCatalogueId = null;
           _bridgeStartCell = null;
         });
-      } on WorldRuleViolation catch (error) {
-        _showMessage(error.message);
+        return;
       }
+      // Second and further clicks: the end tile, projected onto the
+      // closer axis. Invalid tiles are marked in the preview; the
+      // assign button refuses until the line is valid.
+      setState(() {
+        _roadPlanCells = straightLineBetween(_roadStartCell!, cell);
+        _selectedCell = _roadPlanCells.last;
+        _selectedParcel = null;
+        _selectedCatalogueId = null;
+        _bridgeStartCell = null;
+      });
       return;
     }
     setState(() {
@@ -261,8 +280,11 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       } else if (_tool == _WorldTool.bridge) {
         _selectedParcel = null;
         _selectedCatalogueId = null;
-        if (_bridgeStartCell == null || _bridgeStartCell == cell) {
+        if (_bridgeStartCell == null) {
           _bridgeStartCell = cell;
+          _bridgeEndCell = null;
+        } else {
+          _bridgeEndCell = straightLineBetween(_bridgeStartCell!, cell).last;
         }
       } else if (_tool == _WorldTool.building || _tool == _WorldTool.decor) {
         _selectedParcel = null;
@@ -273,10 +295,42 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         _selectedCatalogueId = null;
         _bridgeStartCell = null;
       }
+      _highlightCells = _highlightFor(world, cell, structureId);
       if (structureId != null && _tool == _WorldTool.inspect) {
         _selectedCatalogueId = null;
       }
     });
+  }
+
+  /// The cells a tap highlights in the inspect tool: an active
+  /// project's whole span (planned and funded tiles), or a completed
+  /// road's section between junctions, turns, or dead ends.
+  Set<CellCoord> _highlightFor(
+    ParcelWorldState world,
+    CellCoord cell,
+    String? structureId,
+  ) {
+    for (final job in world.constructions) {
+      final cells = switch (job.kind) {
+        WorldConstructionKind.road => job.roadCells,
+        WorldConstructionKind.bridge => [
+          ...job.waterCells,
+          job.nearBank!,
+          job.farBank!,
+        ],
+        WorldConstructionKind.structure => job.footprint,
+      };
+      if (cells.contains(cell)) return cells.toSet();
+      final funded = world.roads
+          .where((road) => road.projectId == job.id)
+          .map((road) => road.cell);
+      if (funded.contains(cell)) return {cell, ...funded};
+    }
+    if (structureId == null) {
+      final section = WorldQueries(world, _terrain).roadSectionAt(cell);
+      if (section.isNotEmpty) return section.toSet();
+    }
+    return const {};
   }
 
   void _selectTool(_WorldTool tool) {
@@ -285,40 +339,15 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       _selectedCell = null;
       _selectedParcel = null;
       _bridgeStartCell = null;
+      _bridgeEndCell = null;
       _selectedCatalogueId = null;
       _facingOverride = null;
-      if (tool != _WorldTool.road) _roadPlanCells = const [];
-    });
-  }
-
-  List<CellCoord> _activeRoadPlan(ParcelWorldState world) {
-    final project = world.constructions
-        .where((job) => job.kind == WorldConstructionKind.road)
-        .firstOrNull;
-    return project?.roadCells ?? _roadPlanCells;
-  }
-
-  Set<CellCoord> _fundableRoadCells(ParcelWorldState world) {
-    final project = world.constructions
-        .where((job) => job.kind == WorldConstructionKind.road)
-        .firstOrNull;
-    if (project == null) return const <CellCoord>{};
-    final fundable = <CellCoord>{};
-    for (final cell in project.roadCells) {
-      try {
-        quoteRoadTileFunding(
-          world,
-          _requireContent,
-          terrainProvider: _terrain,
-          projectId: project.id,
-          cell: cell,
-        );
-        fundable.add(cell);
-      } on WorldRuleViolation {
-        // Unfinished tiles away from the completed road frontier stay dim.
+      _highlightCells = const {};
+      if (tool != _WorldTool.road) {
+        _roadPlanCells = const [];
+        _roadStartCell = null;
       }
-    }
-    return fundable;
+    });
   }
 
   /// The door-swap target under the current selection: an unfinished
@@ -545,102 +574,74 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     }
   }
 
-  Future<void> _confirmBridge() async {
-    final world = _world;
-    final nearBank = _bridgeStartCell;
-    final farBank = _selectedCell;
-    if (world == null || nearBank == null || farBank == null) return;
-    try {
-      final quote = quoteBridge(
-        world,
-        _requireContent,
-        _terrain,
-        nearBank: nearBank,
-        farBank: farBank,
-      );
-      final parcelDetail = quote.parcelsToAcquire.isEmpty
-          ? 'No additional parcels are needed.'
-          : '${quote.parcelCost} coins will buy ${quote.parcelsToAcquire.length} '
-                'crossing parcel(s) now.';
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Plan river bridge?'),
-          content: Text(
-            '$parcelDetail The bridge itself costs ${quote.bridgeCost} coins '
-            'to fund. Your builder will stay assigned until it is complete.\n\n'
-            'The far-bank landing road is included in the bridge project.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Not now'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Plan and assign builder'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true || !mounted) return;
-      _runAction(
-        (state) => startBridgeConstruction(
-          state,
-          _requireContent,
-          _terrain,
-          nearBank: nearBank,
-          farBank: farBank,
-        ),
-      );
-      setState(() {
-        _bridgeStartCell = null;
-        _selectedCell = null;
-      });
-    } on WorldRuleViolation catch (error) {
-      _showMessage(error.message);
-    }
-  }
-
   void _startRoadProject() {
     final world = _world;
     if (world == null || _roadPlanCells.isEmpty) return;
+    try {
+      quoteRoadStretch(world, _requireContent, _terrain, cells: _roadPlanCells);
+    } on WorldRuleViolation catch (error) {
+      _showMessage(error.message);
+      return;
+    }
     _runAction(
       (state) => planRoadStretch(
         state,
         _requireContent,
         _terrain,
         cells: _roadPlanCells,
-        style: _roadStyle,
       ),
     );
     setState(() {
       _roadPlanCells = const [];
+      _roadStartCell = null;
       _selectedCell = null;
+      _highlightCells = const {};
     });
   }
 
-  void _undoRoadPlanCell() {
-    if (_roadPlanCells.isEmpty) return;
-    setState(() {
-      _roadPlanCells = _roadPlanCells.sublist(0, _roadPlanCells.length - 1);
-      _selectedCell = _roadPlanCells.isEmpty ? null : _roadPlanCells.last;
-    });
-  }
-
-  void _fundSelectedRoadTile(WorldConstruction project) {
-    final cell = _selectedCell;
-    if (cell == null) return;
+  void _startBridgeProject() {
+    final world = _world;
+    final nearBank = _bridgeStartCell;
+    final farBank = _bridgeEndCell;
+    if (world == null || nearBank == null || farBank == null) return;
+    try {
+      quoteBridge(
+        world,
+        _requireContent,
+        _terrain,
+        nearBank: nearBank,
+        farBank: farBank,
+      );
+    } on WorldRuleViolation catch (error) {
+      _showMessage(error.message);
+      return;
+    }
     _runAction(
-      (state) => fundRoadTile(
+      (state) => startBridgeConstruction(
+        state,
+        _requireContent,
+        _terrain,
+        nearBank: nearBank,
+        farBank: farBank,
+      ),
+    );
+    setState(() {
+      _bridgeStartCell = null;
+      _bridgeEndCell = null;
+      _selectedCell = null;
+      _highlightCells = const {};
+    });
+  }
+
+  void _fundRoadProject(WorldConstruction project) {
+    _runAction(
+      (state) => fundRoadProject(
         state,
         _requireContent,
         _terrain,
         projectId: project.id,
-        cell: cell,
       ),
     );
-    setState(() => _selectedCell = null);
   }
 
   void _fundProject(WorldConstruction project, int amount) {
@@ -655,8 +656,12 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       );
     } else if (project.kind == WorldConstructionKind.bridge) {
       _runAction(
-        (state) =>
-            fundBridgeProject(state, projectId: project.id, amount: amount),
+        (state) => fundBridgeProject(
+          state,
+          _requireContent,
+          projectId: project.id,
+          amount: amount,
+        ),
       );
     }
   }
@@ -746,8 +751,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             content: _requireContent,
             selectedCatalogueId: _selectedCatalogueId,
             bridgeStartCell: _bridgeStartCell,
-            roadPlanCells: _activeRoadPlan(world),
-            fundableRoadCells: _fundableRoadCells(world),
+            bridgeEndCell: _bridgeEndCell,
+            roadPlanCells: _roadPlanCells,
+            roadStartCell: _roadStartCell,
+            highlightCells: _highlightCells,
             facingOverride: _facingOverride,
             structurePicking: _tool == _WorldTool.inspect,
             dimStructures:
@@ -931,7 +938,6 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           _requireContent,
           _terrain,
           cells: _roadPlanCells,
-          style: _roadStyle,
         );
       } on WorldRuleViolation catch (error) {
         failure = error.message;
@@ -942,53 +948,38 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: 6,
-            children: [
-              ChoiceChip(
-                label: const Text('Dirt path'),
-                selected: _roadStyle == RoadStyle.dirt,
-                onSelected: (_) => setState(() => _roadStyle = RoadStyle.dirt),
-              ),
-              ChoiceChip(
-                label: const Text('Asphalt'),
-                selected: _roadStyle == RoadStyle.asphalt,
-                onSelected: (_) =>
-                    setState(() => _roadStyle = RoadStyle.asphalt),
-              ),
-            ],
-          ),
           Text(
-            _roadPlanCells.isEmpty
-                ? 'Tap a connected empty tile, then continue to draw a four-way road stretch.'
+            _roadStartCell == null
+                ? 'Click a start tile, then an end tile — the road projects '
+                      'onto the closer axis. Roads go anywhere on owned land.'
+                : _roadPlanCells.isEmpty
+                ? 'Start at ${_roadStartCell!.key}. Now click an end tile.'
                 : failure ??
                       '${_roadPlanCells.length} road tiles · '
                           '${quote!.totalCost} coins total. Plans are free; '
-                          'fund each eligible tile individually.',
+                          'funding builds one tile at a time from the start.',
           ),
           if (quote != null && world.coins == 0)
             const Text(
               'Road tiles cost 1 coin each; check in or use a test grant to fund them.',
             ),
-          if (quote != null)
+          if (_roadStartCell != null)
             Wrap(
               spacing: 6,
               children: [
                 OutlinedButton(
-                  onPressed: _undoRoadPlanCell,
-                  child: const Text('Undo last tile'),
-                ),
-                OutlinedButton(
                   onPressed: () => setState(() {
                     _roadPlanCells = const [];
+                    _roadStartCell = null;
                     _selectedCell = null;
                   }),
                   child: const Text('Clear plan'),
                 ),
-                FilledButton(
-                  onPressed: () => _startRoadProject(),
-                  child: const Text('Assign builder · plan free'),
-                ),
+                if (quote != null)
+                  FilledButton(
+                    onPressed: _startRoadProject,
+                    child: const Text('Assign builder · plan free'),
+                  ),
               ],
             ),
         ],
@@ -997,22 +988,6 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   }
 
   Widget _roadFundingCard(ParcelWorldState world, WorldConstruction project) {
-    final cell = _selectedCell;
-    RoadTileFundingQuote? quote;
-    String? failure;
-    if (cell != null) {
-      try {
-        quote = quoteRoadTileFunding(
-          world,
-          _requireContent,
-          terrainProvider: _terrain,
-          projectId: project.id,
-          cell: cell,
-        );
-      } on WorldRuleViolation catch (error) {
-        failure = error.message;
-      }
-    }
     final completedTiles = world.roads
         .where((road) => road.projectId == project.id)
         .length;
@@ -1027,17 +1002,16 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           ),
           LinearProgressIndicator(value: project.progress),
           Text(
-            cell == null
-                ? 'Select a planned tile that touches a finished road tile.'
-                : failure ?? 'Fund tile ${cell.key} for 1 coin.',
+            world.coins < 1
+                ? 'Earn a coin with an eligible check-in to lay the next tile.'
+                : 'Each coin lays the next tile, from the start of the plan.',
           ),
-          if (quote != null)
-            FilledButton(
-              onPressed: world.coins >= quote.price
-                  ? () => _fundSelectedRoadTile(project)
-                  : null,
-              child: const Text('Fund selected road tile · 1 coin'),
-            ),
+          FilledButton(
+            onPressed: world.coins >= 1
+                ? () => _fundRoadProject(project)
+                : null,
+            child: const Text('Fund road · 1 coin'),
+          ),
         ],
       ),
     );
@@ -1194,7 +1168,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
 
   Widget _bridgeAction(ParcelWorldState world) {
     final near = _bridgeStartCell;
-    final far = _selectedCell;
+    final far = _bridgeEndCell;
     BridgeQuote? quote;
     String? failure;
     if (near != null && far != null && near != far) {
@@ -1217,32 +1191,35 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         children: [
           Text(
             near == null
-                ? 'Choose a connected road tile on the near bank.'
+                ? 'Click a bank tile on owned dry land, then the far bank.'
                 : far == null || far == near
-                ? 'Now choose a dry tile on the opposite river bank.'
+                ? 'Start at ${near.key}. Now click the far bank — the span '
+                      'projects onto the closer axis.'
                 : failure ??
-                      '${quote!.waterCells.length} river tiles · '
-                          '${quote.parcelCost} parcel coins now · '
-                          '${quote.bridgeCost} bridge coins to fund.',
+                      '${quote!.spanCells.length} span '
+                          '${quote.spanCells.length == 1 ? 'tile' : 'tiles'} · '
+                          '${quote.bridgeCost} coins to fund. Spans may cross '
+                          'water and land; everything under the bridge must '
+                          'be owned.',
           ),
-          if (quote != null && world.coins < quote.parcelCost)
-            Text(
-              'Check in for ${quote.parcelCost - world.coins} more coin(s) to buy the crossing parcels.',
-            ),
-          if (quote != null)
-            FilledButton(
-              onPressed: world.coins >= quote.parcelCost
-                  ? _confirmBridge
-                  : null,
-              child: const Text('Plan bridge and buy crossing parcels'),
-            ),
           if (near != null)
-            TextButton(
-              onPressed: () => setState(() {
-                _bridgeStartCell = null;
-                _selectedCell = null;
-              }),
-              child: const Text('Choose near bank again'),
+            Wrap(
+              spacing: 6,
+              children: [
+                OutlinedButton(
+                  onPressed: () => setState(() {
+                    _bridgeStartCell = null;
+                    _bridgeEndCell = null;
+                    _selectedCell = null;
+                  }),
+                  child: const Text('Clear plan'),
+                ),
+                if (quote != null)
+                  FilledButton(
+                    onPressed: _startBridgeProject,
+                    child: const Text('Assign builder · plan free'),
+                  ),
+              ],
             ),
         ],
       ),

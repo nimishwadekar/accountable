@@ -288,6 +288,68 @@ Landed, in order:
   modulation — one draw call, no offscreen layer) so fundable tiles
   and banks behind buildings are visible as well as tappable.
 
+### Road and bridge overhaul
+
+Landed 2026-11-06 (design decided same day). Roads and bridges are
+freely placeable two-click straight-line projects with whole-project
+funding:
+
+- **Placement.** No connectivity requirement: any owned, land, vacant
+  cell can start a road or a bridge bank. First click sets the start
+  tile; the next click sets the end tile, projected onto the closer
+  axis from the start (ties go horizontal); further clicks move the
+  end. A translucent preview shows the final tiles — following the
+  cursor on desktop (hover), fixed after the end click on touch.
+  Invalid cells (water, unowned, occupied) are marked in the preview
+  and block assignment with a message. Every projected cell must be
+  vacant — no merging with existing roads. Commit stays the
+  "Assign builder · plan free" button; switching tools or clearing
+  resets the plan; no cancellation after assignment (demolition and
+  cancellation are their own later feature).
+- **Bridges anywhere.** Banks must sit on non-water cells; the span
+  may cross water and land. Everything under a bridge must already be
+  owned — there is no auto-acquisition of water or land (water
+  parcels are bought before bridging, like land). Spans cross vacant
+  land or water only, never roads, buildings, or other bridges.
+  Pricing is flat per span tile (content-tunable), banks at the road
+  tile price.
+- **Construction and funding.** Dirt roads are gone as a style: every
+  road is asphalt, and the dirt ground texture becomes the
+  under-construction visual. Planned (unfunded) tiles of road and
+  bridge projects render as dirt; funding converts tiles to their
+  final form one at a time from the start. Funding is per project:
+  selecting any tile of an active project selects the whole project,
+  and one coin advances it by one tile (roads) or by its per-tile
+  price (bridges: near bank at road price, span tiles at the bridge
+  tile price, far bank at road price — a cell completes when its
+  cumulative cost is reached). Bridge projects keep planned rows in
+  Tiles until completion and render their funded prefix from the
+  project's funded count; on completion the span becomes complete
+  bridge rows and a placed bridge.
+- **Selection.** Tapping a completed road selects its section — the
+  maximal straight run between junctions (3+ way), elbows, or dead
+  ends — highlighted like a bridge span. Tapping any tile of an
+  active project selects the whole project (planned and funded
+  cells). Completed-road selection is informational.
+- **Building access.** Any adjacent completed ground road counts
+  (bridge banks are roads; elevated decks are not — a door never opens
+  onto a bridge); connectivity to the starter road is no longer a
+  placement requirement, and land reachability stops gating structures.
+  Pedestrians wander all completed roads. The starter road remains
+  as the world's initial tile. Follow-up discussion (deferred): how
+  population arrives at the settlement and outside connections.
+
+Migration: the live CSV save's dirt road rows become asphalt.
+
+Post-landed review (2026-11-06): completed bridges no longer require
+starter-road connectivity (a disconnected bridge's final coin used to
+fail save validation); door-side and access checks share the same
+ground-roads rule; the codec orients single-tile bridge runs by their
+bank roads so vertical one-tile crossings reload correctly; road
+projects reload with the funded prefix as the build direction; and
+partial bridges draw their near ramp with the near-bank road instead
+of popping the whole crossing in with the last span tile.
+
 ### Free prop placement (future work)
 
 Today's decorations obey the building rules: one structure per cell,
@@ -296,7 +358,7 @@ planned feature set for props — multiple props per cell, placeable on
 terrain, roads, and bridge decks, with live mirroring and
 direction-variant cycling — breaks assumptions in every layer:
 
-**Rules and reducers.** Prop placement keeps the owned-and-reachable
+**Rules and reducers.** Prop placement keeps the owned-and-land
 requirement but drops vacancy: a prop may sit on grass, dirt, a road
 tile, or a bridge deck cell (deck cells count as reachable through
 their bridge), and never blocks anything — roads can be planned and

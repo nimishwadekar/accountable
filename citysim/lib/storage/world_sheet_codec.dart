@@ -256,7 +256,9 @@ ParcelWorldState sheetTablesToWorld(
             nearBank: nearBank,
             farBank: farBank,
             waterCells: waterCells,
-            totalCostCoins: content.economy.bridgeCost(waterCells.length),
+            totalCostCoins:
+                waterCells.length * content.economy.bridgeTileCostCoins +
+                2 * content.economy.roadTileCostCoins,
             coinsFunded: funded,
             builderSlot: slot,
             startedAtDay: 0,
@@ -494,8 +496,10 @@ DateTime _userDate(Map<String, String> userData, String key) {
 CellCoord _cell(String x, String y) =>
     CellCoord(_parseInt(x, 'tile x'), _parseInt(y, 'tile y'));
 
-RoadStyle _parseStyle(String name) =>
-    RoadStyle.values.firstWhere((style) => style.name == name);
+/// Dirt roads are gone as a style: every road is asphalt, and older
+/// saves that still carry dirt rows load as asphalt (the live save was
+/// migrated; this covers any older copy).
+RoadStyle _parseStyle(String name) => RoadStyle.asphalt;
 
 String? _orNull(String value) => value.isEmpty ? null : value;
 
@@ -544,7 +548,11 @@ WorldConstruction _roadConstruction(
     throw FormatException('Road project $number has no planned tiles.');
   }
   final outside = roadsByCell.keys.where((cell) => !cells.contains(cell));
-  final ordered = _orderPath(cells, outside.toSet());
+  final fundedCells = roadsByCell.entries
+      .where((entry) => entry.value.projectId == projectId)
+      .map((entry) => entry.key)
+      .toSet();
+  final ordered = _orderPath(cells, outside.toSet(), fundedCells);
   // Road funding is per tile: the funded amount is the count of this
   // project's completed road tiles.
   final fundedTiles = roadsByCell.values
@@ -562,22 +570,33 @@ WorldConstruction _roadConstruction(
   );
 }
 
-/// Orders a four-connected path of cells starting from the end that is
-/// adjacent to a completed road outside the path (the funding frontier
-/// the game enforces). Ties and single cells resolve deterministically.
-List<CellCoord> _orderPath(Set<CellCoord> cells, Set<CellCoord> outside) {
+/// Orders a four-connected path of cells. The preferred start is the
+/// end already holding one of the project's funded tiles — funding
+/// grows from the plan's start, so the funded prefix marks it — then
+/// an end touching a completed road outside the path, then simply the
+/// deterministically smallest end (disconnected plans have no road
+/// anchor at all). Ties resolve deterministically.
+List<CellCoord> _orderPath(
+  Set<CellCoord> cells,
+  Set<CellCoord> outside,
+  Set<CellCoord> funded,
+) {
   if (cells.length == 1) return cells.toList();
   CellCoord? bestStart;
+  int bestRank = -1;
   for (final cell in cells) {
     final inPath = cell.neighbors.where(cells.contains).length;
     if (inPath != 1) continue; // Path ends only.
-    final touchesOutside = cell.neighbors.any(outside.contains);
-    final better =
+    var rank = 0;
+    if (funded.contains(cell)) rank = 2;
+    if (rank == 0 && _touchesOutside(cell, outside)) rank = 1;
+    final tieBreak =
         bestStart == null ||
-        (touchesOutside && !_touchesOutside(bestStart, outside)) ||
-        (touchesOutside == _touchesOutside(bestStart, outside) &&
-            (cell.column + cell.row) < (bestStart.column + bestStart.row));
-    if (better) bestStart = cell;
+        (cell.column + cell.row) < (bestStart.column + bestStart.row);
+    if (rank > bestRank || (rank == bestRank && tieBreak)) {
+      bestStart = cell;
+      bestRank = rank;
+    }
   }
   if (bestStart == null) {
     throw const FormatException('Road plan is not a simple path.');
@@ -612,65 +631,71 @@ List<CompletedBridge> _bridgeRuns(
 
   bool isBridge(CellCoord cell) => bridgeCells.contains(cell);
 
-  // Assign every bridge tile to a horizontal (fixed y) or vertical (fixed
-  // x) line; single tiles orient toward a neighbouring road bank.
-  final assigned = <CellCoord>{};
-  final runs = <List<CellCoord>>[];
-  for (final cell in bridgeCells) {
-    if (assigned.contains(cell)) continue;
-    final horizontal =
-        isBridge(cell.offset(-1, 0)) ||
-        isBridge(cell.offset(1, 0)) ||
-        (!isBridge(cell.offset(0, -1)) && !isBridge(cell.offset(0, 1)));
-    final run = <CellCoord>[cell];
-    assigned.add(cell);
-    if (horizontal) {
-      for (var step = 1; isBridge(cell.offset(step, 0)); step++) {
-        run.add(cell.offset(step, 0));
-        assigned.add(cell.offset(step, 0));
-      }
-      for (var step = 1; isBridge(cell.offset(-step, 0)); step++) {
-        run.insert(0, cell.offset(-step, 0));
-        assigned.add(cell.offset(-step, 0));
-      }
-    } else {
-      for (var step = 1; isBridge(cell.offset(0, step)); step++) {
-        run.add(cell.offset(0, step));
-        assigned.add(cell.offset(0, step));
-      }
-      for (var step = 1; isBridge(cell.offset(0, -step)); step++) {
-        run.insert(0, cell.offset(0, -step));
-        assigned.add(cell.offset(0, -step));
-      }
+  // A run's axis is the one whose ends land on bank roads: walk each
+  // axis while bridge tiles continue, then require a road tile beyond
+  // each end. Multi-tile spans orient through their bridge neighbours,
+  // and single-tile crossings — which have no bridge neighbours to
+  // vote — resolve through their banks, so a vertical one-tile bridge
+  // loads back as vertical. Horizontal wins genuinely ambiguous ties
+  // (roads on all sides); such crossings cannot be distinguished from
+  // flat tiles alone.
+  List<CellCoord>? runAlong(CellCoord start, int dx, int dy) {
+    final run = <CellCoord>[start];
+    for (var step = 1; isBridge(start.offset(dx * step, dy * step)); step++) {
+      run.add(start.offset(dx * step, dy * step));
     }
-    runs.add(run);
+    for (var step = 1; isBridge(start.offset(-dx * step, -dy * step)); step++) {
+      run.insert(0, start.offset(-dx * step, -dy * step));
+    }
+    if (!roadsByCell.containsKey(run.first.offset(-dx, -dy))) return null;
+    if (!roadsByCell.containsKey(run.last.offset(dx, dy))) return null;
+    return run;
   }
 
-  return [for (final run in runs) _bridgeFromRun(run, roadsByCell, content)];
+  final runs = <(List<CellCoord>, int, int)>[];
+  final assigned = <CellCoord>{};
+  for (final cell in bridgeCells) {
+    if (assigned.contains(cell)) continue;
+    var run = runAlong(cell, 1, 0);
+    var dx = 1;
+    var dy = 0;
+    if (run == null) {
+      run = runAlong(cell, 0, 1);
+      dx = 0;
+      dy = 1;
+    }
+    if (run == null) {
+      throw FormatException('Bridge run at ${cell.key} does not end on roads.');
+    }
+    assigned.addAll(run);
+    runs.add((run, dx, dy));
+  }
+
+  return [
+    for (final (run, dx, dy) in runs)
+      _bridgeFromRun(run, dx, dy, roadsByCell, content),
+  ];
 }
 
 CompletedBridge _bridgeFromRun(
   List<CellCoord> run,
+  int dx,
+  int dy,
   Map<CellCoord, RoadSegment> roadsByCell,
   ContentBundle content,
 ) {
   final first = run.first;
   final last = run.last;
-  final horizontal = first.row == last.row;
-  final before = horizontal
-      ? CellCoord(first.column - 1, first.row)
-      : CellCoord(first.column, first.row - 1);
-  final after = horizontal
-      ? CellCoord(last.column + 1, last.row)
-      : CellCoord(last.column, last.row + 1);
+  final before = first.offset(-dx, -dy);
+  final after = last.offset(dx, dy);
   if (!roadsByCell.containsKey(before) || !roadsByCell.containsKey(after)) {
     throw FormatException(
       'Bridge run at ${run.first.key} does not end on roads.',
     );
   }
-  // The near bank is the deterministically smaller end; both banks are
-  // connected roads once a bridge completes, so the choice is semantic
-  // only.
+  // The near bank is the deterministically smaller end; both banks
+  // are road tiles once a bridge completes, so the choice only affects
+  // which end the deck list starts from.
   final (
     nearBank,
     farBank,
@@ -683,7 +708,9 @@ CompletedBridge _bridgeFromRun(
     waterCells: waterCells,
     nearBank: nearBank,
     farBank: farBank,
-    pricePaid: content.economy.bridgeCost(run.length),
+    pricePaid:
+        run.length * content.economy.bridgeTileCostCoins +
+        2 * content.economy.roadTileCostCoins,
     completedAtDay: 0,
   );
 }

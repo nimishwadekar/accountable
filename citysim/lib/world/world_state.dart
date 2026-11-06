@@ -378,7 +378,7 @@ ParcelWorldState newParcelWorldState({
       RoadSegment(
         id: 'road-start',
         cell: startRoadCell,
-        style: RoadStyle.dirt,
+        style: RoadStyle.asphalt,
         pricePaid: 0,
         completedAtDay: 0,
       ),

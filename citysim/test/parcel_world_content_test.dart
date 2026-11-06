@@ -89,8 +89,7 @@ void main() {
     expect(content.economy.startingWalletCoins, 0);
     expect(content.economy.startingBuilderCapacity, 1);
     expect(content.economy.roadTileCostCoins, 1);
-    expect(content.economy.bridgeCost(1), 6);
-    expect(content.economy.bridgeCost(4), 12);
+    expect(content.economy.bridgeTileCostCoins, 2);
     expect(
       content.economy.parcelBaseCoins,
       8,

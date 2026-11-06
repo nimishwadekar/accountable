@@ -29,34 +29,22 @@ void main() {
     today: DateTime.utc(2026, 11, 2),
   );
 
-  // Plans and fully funds a dirt-road stretch, waiting for the builder
-  // slot to free up between stretches.
+  // Plans and fully funds a road stretch: one coin completes the
+  // next tile in order from the start.
   ParcelWorldState planAndFundRoad(
     ParcelWorldState world, {
     required List<CellCoord> cells,
   }) {
-    world = planRoadStretch(
-      world,
-      content,
-      terrain,
-      cells: cells,
-      style: RoadStyle.dirt,
-    );
+    world = planRoadStretch(world, content, terrain, cells: cells);
     final project = world.constructions.single;
-    for (final cell in cells) {
-      world = fundRoadTile(
-        world,
-        content,
-        terrain,
-        projectId: project.id,
-        cell: cell,
-      );
+    for (final _ in cells) {
+      world = fundRoadProject(world, content, terrain, projectId: project.id);
     }
     return world;
   }
 
   group('parcel-world bootstrap and clocks', () {
-    test('starts empty with one free dirt road in the first parcel', () {
+    test('starts empty with one free starter road in the first parcel', () {
       final world = newWorld();
 
       expect(world.parcels.single.coord, const ParcelCoord(0, 0));
@@ -64,7 +52,7 @@ void main() {
       expect(world.coins, 0);
       expect(world.population, 0);
       expect(world.roads.single.cell, const CellCoord(4, 4));
-      expect(world.roads.single.style, RoadStyle.dirt);
+      expect(world.roads.single.style, RoadStyle.asphalt);
       expect(world.roads.single.pricePaid, 0);
       expect(world.builderCapacity, 1);
       expect(
@@ -123,78 +111,55 @@ void main() {
   });
 
   group('builder projects and manual funding', () {
-    test(
-      'road plan occupies one builder; only finished-road frontier tiles fund',
-      () {
-        var world = grantWorldDebugCoins(newWorld(), 5);
-        world = planRoadStretch(
+    test('road plan occupies one builder; funding builds tiles in order', () {
+      var world = grantWorldDebugCoins(newWorld(), 5);
+      world = planRoadStretch(
+        world,
+        content,
+        terrain,
+        cells: const [CellCoord(5, 4), CellCoord(6, 4)],
+      );
+      final project = world.constructions.single;
+      expect(project.kind, WorldConstructionKind.road);
+      expect(project.builderSlot, 0);
+      expect(project.coinsFunded, 0);
+      expect(world.coins, 5, reason: 'planning a road is free');
+      expect(world.roads, hasLength(1));
+      expect(
+        () => planRoadStretch(
           world,
           content,
           terrain,
-          cells: const [CellCoord(5, 4), CellCoord(6, 4)],
-          style: RoadStyle.asphalt,
-        );
-        final project = world.constructions.single;
-        expect(project.kind, WorldConstructionKind.road);
-        expect(project.builderSlot, 0);
-        expect(project.coinsFunded, 0);
-        expect(world.coins, 5, reason: 'planning a road is free');
-        expect(world.roads, hasLength(1));
-        expect(
-          () => planRoadStretch(
-            world,
-            content,
-            terrain,
-            cells: const [CellCoord(3, 4)],
-            style: RoadStyle.dirt,
-          ),
-          throwsA(isA<WorldRuleViolation>()),
-          reason: 'the assigned builder prevents a second planned place',
-        );
-        expect(
-          () => quoteRoadTileFunding(
-            world,
-            content,
-            terrainProvider: terrain,
-            projectId: project.id,
-            cell: const CellCoord(6, 4),
-          ),
-          throwsA(isA<WorldRuleViolation>()),
-          reason: 'the second planned tile does not touch a completed road yet',
-        );
+          cells: const [CellCoord(3, 4)],
+        ),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: 'the assigned builder prevents a second planned place',
+      );
 
-        world = fundRoadTile(
-          world,
-          content,
-          terrain,
-          projectId: project.id,
-          cell: const CellCoord(5, 4),
-        );
-        expect(world.coins, 4);
-        expect(world.roads, hasLength(2));
-        expect(world.constructions.single.coinsFunded, 1);
-        world = advanceWorldDays(world, 30);
-        expect(world.constructions, hasLength(1));
-        expect(world.roads, hasLength(2));
+      world = fundRoadProject(world, content, terrain, projectId: project.id);
+      expect(world.coins, 4);
+      expect(world.roads, hasLength(2));
+      expect(world.constructions.single.coinsFunded, 1);
+      expect(
+        world.roads.any((road) => road.cell == const CellCoord(5, 4)),
+        isTrue,
+        reason: 'funding completes the first tile in plan order',
+      );
+      world = advanceWorldDays(world, 30);
+      expect(world.constructions, hasLength(1));
+      expect(world.roads, hasLength(2));
 
-        world = fundRoadTile(
-          world,
-          content,
-          terrain,
-          projectId: project.id,
-          cell: const CellCoord(6, 4),
-        );
-        expect(world.coins, 3);
-        expect(world.roads, hasLength(3));
-        expect(
-          world.constructions,
-          isEmpty,
-          reason: 'completion releases the builder',
-        );
-        expect(world.totalCoinsSpent, 2);
-        validateParcelWorldState(world, content, terrain);
-      },
-    );
+      world = fundRoadProject(world, content, terrain, projectId: project.id);
+      expect(world.coins, 3);
+      expect(world.roads, hasLength(3));
+      expect(
+        world.constructions,
+        isEmpty,
+        reason: 'completion releases the builder',
+      );
+      expect(world.totalCoinsSpent, 2);
+      validateParcelWorldState(world, content, terrain);
+    });
 
     test(
       'building sites are free plans and complete only when fully funded',
@@ -362,16 +327,14 @@ void main() {
         content,
         terrain,
         cells: const [CellCoord(4, 5), CellCoord(4, 6)],
-        style: RoadStyle.dirt,
       );
       final roadProject = world.constructions.single;
-      for (final cell in [const CellCoord(4, 5), const CellCoord(4, 6)]) {
-        world = fundRoadTile(
+      for (final _ in [const CellCoord(4, 5), const CellCoord(4, 6)]) {
+        world = fundRoadProject(
           world,
           content,
           terrain,
           projectId: roadProject.id,
-          cell: cell,
         );
       }
       for (final origin in [
@@ -648,16 +611,14 @@ void main() {
         content,
         terrain,
         cells: const [CellCoord(4, 5), CellCoord(4, 6)],
-        style: RoadStyle.dirt,
       );
       final roadProject = world.constructions.single;
-      for (final cell in [const CellCoord(4, 5), const CellCoord(4, 6)]) {
-        world = fundRoadTile(
+      for (final _ in [const CellCoord(4, 5), const CellCoord(4, 6)]) {
+        world = fundRoadProject(
           world,
           content,
           terrain,
           projectId: roadProject.id,
-          cell: cell,
         );
       }
       for (final origin in [
@@ -738,16 +699,11 @@ void main() {
         const ParcelCoord(2, 0),
       );
       expect(world.parcels, hasLength(3));
-      // Ownership is not access: nothing beyond the water is reachable
-      // or road-connected until a bridge opens.
+      // Ownership is not access: nothing beyond the water is
+      // reachable on foot until a bridge opens.
       expect(
         WorldQueries(world, terrain).isLandReachable(const CellCoord(16, 4)),
         isFalse,
-      );
-      expect(
-        WorldQueries(world, terrain).isRoadConnected(const CellCoord(16, 4)),
-        isFalse,
-        reason: 'land reachability is not road connectivity',
       );
     });
 
@@ -794,33 +750,93 @@ void main() {
     });
   });
 
-  test('a bridge project needs manual funding before opening the far bank', () {
+  test('a freshly planned bridge over land validates immediately', () {
+    // Disconnected from any road, spanning owned dry land only — the
+    // store validates on save, so a fresh plan (zero coins funded)
+    // must satisfy save validation as-is.
+    var world = grantWorldDebugCoins(newWorld(), 10);
+    world = planAndFundRoad(
+      world,
+      cells: const [CellCoord(2, 2), CellCoord(3, 2), CellCoord(4, 2)],
+    );
+    world = startBridgeConstruction(
+      world,
+      content,
+      terrain,
+      nearBank: const CellCoord(5, 2),
+      farBank: const CellCoord(7, 2),
+    );
+    final job = world.constructions.single;
+    expect(job.kind, WorldConstructionKind.bridge);
+    expect(job.coinsFunded, 0);
+    expect(job.waterCells, const [CellCoord(6, 2)]);
+    validateParcelWorldState(world, content, terrain);
+
+    // Funding the first coin completes the near bank as a road tile
+    // and the state stays valid mid-construction.
+    world = fundBridgeProject(world, content, projectId: job.id, amount: 1);
+    expect(
+      world.roads.any((road) => road.cell == const CellCoord(5, 2)),
+      isTrue,
+    );
+    validateParcelWorldState(world, content, terrain);
+
+    // Coin by coin to completion: the store validates on every save,
+    // so the finished disconnected bridge must validate too — the
+    // far bank opens as a road tile with it.
+    while (world.constructions.isNotEmpty) {
+      world = fundBridgeProject(world, content, projectId: job.id, amount: 1);
+      validateParcelWorldState(world, content, terrain);
+    }
+    final bridge = world.bridges.single;
+    expect(bridge.nearBank, const CellCoord(5, 2));
+    expect(bridge.farBank, const CellCoord(7, 2));
+    expect(
+      world.roads.any((road) => road.cell == const CellCoord(7, 2)),
+      isTrue,
+      reason: 'the far bank opens as a road with the bridge',
+    );
+    expect(
+      world.coins,
+      10 - 3 - bridge.pricePaid,
+      reason: 'road tiles + bridge',
+    );
+  });
+
+  test('a bridge project funds tile by tile before opening the far bank', () {
     var world = grantWorldDebugCoins(newWorld(), 100);
+    // Everything under the bridge must be owned up front: the water
+    // parcel and the far-bank parcel are bought before planning.
     world = purchaseAdjacentParcel(
       world,
       content,
       terrain,
       const ParcelCoord(1, 0),
     );
+    world = purchaseAdjacentParcel(
+      world,
+      content,
+      terrain,
+      const ParcelCoord(2, 0),
+    );
+    // Roads stop one tile short: both bridge banks need vacant land.
     world = planRoadStretch(
       world,
       content,
       terrain,
-      cells: [for (var column = 5; column <= 7; column++) CellCoord(column, 4)],
-      style: RoadStyle.asphalt,
+      cells: [for (var column = 5; column <= 6; column++) CellCoord(column, 4)],
     );
     final roadProject = world.constructions.single;
-    for (var column = 5; column <= 7; column++) {
-      world = fundRoadTile(
+    for (var column = 5; column <= 6; column++) {
+      world = fundRoadProject(
         world,
         content,
         terrain,
         projectId: roadProject.id,
-        cell: CellCoord(column, 4),
       );
     }
-    // The east water parcel spans cells x 8..15: a full eight-tile
-    // crossing with banks on the grass parcels either side.
+    // The east water parcel spans cells x 8..15: an eight-tile span
+    // with vacant banks either side.
     final quote = quoteBridge(
       world,
       content,
@@ -828,9 +844,11 @@ void main() {
       nearBank: const CellCoord(7, 4),
       farBank: const CellCoord(16, 4),
     );
-    expect(quote.waterCells, [
+    expect(quote.spanCells, [
       for (var column = 8; column <= 15; column++) CellCoord(column, 4),
     ]);
+    // Flat per-tile pricing: eight span tiles plus two road-priced banks.
+    expect(quote.bridgeCost, 8 * content.economy.bridgeTileCostCoins + 2);
 
     world = startBridgeConstruction(
       world,
@@ -840,29 +858,38 @@ void main() {
       farBank: const CellCoord(16, 4),
     );
     final bridgeProject = world.constructions.single;
-    expect(
-      world.coins,
-      81,
-      reason:
-          'water parcel (8), road tiles (3), and the far parcel (8) '
-          'were paid',
-    );
-    expect(
-      WorldQueries(world, terrain).isRoadConnected(const CellCoord(16, 4)),
-      isFalse,
-    );
+    final coinsAfterPlanning = world.coins;
+    expect(world.bridges, isEmpty);
     world = advanceWorldDays(world, 100);
+    expect(world.bridges, isEmpty, reason: 'days never fund anything');
+
+    // The first coin completes the near bank as a road tile.
+    world = fundBridgeProject(
+      world,
+      content,
+      projectId: bridgeProject.id,
+      amount: 1,
+    );
+    expect(
+      world.roads.any((road) => road.cell == const CellCoord(7, 4)),
+      isTrue,
+      reason: 'the near bank becomes a road with its first coins',
+    );
     expect(world.bridges, isEmpty);
 
     world = fundBridgeProject(
       world,
+      content,
       projectId: bridgeProject.id,
-      amount: bridgeProject.totalCostCoins,
+      amount: world.constructions.single.coinsRemaining,
     );
     final queries = WorldQueries(world, terrain);
     expect(world.bridges, hasLength(1));
-    expect(queries.isLandReachable(const CellCoord(16, 4)), isTrue);
-    expect(queries.isRoadConnected(const CellCoord(16, 4)), isTrue);
+    expect(
+      world.roads.any((road) => road.cell == const CellCoord(16, 4)),
+      isTrue,
+      reason: 'the far bank opens with the bridge',
+    );
     expect(
       quoteStructurePlacement(
         world,
@@ -872,24 +899,95 @@ void main() {
         origin: const CellCoord(17, 4),
       ).price,
       3,
+      reason: 'buildings beside any road count as accessed',
     );
-    world = purchaseAdjacentParcel(
+    expect(queries.isLandReachable(const CellCoord(16, 4)), isTrue);
+    expect(world.coins, lessThan(coinsAfterPlanning));
+    validateParcelWorldState(world, content, terrain);
+  });
+
+  test('straight-line projection picks the closer axis', () {
+    // Horizontal: the column delta dominates.
+    expect(
+      straightLineBetween(const CellCoord(4, 4), const CellCoord(7, 5)),
+      const [
+        CellCoord(4, 4),
+        CellCoord(5, 4),
+        CellCoord(6, 4),
+        CellCoord(7, 4),
+      ],
+    );
+    // Vertical: the row delta dominates.
+    expect(
+      straightLineBetween(const CellCoord(4, 4), const CellCoord(5, 8)),
+      const [
+        CellCoord(4, 4),
+        CellCoord(4, 5),
+        CellCoord(4, 6),
+        CellCoord(4, 7),
+        CellCoord(4, 8),
+      ],
+    );
+    // Ties go horizontal.
+    expect(
+      straightLineBetween(const CellCoord(4, 4), const CellCoord(6, 6)),
+      const [CellCoord(4, 4), CellCoord(5, 4), CellCoord(6, 4)],
+    );
+    // Start == end yields a single tile.
+    expect(
+      straightLineBetween(const CellCoord(4, 4), const CellCoord(4, 4)),
+      const [CellCoord(4, 4)],
+    );
+    // Projection also runs backwards (end west/north of start).
+    expect(
+      straightLineBetween(const CellCoord(6, 4), const CellCoord(4, 4)),
+      const [CellCoord(6, 4), CellCoord(5, 4), CellCoord(4, 4)],
+    );
+  });
+
+  test('roads place anywhere on owned land without connectivity', () {
+    // An isolated stretch in the corner of the starter parcel, far
+    // from the starter road, quotes and funds fine.
+    var world = grantWorldDebugCoins(newWorld(), 3);
+    world = planRoadStretch(
       world,
       content,
       terrain,
-      const ParcelCoord(3, 0),
+      cells: const [CellCoord(1, 1), CellCoord(2, 1)],
     );
-    expect(
-      () => purchaseAdjacentParcel(
-        world,
-        content,
-        terrain,
-        const ParcelCoord(4, 0),
-      ),
-      throwsA(isA<WorldRuleViolation>()),
-      reason: 'beyond the authored map is open ocean',
-    );
+    final project = world.constructions.single;
+    world = fundRoadProject(world, content, terrain, projectId: project.id);
+    world = fundRoadProject(world, content, terrain, projectId: project.id);
+    expect(world.roads, hasLength(3), reason: 'starter + the isolated pair');
     validateParcelWorldState(world, content, terrain);
+  });
+
+  test('road sections span between junctions, elbows, and dead ends', () {
+    var world = grantWorldDebugCoins(newWorld(), 20);
+    // A T shape: a three-tile stem east of the starter road with a
+    // two-tile branch south from its middle.
+    world = planAndFundRoad(
+      world,
+      cells: const [CellCoord(5, 4), CellCoord(6, 4), CellCoord(7, 4)],
+    );
+    world = planAndFundRoad(
+      world,
+      cells: const [CellCoord(6, 5), CellCoord(6, 6)],
+    );
+    final queries = WorldQueries(world, terrain);
+    // The stem splits at the junction (6,4): junction cells bound
+    // sections and belong to none, so tapping east of it selects the
+    // short run to the dead end.
+    expect(queries.roadSectionAt(const CellCoord(7, 4)), const [
+      CellCoord(7, 4),
+    ], reason: 'the junction bounds the eastern run');
+    // Tapping the branch selects the vertical run below the junction.
+    expect(queries.roadSectionAt(const CellCoord(6, 6)), const [
+      CellCoord(6, 5),
+      CellCoord(6, 6),
+    ]);
+    // Tapping a non-road cell selects nothing.
+    expect(queries.roadSectionAt(const CellCoord(2, 2)), isEmpty);
   });
 
   test('active funded road project round-trips through the save', () {
@@ -905,16 +1003,9 @@ void main() {
       content,
       terrain,
       cells: const [CellCoord(5, 4), CellCoord(6, 4)],
-      style: RoadStyle.dirt,
     );
     final project = world.constructions.single;
-    world = fundRoadTile(
-      world,
-      content,
-      terrain,
-      projectId: project.id,
-      cell: const CellCoord(5, 4),
-    );
+    world = fundRoadProject(world, content, terrain, projectId: project.id);
 
     final decoded = sheetTablesToWorld(
       worldToSheetTables(world),
@@ -929,6 +1020,88 @@ void main() {
       encodeSheetTables(worldToSheetTables(world)),
     );
   });
+
+  test('a partially funded road keeps its build direction across a reload', () {
+    var world = grantWorldDebugCoins(newWorld(), 10);
+    // A disconnected stretch running west: its start is the east
+    // (larger) end, so the codec's smallest-end fallback alone would
+    // resume funding from the wrong end after a reload.
+    world = planRoadStretch(
+      world,
+      content,
+      terrain,
+      cells: const [CellCoord(3, 7), CellCoord(2, 7), CellCoord(1, 7)],
+    );
+    final project = world.constructions.single;
+    world = fundRoadProject(world, content, terrain, projectId: project.id);
+    expect(
+      world.roads.any((road) => road.cell == const CellCoord(3, 7)),
+      isTrue,
+    );
+
+    final decoded = sheetTablesToWorld(
+      worldToSheetTables(world),
+      content: content,
+      terrainProvider: terrain,
+    );
+    final reloaded = decoded.constructions.single;
+    expect(
+      reloaded.roadCells.first,
+      const CellCoord(3, 7),
+      reason: 'the funded end marks the plan start',
+    );
+    final played = fundRoadProject(
+      decoded,
+      content,
+      terrain,
+      projectId: reloaded.id,
+    );
+    expect(
+      played.roads.any((road) => road.cell == const CellCoord(2, 7)),
+      isTrue,
+      reason: 'funding continues from the funded end',
+    );
+  });
+
+  test('a vertical one-tile bridge round-trips through the save', () {
+    var world = grantWorldDebugCoins(newWorld(), 20);
+    // Two short roads north and south of the crossing; the banks
+    // themselves stay vacant land so the span is a single vertical
+    // tile between them.
+    world = planAndFundRoad(
+      world,
+      cells: const [CellCoord(5, 1), CellCoord(5, 2)],
+    );
+    world = planAndFundRoad(
+      world,
+      cells: const [CellCoord(5, 6), CellCoord(5, 7)],
+    );
+    world = startBridgeConstruction(
+      world,
+      content,
+      terrain,
+      nearBank: const CellCoord(5, 3),
+      farBank: const CellCoord(5, 5),
+    );
+    final job = world.constructions.single;
+    world = fundBridgeProject(
+      world,
+      content,
+      projectId: job.id,
+      amount: job.totalCostCoins,
+    );
+
+    final decoded = sheetTablesToWorld(
+      worldToSheetTables(world),
+      content: content,
+      terrainProvider: terrain,
+    );
+    final bridge = decoded.bridges.single;
+    expect(bridge.waterCells, const [CellCoord(5, 4)]);
+    expect(bridge.nearBank, const CellCoord(5, 3));
+    expect(bridge.farBank, const CellCoord(5, 5));
+    validateParcelWorldState(decoded, content, terrain);
+  });
 }
 
 EconomyContent _economyWithProgression(
@@ -938,8 +1111,7 @@ EconomyContent _economyWithProgression(
   startingWalletCoins: content.economy.startingWalletCoins,
   startingBuilderCapacity: content.economy.startingBuilderCapacity,
   roadTileCostCoins: content.economy.roadTileCostCoins,
-  bridgeBaseCoins: content.economy.bridgeBaseCoins,
-  bridgePerWaterTileCoins: content.economy.bridgePerWaterTileCoins,
+  bridgeTileCostCoins: content.economy.bridgeTileCostCoins,
   parcelBaseCoins: content.economy.parcelBaseCoins,
   builderProgression: progression,
 );

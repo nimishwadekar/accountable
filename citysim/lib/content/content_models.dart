@@ -13,7 +13,7 @@ import '../world/coordinates.dart';
 // Shared enums (also used inside saved world state)
 // ---------------------------------------------------------------------------
 
-enum RoadStyle { dirt, asphalt }
+enum RoadStyle { asphalt }
 
 enum StructureKind { building, decoration }
 
@@ -311,8 +311,7 @@ class EconomyContent {
     required this.startingWalletCoins,
     required this.startingBuilderCapacity,
     required this.roadTileCostCoins,
-    required this.bridgeBaseCoins,
-    required this.bridgePerWaterTileCoins,
+    required this.bridgeTileCostCoins,
     required this.parcelBaseCoins,
     required this.builderProgression,
   });
@@ -322,15 +321,14 @@ class EconomyContent {
   /// Fixed at 1 by product rule; shown read-only in the dashboard.
   final int startingBuilderCapacity;
   final int roadTileCostCoins;
-  final int bridgeBaseCoins;
-  final int bridgePerWaterTileCoins;
+
+  /// Flat price of one bridge span tile; banks cost the road tile
+  /// price.
+  final int bridgeTileCostCoins;
 
   /// Flat parcel price: every parcel on the map costs the same.
   final int parcelBaseCoins;
   final List<BuilderProgressionStep> builderProgression;
-
-  int bridgeCost(int waterSpanLength) =>
-      bridgeBaseCoins + waterSpanLength * bridgePerWaterTileCoins;
 
   /// Builder capacity granted for a population (monotonic; the highest
   /// crossed threshold wins, never below the starting capacity).
@@ -348,10 +346,7 @@ class EconomyContent {
     'startingWalletCoins': startingWalletCoins,
     'startingBuilderCapacity': startingBuilderCapacity,
     'roadTileCostCoins': roadTileCostCoins,
-    'bridgeCost': {
-      'baseCoins': bridgeBaseCoins,
-      'perWaterTileCoins': bridgePerWaterTileCoins,
-    },
+    'bridgeCost': {'bridgeTileCostCoins': bridgeTileCostCoins},
     'parcelBaseCoins': parcelBaseCoins,
     'builderProgression': builderProgression
         .map((step) => step.toJson())
@@ -364,8 +359,7 @@ class EconomyContent {
       startingWalletCoins: json['startingWalletCoins']! as int,
       startingBuilderCapacity: json['startingBuilderCapacity']! as int,
       roadTileCostCoins: json['roadTileCostCoins']! as int,
-      bridgeBaseCoins: bridge['baseCoins']! as int,
-      bridgePerWaterTileCoins: bridge['perWaterTileCoins']! as int,
+      bridgeTileCostCoins: bridge['bridgeTileCostCoins']! as int,
       parcelBaseCoins: json['parcelBaseCoins']! as int,
       builderProgression: [
         for (final step in json['builderProgression']! as List)
@@ -806,8 +800,8 @@ List<ContentIssue> validateContentData({
   if (economy.roadTileCostCoins < 0) {
     error('Road tile cost must not be negative.');
   }
-  if (economy.bridgeBaseCoins < 0 || economy.bridgePerWaterTileCoins < 0) {
-    error('Bridge costs must not be negative.');
+  if (economy.bridgeTileCostCoins < 0) {
+    error('Bridge tile cost must not be negative.');
   }
   if (economy.parcelBaseCoins < 0) {
     error('The parcel price must not be negative.');

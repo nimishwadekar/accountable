@@ -86,15 +86,8 @@ ParcelWorldState planRoadStretch(
   ContentBundle content,
   TerrainProvider terrainProvider, {
   required List<CellCoord> cells,
-  required RoadStyle style,
 }) {
-  final quote = quoteRoadStretch(
-    state,
-    content,
-    terrainProvider,
-    cells: cells,
-    style: style,
-  );
+  final quote = quoteRoadStretch(state, content, terrainProvider, cells: cells);
   final job = WorldConstruction(
     id: 'construction-${state.nextEntityNumber}',
     kind: WorldConstructionKind.road,
@@ -102,7 +95,7 @@ ParcelWorldState planRoadStretch(
     coinsFunded: 0,
     builderSlot: quote.builderSlot,
     startedAtDay: state.constructionDay,
-    roadStyle: style,
+    roadStyle: RoadStyle.asphalt,
     roadCells: quote.cells,
   );
   return state.copyWith(
@@ -114,11 +107,10 @@ ParcelWorldState planRoadStretch(
         state,
         kind: 'road-project-planned',
         description:
-            '${cells.length}-tile ${style.name} road planned · '
+            '${cells.length}-tile road planned · '
             '${quote.totalCost} coins to fund',
         payload: {
           'projectId': job.id,
-          'style': style.name,
           'cells': cells.map((cell) => cell.toJson()).toList(),
           'totalCostCoins': quote.totalCost,
           'builderSlot': quote.builderSlot,
@@ -129,35 +121,30 @@ ParcelWorldState planRoadStretch(
   );
 }
 
-ParcelWorldState fundRoadTile(
+/// Funds a road project by one tile: the next planned tile in order
+/// from the start becomes a completed road. Funding the last tile
+/// completes and settles the project.
+ParcelWorldState fundRoadProject(
   ParcelWorldState state,
   ContentBundle content,
   TerrainProvider terrainProvider, {
   required String projectId,
-  required CellCoord cell,
 }) {
-  final quote = quoteRoadTileFunding(
-    state,
-    content,
-    terrainProvider: terrainProvider,
-    projectId: projectId,
-    cell: cell,
-  );
+  final quote = quoteRoadProjectFunding(state, content, projectId: projectId);
   _requireWallet(state, quote.price);
   final project = _roadProject(state, projectId);
+  final cell = quote.cell;
   final road = RoadSegment(
     id: 'road-${project.id}-${cell.key}',
     cell: cell,
-    style: project.roadStyle!,
+    style: RoadStyle.asphalt,
     pricePaid: quote.price,
     completedAtDay: state.constructionDay,
     projectId: project.id,
   );
   final roads = [...state.roads, road];
   final funded = project.coinsFunded + quote.price;
-  final completed = project.roadCells.every(
-    (plannedCell) => roads.any((entry) => entry.cell == plannedCell),
-  );
+  final completed = funded >= project.totalCostCoins;
   // The save's project column references live projects only. Project
   // numbers restart once no project is active, so a finished stretch
   // must stop naming its project — otherwise its tiles would be
@@ -593,6 +580,9 @@ ParcelWorldState reconcileWorldProgression(
 
 /// Buys the quoted bridge corridor immediately, then assigns a builder to the
 /// bridge project. Bridge coins themselves are contributed explicitly later.
+/// Plans a bridge: a free builder assignment like roads. The span may
+/// cross water and land alike; everything under it must already be
+/// owned — bridges acquire nothing.
 ParcelWorldState startBridgeConstruction(
   ParcelWorldState state,
   ContentBundle content,
@@ -607,55 +597,32 @@ ParcelWorldState startBridgeConstruction(
     nearBank: nearBank,
     farBank: farBank,
   );
-  _requireWallet(state, quote.parcelCost);
-  final newParcels = quote.parcelsToAcquire
-      .map(
-        (parcel) => OwnedParcel(
-          coord: parcel.coord,
-          pricePaid: parcel.price,
-          purchasedAtDay: state.constructionDay,
-          terrain: parcel.cells,
-        ),
-      )
-      .toList();
   final job = WorldConstruction(
     id: 'construction-${state.nextEntityNumber}',
     kind: WorldConstructionKind.bridge,
     nearBank: nearBank,
     farBank: farBank,
-    waterCells: quote.waterCells,
+    waterCells: quote.spanCells,
     totalCostCoins: quote.bridgeCost,
     coinsFunded: 0,
     builderSlot: quote.builderSlot,
     startedAtDay: state.constructionDay,
   );
-  final parcelNames = quote.parcelsToAcquire.map((parcel) => parcel.coord.key);
-  final detail = parcelNames.isEmpty
-      ? ''
-      : ' including crossing parcels ${parcelNames.join(', ')}';
   return state.copyWith(
-    coins: state.coins - quote.parcelCost,
-    totalCoinsSpent: state.totalCoinsSpent + quote.parcelCost,
     nextEntityNumber: state.nextEntityNumber + 1,
-    parcels: [...state.parcels, ...newParcels],
     constructions: [...state.constructions, job],
     events: [
       ...state.events,
       _event(
         state,
         kind: 'bridge-project-planned',
-        description:
-            'River bridge planned · ${quote.bridgeCost} coins to fund$detail',
+        description: 'Bridge planned · ${quote.bridgeCost} coins to fund',
         payload: {
           'projectId': job.id,
           'nearBank': nearBank.toJson(),
           'farBank': farBank.toJson(),
-          'waterCells': quote.waterCells.map((cell) => cell.toJson()).toList(),
-          'parcelCoordinates': quote.parcelsToAcquire
-              .map((parcel) => parcel.coord.toJson())
-              .toList(),
+          'spanCells': quote.spanCells.map((cell) => cell.toJson()).toList(),
           'bridgeCostCoins': quote.bridgeCost,
-          'parcelCostCoins': quote.parcelCost,
           'builderSlot': quote.builderSlot,
         },
       ),
@@ -664,8 +631,14 @@ ParcelWorldState startBridgeConstruction(
   );
 }
 
+/// Funds a bridge project coin by coin. Cells complete in order —
+/// near bank, span tiles, far bank — each when its cumulative cost is
+/// reached: banks turn into road tiles as they complete, span tiles
+/// render from the project's funded count, and the final coin opens
+/// the bridge.
 ParcelWorldState fundBridgeProject(
-  ParcelWorldState state, {
+  ParcelWorldState state,
+  ContentBundle content, {
   required String projectId,
   required int amount,
 }) {
@@ -676,7 +649,49 @@ ParcelWorldState fundBridgeProject(
     );
   }
   final newFunded = project.coinsFunded + amount;
-  final complete = newFunded == project.totalCostCoins;
+  final complete = newFunded >= project.totalCostCoins;
+
+  // Per-cell funding order and price: near bank, span, far bank.
+  final roadTileCost = content.economy.roadTileCostCoins;
+  final bridgeTileCost = content.economy.bridgeTileCostCoins;
+  final cellCosts = <(CellCoord, int)>[
+    (project.nearBank!, roadTileCost),
+    for (final cell in project.waterCells) (cell, bridgeTileCost),
+    (project.farBank!, roadTileCost),
+  ];
+
+  // Which cells are complete at a given funded amount: cells whose
+  // cumulative cost fits inside the funding.
+  List<CellCoord> completedCells(int funded) {
+    var remaining = funded;
+    final completed = <CellCoord>[];
+    for (final (cell, cost) in cellCosts) {
+      if (remaining < cost) break;
+      remaining -= cost;
+      completed.add(cell);
+    }
+    return completed;
+  }
+
+  // Banks that complete with this contribution become road tiles.
+  final newlyCompleted = completedCells(newFunded).where((cell) {
+    final already = completedCells(project.coinsFunded).contains(cell);
+    return !already && (cell == project.nearBank || cell == project.farBank);
+  }).toList();
+  final roads = [...state.roads];
+  for (final cell in newlyCompleted) {
+    roads.add(
+      RoadSegment(
+        id: 'bridge-approach:${project.id}-${cell.key}',
+        cell: cell,
+        style: RoadStyle.asphalt,
+        pricePaid: 0,
+        completedAtDay: state.constructionDay,
+        projectId: project.id,
+      ),
+    );
+  }
+
   final events = [
     ...state.events,
     _event(
@@ -693,8 +708,11 @@ ParcelWorldState fundBridgeProject(
   ];
   var nextEvent = state.nextEventNumber + 1;
   var bridges = [...state.bridges];
-  var roads = [...state.roads];
   var nextEntity = state.nextEntityNumber;
+  // The bank roads the project created stop naming it once it
+  // finishes, matching road completion: project numbers restart, so a
+  // dead reference would be mistaken for a later project.
+  var settledRoads = roads;
   if (complete) {
     bridges.add(
       CompletedBridge(
@@ -706,21 +724,16 @@ ParcelWorldState fundBridgeProject(
         completedAtDay: state.constructionDay,
       ),
     );
-    roads.add(
-      RoadSegment(
-        id: 'bridge-approach:${project.id}',
-        cell: project.farBank!,
-        style: RoadStyle.asphalt,
-        pricePaid: 0,
-        completedAtDay: state.constructionDay,
-      ),
-    );
+    settledRoads = [
+      for (final road in roads)
+        road.projectId == project.id ? _detachProject(road) : road,
+    ];
     nextEntity++;
     events.add(
       _event(
         state,
         kind: 'construction-complete',
-        description: 'River bridge is open',
+        description: 'Bridge is open',
         payload: {'projectId': project.id},
         eventNumber: nextEvent,
       ),
@@ -732,7 +745,7 @@ ParcelWorldState fundBridgeProject(
     totalCoinsSpent: state.totalCoinsSpent + amount,
     nextEntityNumber: nextEntity,
     bridges: bridges,
-    roads: roads,
+    roads: settledRoads,
     constructions: complete
         ? state.constructions.where((job) => job.id != project.id).toList()
         : state.constructions

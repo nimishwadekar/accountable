@@ -52,13 +52,6 @@ class WorldQueries {
   late final Set<CellCoord> _reachableLandCells = Set.unmodifiable(
     _computeReachableLandCells(),
   );
-  late final Set<CellCoord> _connectedRoadCells = Set.unmodifiable(
-    _computeConnectedRoadCells(),
-  );
-  late final Set<CellCoord> _completedRoadCells = Set.unmodifiable({
-    ...roadsByCell.keys,
-    ...state.bridges.expand((bridge) => bridge.waterCells),
-  });
 
   bool ownsParcel(ParcelCoord coord) => ownedParcels.containsKey(coord);
 
@@ -106,39 +99,8 @@ class WorldQueries {
     return reached;
   }
 
-  Set<CellCoord> get connectedRoadCells => _connectedRoadCells;
-
-  Set<CellCoord> get completedRoadCells => _completedRoadCells;
-
-  Set<CellCoord> _computeConnectedRoadCells() {
-    final roads = <CellCoord>{
-      ...roadsByCell.keys,
-      ...state.bridges.expand((bridge) => bridge.waterCells),
-    };
-    CellCoord? start;
-    for (final road in state.roads) {
-      if (road.id == 'road-start') {
-        start = road.cell;
-        break;
-      }
-    }
-    if (start == null) return <CellCoord>{};
-    final reached = <CellCoord>{start};
-    final queue = <CellCoord>[start];
-    for (var cursor = 0; cursor < queue.length; cursor++) {
-      final current = queue[cursor];
-      for (final next in current.neighbors) {
-        if (!roads.contains(next) || !reached.add(next)) continue;
-        queue.add(next);
-      }
-    }
-    return reached;
-  }
-
   bool isLandReachable(CellCoord cell) =>
       reachableLandCells.contains(cell) && terrainAt(cell).isLand;
-
-  bool isRoadConnected(CellCoord cell) => connectedRoadCells.contains(cell);
 
   bool footprintIsVacant(Iterable<CellCoord> cells) {
     final occupied = <CellCoord>{
@@ -151,13 +113,15 @@ class WorldQueries {
 
   /// A building's road frontage must run along a whole side of its
   /// footprint: every cell on one edge of the footprint has a
-  /// connected road beside it. Footprints larger than 1×1 therefore
-  /// need a road along an entire side, not a single touching corner;
-  /// for a 1×1 footprint the rule is exactly "any adjacent road".
+  /// completed ground road beside it — connectivity to the starter
+  /// road is not required, any road counts. Bridge banks are roads;
+  /// elevated decks are not, so a door never opens onto a bridge.
+  /// Footprints larger than 1×1 therefore need a road along an
+  /// entire side, not a single touching corner; for a 1×1 footprint
+  /// the rule is exactly "any adjacent road".
   bool buildingHasRoadAccess(Iterable<CellCoord> footprint) {
     final cells = footprint.toSet();
     if (cells.isEmpty) return false;
-    final connectedRoads = connectedRoadCells;
     var minColumn = cells.first.column;
     var maxColumn = cells.first.column;
     var minRow = cells.first.row;
@@ -174,7 +138,7 @@ class WorldQueries {
     ) {
       for (final cell in cells) {
         if (!onSide(cell)) continue;
-        if (!connectedRoads.contains(roadNeighbor(cell))) return false;
+        if (!roadsByCell.containsKey(roadNeighbor(cell))) return false;
       }
       return true;
     }
@@ -205,20 +169,57 @@ class WorldQueries {
   /// building still counts: the door goes on the visible facade around
   /// the corner from it, on the same screen side.
   Set<String> adjacentDoorSides(Iterable<CellCoord> footprint) {
-    final connectedRoads = connectedRoadCells;
     final footprintSet = footprint.toSet();
     final sides = <String>{};
     for (final cell in footprintSet) {
       final neighbors = cell.neighbors; // north, east, south, west.
       for (var side = 0; side < 4; side++) {
         if (footprintSet.contains(neighbors[side]) ||
-            !connectedRoads.contains(neighbors[side])) {
+            !roadsByCell.containsKey(neighbors[side])) {
           continue;
         }
         sides.add(side < 2 ? 'right' : 'left');
       }
     }
     return sides;
+  }
+
+  /// The completed-road section containing [cell]: the maximal
+  /// straight run between junctions (3+ road neighbours), elbows, or
+  /// dead ends — the stretch a road tap selects. Returns an empty
+  /// list when the cell holds no completed road.
+  List<CellCoord> roadSectionAt(CellCoord cell) {
+    if (!roadsByCell.containsKey(cell)) return const [];
+    bool isRoad(CellCoord candidate) => roadsByCell.containsKey(candidate);
+    int roadNeighbourCount(CellCoord candidate) =>
+        candidate.neighbors.where(isRoad).length;
+    // The run's axis: a cell with an east or west road neighbour is
+    // part of a horizontal run (junctions and elbows pick horizontal
+    // by convention).
+    final horizontal = isRoad(cell.offset(1, 0)) || isRoad(cell.offset(-1, 0));
+    final dx = horizontal ? 1 : 0;
+    final dy = horizontal ? 0 : 1;
+
+    List<CellCoord> walk(int stepX, int stepY) {
+      final run = <CellCoord>[];
+      var current = cell;
+      while (true) {
+        final next = current.offset(stepX, stepY);
+        if (!isRoad(next) || roadNeighbourCount(next) >= 3) break;
+        // A turn: the next tile's road continues perpendicular to
+        // this run — the section ends before it.
+        if (isRoad(next.offset(dy, dx)) || isRoad(next.offset(-dy, -dx))) {
+          break;
+        }
+        run.add(next);
+        current = next;
+      }
+      return run;
+    }
+
+    final before = walk(-dx, -dy);
+    final after = walk(dx, dy);
+    return [...before.reversed, cell, ...after];
   }
 
   List<RoadSegment> roadsInBounds({
