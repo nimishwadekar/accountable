@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 
 import 'package:citysim/rendering/parcel_world_tuning.dart';
+import 'package:citysim/rendering/sprite_picking.dart';
 
 import '../content/content_bundle.dart';
 import '../world/coordinates.dart';
@@ -62,6 +63,15 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     with SingleTickerProviderStateMixin {
   final Map<String, ui.Image> _images = {};
   final Map<String, Future<ui.Image>> _imageRequests = {};
+
+  /// Per-pixel picking masks for the decoded sprites, keyed by asset
+  /// path. Filled alongside [_images]; taps read them synchronously.
+  final Map<String, SpriteMask> _masks = {};
+
+  /// How many cells a sprite's art can reach above its footprint — the
+  /// candidate window for picking. Starts wide enough for the pack's
+  /// tallest building and grows if taller art loads.
+  int _spriteReachCells = 8;
   late WorldQueries _queries = WorldQueries(
     widget.state,
     widget.terrainProvider,
@@ -292,6 +302,8 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
       _offset,
       _queries,
       _images,
+      _masks,
+      _spriteReachCells,
       widget.content,
     );
     widget.onCellTap(hit.cell, hit.structureId);
@@ -352,6 +364,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
           future.then<void>((image) {
             if (mounted) {
               setState(() => _images[path] = image);
+              unawaited(_loadMask(path, image));
             } else {
               image.dispose();
             }
@@ -362,6 +375,22 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
       pending.add(request);
     }
     await Future.wait(pending);
+  }
+
+  /// Builds the per-pixel picking mask for a decoded sprite and widens
+  /// the picking window to cover the tallest art seen. Masks only feed
+  /// taps, so they fill without triggering repaints.
+  Future<void> _loadMask(String path, ui.Image image) async {
+    final mask = await extractSpriteMask(image);
+    if (!mounted || mask == null) return;
+    _masks[path] = mask;
+    final role = _spriteRoleForPath(path, widget.content);
+    final sprite = role == null ? null : widget.content.sprite(role);
+    if (sprite == null) return;
+    final cells =
+        (mask.height * sprite.renderScale / (_logicalTileHeight / 2)).ceil() +
+        1;
+    if (cells > _spriteReachCells) _spriteReachCells = cells;
   }
 
   Future<ui.Image> _loadImage(String path) async {
@@ -464,38 +493,55 @@ _WorldHit _hitTest(
   Offset offset,
   WorldQueries queries,
   Map<String, ui.Image> images,
+  Map<String, SpriteMask> masks,
+  int reachCells,
   ContentBundle content,
 ) {
   final world = _screenToWorld(position, size, scale, offset);
   final cell = _nearestCell(world);
-  final structures =
-      queries.structuresInBounds(
-        left: cell.column - 5,
-        right: cell.column + 5,
-        top: cell.row - 5,
-        bottom: cell.row + 5,
-      )..sort((a, b) {
-        final aDepth = a.footprint
-            .map((entry) => entry.column + entry.row)
-            .reduce(math.max);
-        final bDepth = b.footprint
-            .map((entry) => entry.column + entry.row)
-            .reduce(math.max);
-        return aDepth.compareTo(bDepth);
-      });
+  // Candidates are every structure whose art could reach the tap,
+  // ordered exactly as the painter draws them (back to front) and
+  // walked front to back. The first sprite with an opaque pixel under
+  // the tap wins; the ground diamond below is the fallback.
+  final structures = queries.structuresInBounds(
+    left: cell.column - reachCells,
+    right: cell.column + reachCells,
+    top: cell.row - reachCells,
+    bottom: cell.row + reachCells,
+  )..sort(_compareStructureDepth);
   for (final structure in structures.reversed) {
     final definition = content.structure(structure.catalogueId)!;
     final role = structure.assetRole ?? definition.assetRoles.first;
-    final image = images[content.tryAssetPathFor(role, structure.facing)];
+    final path = content.tryAssetPathFor(role, structure.facing);
+    final image = images[path];
     if (image == null) continue;
-    final rect = _structureRect(image, definition, structure, content);
-    final screenRect = _worldRectToScreen(rect, size, scale, offset);
-    if (screenRect.inflate(3).contains(position)) {
+    final screenRect = _worldRectToScreen(
+      _structureRect(image, definition, structure, content),
+      size,
+      scale,
+      offset,
+    );
+    if (!screenRect.contains(position)) continue;
+    final mask = masks[path];
+    if (mask == null) {
+      // Mask still decoding: fall back to the rect until it lands.
+      return _WorldHit(structure.origin, structure.id);
+    }
+    if (spritePixelHit(mask, screenRect, position)) {
       return _WorldHit(structure.origin, structure.id);
     }
   }
   return _WorldHit(cell, null);
 }
+
+/// The painter's depth for a structure — the deepest footprint cell —
+/// matching the back-to-front order [_ParcelWorldPainter] draws, so
+/// picking tests sprites in exactly the order they were painted.
+int _structureDepth(PlacedStructure structure) =>
+    structure.footprint.map((cell) => cell.column + cell.row).reduce(math.max);
+
+int _compareStructureDepth(PlacedStructure a, PlacedStructure b) =>
+    _structureDepth(a).compareTo(_structureDepth(b));
 
 class _ParcelWorldPainter extends CustomPainter {
   _ParcelWorldPainter({
@@ -703,14 +749,7 @@ class _ParcelWorldPainter extends CustomPainter {
       top: bounds.top - 5,
       bottom: bounds.bottom + 5,
     )) {
-      actors.add((
-        structure.footprint
-            .map((cell) => cell.column + cell.row)
-            .reduce(math.max)
-            .toDouble(),
-        structure,
-        null,
-      ));
+      actors.add((_structureDepth(structure).toDouble(), structure, null));
     }
     for (final pedestrian in pedestrians.list) {
       actors.add((pedestrian.depth, null, pedestrian));

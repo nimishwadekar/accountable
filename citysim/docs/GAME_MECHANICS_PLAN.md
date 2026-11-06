@@ -233,8 +233,10 @@ These are candidates, not promises or requirements for the current prototype:
 - Google Sheets sync for game data: the four-sheet storage (CSV documents
   for now, the game's own spreadsheet once created) replaces ad-hoc
   export/backup.
-- Tap-picking improvements for targets behind buildings: per-pixel picking,
-  click cycling, tool-based pick priority, and x-ray dimming (spec in the
+- Tap-picking follow-ups on top of the landed per-pixel picking (sprite
+  alpha masks tested in painter order, ground diamond as fallback):
+  click cycling for targets genuinely hidden behind tall art,
+  tool-based pick priority, and x-ray dimming (spec in the
   implementation plan).
 - Optional ambience, residents, or seasonal presentation that never penalizes
   absence or makes residents a resource-optimization system. Deferred
