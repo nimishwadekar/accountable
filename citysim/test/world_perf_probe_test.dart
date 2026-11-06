@@ -105,7 +105,9 @@ void main() {
         }
         settled =
             ParcelWorldProbe.samples.isNotEmpty &&
-            ParcelWorldProbe.samples.every((sample) => !sample.recorded);
+            ParcelWorldProbe.samples.every(
+              (sample) => sample.chunkRecords == 0,
+            );
       }
       expect(
         settled,
@@ -194,21 +196,22 @@ void main() {
 
       // Structural claims from the performance analysis. Absolute
       // timings vary per machine; these relationships should not.
-      // 1. A still camera never re-records the ground layer.
-      expect(idle.records, lessThanOrEqualTo(1));
-      // 2. Motion re-records essentially every frame.
-      expect(panIn.records, greaterThanOrEqualTo(28));
-      expect(panOut.records, greaterThanOrEqualTo(28));
-      // 3. Re-record cost scales with visible cells.
-      expect(panOut.meanRecordMs, greaterThan(panIn.meanRecordMs));
-      // 4. Frame op count scales with visible cells.
-      expect(panOut.meanTotalOps, greaterThan(panIn.meanTotalOps));
-      // 5. Diamond culling: the record loop visits cells near the
-      // on-screen estimate (not the ~2.6x bounding box), and never
-      // fewer than actually visible.
+      // 1. A still camera never re-records chunks.
+      expect(idle.chunkRecords, lessThanOrEqualTo(2));
+      // 2. Motion no longer re-records the ground layer — only chunks
+      //    entering view record, about one per frame at most.
+      expect(panIn.chunkRecords, lessThanOrEqualTo(20));
+      expect(panOut.chunkRecords, lessThanOrEqualTo(60));
+      // 3. Frame draws are chunk textures plus actors — hundreds, not
+      //    the thousands of per-cell draws the unchunked renderer
+      //    pushed at zoom-out.
+      expect(panOut.meanTotalOps, lessThan(600));
+      // 4. More chunks are visible zoomed out than zoomed in.
+      expect(panOut.meanChunkDraws, greaterThan(panIn.meanChunkDraws));
+      // 5. Chunk-granularity culling: drawn cells stay near the
+      //    visible-cell estimate, never below it.
       expect(panOut.overdraw, greaterThan(0.85));
-      expect(panOut.overdraw, lessThan(1.4));
-      expect(panOut.meanDrawnCells, lessThan(panOut.meanBoundsCells * 0.65));
+      expect(panOut.overdraw, lessThan(1.9));
       // 6. The zoom actually reached the zoomed-out regime.
       expect(panOut.meanScale, lessThan(0.62));
       expect(panOut.meanScale, greaterThan(0.42));

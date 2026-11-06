@@ -23,6 +23,18 @@ import '../world/world_state.dart';
 const _logicalTileWidth = 64.0;
 const _logicalTileHeight = 32.0;
 
+/// Debug/test switch: draw every terrain chunk by replaying its
+/// world-space recording instead of its rasterized texture. Tests use
+/// this to prove both draw paths place content at identical pixels.
+@visibleForTesting
+bool debugDrawChunksViaPictures = false;
+
+/// Debug/test switch: draw the water shimmer with the merged-path
+/// fallback instead of the fragment shader. Tests use this to prove
+/// both shimmer paths produce identical pixels.
+@visibleForTesting
+bool debugDrawShimmerViaPaths = false;
+
 class ParcelWorldView extends StatefulWidget {
   const ParcelWorldView({
     required this.state,
@@ -98,7 +110,16 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
       timeScale: widget.content.ambience.ambientTimeScale,
     ),
   );
-  final _TerrainLayerCache _terrainCache = _TerrainLayerCache();
+  final _TerrainChunkCache _terrainCache = _TerrainChunkCache();
+
+  /// Display pixel ratio, captured per build so chunk textures
+  /// rasterize at the display's real density.
+  double _pixelRatio = 1.0;
+
+  /// Water-shimmer fragment program; null until it loads or when the
+  /// platform cannot run it, in which case the shimmer falls back to
+  /// merged path drawing.
+  ui.FragmentProgram? _shimmerProgram;
   final _PedestrianSim _pedestrians = _PedestrianSim();
 
   @override
@@ -106,6 +127,19 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     super.initState();
     _loading = _loadMissingImages();
     _ambientTicker.start();
+    _loadShimmerShader();
+  }
+
+  Future<void> _loadShimmerShader() async {
+    try {
+      final program = await ui.FragmentProgram.fromAsset(
+        'shaders/water_shimmer.frag',
+      );
+      if (!mounted) return;
+      setState(() => _shimmerProgram = program);
+    } catch (_) {
+      // Shimmer stays on the merged-path fallback.
+    }
   }
 
   @override
@@ -146,6 +180,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final size = Size(constraints.maxWidth, constraints.maxHeight);
+      _pixelRatio = View.of(context).devicePixelRatio;
       _initializeCamera(size);
       return FutureBuilder<void>(
         future: _loading,
@@ -247,6 +282,8 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   facingOverride: widget.facingOverride,
                   ambient: _ambient,
                   terrainCache: _terrainCache,
+                  pixelRatio: _pixelRatio,
+                  shimmerProgram: _shimmerProgram,
                   pedestrians: _pedestrians,
                 ),
               ),
@@ -561,6 +598,8 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.facingOverride,
     required this.ambient,
     required this.terrainCache,
+    required this.pixelRatio,
+    required this.shimmerProgram,
     required this.pedestrians,
   }) : super(repaint: ambient);
 
@@ -578,7 +617,9 @@ class _ParcelWorldPainter extends CustomPainter {
   final Set<CellCoord> fundableRoadCells;
   final String? facingOverride;
   final _AmbientClock ambient;
-  final _TerrainLayerCache terrainCache;
+  final _TerrainChunkCache terrainCache;
+  final double pixelRatio;
+  final ui.FragmentProgram? shimmerProgram;
   final _PedestrianSim pedestrians;
 
   @override
@@ -589,184 +630,413 @@ class _ParcelWorldPainter extends CustomPainter {
       Paint()..color = const Color(0xFFB5DCCF),
     );
     final bounds = _visibleCellBounds(size, scale, offset);
+    final viewport = _ViewportGeometry(size, scale, offset);
+    ParcelWorldProbe.noteBoundsCells(
+      (bounds.right - bounds.left + 1) * (bounds.bottom - bounds.top + 1),
+    );
+    ParcelWorldProbe.noteOnscreenCells(_visibleCellCount(bounds, viewport));
 
-    // Flat content — ground, roads, parcel outlines — only changes with
-    // the world or the camera, so it is recorded once and replayed
-    // while the ambient animations tick. Everything standing or
-    // elevated (bridges included) plus the animated layers (water
-    // shimmer, swaying vegetation, pedestrians) draw on top every
-    // frame, depth-sorted, so raised geometry occludes correctly.
-    final cacheKey = (state, scale, offset, size, images.length);
-    if (terrainCache.key != cacheKey) {
-      ParcelWorldProbe.beginRecord();
-      _recordTerrainLayer(terrainCache, cacheKey, size, bounds);
-      ParcelWorldProbe.endRecord();
-    }
-    canvas.drawPicture(terrainCache.picture!);
-    _paintWaterShimmer(canvas, terrainCache, ambient.seconds);
+    // The flat layer — terrain, wash, roads, parcel outlines — is
+    // cached as parcel-sized world-space chunks, rasterized to
+    // textures and drawn as one quad each. Chunks are camera-
+    // independent, so panning and zooming replay cached textures
+    // instead of re-recording; only world or sprite changes (or
+    // entering unseen areas) record. Everything standing or elevated
+    // (bridges included) plus the animated layers (water shimmer,
+    // swaying vegetation, pedestrians) draw on top every frame,
+    // depth-sorted, so raised geometry occludes correctly.
+    ParcelWorldProbe.beginTerrain();
+    _drawTerrainChunks(canvas, size, bounds, viewport);
+    ParcelWorldProbe.endTerrain();
     _drawActors(canvas, size, bounds, ambient.seconds);
     _drawPendingConstructions(canvas, size);
     _drawRoadPlan(canvas, size);
     _drawSelection(canvas, size, queries);
-    ParcelWorldProbe.endFrame(
-      boundsCells:
-          (bounds.right - bounds.left + 1) * (bounds.bottom - bounds.top + 1),
-    );
+    ParcelWorldProbe.endFrame();
     ParcelWorldProbe.paintHud(canvas, size);
   }
 
-  void _recordTerrainLayer(
-    _TerrainLayerCache cache,
-    Object cacheKey,
+  /// Draws the visible terrain chunks and the water shimmer. Chunks
+  /// draw from rasterized textures; a chunk without a fresh texture
+  /// falls back to replaying its world-space recording under the
+  /// camera transform, which is slower but always correct.
+  void _drawTerrainChunks(
+    Canvas canvas,
     Size size,
     _CellBounds bounds,
+    _ViewportGeometry viewport,
   ) {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, Offset.zero & size);
-    final viewport = _ViewportGeometry(size, scale, offset);
-    final visibleCellCount =
-        (bounds.right - bounds.left + 1) * (bounds.bottom - bounds.top + 1);
-    var terrainStride = 1;
-    while (visibleCellCount ~/ (terrainStride * terrainStride) > 24000) {
-      terrainStride *= 2;
-    }
-    final terrainTop = floorDivide(bounds.top, terrainStride) * terrainStride;
-    final terrainLeft = floorDivide(bounds.left, terrainStride) * terrainStride;
-    final shimmerBuckets = List<Path>.generate(
-      content.ambience.waterShimmer.bands,
-      (_) => Path(),
-    );
-    var blockIndex = 0;
-    for (var row = terrainTop; row <= bounds.bottom; row += terrainStride) {
-      // The viewport is an axis-aligned rect in world space, which the
-      // lattice sees as a diamond: iterating the lattice bounding box
-      // draws ~2.2x the visible cells, all instantly clipped. At unit
-      // stride the loop instead walks each row's exact column window,
-      // so off-screen cells are never recorded. Merged blocks span
-      // several rows and keep the conservative box.
-      int columnStart;
-      int columnEnd;
-      if (terrainStride == 1) {
-        final window = viewport.columnWindow(row);
-        if (window == null) continue;
-        (columnStart, columnEnd) = window;
-      } else {
-        columnStart = terrainLeft;
-        columnEnd = bounds.right;
+    terrainCache.resetFor(state, images.length);
+    terrainCache.setTextureFactor(_textureFactorFor(scale, pixelRatio));
+    terrainCache.evictDistant();
+    final drawn = <_TerrainChunk>[];
+    var rasterBudget = 12;
+    for (final coord in _visibleChunkCoords(bounds, viewport)) {
+      var chunk = terrainCache.chunks[coord];
+      if (chunk == null || chunk.generation != terrainCache.generation) {
+        chunk = _recordChunk(coord);
       }
+      chunk.lastUsed = terrainCache.nextStamp();
+      drawn.add(chunk);
+      if (!chunk.imageMatchesBucket && rasterBudget > 0) {
+        rasterBudget--;
+        _rasterizeChunk(chunk);
+      }
+    }
+    for (final chunk in drawn) {
+      ParcelWorldProbe.countChunkDraw();
+      ParcelWorldProbe.noteDrawnCells(state.parcelSize * state.parcelSize);
+      final image = chunk.image;
+      if (!debugDrawChunksViaPictures && image != null) {
+        canvas.drawImageRect(
+          image,
+          Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+          _worldRectToScreen(chunk.worldRect, size, scale, offset),
+          Paint()..filterQuality = FilterQuality.medium,
+        );
+      } else if (chunk.picture case final picture?) {
+        _drawWorldPicture(canvas, size, chunk.worldRect, picture);
+      }
+    }
+    _paintWaterShimmer(canvas, size, drawn);
+  }
+
+  /// Replays a world-space recording through the camera transform.
+  /// The recording's origin sits at [worldRect]'s top-left, so the
+  /// replay adds that origin back after applying the camera: picture
+  /// point p (world w minus the rect origin) must land at
+  /// `center + offset + w * scale`.
+  void _drawWorldPicture(
+    Canvas canvas,
+    Size size,
+    Rect worldRect,
+    ui.Picture picture,
+  ) {
+    canvas
+      ..save()
+      ..translate(size.width / 2 + offset.dx, size.height / 2 + offset.dy)
+      ..scale(scale)
+      ..translate(worldRect.left, worldRect.top)
+      ..drawPicture(picture)
+      ..restore();
+  }
+
+  /// Parcel chunks that can hold any visible cell: the lattice
+  /// bounding box at parcel granularity, filtered by the exact
+  /// per-row visibility windows.
+  List<ParcelCoord> _visibleChunkCoords(
+    _CellBounds bounds,
+    _ViewportGeometry viewport,
+  ) {
+    final parcelSize = state.parcelSize;
+    final result = <ParcelCoord>[];
+    for (
+      var py = floorDivide(bounds.top, parcelSize);
+      py <= floorDivide(bounds.bottom, parcelSize);
+      py++
+    ) {
       for (
-        var column = columnStart;
-        column <= columnEnd;
-        column += terrainStride
+        var px = floorDivide(bounds.left, parcelSize);
+        px <= floorDivide(bounds.right, parcelSize);
+        px++
       ) {
-        final cell = CellCoord(column, row);
-        ParcelWorldProbe.noteDrawnCells(terrainStride * terrainStride);
-        final terrain = queries.terrainAt(cell);
-        var anyWater = !terrain.isLand;
-        var allOwned = queries.ownsCell(cell);
-        if (terrainStride > 1) {
-          for (var dy = 0; dy < terrainStride; dy++) {
-            for (var dx = 0; dx < terrainStride; dx++) {
-              if (dx == 0 && dy == 0) continue;
-              final subCell = cell.offset(dx, dy);
-              anyWater = anyWater || !queries.terrainAt(subCell).isLand;
-              allOwned = allOwned && queries.ownsCell(subCell);
-            }
-          }
-        }
-        final roles = anyWater
-            ? const ['terrain.water']
-            : _terrainSpriteRoles(cell, terrain, queries);
-        final blockCenter = _blockWorldCenter(cell, terrainStride);
-        // On-screen estimate for the probe: sample every 16th block's
-        // screen position against the viewport.
-        if (ParcelWorldProbe.recording && (blockIndex++ & 0xF) == 0) {
-          final probeCenter = _worldToScreen(blockCenter, size, scale, offset);
-          if (probeCenter.dx >= 0 &&
-              probeCenter.dx <= size.width &&
-              probeCenter.dy >= 0 &&
-              probeCenter.dy <= size.height) {
-            ParcelWorldProbe.noteOnscreenCells(
-              16 * terrainStride * terrainStride,
-            );
-          }
-        }
-        for (final role in roles) {
-          final path = content.tryAssetPath(role);
-          if (path == null) continue;
-          final image = images[path];
-          if (image == null) continue;
-          ParcelWorldProbe.countTerrain();
-          _drawImageAtWorld(
-            canvas,
-            image,
-            blockCenter,
-            size,
-            scale,
-            offset,
-            tileSpan: terrainStride,
-          );
-        }
-        if (!allOwned) {
-          ParcelWorldProbe.countWash();
-          _drawCellWash(
-            canvas,
-            blockCenter,
-            terrainStride,
-            size,
-            scale,
-            offset,
-            content.ambience.unownedLandWash,
-          );
-        }
-        if (anyWater && terrainStride == 1) {
-          final center = _worldToScreen(blockCenter, size, scale, offset);
-          final bucket =
-              shimmerBuckets[(column - row) %
-                  content.ambience.waterShimmer.bands];
-          ParcelWorldProbe.countShimmer();
-          bucket
-            ..moveTo(center.dx, center.dy - _logicalTileHeight / 2 * scale)
-            ..lineTo(center.dx + _logicalTileWidth / 2 * scale, center.dy)
-            ..lineTo(center.dx, center.dy + _logicalTileHeight / 2 * scale)
-            ..lineTo(center.dx - _logicalTileWidth / 2 * scale, center.dy)
-            ..close();
+        final coord = ParcelCoord(px, py);
+        if (_chunkVisible(coord, parcelSize, viewport)) result.add(coord);
+      }
+    }
+    return result;
+  }
+
+  bool _chunkVisible(
+    ParcelCoord coord,
+    int parcelSize,
+    _ViewportGeometry viewport,
+  ) {
+    final firstColumn = coord.x * parcelSize;
+    final lastColumn = firstColumn + parcelSize - 1;
+    for (
+      var row = coord.y * parcelSize;
+      row < coord.y * parcelSize + parcelSize;
+      row++
+    ) {
+      final window = viewport.columnWindow(row);
+      if (window == null) continue;
+      if (window.$1 <= lastColumn && window.$2 >= firstColumn) return true;
+    }
+    return false;
+  }
+
+  /// Exact count of cells whose diamonds intersect the viewport.
+  int _visibleCellCount(_CellBounds bounds, _ViewportGeometry viewport) {
+    var count = 0;
+    for (var row = bounds.top; row <= bounds.bottom; row++) {
+      final window = viewport.columnWindow(row);
+      if (window != null) count += window.$2 - window.$1 + 1;
+    }
+    return count;
+  }
+
+  /// Texture pixels per logical pixel for chunk rasterization. The
+  /// pack's art is 2x logical density, so factor 2 preserves full art
+  /// detail; smaller factors trade detail for memory when the display
+  /// is zoomed out.
+  double _textureFactorFor(double cameraScale, double pixelRatio) {
+    final density = cameraScale * pixelRatio;
+    if (density < 0.75) return 0.5;
+    if (density < 1.5) return 1;
+    return 2;
+  }
+
+  /// Records one parcel chunk in world space: terrain, unowned wash,
+  /// roads, shimmer contours, and — separately, so it can draw above
+  /// neighbouring chunks — the owned-parcel outline.
+  _TerrainChunk _recordChunk(ParcelCoord coord) {
+    final parcelSize = state.parcelSize;
+    final worldRect = _chunkWorldRect(coord, parcelSize);
+    final chunk = _TerrainChunk(coord, worldRect)
+      ..generation = terrainCache.generation;
+    terrainCache.chunks[coord] = chunk;
+    ParcelWorldProbe.countChunkRecord();
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Offset.zero & worldRect.size);
+    canvas.translate(-worldRect.left, -worldRect.top);
+
+    final shimmer = content.ambience.waterShimmer;
+    final shimmerBuckets = List<Path>.generate(shimmer.bands, (_) => Path());
+    final shimmerCounts = List<int>.filled(shimmer.bands, 0);
+
+    // Road neighbour masks read the road set around the chunk.
+    final roadCells = <CellCoord>{
+      ...queries.roadsByCell.keys,
+      for (final bridge in state.bridges) ...bridge.waterCells,
+    };
+
+    for (final cell in coord.cells(parcelSize)) {
+      final terrain = queries.terrainAt(cell);
+      final anyWater = !terrain.isLand;
+      final center = _cellWorldCenter(cell);
+      final roles = anyWater
+          ? const ['terrain.water']
+          : _terrainSpriteRoles(cell, terrain, queries);
+      for (final role in roles) {
+        final path = content.tryAssetPath(role);
+        if (path == null) continue;
+        final image = images[path];
+        if (image == null) continue;
+        ParcelWorldProbe.countTerrain();
+        _drawImageAtWorldCenter(canvas, image, center);
+      }
+      if (!queries.ownsCell(cell)) {
+        ParcelWorldProbe.countWash();
+        _drawWorldCellWash(canvas, center, content.ambience.unownedLandWash);
+      }
+      if (anyWater) {
+        final band = (cell.column - cell.row) % shimmer.bands;
+        shimmerCounts[band]++;
+        final halfWidth = _logicalTileWidth / 2;
+        final halfHeight = _logicalTileHeight / 2;
+        shimmerBuckets[band]
+          ..moveTo(center.dx, center.dy - halfHeight)
+          ..lineTo(center.dx + halfWidth, center.dy)
+          ..lineTo(center.dx, center.dy + halfHeight)
+          ..lineTo(center.dx - halfWidth, center.dy)
+          ..close();
+      }
+      final road = queries.roadsByCell[cell];
+      if (road != null) {
+        final path = road.style == RoadStyle.dirt
+            ? content.tryAssetPath('terrain.dirt')
+            : content.tryAssetPath(
+                roadSpriteRole(roadNeighborMask(cell, roadCells)),
+              );
+        final image = path == null ? null : images[path];
+        if (image != null) {
+          ParcelWorldProbe.countRoad();
+          _drawImageAtWorldCenter(canvas, image, center);
         }
       }
     }
 
-    _drawOwnedParcels(canvas, size, bounds);
-    _drawRoads(canvas, size, queries, bounds, viewport);
-    cache.picture?.dispose();
-    cache.picture = recorder.endRecording();
-    cache.key = cacheKey;
-    cache.shimmerPaths = shimmerBuckets;
+    // The owned-parcel outline draws after the chunk's cells. Its
+    // stroke bleeds ~0.6 world px into the neighbouring chunk, which
+    // the margin covers; a neighbour's tiles may paint over that
+    // outer half, which reads fine at 1.2 px.
+    if (queries.ownsParcel(coord)) {
+      ParcelWorldProbe.countOutline();
+      _drawWorldParcelOutline(canvas, coord, parcelSize);
+    }
+
+    chunk.picture = recorder.endRecording();
+    chunk.shimmerPaths = shimmerBuckets;
+    chunk.shimmerCounts = shimmerCounts;
+
+    // The shimmer shader's coverage mask: the same water diamonds as
+    // one filled shape.
+    if (shimmerCounts.any((count) => count > 0)) {
+      final maskRecorder = ui.PictureRecorder();
+      final maskCanvas = Canvas(maskRecorder, Offset.zero & worldRect.size);
+      maskCanvas.translate(-worldRect.left, -worldRect.top);
+      final white = Paint()..color = const Color(0xFFFFFFFF);
+      for (final path in shimmerBuckets) {
+        maskCanvas.drawPath(path, white);
+      }
+      chunk.waterMaskPicture = maskRecorder.endRecording();
+    }
+    return chunk;
+  }
+
+  /// Rasterizes a chunk's recording into a texture at the cache's
+  /// current texture factor. The recording is wrapped in a scaling
+  /// picture so one world-space recording serves every factor.
+  void _rasterizeChunk(_TerrainChunk chunk) {
+    final picture = chunk.picture;
+    if (picture == null) {
+      chunk.imageMatchesBucket = true;
+      return;
+    }
+    final factor = terrainCache.textureFactor;
+    final width = (chunk.worldRect.width * factor).ceil();
+    final height = (chunk.worldRect.height * factor).ceil();
+    try {
+      final wrapper = ui.PictureRecorder();
+      final canvas = Canvas(
+        wrapper,
+        Offset.zero & Size(width.toDouble(), height.toDouble()),
+      );
+      canvas
+        ..scale(factor)
+        ..drawPicture(picture);
+      final wrapperPicture = wrapper.endRecording();
+      final oldImage = chunk.image;
+      final oldWrapper = chunk.rasterWrapper;
+      chunk.image = wrapperPicture.toImageSync(width, height);
+      chunk.rasterWrapper = wrapperPicture;
+      chunk.imageMatchesBucket = true;
+      oldImage?.dispose();
+      oldWrapper?.dispose();
+      if (chunk.waterMaskPicture case final maskPicture?) {
+        final maskWrapper = ui.PictureRecorder();
+        final maskCanvas = Canvas(
+          maskWrapper,
+          Offset.zero & Size(width.toDouble(), height.toDouble()),
+        );
+        maskCanvas
+          ..scale(factor)
+          ..drawPicture(maskPicture);
+        final maskWrapperPicture = maskWrapper.endRecording();
+        final oldMask = chunk.waterMask;
+        final oldMaskWrapper = chunk.waterMaskWrapper;
+        chunk.waterMask = maskWrapperPicture.toImageSync(width, height);
+        chunk.waterMaskWrapper = maskWrapperPicture;
+        oldMask?.dispose();
+        oldMaskWrapper?.dispose();
+      }
+    } catch (_) {
+      // Rasterization unavailable (for example without a GPU
+      // context): keep drawing via the picture replay path.
+      chunk.imageMatchesBucket = true;
+    }
   }
 
   /// A gentle travelling highlight over the water: diagonal bands of
   /// translucent white whose brightness rises and falls out of phase,
   /// reading as ripples moving across rivers, lakes, and the ocean.
-  void _paintWaterShimmer(
+  /// Drawn by the fragment shader when available — one textured quad
+  /// per water chunk, with the band pattern computed per pixel — and
+  /// by merged world-space paths otherwise.
+  void _paintWaterShimmer(Canvas canvas, Size size, List<_TerrainChunk> drawn) {
+    final program = shimmerProgram;
+    if (program != null && !debugDrawShimmerViaPaths) {
+      _paintWaterShimmerViaShader(canvas, size, drawn, program);
+    } else {
+      _paintWaterShimmerViaPaths(canvas, size, drawn);
+    }
+  }
+
+  void _paintWaterShimmerViaShader(
     Canvas canvas,
-    _TerrainLayerCache cache,
-    double seconds,
+    Size size,
+    List<_TerrainChunk> drawn,
+    ui.FragmentProgram program,
   ) {
-    final paths = cache.shimmerPaths;
-    if (paths == null) return;
     final shimmer = content.ambience.waterShimmer;
-    for (var bucket = 0; bucket < paths.length; bucket++) {
+    var quads = 0;
+    for (final chunk in drawn) {
+      final mask = chunk.waterMask;
+      if (mask == null) continue;
+      // One shader instance per quad: uniform and sampler values are
+      // read at raster time, so a shared instance would draw every
+      // quad with the last quad's mask and origin. Indices follow the
+      // shader's declaration order, counting only non-sampler
+      // uniforms.
+      final shader = program.fragmentShader();
+      shader.setFloat(0, ambient.seconds);
+      shader.setFloat(1, shimmer.periodSeconds);
+      shader.setFloat(2, shimmer.bands.toDouble());
+      shader.setFloat(3, shimmer.maxOpacity);
+      final tint = shimmer.colorRgb;
+      shader.setFloat(4, tint.isNotEmpty ? tint[0] / 255 : 1);
+      shader.setFloat(5, tint.length > 1 ? tint[1] / 255 : 1);
+      shader.setFloat(6, tint.length > 2 ? tint[2] / 255 : 1);
+      shader.setFloat(7, 1);
+      shader.setFloat(8, chunk.worldRect.left);
+      shader.setFloat(9, chunk.worldRect.top);
+      shader.setFloat(10, chunk.worldRect.width);
+      shader.setFloat(11, chunk.worldRect.height);
+      shader.setImageSampler(0, mask, filterQuality: FilterQuality.medium);
+      final paint = Paint()..shader = shader;
+      quads++;
+      canvas
+        ..save()
+        ..translate(size.width / 2 + offset.dx, size.height / 2 + offset.dy)
+        ..scale(scale)
+        ..translate(chunk.worldRect.left, chunk.worldRect.top)
+        ..drawRect(Offset.zero & chunk.worldRect.size, paint)
+        ..restore();
+    }
+    ParcelWorldProbe.noteShimmerQuads(quads);
+  }
+
+  void _paintWaterShimmerViaPaths(
+    Canvas canvas,
+    Size size,
+    List<_TerrainChunk> drawn,
+  ) {
+    final shimmer = content.ambience.waterShimmer;
+    final bands = shimmer.bands;
+    final merged = List<Path>.generate(bands, (_) => Path());
+    var contours = 0;
+    var anyWater = false;
+    for (final chunk in drawn) {
+      final paths = chunk.shimmerPaths;
+      final counts = chunk.shimmerCounts;
+      if (paths == null || counts == null) continue;
+      for (var band = 0; band < bands; band++) {
+        if (counts[band] == 0) continue;
+        merged[band].addPath(paths[band], Offset.zero);
+        contours += counts[band];
+        anyWater = true;
+      }
+    }
+    ParcelWorldProbe.noteShimmerContours(contours);
+    if (!anyWater) return;
+    canvas.save();
+    canvas.translate(size.width / 2 + offset.dx, size.height / 2 + offset.dy);
+    canvas.scale(scale);
+    for (var band = 0; band < bands; band++) {
       final wave =
           0.5 +
           0.5 *
               math.sin(
-                2 * math.pi * (seconds / shimmer.periodSeconds) -
-                    bucket * 2 * math.pi / paths.length,
+                2 * math.pi * (ambient.seconds / shimmer.periodSeconds) -
+                    band * 2 * math.pi / bands,
               );
       final alpha = wave * shimmer.maxOpacity;
       if (alpha < 0.006) continue;
       final tint = shimmer.colorRgb;
       canvas.drawPath(
-        paths[bucket],
+        merged[band],
         Paint()
           ..color = Color.fromARGB(
             (alpha * 255).round(),
@@ -776,6 +1046,7 @@ class _ParcelWorldPainter extends CustomPainter {
           ),
       );
     }
+    canvas.restore();
   }
 
   /// Everything that stands on or rises above the ground — structures,
@@ -1036,87 +1307,6 @@ class _ParcelWorldPainter extends CustomPainter {
       roles.add('shore.$style.corner.w');
     }
     return roles;
-  }
-
-  void _drawOwnedParcels(Canvas canvas, Size size, _CellBounds bounds) {
-    for (final parcel in queries.parcelsInBounds(
-      left: bounds.left - state.parcelSize,
-      right: bounds.right + state.parcelSize,
-      top: bounds.top - state.parcelSize,
-      bottom: bounds.bottom + state.parcelSize,
-    )) {
-      final origin = parcel.coord.origin(state.parcelSize);
-      final last = origin.offset(state.parcelSize, state.parcelSize);
-      final vertices = [
-        origin,
-        origin.offset(state.parcelSize, 0),
-        last,
-        origin.offset(0, state.parcelSize),
-      ];
-      final path = Path();
-      for (var i = 0; i < vertices.length; i++) {
-        final point = _worldToScreen(
-          _cellWorldCorner(vertices[i]),
-          size,
-          scale,
-          offset,
-        );
-        if (i == 0) {
-          path.moveTo(point.dx, point.dy);
-        } else {
-          path.lineTo(point.dx, point.dy);
-        }
-      }
-      path.close();
-      ParcelWorldProbe.countOutline();
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = const Color(0x66537662)
-          ..strokeWidth = 1.2
-          ..style = PaintingStyle.stroke,
-      );
-    }
-  }
-
-  void _drawRoads(
-    Canvas canvas,
-    Size size,
-    WorldQueries queries,
-    _CellBounds bounds,
-    _ViewportGeometry viewport,
-  ) {
-    final nearbyRoads = queries.roadsInBounds(
-      left: bounds.left - 8,
-      right: bounds.right + 8,
-      top: bounds.top - 8,
-      bottom: bounds.bottom + 8,
-    );
-    final nearbyBridges = queries.bridgesInBounds(
-      left: bounds.left - 8,
-      right: bounds.right + 8,
-      top: bounds.top - 8,
-      bottom: bounds.bottom + 8,
-    );
-    final roadCells = <CellCoord>{
-      ...nearbyRoads.map((road) => road.cell),
-      for (final bridge in nearbyBridges) ...bridge.waterCells,
-    };
-    final entries =
-        nearbyRoads.where((road) => viewport.containsCell(road.cell)).toList()
-          ..sort((a, b) => _depthCompare(a.cell, b.cell));
-    for (final road in entries) {
-      final path = road.style == RoadStyle.dirt
-          ? content.tryAssetPath('terrain.dirt')
-          : content.tryAssetPath(
-              roadSpriteRole(roadNeighborMask(road.cell, roadCells)),
-            );
-      final image = path == null ? null : images[path];
-      if (image != null) {
-        ParcelWorldProbe.countRoad();
-        _drawImageAtCell(canvas, image, road.cell, size, scale, offset);
-      }
-    }
   }
 
   /// Draws a tile sprite at its natural aspect ratio with the sprite's
@@ -1589,56 +1779,82 @@ Rect _structureRect(
   );
 }
 
-void _drawImageAtCell(
-  Canvas canvas,
-  ui.Image image,
-  CellCoord cell,
-  Size size,
-  double scale,
-  Offset offset,
-) {
-  _drawImageAtWorld(canvas, image, _cellWorldCenter(cell), size, scale, offset);
-}
-
-void _drawImageAtWorld(
-  Canvas canvas,
-  ui.Image image,
-  Offset worldCenter,
-  Size size,
-  double scale,
-  Offset offset, {
-  int tileSpan = 1,
-}) {
-  final center = _worldToScreen(worldCenter, size, scale, offset);
+/// Draws a tile sprite at its natural aspect ratio in world space:
+/// the sprite's ground diamond aligned to the cell's diamond.
+void _drawImageAtWorldCenter(Canvas canvas, ui.Image image, Offset center) {
   canvas.drawImageRect(
     image,
     Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
     Rect.fromCenter(
       center: center,
-      width: _logicalTileWidth * tileSpan * scale,
-      height: _logicalTileHeight * tileSpan * scale,
+      width: _logicalTileWidth,
+      height: _logicalTileHeight,
     ),
     Paint()..filterQuality = FilterQuality.medium,
   );
 }
 
-/// Unowned land is faded toward the map background. The wash is applied once
-/// over the cell's fully composed layers, so a cell with layered shore
-/// pieces fades exactly like plain ground instead of compounding
-/// per-sprite transparency (which made shorelines look darker than the
-/// surrounding grass).
-void _drawCellWash(
+/// Draws the parcel-outline stroke in world space.
+void _drawWorldParcelOutline(
   Canvas canvas,
-  Offset worldCenter,
-  int tileSpan,
-  Size size,
-  double scale,
-  Offset offset,
+  ParcelCoord parcel,
+  int parcelSize,
+) {
+  final origin = parcel.origin(parcelSize);
+  final vertices = [
+    origin,
+    origin.offset(parcelSize, 0),
+    origin.offset(parcelSize, parcelSize),
+    origin.offset(0, parcelSize),
+  ];
+  final path = Path();
+  for (var i = 0; i < vertices.length; i++) {
+    final point = _cellWorldCorner(vertices[i]);
+    if (i == 0) {
+      path.moveTo(point.dx, point.dy);
+    } else {
+      path.lineTo(point.dx, point.dy);
+    }
+  }
+  path.close();
+  canvas.drawPath(
+    path,
+    Paint()
+      ..color = const Color(0x66537662)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke,
+  );
+}
+
+/// World-space rect covering every cell diamond in a parcel chunk,
+/// plus a margin so anti-aliased edges and outline strokes that bleed
+/// past the boundary survive rasterization.
+Rect _chunkWorldRect(ParcelCoord parcel, int parcelSize) {
+  const margin = 2.0;
+  final halfWidth = _logicalTileWidth / 2;
+  final halfHeight = _logicalTileHeight / 2;
+  final firstColumn = parcel.x * parcelSize;
+  final firstRow = parcel.y * parcelSize;
+  return Rect.fromLTRB(
+    (firstColumn - firstRow - parcelSize) * halfWidth - margin,
+    (firstColumn + firstRow) * halfHeight - halfHeight - margin,
+    (firstColumn - firstRow + parcelSize) * halfWidth + margin,
+    (firstColumn + firstRow + 2 * parcelSize - 1) * halfHeight + margin,
+  );
+}
+
+/// Unowned land is faded toward the map background. The wash is
+/// applied once over the cell's fully composed layers, so a cell with
+/// layered shore pieces fades exactly like plain ground instead of
+/// compounding per-sprite transparency (which made shorelines look
+/// darker than the surrounding grass).
+void _drawWorldCellWash(
+  Canvas canvas,
+  Offset center,
   UnownedLandWashContent wash,
 ) {
-  final center = _worldToScreen(worldCenter, size, scale, offset);
-  final halfWidth = _logicalTileWidth / 2 * tileSpan * scale;
-  final halfHeight = _logicalTileHeight / 2 * tileSpan * scale;
+  final halfWidth = _logicalTileWidth / 2;
+  final halfHeight = _logicalTileHeight / 2;
   final path = Path()
     ..moveTo(center.dx, center.dy - halfHeight)
     ..lineTo(center.dx + halfWidth, center.dy)
@@ -1700,22 +1916,6 @@ Offset _cellWorldCorner(CellCoord gridCorner) => Offset(
       _logicalTileHeight / 2,
 );
 
-/// Centre of the diamond covered by a span×span block of cells. Cell
-/// diamonds are centred on integer lattice points, so the block covers the
-/// continuous square [c-0.5, c+span-0.5] × [r-0.5, r+span-0.5], whose centre
-/// is at lattice (c+(span-1)/2, r+(span-1)/2). For span 1 this is exactly
-/// the cell's centre; terrain must keep using this value so the ground grid
-/// stays aligned with cell-centred overlays.
-Offset _blockWorldCenter(CellCoord firstCell, int span) {
-  final halfOffset = (span - 1) / 2.0;
-  return Offset(
-    (firstCell.column + halfOffset - firstCell.row - halfOffset) *
-        (_logicalTileWidth / 2),
-    (firstCell.column + halfOffset + firstCell.row + halfOffset) *
-        (_logicalTileHeight / 2),
-  );
-}
-
 Offset _worldToScreen(Offset point, Size size, double scale, Offset offset) =>
     size.center(Offset.zero) + offset + point * scale;
 
@@ -1735,9 +1935,6 @@ Rect _worldRectToScreen(Rect rect, Size size, double scale, Offset offset) =>
       size.width / 2 + offset.dx + rect.right * scale,
       size.height / 2 + offset.dy + rect.bottom * scale,
     );
-
-int _depthCompare(CellCoord a, CellCoord b) =>
-    (a.column + a.row).compareTo(b.column + b.row);
 
 /// How large ambient pedestrians render relative to the standard
 /// 128×64 tile scale. A 24×32 character frame at this size reads as a
@@ -1764,19 +1961,132 @@ class _AmbientClock extends ChangeNotifier {
   }
 }
 
-/// Records the camera- and world-dependent ground layers (terrain, shores,
-/// roads, bridges) plus the prebuilt water-shimmer band paths. Rebuilt
-/// whenever any cache-key input changes; replayed every animation frame.
-class _TerrainLayerCache {
+/// One parcel-sized piece of the flat ground layer, recorded in world
+/// coordinates so the recording survives camera motion. The [picture]
+/// is the source of truth; the [image] is a rasterized texture at the
+/// current zoom bucket, drawn as a single quad per frame.
+class _TerrainChunk {
+  _TerrainChunk(this.coord, this.worldRect);
+
+  final ParcelCoord coord;
+
+  /// World-space rect covering the chunk's cells plus a small margin.
+  final Rect worldRect;
+
+  /// World-space recording of terrain, wash, roads, and the parcel
+  /// outline, translated so this rect's top-left is the origin.
   ui.Picture? picture;
+
+  /// Rasterized [picture] at the cache's texture factor.
+  ui.Image? image;
+
+  /// The scaling wrapper recorded around [picture] for [image];
+  /// retained because rasterization may still reference it.
+  ui.Picture? rasterWrapper;
+
+  /// Whether [image] was rasterized at the cache's current factor.
+  bool imageMatchesBucket = false;
+
+  /// World-space water-shimmer contours, one path per band.
   List<Path>? shimmerPaths;
-  Object? key;
+
+  /// Water-cell count per shimmer band (the contours in each path).
+  List<int>? shimmerCounts;
+
+  /// World-space recording of the chunk's water coverage (filled
+  /// diamonds), rasterized into [waterMask] for the shimmer shader.
+  ui.Picture? waterMaskPicture;
+
+  /// Rasterized water-coverage mask at the cache's texture factor.
+  ui.Image? waterMask;
+
+  /// The scaling wrapper recorded around [waterMaskPicture] for
+  /// [waterMask]; retained while rasterization may reference it.
+  ui.Picture? waterMaskWrapper;
+
+  /// Cache generation this chunk was recorded in.
+  int generation = -1;
+
+  /// Monotonic stamp of the last frame that drew this chunk.
+  int lastUsed = 0;
 
   void dispose() {
     picture?.dispose();
+    image?.dispose();
+    rasterWrapper?.dispose();
+    waterMaskPicture?.dispose();
+    waterMask?.dispose();
+    waterMaskWrapper?.dispose();
     picture = null;
+    image = null;
+    rasterWrapper = null;
+    waterMaskPicture = null;
+    waterMask = null;
+    waterMaskWrapper = null;
     shimmerPaths = null;
-    key = null;
+    shimmerCounts = null;
+  }
+}
+
+/// Parcel-sized world-space chunks of the flat layer (terrain, wash,
+/// roads, parcel outlines). Chunks are recorded and rasterized lazily
+/// when visible and survive camera motion: panning and zooming draw
+/// cached textures instead of re-recording, and only entering unseen
+/// areas records new chunks. Any change to the world or the sprite
+/// set re-records everything, matching the previous whole-layer cache
+/// semantics; per-chunk dirtying is future work.
+class _TerrainChunkCache {
+  final Map<ParcelCoord, _TerrainChunk> chunks = {};
+  Object? worldKey;
+  int imageCount = -1;
+  double textureFactor = 1;
+  int generation = 0;
+  int _stamp = 0;
+
+  /// Cap on cached chunks so roaming the open ocean cannot grow the
+  /// cache without bound; the least recently drawn are evicted.
+  static const int _maxChunks = 400;
+
+  int nextStamp() => ++_stamp;
+
+  /// Drops every chunk when the world or the sprite set changed.
+  void resetFor(Object world, int images) {
+    if (worldKey == world && imageCount == images) return;
+    worldKey = world;
+    imageCount = images;
+    generation++;
+    for (final chunk in chunks.values) {
+      chunk.dispose();
+    }
+    chunks.clear();
+  }
+
+  /// Marks every rasterized texture stale after a zoom-bucket change;
+  /// stale textures keep drawing (scaled) until re-rasterized.
+  void setTextureFactor(double factor) {
+    if (textureFactor == factor) return;
+    textureFactor = factor;
+    for (final chunk in chunks.values) {
+      chunk.imageMatchesBucket = false;
+    }
+  }
+
+  void evictDistant() {
+    if (chunks.length <= _maxChunks) return;
+    final ordered = chunks.values.toList()
+      ..sort((a, b) => a.lastUsed.compareTo(b.lastUsed));
+    final excess = chunks.length - _maxChunks + 100;
+    for (final chunk in ordered.take(excess)) {
+      chunks.remove(chunk.coord);
+      chunk.dispose();
+    }
+  }
+
+  void dispose() {
+    for (final chunk in chunks.values) {
+      chunk.dispose();
+    }
+    chunks.clear();
   }
 }
 

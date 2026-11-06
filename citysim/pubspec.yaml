@@ -23,6 +23,9 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  shaders:
+    - shaders/water_shimmer.frag
+
   assets:
     - assets/config.json
     - assets/content/

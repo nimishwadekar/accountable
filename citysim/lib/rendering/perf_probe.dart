@@ -3,18 +3,22 @@
 ///
 /// The probe answers specific questions about each frame:
 /// - how long the UI thread spends in `paint()` overall, and how much
-///   of that is re-recording the cached ground layer (the suspected
-///   cost of camera motion);
-/// - how many draw ops the frame carries, split by layer, because op
-///   count — not pixels — is what dominates zoomed-out frames;
+///   of that is the terrain layer (chunk records, rasterizations, and
+///   chunk texture draws);
+/// - how many raster quads the frame carries (chunk textures plus
+///   actors) and how many water-shimmer contours the animated layer
+///   tessellates, because op count — not pixels — is what dominates
+///   zoomed-out frames;
+/// - how much chunk re-recording happened (world or sprite changes,
+///   or entering previously unseen areas);
 /// - how many cells the draw bounds cover versus how many are actually
-///   on screen (the bounding-box overdraw), estimated by sampling.
+///   visible (chunk-granularity overdraw).
 ///
 /// Frames are collected while [recording] is on. A debug build opened
 /// with `?perf=1` enables recording automatically, paints a small HUD
-/// onto the map, and prints a summary to the console every few seconds.
-/// Everything here is a no-op in release builds (`kDebugMode` guards),
-/// and tests read [samples] directly.
+/// onto the map, and prints a summary to the console every few
+/// seconds. Everything here is a no-op in release builds (`kDebugMode`
+/// guards), and tests read [samples] directly.
 library;
 
 import 'dart:math' as math;
@@ -28,12 +32,15 @@ class FrameSample {
   const FrameSample({
     required this.scale,
     required this.paintMicros,
-    required this.recordMicros,
+    required this.terrainMicros,
+    required this.chunkDraws,
+    required this.chunkRecords,
     required this.terrainOps,
     required this.washOps,
-    required this.shimmerContours,
     required this.roadOps,
     required this.outlineOps,
+    required this.shimmerContours,
+    required this.shimmerQuads,
     required this.actorOps,
     required this.boundsCells,
     required this.drawnCells,
@@ -45,42 +52,53 @@ class FrameSample {
   /// Total UI-thread time spent in `paint()` for this frame.
   final int paintMicros;
 
-  /// Time spent re-recording the cached ground layer; 0 when the frame
-  /// replayed the existing picture.
-  final int recordMicros;
+  /// Time in the terrain layer: chunk records, rasterizations, chunk
+  /// draws, and the water shimmer pass.
+  final int terrainMicros;
 
+  /// Chunk textures (or world-space picture replays) drawn this frame.
+  final int chunkDraws;
+
+  /// Chunks re-recorded this frame.
+  final int chunkRecords;
+
+  /// Sprite draws emitted while recording chunks this frame.
   final int terrainOps;
   final int washOps;
-  final int shimmerContours;
   final int roadOps;
   final int outlineOps;
+
+  /// Water-shimmer contours tessellated by the path fallback this
+  /// frame (zero in shader mode).
+  final int shimmerContours;
+
+  /// Water-shimmer shader quads drawn this frame (zero in path mode).
+  final int shimmerQuads;
+
   final int actorOps;
 
   /// Cells covered by the painter's draw bounds (the lattice bounding
   /// box of the visible diamond).
   final int boundsCells;
 
-  /// Cells actually visited by the terrain record loop — after
-  /// diamond culling this should sit near [onscreenCells] instead of
-  /// [boundsCells].
+  /// Cells covered by the chunks actually drawn.
   final int drawnCells;
 
-  /// Estimated cells actually visible on screen.
+  /// Cells whose diamonds intersect the viewport.
   final int onscreenCells;
 
-  bool get recorded => recordMicros > 0;
-
-  int get flatOps =>
-      terrainOps + washOps + shimmerContours + roadOps + outlineOps;
-
-  int get totalOps => flatOps + actorOps;
+  /// Raster quads pushed this frame: chunk textures plus actors.
+  int get totalOps => chunkDraws + actorOps;
 }
 
 /// Summary statistics over a run of frames.
 class ProbeStats {
   ProbeStats(this.label, List<FrameSample> source)
     : frames = source.length,
-      records = source.where((sample) => sample.recorded).length,
+      chunkRecords = source.fold<int>(
+        0,
+        (sum, sample) => sum + sample.chunkRecords,
+      ),
       meanScale = _mean(source.map((s) => s.scale)),
       meanPaintMs = _mean(source.map((s) => s.paintMicros / 1000)),
       p95PaintMs = _percentile(
@@ -91,64 +109,68 @@ class ProbeStats {
         0,
         (max, s) => math.max(max, s.paintMicros / 1000),
       ),
-      meanRecordMs = _mean(
-        source.where((s) => s.recorded).map((s) => s.recordMicros / 1000),
+      meanTerrainMs = _mean(source.map((s) => s.terrainMicros / 1000)),
+      maxTerrainMs = source.fold<double>(
+        0,
+        (max, s) => math.max(max, s.terrainMicros / 1000),
       ),
-      maxRecordMs = source
-          .where((s) => s.recorded)
-          .fold<double>(0, (max, s) => math.max(max, s.recordMicros / 1000)),
+      meanChunkDraws = _mean(source.map((s) => s.chunkDraws)),
       meanTotalOps = _mean(source.map((s) => s.totalOps)),
+      meanActorOps = _mean(source.map((s) => s.actorOps)),
+      meanShimmerContours = _mean(source.map((s) => s.shimmerContours)),
+      meanShimmerQuads = _mean(source.map((s) => s.shimmerQuads)),
       meanTerrainOps = _mean(source.map((s) => s.terrainOps)),
       meanWashOps = _mean(source.map((s) => s.washOps)),
-      meanShimmerContours = _mean(source.map((s) => s.shimmerContours)),
       meanRoadOps = _mean(source.map((s) => s.roadOps)),
       meanOutlineOps = _mean(source.map((s) => s.outlineOps)),
-      meanActorOps = _mean(source.map((s) => s.actorOps)),
       meanBoundsCells = _mean(source.map((s) => s.boundsCells)),
       meanDrawnCells = _mean(source.map((s) => s.drawnCells)),
       meanOnscreenCells = _mean(source.map((s) => s.onscreenCells));
 
   final String label;
   final int frames;
-  final int records;
+  final int chunkRecords;
   final double meanScale;
   final double meanPaintMs;
   final double p95PaintMs;
   final double maxPaintMs;
-  final double meanRecordMs;
-  final double maxRecordMs;
+  final double meanTerrainMs;
+  final double maxTerrainMs;
+  final double meanChunkDraws;
   final double meanTotalOps;
+  final double meanActorOps;
+  final double meanShimmerContours;
+  final double meanShimmerQuads;
   final double meanTerrainOps;
   final double meanWashOps;
-  final double meanShimmerContours;
   final double meanRoadOps;
   final double meanOutlineOps;
-  final double meanActorOps;
   final double meanBoundsCells;
   final double meanDrawnCells;
   final double meanOnscreenCells;
 
-  /// Drawn cells per on-screen cell — how much off-screen work the
-  /// record loop still carries. ~1.0 is perfect culling; the
-  /// unculled bounding box measured ~2.6.
+  /// Drawn cells per visible cell — chunk-granularity culling waste.
+  /// ~1.0 is perfect; the unculled bounding box measured ~2.6.
   double get overdraw =>
       meanOnscreenCells > 0 ? meanDrawnCells / meanOnscreenCells : 0;
 
   String describe() =>
-      '-- $label: $frames frames, $records re-records, zoom '
+      '-- $label: $frames frames, $chunkRecords chunk records, zoom '
       '${meanScale.toStringAsFixed(2)}\n'
       '   paint: mean ${meanPaintMs.toStringAsFixed(1)}ms'
       '  p95 ${p95PaintMs.toStringAsFixed(1)}ms'
       '  max ${maxPaintMs.toStringAsFixed(1)}ms'
-      '  (re-record: mean ${meanRecordMs.toStringAsFixed(1)}ms,'
-      ' max ${maxRecordMs.toStringAsFixed(1)}ms)\n'
-      '   ops/frame: ${_fmt(meanTotalOps)} total'
-      ' - terrain ${_fmt(meanTerrainOps)},'
+      '  (terrain: mean ${meanTerrainMs.toStringAsFixed(1)}ms,'
+      ' max ${maxTerrainMs.toStringAsFixed(1)}ms)\n'
+      '   draws/frame: ${_fmt(meanTotalOps)} total'
+      ' - chunks ${_fmt(meanChunkDraws)},'
+      ' actors ${_fmt(meanActorOps)},'
+      ' shimmer ${_fmt(meanShimmerQuads)} quads /'
+      ' ${_fmt(meanShimmerContours)} contours\n'
+      '   record work/frame: terrain ${_fmt(meanTerrainOps)},'
       ' wash ${_fmt(meanWashOps)},'
-      ' shimmer ${_fmt(meanShimmerContours)},'
       ' roads ${_fmt(meanRoadOps)},'
-      ' outlines ${_fmt(meanOutlineOps)},'
-      ' actors ${_fmt(meanActorOps)}\n'
+      ' outlines ${_fmt(meanOutlineOps)}\n'
       '   bounds ${_fmt(meanBoundsCells)} cells,'
       ' drawn ${_fmt(meanDrawnCells)},'
       ' onscreen ~${_fmt(meanOnscreenCells)}'
@@ -171,7 +193,7 @@ class ProbeStats {
     return sorted[index].toDouble();
   }
 
-  static String _fmt(double value) {
+  static String _fmt(num value) {
     final rounded = value.round();
     final text = '$rounded';
     final buffer = StringBuffer();
@@ -195,28 +217,29 @@ class ParcelWorldProbe {
 
   static bool _queryChecked = false;
   static Stopwatch? _paintClock;
-  static Stopwatch? _recordClock;
+  static Stopwatch? _terrainClock;
+  static int _terrainMicros = 0;
   static double _scale = 1;
-  static int _recordMicros = 0;
+  static int _chunkDraws = 0;
+  static int _chunkRecords = 0;
   static int _terrainOps = 0;
   static int _washOps = 0;
-  static int _shimmerContours = 0;
   static int _roadOps = 0;
   static int _outlineOps = 0;
+  static int _shimmerContours = 0;
+  static int _shimmerQuads = 0;
   static int _actorOps = 0;
-  static int _onscreenCells = 0;
+  static int _boundsCells = 0;
   static int _drawnCells = 0;
+  static int _onscreenCells = 0;
 
-  /// Op counts from the most recent record, carried into replay-only
-  /// frames: a frame that replays the cached picture still pushes all
-  /// of those ops through the rasterizer, so its sample should say so.
+  /// Record-work counters from the most recent frame that recorded
+  /// chunks, carried into replay-only frames for continuity.
   static int _carryTerrainOps = 0;
   static int _carryWashOps = 0;
-  static int _carryShimmerContours = 0;
   static int _carryRoadOps = 0;
   static int _carryOutlineOps = 0;
-  static int _carryOnscreenCells = 0;
-  static int _carryDrawnCells = 0;
+
   static int _hudFrame = 0;
   static TextPainter? _hudPainter;
   static List<String>? _hudLines;
@@ -244,37 +267,47 @@ class ParcelWorldProbe {
     if (hudVisible) recording = true;
     if (!recording) return;
     _scale = scale;
-    _recordMicros = 0;
+    _terrainMicros = 0;
+    _chunkDraws = 0;
+    _chunkRecords = 0;
     _terrainOps = 0;
     _washOps = 0;
-    _shimmerContours = 0;
     _roadOps = 0;
     _outlineOps = 0;
+    _shimmerContours = 0;
+    _shimmerQuads = 0;
     _actorOps = 0;
-    _onscreenCells = 0;
+    _boundsCells = 0;
     _drawnCells = 0;
+    _onscreenCells = 0;
     _paintClock = Stopwatch()..start();
   }
 
-  /// Called around the cached ground layer's re-record.
-  static void beginRecord() {
+  /// Called around the terrain layer's per-frame work (chunk records,
+  /// rasterizations, and draws).
+  static void beginTerrain() {
     if (_paintClock == null) return;
-    _recordClock = Stopwatch()..start();
+    _terrainClock = Stopwatch()..start();
   }
 
-  static void endRecord() {
-    final clock = _recordClock;
+  static void endTerrain() {
+    final clock = _terrainClock;
     if (clock == null) return;
     clock.stop();
-    _recordMicros += clock.elapsedMicroseconds;
-    _recordClock = null;
+    _terrainMicros += clock.elapsedMicroseconds;
+    _terrainClock = null;
     _carryTerrainOps = _terrainOps;
     _carryWashOps = _washOps;
-    _carryShimmerContours = _shimmerContours;
     _carryRoadOps = _roadOps;
     _carryOutlineOps = _outlineOps;
-    _carryOnscreenCells = _onscreenCells;
-    _carryDrawnCells = _drawnCells;
+  }
+
+  static void countChunkDraw() {
+    if (_paintClock != null) _chunkDraws++;
+  }
+
+  static void countChunkRecord() {
+    if (_paintClock != null) _chunkRecords++;
   }
 
   static void countTerrain() {
@@ -283,10 +316,6 @@ class ParcelWorldProbe {
 
   static void countWash() {
     if (_paintClock != null) _washOps++;
-  }
-
-  static void countShimmer() {
-    if (_paintClock != null) _shimmerContours++;
   }
 
   static void countRoad() {
@@ -301,36 +330,54 @@ class ParcelWorldProbe {
     if (_paintClock != null) _actorOps++;
   }
 
-  /// Adds sampled on-screen cells to this frame's estimate.
-  static void noteOnscreenCells(int cells) {
-    if (_paintClock != null) _onscreenCells += cells;
+  /// Water-shimmer contours tessellated by the path fallback this
+  /// frame.
+  static void noteShimmerContours(int contours) {
+    if (_paintClock != null) _shimmerContours = contours;
   }
 
-  /// Counts cells visited by the terrain record loop.
+  /// Water-shimmer shader quads drawn this frame.
+  static void noteShimmerQuads(int quads) {
+    if (_paintClock != null) _shimmerQuads = quads;
+  }
+
+  /// Cells covered by drawn chunks.
   static void noteDrawnCells(int cells) {
     if (_paintClock != null) _drawnCells += cells;
   }
 
+  /// Cells covered by the painter's draw bounds.
+  static void noteBoundsCells(int cells) {
+    if (_paintClock != null) _boundsCells = cells;
+  }
+
+  /// Cells whose diamonds intersect the viewport.
+  static void noteOnscreenCells(int cells) {
+    if (_paintClock != null) _onscreenCells = cells;
+  }
+
   /// Called at the end of the painter's `paint()`.
-  static void endFrame({required int boundsCells}) {
+  static void endFrame() {
     final clock = _paintClock;
     if (clock == null) return;
     clock.stop();
-    final replayed = _recordMicros == 0;
     samples.add(
       FrameSample(
         scale: _scale,
         paintMicros: clock.elapsedMicroseconds,
-        recordMicros: _recordMicros,
-        terrainOps: replayed ? _carryTerrainOps : _terrainOps,
-        washOps: replayed ? _carryWashOps : _washOps,
-        shimmerContours: replayed ? _carryShimmerContours : _shimmerContours,
-        roadOps: replayed ? _carryRoadOps : _roadOps,
-        outlineOps: replayed ? _carryOutlineOps : _outlineOps,
+        terrainMicros: _terrainMicros,
+        chunkDraws: _chunkDraws,
+        chunkRecords: _chunkRecords,
+        terrainOps: _carryTerrainOps,
+        washOps: _carryWashOps,
+        roadOps: _carryRoadOps,
+        outlineOps: _carryOutlineOps,
+        shimmerContours: _shimmerContours,
+        shimmerQuads: _shimmerQuads,
         actorOps: _actorOps,
-        boundsCells: boundsCells,
-        drawnCells: replayed ? _carryDrawnCells : _drawnCells,
-        onscreenCells: replayed ? _carryOnscreenCells : _onscreenCells,
+        boundsCells: _boundsCells,
+        drawnCells: _drawnCells,
+        onscreenCells: _onscreenCells,
       ),
     );
     if (samples.length > _maxSamples) {
@@ -350,8 +397,9 @@ class ParcelWorldProbe {
     }
   }
 
-  /// Paints the HUD in the top-left corner of the map. Refreshes its
-  /// text a couple of times per second from the most recent samples.
+  /// Paints the HUD in the map's top-right corner, below the camera
+  /// reset button. Refreshes its text a couple of times per second
+  /// from the most recent samples.
   static void paintHud(ui.Canvas canvas, ui.Size size) {
     if (!hudVisible || size.isEmpty) return;
     if (_hudLines == null || _hudFrame % _hudRefreshFrames == 0) {
@@ -361,16 +409,15 @@ class ParcelWorldProbe {
       final stats = ProbeStats('hud', window);
       _hudLines = [
         'paint ${stats.meanPaintMs.toStringAsFixed(1)}ms'
-            ' (record ${stats.meanRecordMs.toStringAsFixed(1)}ms,'
-            ' ${stats.records}/${stats.frames} frames)',
-        'ops ${ProbeStats._fmt(stats.meanTotalOps)}'
-            ' - terrain ${ProbeStats._fmt(stats.meanTerrainOps)}'
-            ' wash ${ProbeStats._fmt(stats.meanWashOps)}'
-            ' shimmer ${ProbeStats._fmt(stats.meanShimmerContours)}'
-            ' actors ${ProbeStats._fmt(stats.meanActorOps)}',
+            ' (terrain ${stats.meanTerrainMs.toStringAsFixed(1)}ms,'
+            ' ${stats.chunkRecords} chunk records)',
+        'draws ${ProbeStats._fmt(stats.meanTotalOps)}'
+            ' (chunks ${ProbeStats._fmt(stats.meanChunkDraws)},'
+            ' actors ${ProbeStats._fmt(stats.meanActorOps)})'
+            ' + shimmer ${ProbeStats._fmt(stats.meanShimmerQuads)}q/'
+            '${ProbeStats._fmt(stats.meanShimmerContours)}c',
         'zoom ${stats.meanScale.toStringAsFixed(2)}'
-            ' - bounds ${ProbeStats._fmt(stats.meanBoundsCells)},'
-            ' drawn ${ProbeStats._fmt(stats.meanDrawnCells)},'
+            ' - drawn ${ProbeStats._fmt(stats.meanDrawnCells)},'
             ' onscreen ~${ProbeStats._fmt(stats.meanOnscreenCells)}'
             ' (${stats.overdraw.toStringAsFixed(2)}x overdraw)',
       ];
@@ -390,8 +437,6 @@ class ParcelWorldProbe {
     final painter = _hudPainter;
     if (painter == null) return;
     const padding = 8.0;
-    // Anchored below the map panel's top-right camera-reset button so
-    // it never covers the parcel/structure status chip at top-left.
     const top = 62.0;
     final left = size.width - painter.width - padding - 10;
     final backdrop = ui.RRect.fromRectAndRadius(
