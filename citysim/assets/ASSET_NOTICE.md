@@ -10,64 +10,73 @@ editor's grouping:
   by the renderer.
 - `content/` — the JSON content layer (catalogue, sprites, economy,
   ambience).
-- `buggy_studio/` — the remainder of the downloaded art pack: damaged
-  versions, the gunshop (deliberately not promoted), and vehicles,
-  kept for the planned asset browser that will promote them into
-  the organized tree. The pack is **disk-only**: it is not listed in
-  the pubspec asset bundle, so builds ship only promoted art — the
-  browser will read it server-side from disk, like content
-  validation already does. The pack's clean building art (35
-  entities, both door facings) was promoted into
+- `buggy_studio/` — the remainder of the downloaded art pack, kept for
+  the planned asset browser that will promote pieces into the organized
+  tree. The pack is **disk-only**: it is not listed in the pubspec
+  asset bundle, so builds ship only promoted art — the browser will
+  read it server-side from disk, like content validation already does.
+  The pack's clean building art (49 entities, both door facings — see
+  the promotion-history note below) was promoted into
   `sprites/buildings/` and wired into the catalogue's houses,
-  commerce, offices, civic, industrial, and sites subcategories;
-  all 46 clean props were promoted into `sprites/props/` as
-  decoration models. Promotions copy files, so the pack originals
-  remain here.
+  commerce, offices, civic, industrial, and sites subcategories; the
+  clean props were promoted into `sprites/props/` as decoration
+  models.
+- `buggy_studio/Damaged/` — all damaged, toppled, and dirty variants
+  (242 files: 98 buildings, 14 props, 50 roads and grounds, 80
+  vehicles), separated from the clean art by filename suffix
+  (`_damaged`, `_damaged1..3`, `_toppled`, `_dirty`). Not used by the
+  game; parked for potential demolition/abandonment/grime visuals.
+
+  Promotion history note: the earlier terrain/roads/bridges pass and
+  the first batch of building/props promotions **moved** files out of
+  the pack (their originals are gone); later promotions **copied**, so
+  many clean originals now sit alongside their promoted copies. The
+  inventory below is checksum-verified against the promoted tree, not
+  reconstructed from the original pack contents.
 
 ## Unused pack remainder — category inventory
 
-Everything below sits in `buggy_studio/` and is not referenced by the
-game. Work through the categories one by one when promoting. (The
-construction-site and water-tower originals also remain here under
-their original pack filenames — those two were promoted under renamed
-copies in `sprites/buildings/`.)
+Everything below sits in `buggy_studio/` (outside `Damaged/`) and is
+not referenced by the game. Checksum-verified against the promoted
+tree: **119 sprites are left to migrate.**
 
-### Buildings — 2 clean files
+### Buildings — 2 candidates
 - Gunshop, both door facings (`bld_gunshop_a/b`) — deliberately
   skipped for the cozy tone; revisit only if that decision changes.
+- The other 70 clean building files are originals of already-promoted
+  copies (later promotions copy, originals stay).
 
-### Props — promoted in full
-All 46 clean pack props are promoted into `sprites/props/` as instant
-decoration models (16 catalogue entries): streetside (lamps, traffic
-lights, signs, fences, trash cans and bags), natural (common trees,
-trunks, rocks, wild grass — the grass joined `flowers/`), and clutter
-(boxes, drop box, papers, tires). Only the 18 damaged/toppled variants
-remain in the pack remainder, parked for demolition/abandonment
-visuals.
+### Props — 4 candidates
+- Dry wild-grass variants (`prop_weed_*_dry`) — color variants of the
+  promoted weeds, never promoted.
+- The other 46 clean props are originals of already-promoted copies.
 
-### Roads and Grounds — 37 clean, 22 damaged
-- **Pelican crossings** (4 orientations) — zebra-crossing road
-  overlays, candidate for road detailing.
-- **Puddles and patches** — grass puddles, dirt puddles, drypatch,
-  grasspatch — candidate ground variation/weathering layer.
-- **Dirty terrain variants** — grimy copies of every shore
-  edge/corner/quarter and water tile — a grime aesthetic, distinct
-  from the `_damaged` building art.
+### Roads and Grounds — 9 candidates
+- **Pelican crossings** (4 orientations, `tile_road_pelican_*_normal`)
+  — zebra-crossing road overlays, candidate for road detailing.
+- **Puddles and patches** (5 tiles: grass `puddles` variant, dirt
+  `puddle` and `puddles`, `drypatch`, `grasspatch`) — candidate ground
+  variation/weathering layer. The promoted grass puddle is the
+  singular-`puddle` art and was moved out of the pack; the plural
+  variant here is distinct, different art.
 
-### Vehicles — 104 clean, 80 damaged
+### Vehicles — 104 candidates
 All 4-direction driving sprites; the biggest untouched category and
 the logged future ambience work (ambient traffic on roads):
 - **Civilian**: sedans (blue/red/white), pickups (black/orange/red),
-  vans (black/purple/white), trucks and box trucks (green/red/yellow).
+  vans (black/purple/white), trucks and box trucks (green/red/yellow)
+  — 60 files.
 - **Service**: school bus, fire truck, garbage truck, police car,
-  SWAT van.
+  SWAT van — 20 files.
 - **Air**: helicopters (red/white) with 3-frame spinning-rotor
-  animation per direction.
+  animation per direction — 24 files.
 
-### Damaged variants — ~220 files across all categories
-Demolished buildings, toppled props, wrecked vehicles, dirty terrain.
-Parked as potential demolition/abandonment/grime visuals — see the
-future-work notes in the docs.
+### Damaged/Dirty variants — 242 files
+Demolished buildings (98), toppled props (14), cracked roads and
+grimy terrain (50), wrecked vehicles (80) — all in
+`buggy_studio/Damaged/`, parked as potential
+demolition/abandonment/grime visuals — see the future-work notes in
+the docs.
 
 ## Provenance
 
