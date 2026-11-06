@@ -266,6 +266,78 @@ Taps currently hit the frontmost structure whose sprite *bounding rectangle* con
 - **Tool-based pick priority.** Only the inspect tool should pick structures; the road, parcel, bridge, and placement tools target cells directly, since no one wields the road tool intending to select a house.
 - **X-ray dimming.** While the road or bridge tool is active, render structures at reduced opacity so fundable tiles and banks behind buildings are visible as well as tappable.
 
+### Free prop placement (future work)
+
+Today's decorations obey the building rules: one structure per cell,
+never on roads, variant rolled once at placement, no mirroring. The
+planned feature set for props — multiple props per cell, placeable on
+terrain, roads, and bridge decks, with live mirroring and
+direction-variant cycling — breaks assumptions in every layer:
+
+**Rules and reducers.** Prop placement keeps the owned-and-reachable
+requirement but drops vacancy: a prop may sit on grass, dirt, a road
+tile, or a bridge deck cell (deck cells count as reachable through
+their bridge), and never blocks anything — roads can be planned and
+funded under existing props, and props stack freely on the same cell.
+Buildings still require fully vacant cells, so a cell with a prop on
+it is closed to buildings until the prop is removed. New actions:
+toggle a prop's mirror, cycle a prop's variant through its model's
+`assetRoles`, and remove a prop (the small, reversible cousin of the
+deferred demolition decision). Intra-cell draw order is deterministic
+(placement order) at first; player reordering is a later option.
+
+**State model.** Structures stay single-occupancy
+(`structuresByCell`); props become their own lightweight entity
+(`PropInstance`: id, catalogueId, assetRole, cell, mirror, placedAt)
+with `propsByCell: Map<CellCoord, List<PropInstance>>` — a per-cell
+list, excluded from `footprintIsVacant`, reserved cells, and
+population. Existing decoration structures (flowers, pines, the
+promoted props) migrate to the new entity on load.
+
+**Storage.** The Tiles sheet is keyed one row per cell, so it cannot
+host multiple props per cell: a fifth sheet (`Props`: id, x, y,
+model, variant, mirror) joins UserData, Tiles, OwnedParcels, and
+Projects — new headers, editor-server endpoint, encode/decode, and
+world-usage surface. Migration follows the no-versions philosophy:
+the codec translates old saves on read (decoration rows in Tiles
+become props) and the next save writes the new shape; the editor's
+Google-Sheets design inherits the fifth tab.
+
+**Rendering.** Props already draw in the depth-sorted actor pass;
+the extension work is (a) props on bridge decks must anchor to the
+deck surface — offset by the deck elevation and tie-broken to draw
+after their deck cell, the same rule pedestrians already follow on
+ramps; (b) mirroring draws the sprite flipped around its ground
+anchor (`canvas.scale(-1, 1)` on the sway-transform pattern) —
+`groundAnchorX` effectively becomes `1 − anchorX` under mirroring,
+which matters once the deferred per-sprite anchor nudges land, and
+the sway pivot must respect the flip; (c) variant cycling just swaps
+the role. The actor sort key extends to (base-cell depth, intra-cell
+layer index).
+
+**Picking and interaction.** Per-pixel candidates expand from one
+structure per cell to the prop stack, walked front-to-back in painter
+order (this composes with the deferred click-cycling work for
+targets hidden behind tall art). `spritePixelHit` must mirror its
+x-coordinate when sampling a mirrored prop's mask. Selection UI adds
+mirror and next-variant controls to the selected-prop inspector —
+the floating-button pattern the door-facing swap already uses. Tap
+priority between a prop and the road beneath it leans on the deferred
+tool-based pick priority: with the inspect tool, an opaque prop pixel
+wins; otherwise the cell is targeted directly.
+
+**Content caveats.** The pack paints with a consistent light
+direction, so mirrored props carry flipped shadows — acceptable for
+props, and direction variants (for example the traffic light's)
+should be preferred where the art provides them. Fence-like props
+snapping or rotating to tile edges is a separate later idea, out of
+scope here.
+
+**Tests.** A placement-rules matrix (grass/road/deck/water/building
+cell; single and stacked), codec round-trip plus old-save migration,
+mirror and variant round-trips, mirror-aware mask picking, and a
+render smoke test with props standing on a bridge deck.
+
 ### Regression checks
 
 Maintain pure rule/reducer coverage, persistence tests, and responsive widget checks. Keep scenario/pacing tools synthetic and separate from the production finance app.

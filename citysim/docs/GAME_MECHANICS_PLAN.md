@@ -238,6 +238,11 @@ These are candidates, not promises or requirements for the current prototype:
   click cycling for targets genuinely hidden behind tall art,
   tool-based pick priority, and x-ray dimming (spec in the
   implementation plan).
+- Free prop placement: props anywhere on terrain, roads, and bridge
+  decks; several props on one cell; live mirroring and swapping
+  between direction variants after placement; prop removal. Full
+  technical breakdown (fifth save sheet, prop entity, deck-height
+  anchoring, mirror-aware picking) in the implementation plan.
 - Optional ambience, residents, or seasonal presentation that never penalizes
   absence or makes residents a resource-optimization system. Deferred
   animation follow-ups: a true water-flow shader, a wind-gust sweep over
