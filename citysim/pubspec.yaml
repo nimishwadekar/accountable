@@ -32,7 +32,9 @@ flutter:
     - assets/sprites/buildings/civic/
     - assets/sprites/buildings/commerce/
     - assets/sprites/buildings/houses/
+    - assets/sprites/buildings/industrial/
     - assets/sprites/buildings/offices/
+    - assets/sprites/buildings/sites/
     - assets/sprites/props/flowers/
     - assets/sprites/props/trees/
     - assets/sprites/ground/asphalt/

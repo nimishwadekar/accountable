@@ -156,6 +156,58 @@ void main() {
     );
   });
 
+  test('stale project references on completed roads are healed', () {
+    final base = handwrittenTables();
+    // A pre-fix save: the completed road at (5,4) still names project 9,
+    // which finished long ago. Its reference must be dropped on load.
+    final tiles = <List<String>>[for (final row in base.tiles) row];
+    final staleIndex = tiles.indexWhere(
+      (row) => row[0] == '5' && row[1] == '4',
+    );
+    final stale = [...tiles[staleIndex]];
+    stale[7] = '9';
+    tiles[staleIndex] = stale;
+    final world = sheetTablesToWorld(
+      SheetTables(
+        userData: base.userData,
+        ownedParcels: base.ownedParcels,
+        tiles: tiles,
+        projects: base.projects,
+      ),
+      content: content,
+      terrainProvider: terrain,
+    );
+    final healed = world.roads.singleWhere(
+      (road) => road.cell == const CellCoord(5, 4),
+    );
+    expect(healed.projectId, isNull);
+    expect(
+      () => validateParcelWorldState(world, content, terrain),
+      returnsNormally,
+    );
+  });
+
+  test('planned road tiles with dead project references still fail', () {
+    final base = handwrittenTables();
+    expect(
+      () => sheetTablesToWorld(
+        SheetTables(
+          userData: base.userData,
+          ownedParcels: base.ownedParcels,
+          tiles: [
+            ...base.tiles,
+            ['4', '5', 'road', 'planned', 'dirt', '', '', '9'],
+          ],
+          projects: base.projects,
+        ),
+        content: content,
+        terrainProvider: terrain,
+      ),
+      throwsA(isA<FormatException>()),
+      reason: 'a planned tile without a live project is orphaned, not healed',
+    );
+  });
+
   test('corrupt tables fail loudly', () {
     expect(
       () => sheetTablesToWorld(

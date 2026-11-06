@@ -115,7 +115,12 @@ storage, and the exact shape of the game's future Google Spreadsheet:
   id/variant/door side at their origin (footprints derive from content),
   bridges one row per water cell (spans and ramps derive from geometry).
   Status is `planned` or `complete`; building funding amounts live on the
-  project row.
+  project row. The `project` column names a **live** project only — it
+  ties a half-funded road stretch's completed and planned tiles together
+  so the reload can rebuild the path, its funding count, and the frontier
+  order; a finished stretch drops the reference when its project row is
+  deleted (project numbers restart once no project is active, so a stale
+  reference would collide with a later project's number).
 - **`Parcels`** (`x,y`): owned parcel coordinates.
 - **`Projects`** (`id,kind,detail,target,funded`): active projects only —
   rows are deleted as projects finish.

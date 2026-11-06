@@ -173,4 +173,86 @@ void main() {
       ),
     );
   });
+
+  test('finished road projects release their tile references', () async {
+    final api = _FakeDocumentsApi();
+    final store = ServerSheetParcelWorldStore(
+      content: content,
+      terrainProvider: terrain,
+      api: api,
+    );
+
+    // Finish a road stretch east of the starter road.
+    var world = grantWorldDebugCoins(checkInWorldForToday(newWorld()), 100);
+    world = purchaseAdjacentParcel(
+      world,
+      content,
+      terrain,
+      const ParcelCoord(1, 0),
+    );
+    world = planRoadStretch(
+      world,
+      content,
+      terrain,
+      cells: [for (var column = 5; column <= 7; column++) CellCoord(column, 4)],
+      style: RoadStyle.asphalt,
+    );
+    final finishedId = world.constructions.single.id;
+    for (var column = 5; column <= 7; column++) {
+      world = fundRoadTile(
+        world,
+        content,
+        terrain,
+        projectId: finishedId,
+        cell: CellCoord(column, 4),
+      );
+    }
+    expect(world.constructions, isEmpty);
+    expect(
+      world.roads.where((road) => road.projectId == finishedId),
+      isEmpty,
+      reason: 'finished roads no longer name their project',
+    );
+
+    await store.save(world);
+    final saved = decodeSheetTables(
+      userData: api.documents![userDataSheetName] ?? '',
+      tiles: api.documents![tilesSheetName] ?? '',
+      ownedParcels: api.documents![ownedParcelsSheetName] ?? '',
+      projects: api.documents![projectsSheetName] ?? '',
+    );
+    expect(
+      saved.tiles.where((row) => row[2] == 'road' && row[7].isNotEmpty),
+      isEmpty,
+      reason: 'no completed road keeps a project reference',
+    );
+
+    // Reloading with no active projects restarts numbering, so the next
+    // stretch reuses the finished project's id. The two must not
+    // collide: the reload has to rebuild the new project from its own
+    // tiles only.
+    final reloaded = (await store.load())!;
+    expect(reloaded.nextEntityNumber, 1);
+    var played = planRoadStretch(
+      reloaded,
+      content,
+      terrain,
+      cells: [const CellCoord(4, 5), const CellCoord(4, 6)],
+      style: RoadStyle.dirt,
+    );
+    expect(played.constructions.single.id, finishedId);
+    played = fundRoadTile(
+      played,
+      content,
+      terrain,
+      projectId: played.constructions.single.id,
+      cell: const CellCoord(4, 5),
+    );
+
+    await store.save(played);
+    final second = (await store.load())!;
+    expect(second.constructions.single.roadCells, hasLength(2));
+    expect(second.constructions.single.coinsFunded, 1);
+    expect(second.roads, hasLength(5), reason: 'starter + 3 + 1 funded tile');
+  });
 }

@@ -6,7 +6,8 @@
 /// player has touched (roads, bridges, structures — keyed by global tile
 /// x/y), `OwnedParcels` holds owned parcel coordinates, and `Projects` holds
 /// currently active construction projects only (rows are deleted as
-/// projects finish). Everything else — terrain, footprints, bridge spans,
+/// projects finish — and the `Tiles` project column names a live project
+/// only: finished roads drop the reference when their project completes). Everything else — terrain, footprints, bridge spans,
 /// unlocks, entity counters — derives from codebase content and the
 /// tables themselves. No versions are stored anywhere; content edits are
 /// live updates validated against the current save by the editors.

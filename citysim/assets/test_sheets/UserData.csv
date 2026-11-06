@@ -1,9 +1,10 @@
 key,value
-checkin_count,0
-coins,0
-coins_earned,0
-coins_spent,0
-construction_day,0
+checkin_count,45
+coins,23
+coins_earned,400
+coins_spent,377
+construction_day,42
 high_water_date,2026-11-05
-seed,1833663608
+last_checkin_date,2026-11-04
+seed,7
 simulated_date,2026-11-05

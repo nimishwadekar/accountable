@@ -135,6 +135,22 @@ ParcelWorldState sheetTablesToWorld(
 
   final tileRows = <List<String>>[...tables.tiles];
   _validateTileRows(tileRows);
+  // The project column references live projects only. Heal older saves
+  // whose completed roads kept a finished project's reference: project
+  // numbers restart once no project is active, and a stale reference
+  // would be mistaken for a later project that reuses the number.
+  // Planned tiles are not healed — a planned tile without a live
+  // project is genuinely orphaned and must fail below.
+  final liveProjectNumbers = {for (final row in tables.projects) row[0].trim()};
+  for (var index = 0; index < tileRows.length; index++) {
+    final row = tileRows[index];
+    if (row[2] != 'road' || row[3] != 'complete' || row[7].isEmpty) continue;
+    if (!liveProjectNumbers.contains(row[7].trim())) {
+      final healed = [...row];
+      healed[7] = '';
+      tileRows[index] = healed;
+    }
+  }
   final parcelCenter = CellCoord(
     defaultParcelSize ~/ 2,
     defaultParcelSize ~/ 2,

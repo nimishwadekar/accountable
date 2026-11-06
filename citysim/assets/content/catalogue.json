@@ -4,7 +4,10 @@
       "assetRoles": [
         "home-small-yellow",
         "home-small-blue",
-        "home-small-red"
+        "home-small-red",
+        "home-small-brickbrown",
+        "home-small-brickred",
+        "home-small-purple"
       ],
       "costCoins": 3,
       "description": "A welcoming home beside a connected road.",
@@ -34,6 +37,24 @@
       "id": "cafe",
       "kind": "building",
       "name": "Caf\u00e9",
+      "population": 1,
+      "subcategory": "commerce",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
+        "icecream"
+      ],
+      "costCoins": 3,
+      "description": "A sweet stop on a warm afternoon.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "ice-cream-shop",
+      "kind": "building",
+      "name": "Ice Cream Shop",
       "population": 1,
       "subcategory": "commerce",
       "unlockAtPopulation": 0
@@ -80,9 +101,29 @@
     },
     {
       "assetRoles": [
+        "construction-site"
+      ],
+      "costCoins": 2,
+      "description": "A fenced-off lot, always promising something.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "construction-site",
+      "kind": "building",
+      "name": "Construction Site",
+      "population": 0,
+      "subcategory": "sites",
+      "unlockAtPopulation": 0
+    },
+    {
+      "assetRoles": [
         "home-medium-blue",
         "home-medium-brickwhite",
-        "home-medium-brown"
+        "home-medium-brown",
+        "home-medium-green",
+        "home-medium-white"
       ],
       "costCoins": 4,
       "description": "A larger home unlocked by a growing settlement.",
@@ -118,6 +159,61 @@
     },
     {
       "assetRoles": [
+        "autoshop"
+      ],
+      "costCoins": 4,
+      "description": "Grease, tires, and honest work.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "autoshop",
+      "kind": "building",
+      "name": "Auto Shop",
+      "population": 1,
+      "subcategory": "commerce",
+      "unlockAtPopulation": 5
+    },
+    {
+      "assetRoles": [
+        "pizza"
+      ],
+      "costCoins": 4,
+      "description": "The neighborhood favorite slice.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "pizza-shop",
+      "kind": "building",
+      "name": "Pizza Place",
+      "population": 1,
+      "subcategory": "commerce",
+      "unlockAtPopulation": 5
+    },
+    {
+      "assetRoles": [
+        "home-mobile-style1",
+        "home-mobile-style2"
+      ],
+      "costCoins": 5,
+      "description": "Affordable housing that arrived on wheels.",
+      "enabled": true,
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "id": "mobile-home",
+      "kind": "building",
+      "name": "Mobile Home",
+      "population": 1,
+      "subcategory": "houses",
+      "unlockAtPopulation": 5
+    },
+    {
+      "assetRoles": [
         "clinic"
       ],
       "costCoins": 6,
@@ -133,6 +229,124 @@
       "population": 1,
       "subcategory": "civic",
       "unlockAtPopulation": 10
+    },
+    {
+      "assetRoles": [
+        "home-large-blue",
+        "home-large-brickbrown",
+        "home-large-brickwhite",
+        "home-large-brown",
+        "home-large-green",
+        "home-large-purple"
+      ],
+      "costCoins": 5,
+      "description": "A tall family home with room to spare.",
+      "enabled": true,
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "id": "large-home",
+      "kind": "building",
+      "name": "Large House",
+      "population": 1,
+      "subcategory": "houses",
+      "unlockAtPopulation": 10
+    },
+    {
+      "assetRoles": [
+        "office-small-brickred",
+        "office-small-brown",
+        "office-small-gray",
+        "office-small-orange"
+      ],
+      "costCoins": 6,
+      "description": "A compact workplace for a growing town.",
+      "enabled": true,
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "id": "small-office",
+      "kind": "building",
+      "name": "Small Office",
+      "population": 1,
+      "subcategory": "offices",
+      "unlockAtPopulation": 10
+    },
+    {
+      "assetRoles": [
+        "water-tower"
+      ],
+      "costCoins": 6,
+      "description": "The town\u2019s quiet landmark.",
+      "enabled": true,
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "id": "water-tower",
+      "kind": "building",
+      "name": "Water Tower",
+      "population": 1,
+      "subcategory": "civic",
+      "unlockAtPopulation": 10
+    },
+    {
+      "assetRoles": [
+        "church"
+      ],
+      "costCoins": 7,
+      "description": "A steeple the whole town can see.",
+      "enabled": true,
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "id": "church",
+      "kind": "building",
+      "name": "Church",
+      "population": 1,
+      "subcategory": "civic",
+      "unlockAtPopulation": 15
+    },
+    {
+      "assetRoles": [
+        "gas-station"
+      ],
+      "costCoins": 7,
+      "description": "Fuel for the town\u2019s vehicles.",
+      "enabled": true,
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "id": "gas-station",
+      "kind": "building",
+      "name": "Gas Station",
+      "population": 1,
+      "subcategory": "commerce",
+      "unlockAtPopulation": 15
+    },
+    {
+      "assetRoles": [
+        "warehouse-blue",
+        "warehouse-brown",
+        "warehouse-green"
+      ],
+      "costCoins": 7,
+      "description": "Storage and light industry on the outskirts.",
+      "enabled": true,
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "id": "warehouse",
+      "kind": "building",
+      "name": "Warehouse",
+      "population": 1,
+      "subcategory": "industrial",
+      "unlockAtPopulation": 15
     },
     {
       "assetRoles": [
@@ -157,7 +371,9 @@
       "assetRoles": [
         "office-medium-green",
         "office-medium-blue",
-        "office-medium-brickred"
+        "office-medium-brickred",
+        "office-medium-brickbrown",
+        "office-medium-white"
       ],
       "costCoins": 8,
       "description": "A compact workplace for an established city.",
@@ -172,6 +388,80 @@
       "population": 1,
       "subcategory": "offices",
       "unlockAtPopulation": 20
+    },
+    {
+      "assetRoles": [
+        "police-station"
+      ],
+      "costCoins": 8,
+      "description": "Keeps the streets safe.",
+      "enabled": true,
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "id": "police-station",
+      "kind": "building",
+      "name": "Police Station",
+      "population": 1,
+      "subcategory": "civic",
+      "unlockAtPopulation": 20
+    },
+    {
+      "assetRoles": [
+        "fire-station"
+      ],
+      "costCoins": 8,
+      "description": "Ready for any emergency.",
+      "enabled": true,
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "id": "fire-station",
+      "kind": "building",
+      "name": "Fire Station",
+      "population": 1,
+      "subcategory": "civic",
+      "unlockAtPopulation": 20
+    },
+    {
+      "assetRoles": [
+        "office-tall-blue",
+        "office-tall-brown",
+        "office-tall-yellow"
+      ],
+      "costCoins": 9,
+      "description": "A landmark tower of brick and glass.",
+      "enabled": true,
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "id": "tall-office",
+      "kind": "building",
+      "name": "Tall Office",
+      "population": 1,
+      "subcategory": "offices",
+      "unlockAtPopulation": 25
+    },
+    {
+      "assetRoles": [
+        "hospital"
+      ],
+      "costCoins": 10,
+      "description": "Care for the whole community.",
+      "enabled": true,
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "id": "hospital",
+      "kind": "building",
+      "name": "Hospital",
+      "population": 1,
+      "subcategory": "civic",
+      "unlockAtPopulation": 30
     }
   ]
 }

@@ -10,9 +10,13 @@ editor's grouping:
   by the renderer.
 - `content/` — the JSON content layer (catalogue, sprites, economy,
   ambience).
-- `buggy_studio/` — the remainder of the downloaded art pack: unused
-  variants, damaged versions, and vehicles, kept for the planned asset
-  browser that will promote them into the organized tree.
+- `buggy_studio/` — the remainder of the downloaded art pack: damaged
+  versions, the gunshop (deliberately not promoted), vehicles, and urban
+  props, kept for the planned asset browser that will promote them into
+  the organized tree. The pack's clean building art (35 entities, both
+  door facings) was promoted into `sprites/buildings/` and wired into the
+  catalogue's houses, commerce, offices, civic, industrial, and sites
+  subcategories.
 
 ## Provenance
 

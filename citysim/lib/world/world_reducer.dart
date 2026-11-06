@@ -158,6 +158,16 @@ ParcelWorldState fundRoadTile(
   final completed = project.roadCells.every(
     (plannedCell) => roads.any((entry) => entry.cell == plannedCell),
   );
+  // The save's project column references live projects only. Project
+  // numbers restart once no project is active, so a finished stretch
+  // must stop naming its project — otherwise its tiles would be
+  // mistaken for a later project that reuses the number.
+  final settledRoads = completed
+      ? [
+          for (final entry in roads)
+            entry.projectId == project.id ? _detachProject(entry) : entry,
+        ]
+      : roads;
   final events = [
     ...state.events,
     _event(
@@ -190,7 +200,7 @@ ParcelWorldState fundRoadTile(
   return state.copyWith(
     coins: state.coins - quote.price,
     totalCoinsSpent: state.totalCoinsSpent + quote.price,
-    roads: roads,
+    roads: settledRoads,
     constructions: completed
         ? state.constructions.where((job) => job.id != project.id).toList()
         : state.constructions
@@ -203,6 +213,16 @@ ParcelWorldState fundRoadTile(
     nextEventNumber: nextEvent,
   );
 }
+
+/// A road whose project has finished: the same segment with no project
+/// reference, so the save never stores a link to a deleted project row.
+RoadSegment _detachProject(RoadSegment road) => RoadSegment(
+  id: road.id,
+  cell: road.cell,
+  style: road.style,
+  pricePaid: road.pricePaid,
+  completedAtDay: road.completedAtDay,
+);
 
 /// Places a free construction plan and assigns a builder immediately.
 /// Decorations bypass builders and complete as an instant coin purchase.

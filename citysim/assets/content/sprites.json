@@ -32,6 +32,22 @@
       "subcategory": "apartments",
       "sways": false
     },
+    "autoshop": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/commerce/bld_autoshop_a.png",
+        "right": "sprites/buildings/commerce/bld_autoshop_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "commerce",
+      "sways": false
+    },
     "bridge.body.se": {
       "baseOffsetY": 12,
       "category": "bridges",
@@ -126,6 +142,22 @@
       "subcategory": "commerce",
       "sways": false
     },
+    "church": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/civic/bld_church_a.png",
+        "right": "sprites/buildings/civic/bld_church_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "civic",
+      "sways": false
+    },
     "clinic": {
       "baseOffsetY": 0,
       "category": "buildings",
@@ -133,6 +165,38 @@
       "facings": {
         "left": "sprites/buildings/civic/bld_clinic_a.png",
         "right": "sprites/buildings/civic/bld_clinic_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "civic",
+      "sways": false
+    },
+    "construction-site": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/sites/bld_construction_site_a.png",
+        "right": "sprites/buildings/sites/bld_construction_site_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "sites",
+      "sways": false
+    },
+    "fire-station": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/civic/bld_firestation_a.png",
+        "right": "sprites/buildings/civic/bld_firestation_b.png"
       },
       "groundAnchor": [
         0.5,
@@ -197,6 +261,118 @@
       "subcategory": "commerce",
       "sways": false
     },
+    "gas-station": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/commerce/bld_gasstation_a.png",
+        "right": "sprites/buildings/commerce/bld_gasstation_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "commerce",
+      "sways": false
+    },
+    "home-large-blue": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_tall_blue_a.png",
+        "right": "sprites/buildings/houses/bld_house_tall_blue_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-large-brickbrown": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_tall_brickbrown_a.png",
+        "right": "sprites/buildings/houses/bld_house_tall_brickbrown_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-large-brickwhite": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_tall_brickwhite_a.png",
+        "right": "sprites/buildings/houses/bld_house_tall_brickwhite_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-large-brown": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_tall_brown_a.png",
+        "right": "sprites/buildings/houses/bld_house_tall_brown_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-large-green": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_tall_green_a.png",
+        "right": "sprites/buildings/houses/bld_house_tall_green_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-large-purple": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_tall_purple_a.png",
+        "right": "sprites/buildings/houses/bld_house_tall_purple_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
     "home-medium-blue": {
       "baseOffsetY": 0,
       "category": "buildings",
@@ -245,6 +421,70 @@
       "subcategory": "houses",
       "sways": false
     },
+    "home-medium-green": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_medium_green_a.png",
+        "right": "sprites/buildings/houses/bld_house_medium_green_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-medium-white": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_medium_white_a.png",
+        "right": "sprites/buildings/houses/bld_house_medium_white_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-mobile-style1": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_mobilehomes_style1_a.png",
+        "right": "sprites/buildings/houses/bld_mobilehomes_style1_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-mobile-style2": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_mobilehomes_style2_a.png",
+        "right": "sprites/buildings/houses/bld_mobilehomes_style2_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
     "home-small-blue": {
       "baseOffsetY": 0,
       "category": "buildings",
@@ -252,6 +492,54 @@
       "facings": {
         "left": "sprites/buildings/houses/bld_house_small_blue_a.png",
         "right": "sprites/buildings/houses/bld_house_small_blue_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-small-brickbrown": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_small_brickbrown_a.png",
+        "right": "sprites/buildings/houses/bld_house_small_brickbrown_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-small-brickred": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_small_brickred_a.png",
+        "right": "sprites/buildings/houses/bld_house_small_brickred_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "houses",
+      "sways": false
+    },
+    "home-small-purple": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/houses/bld_house_small_purple_a.png",
+        "right": "sprites/buildings/houses/bld_house_small_purple_b.png"
       },
       "groundAnchor": [
         0.5,
@@ -293,6 +581,38 @@
       "subcategory": "houses",
       "sways": false
     },
+    "hospital": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/civic/bld_hospital_a.png",
+        "right": "sprites/buildings/civic/bld_hospital_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "civic",
+      "sways": false
+    },
+    "icecream": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/commerce/bld_icecream_a.png",
+        "right": "sprites/buildings/commerce/bld_icecream_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "commerce",
+      "sways": false
+    },
     "office-medium-blue": {
       "baseOffsetY": 0,
       "category": "buildings",
@@ -300,6 +620,22 @@
       "facings": {
         "left": "sprites/buildings/offices/bld_office_medium_blue_a.png",
         "right": "sprites/buildings/offices/bld_office_medium_blue_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "offices",
+      "sways": false
+    },
+    "office-medium-brickbrown": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/offices/bld_office_medium_brickbrown_a.png",
+        "right": "sprites/buildings/offices/bld_office_medium_brickbrown_b.png"
       },
       "groundAnchor": [
         0.5,
@@ -332,6 +668,134 @@
       "facings": {
         "left": "sprites/buildings/offices/bld_office_medium_green_a.png",
         "right": "sprites/buildings/offices/bld_office_medium_green_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "offices",
+      "sways": false
+    },
+    "office-medium-white": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/offices/bld_office_medium_white_a.png",
+        "right": "sprites/buildings/offices/bld_office_medium_white_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "offices",
+      "sways": false
+    },
+    "office-small-brickred": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/offices/bld_office_small_brickred_a.png",
+        "right": "sprites/buildings/offices/bld_office_small_brickred_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "offices",
+      "sways": false
+    },
+    "office-small-brown": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/offices/bld_office_small_brown_a.png",
+        "right": "sprites/buildings/offices/bld_office_small_brown_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "offices",
+      "sways": false
+    },
+    "office-small-gray": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/offices/bld_office_small_gray_a.png",
+        "right": "sprites/buildings/offices/bld_office_small_gray_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "offices",
+      "sways": false
+    },
+    "office-small-orange": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/offices/bld_office_small_orange_a.png",
+        "right": "sprites/buildings/offices/bld_office_small_orange_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "offices",
+      "sways": false
+    },
+    "office-tall-blue": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/offices/bld_office_tall_blue_a.png",
+        "right": "sprites/buildings/offices/bld_office_tall_blue_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "offices",
+      "sways": false
+    },
+    "office-tall-brown": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/offices/bld_office_tall_brown_a.png",
+        "right": "sprites/buildings/offices/bld_office_tall_brown_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "offices",
+      "sways": false
+    },
+    "office-tall-yellow": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/offices/bld_office_tall_yellow_a.png",
+        "right": "sprites/buildings/offices/bld_office_tall_yellow_b.png"
       },
       "groundAnchor": [
         0.5,
@@ -379,6 +843,38 @@
       "renderScale": 0.5,
       "subcategory": "trees",
       "sways": true
+    },
+    "pizza": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/commerce/bld_pizza_a.png",
+        "right": "sprites/buildings/commerce/bld_pizza_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "commerce",
+      "sways": false
+    },
+    "police-station": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/civic/bld_policestation_a.png",
+        "right": "sprites/buildings/civic/bld_policestation_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "civic",
+      "sways": false
     },
     "road.corner.e": {
       "baseOffsetY": 0,
@@ -963,6 +1459,70 @@
       "path": "sprites/ground/water/tile_ground_water.png",
       "renderScale": 0.5,
       "subcategory": "water",
+      "sways": false
+    },
+    "warehouse-blue": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/industrial/bld_warehouse_blue_a.png",
+        "right": "sprites/buildings/industrial/bld_warehouse_blue_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "industrial",
+      "sways": false
+    },
+    "warehouse-brown": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/industrial/bld_warehouse_brown_a.png",
+        "right": "sprites/buildings/industrial/bld_warehouse_brown_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "industrial",
+      "sways": false
+    },
+    "warehouse-green": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/industrial/bld_warehouse_green_a.png",
+        "right": "sprites/buildings/industrial/bld_warehouse_green_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "industrial",
+      "sways": false
+    },
+    "water-tower": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/civic/bld_water_tower_a.png",
+        "right": "sprites/buildings/civic/bld_water_tower_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.5,
+      "subcategory": "civic",
       "sways": false
     }
   }

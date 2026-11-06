@@ -34,11 +34,12 @@ void main() {
     },
   );
 
-  test('content seed replicates the pre-content hardcoded game exactly', () {
+  test('content seed snapshot holds the seeded defaults', () {
     // Snapshot guard: these values are the seeded defaults the dashboard
-    // starts from. Editing them in the editor is expected; editing them by
-    // accident in the JSON is not.
-    expect(content.catalogue, hasLength(9));
+    // starts from — the original nine models plus the promoted Buggy
+    // Studio pack art. Editing them in the editor is expected; editing
+    // them by accident in the JSON is not.
+    expect(content.catalogue, hasLength(24));
     final byId = {for (final model in content.catalogue) model.id: model};
     expect(byId['small-home']!.costCoins, 3);
     expect(byId['small-home']!.population, 1);
@@ -58,6 +59,20 @@ void main() {
     expect(byId['apartments']!.footprintRows, 2);
     expect(byId['apartments']!.unlockAtPopulation, 20);
     expect(byId['city-office']!.costCoins, 8);
+
+    // Promoted pack art: representative snapshot of the new models.
+    expect(byId['small-home']!.assetRoles, hasLength(6));
+    expect(byId['medium-home']!.assetRoles, hasLength(5));
+    expect(byId['city-office']!.assetRoles, hasLength(5));
+    expect(byId['ice-cream-shop']!.unlockAtPopulation, 0);
+    expect(byId['large-home']!.costCoins, 5);
+    expect(byId['large-home']!.assetRoles, hasLength(6));
+    expect(byId['large-home']!.unlockAtPopulation, 10);
+    expect(byId['warehouse']!.footprintColumns, 2);
+    expect(byId['warehouse']!.subcategory, 'industrial');
+    expect(byId['construction-site']!.kind, StructureKind.building);
+    expect(byId['construction-site']!.population, 0);
+    expect(byId['hospital']!.unlockAtPopulation, 30);
 
     expect(content.economy.startingWalletCoins, 0);
     expect(content.economy.startingBuilderCapacity, 1);
