@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 
 import 'package:citysim/rendering/parcel_world_tuning.dart';
+import 'package:citysim/rendering/perf_probe.dart';
 import 'package:citysim/rendering/sprite_picking.dart';
 
 import '../content/content_bundle.dart';
@@ -582,6 +583,7 @@ class _ParcelWorldPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    ParcelWorldProbe.beginFrame(scale);
     canvas.drawRect(
       Offset.zero & size,
       Paint()..color = const Color(0xFFB5DCCF),
@@ -596,7 +598,9 @@ class _ParcelWorldPainter extends CustomPainter {
     // frame, depth-sorted, so raised geometry occludes correctly.
     final cacheKey = (state, scale, offset, size, images.length);
     if (terrainCache.key != cacheKey) {
+      ParcelWorldProbe.beginRecord();
       _recordTerrainLayer(terrainCache, cacheKey, size, bounds);
+      ParcelWorldProbe.endRecord();
     }
     canvas.drawPicture(terrainCache.picture!);
     _paintWaterShimmer(canvas, terrainCache, ambient.seconds);
@@ -604,6 +608,11 @@ class _ParcelWorldPainter extends CustomPainter {
     _drawPendingConstructions(canvas, size);
     _drawRoadPlan(canvas, size);
     _drawSelection(canvas, size, queries);
+    ParcelWorldProbe.endFrame(
+      boundsCells:
+          (bounds.right - bounds.left + 1) * (bounds.bottom - bounds.top + 1),
+    );
+    ParcelWorldProbe.paintHud(canvas, size);
   }
 
   void _recordTerrainLayer(
@@ -614,6 +623,7 @@ class _ParcelWorldPainter extends CustomPainter {
   ) {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Offset.zero & size);
+    final viewport = _ViewportGeometry(size, scale, offset);
     final visibleCellCount =
         (bounds.right - bounds.left + 1) * (bounds.bottom - bounds.top + 1);
     var terrainStride = 1;
@@ -626,13 +636,31 @@ class _ParcelWorldPainter extends CustomPainter {
       content.ambience.waterShimmer.bands,
       (_) => Path(),
     );
+    var blockIndex = 0;
     for (var row = terrainTop; row <= bounds.bottom; row += terrainStride) {
+      // The viewport is an axis-aligned rect in world space, which the
+      // lattice sees as a diamond: iterating the lattice bounding box
+      // draws ~2.2x the visible cells, all instantly clipped. At unit
+      // stride the loop instead walks each row's exact column window,
+      // so off-screen cells are never recorded. Merged blocks span
+      // several rows and keep the conservative box.
+      int columnStart;
+      int columnEnd;
+      if (terrainStride == 1) {
+        final window = viewport.columnWindow(row);
+        if (window == null) continue;
+        (columnStart, columnEnd) = window;
+      } else {
+        columnStart = terrainLeft;
+        columnEnd = bounds.right;
+      }
       for (
-        var column = terrainLeft;
-        column <= bounds.right;
+        var column = columnStart;
+        column <= columnEnd;
         column += terrainStride
       ) {
         final cell = CellCoord(column, row);
+        ParcelWorldProbe.noteDrawnCells(terrainStride * terrainStride);
         final terrain = queries.terrainAt(cell);
         var anyWater = !terrain.isLand;
         var allOwned = queries.ownsCell(cell);
@@ -650,11 +678,25 @@ class _ParcelWorldPainter extends CustomPainter {
             ? const ['terrain.water']
             : _terrainSpriteRoles(cell, terrain, queries);
         final blockCenter = _blockWorldCenter(cell, terrainStride);
+        // On-screen estimate for the probe: sample every 16th block's
+        // screen position against the viewport.
+        if (ParcelWorldProbe.recording && (blockIndex++ & 0xF) == 0) {
+          final probeCenter = _worldToScreen(blockCenter, size, scale, offset);
+          if (probeCenter.dx >= 0 &&
+              probeCenter.dx <= size.width &&
+              probeCenter.dy >= 0 &&
+              probeCenter.dy <= size.height) {
+            ParcelWorldProbe.noteOnscreenCells(
+              16 * terrainStride * terrainStride,
+            );
+          }
+        }
         for (final role in roles) {
           final path = content.tryAssetPath(role);
           if (path == null) continue;
           final image = images[path];
           if (image == null) continue;
+          ParcelWorldProbe.countTerrain();
           _drawImageAtWorld(
             canvas,
             image,
@@ -666,6 +708,7 @@ class _ParcelWorldPainter extends CustomPainter {
           );
         }
         if (!allOwned) {
+          ParcelWorldProbe.countWash();
           _drawCellWash(
             canvas,
             blockCenter,
@@ -681,6 +724,7 @@ class _ParcelWorldPainter extends CustomPainter {
           final bucket =
               shimmerBuckets[(column - row) %
                   content.ambience.waterShimmer.bands];
+          ParcelWorldProbe.countShimmer();
           bucket
             ..moveTo(center.dx, center.dy - _logicalTileHeight / 2 * scale)
             ..lineTo(center.dx + _logicalTileWidth / 2 * scale, center.dy)
@@ -692,7 +736,7 @@ class _ParcelWorldPainter extends CustomPainter {
     }
 
     _drawOwnedParcels(canvas, size, bounds);
-    _drawRoads(canvas, size, queries, bounds);
+    _drawRoads(canvas, size, queries, bounds, viewport);
     cache.picture?.dispose();
     cache.picture = recorder.endRecording();
     cache.key = cacheKey;
@@ -812,6 +856,7 @@ class _ParcelWorldPainter extends CustomPainter {
     final role = structure.assetRole ?? definition.assetRoles.first;
     final image = images[content.tryAssetPathFor(role, structure.facing)];
     if (image == null) return;
+    ParcelWorldProbe.countActor();
     final sprite = content.sprite(role)!;
     final rect = _worldRectToScreen(
       _structureRect(image, definition, structure, content),
@@ -874,6 +919,7 @@ class _ParcelWorldPainter extends CustomPainter {
           content.ambience.pedestrians.walkFrameRate,
         )];
     if (image == null) return;
+    ParcelWorldProbe.countActor();
     final unit = 0.5 * scale * content.ambience.pedestrians.spriteScale;
     final width = image.width * unit;
     final height = image.height * unit;
@@ -1022,6 +1068,7 @@ class _ParcelWorldPainter extends CustomPainter {
         }
       }
       path.close();
+      ParcelWorldProbe.countOutline();
       canvas.drawPath(
         path,
         Paint()
@@ -1037,6 +1084,7 @@ class _ParcelWorldPainter extends CustomPainter {
     Size size,
     WorldQueries queries,
     _CellBounds bounds,
+    _ViewportGeometry viewport,
   ) {
     final nearbyRoads = queries.roadsInBounds(
       left: bounds.left - 8,
@@ -1055,7 +1103,7 @@ class _ParcelWorldPainter extends CustomPainter {
       for (final bridge in nearbyBridges) ...bridge.waterCells,
     };
     final entries =
-        nearbyRoads.where((road) => _containsCell(bounds, road.cell)).toList()
+        nearbyRoads.where((road) => viewport.containsCell(road.cell)).toList()
           ..sort((a, b) => _depthCompare(a.cell, b.cell));
     for (final road in entries) {
       final path = road.style == RoadStyle.dirt
@@ -1065,6 +1113,7 @@ class _ParcelWorldPainter extends CustomPainter {
             );
       final image = path == null ? null : images[path];
       if (image != null) {
+        ParcelWorldProbe.countRoad();
         _drawImageAtCell(canvas, image, road.cell, size, scale, offset);
       }
     }
@@ -1087,6 +1136,7 @@ class _ParcelWorldPainter extends CustomPainter {
     final path = content.tryAssetPath(role);
     final image = path == null ? null : images[path];
     if (image == null) return;
+    ParcelWorldProbe.countActor();
     final sprite = content.sprite(role)!;
     final center = _worldToScreen(_cellWorldCenter(cell), size, scale, offset);
     final unit = (_logicalTileWidth * scale) / image.width;
@@ -1464,6 +1514,55 @@ class _CellBounds {
   final int bottom;
 }
 
+/// The viewport rectangle in world coordinates, and the per-row cell
+/// windows it covers. The screen is an axis-aligned rect in world
+/// space; the cell lattice is rotated 45 degrees relative to it, so
+/// the visible cells form a diamond in (column, row) space. Cell
+/// diamonds are `_logicalTileWidth x _logicalTileHeight` world units
+/// centred on lattice points, so a cell can paint a pixel iff its
+/// diamond intersects this rect.
+class _ViewportGeometry {
+  _ViewportGeometry(Size size, double scale, Offset offset) {
+    final center = size.center(Offset.zero);
+    left = (-center.dx - offset.dx) / scale;
+    right = (size.width - center.dx - offset.dx) / scale;
+    top = (-center.dy - offset.dy) / scale;
+    bottom = (size.height - center.dy - offset.dy) / scale;
+  }
+
+  late final double left;
+  late final double right;
+  late final double top;
+  late final double bottom;
+
+  /// Inclusive column window covering every cell at [row] whose
+  /// diamond intersects the viewport, or null when the whole row is
+  /// off-screen.
+  (int, int)? columnWindow(int row) {
+    final halfWidth = _logicalTileWidth / 2;
+    final halfHeight = _logicalTileHeight / 2;
+    // Cell centre: x = (column - row) * halfWidth, y = (column + row) *
+    // halfHeight; the diamond extends halfWidth / halfHeight around it.
+    final lowFromX = (left - halfWidth) / halfWidth + row;
+    final highFromX = (right + halfWidth) / halfWidth + row;
+    final lowFromY = (top - halfHeight) / halfHeight - row;
+    final highFromY = (bottom + halfHeight) / halfHeight - row;
+    final start = math.max(lowFromX, lowFromY).ceil();
+    final end = math.min(highFromX, highFromY).floor();
+    return start > end ? null : (start, end);
+  }
+
+  /// Whether a flat, tile-footprint cell (terrain, roads) can paint
+  /// any pixel in the viewport. Standing sprites overhang their cells
+  /// and must not use this test.
+  bool containsCell(CellCoord cell) {
+    final window = columnWindow(cell.row);
+    return window != null &&
+        cell.column >= window.$1 &&
+        cell.column <= window.$2;
+  }
+}
+
 Rect _structureRect(
   ui.Image image,
   StructureDefinition definition,
@@ -1639,12 +1738,6 @@ Rect _worldRectToScreen(Rect rect, Size size, double scale, Offset offset) =>
 
 int _depthCompare(CellCoord a, CellCoord b) =>
     (a.column + a.row).compareTo(b.column + b.row);
-
-bool _containsCell(_CellBounds bounds, CellCoord cell) =>
-    cell.column >= bounds.left &&
-    cell.column <= bounds.right &&
-    cell.row >= bounds.top &&
-    cell.row <= bounds.bottom;
 
 /// How large ambient pedestrians render relative to the standard
 /// 128×64 tile scale. A 24×32 character frame at this size reads as a
