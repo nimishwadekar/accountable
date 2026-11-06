@@ -36,7 +36,7 @@
       },
       "id": "cafe",
       "kind": "building",
-      "name": "Caf\u00e9",
+      "name": "Café",
       "population": 1,
       "subcategory": "commerce",
       "unlockAtPopulation": 0
@@ -597,7 +597,7 @@
         "water-tower"
       ],
       "costCoins": 6,
-      "description": "The town\u2019s quiet landmark.",
+      "description": "The town’s quiet landmark.",
       "enabled": true,
       "footprint": {
         "columns": 2,
@@ -633,7 +633,7 @@
         "gas-station"
       ],
       "costCoins": 7,
-      "description": "Fuel for the town\u2019s vehicles.",
+      "description": "Fuel for the town’s vehicles.",
       "enabled": true,
       "footprint": {
         "columns": 2,
