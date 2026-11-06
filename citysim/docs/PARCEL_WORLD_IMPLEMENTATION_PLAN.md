@@ -3,7 +3,8 @@
 **Status:** vertical slice implemented; regional terrain, long-run persistence resilience, and scale work remain.  
 **Date:** 2026-11-03  
 **Entry point:** `lib/main.dart` (run commands from the `citysim/` package folder)  
-**Mechanics and features:** [Game Mechanics Plan](GAME_MECHANICS_PLAN.md)
+**Mechanics and features:** [Game Mechanics Plan](GAME_MECHANICS_PLAN.md)  
+**Renderer performance:** [Rendering Performance](RENDERING_PERFORMANCE.md)
 
 This document covers code architecture, data contracts, rendering, persistence, and engineering work. Player-facing rules and the product roadmap belong in the game mechanics plan.
 
