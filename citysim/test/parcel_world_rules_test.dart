@@ -4,6 +4,7 @@ import 'package:citysim/storage/sheet_tables.dart';
 import 'package:citysim/storage/world_sheet_codec.dart';
 import 'package:citysim/world/coordinates.dart';
 import 'package:citysim/world/terrain_provider.dart';
+import 'package:citysim/world/world_content.dart';
 import 'package:citysim/world/world_queries.dart';
 import 'package:citysim/world/world_reducer.dart';
 import 'package:citysim/world/world_rules.dart';
@@ -397,6 +398,58 @@ void main() {
         decoded.structures.map((s) => s.assetRole).toList(),
         structureRoles,
         reason: 'variant snapshots survive the sheet round-trip',
+      );
+    });
+
+    test('buildings larger than 1x1 need a road along a whole side', () {
+      // A 2×2 footprint at (5,3) touches the starter road only at its
+      // south-west corner cell (5,4): one adjacent road is no longer
+      // frontage for a multi-cell building.
+      var world = grantWorldDebugCoins(newWorld(), 10);
+      final apartments = content.structure('apartments')!;
+      final footprint = structureFootprint(apartments, const CellCoord(5, 3));
+      expect(
+        WorldQueries(world, terrain).buildingHasRoadAccess(footprint),
+        isFalse,
+        reason: 'a single corner-touching road is not a frontage',
+      );
+      expect(
+        () => quoteStructurePlacement(
+          world,
+          content,
+          terrain,
+          catalogueId: 'apartments',
+          origin: const CellCoord(5, 3),
+        ),
+        throwsA(isA<WorldRuleViolation>()),
+      );
+
+      // Roads along the whole north side (5,2) and (6,2) satisfy it.
+      world = planAndFundRoad(
+        world,
+        cells: const [
+          CellCoord(4, 3),
+          CellCoord(4, 2),
+          CellCoord(5, 2),
+          CellCoord(6, 2),
+        ],
+      );
+      expect(
+        WorldQueries(world, terrain).buildingHasRoadAccess(footprint),
+        isTrue,
+        reason: 'a road running along the full north side is frontage',
+      );
+
+      // One-cell buildings keep the any-adjacent-road rule: the same
+      // corner touch is plenty for a cottage.
+      expect(
+        WorldQueries(world, terrain).buildingHasRoadAccess(
+          structureFootprint(
+            content.structure('small-home')!,
+            const CellCoord(5, 4),
+          ),
+        ),
+        isTrue,
       );
     });
 

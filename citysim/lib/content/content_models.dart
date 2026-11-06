@@ -781,8 +781,11 @@ List<ContentIssue> validateContentData({
         sprite.groundAnchorY > 1) {
       error('Sprite "${entry.key}": ground anchors must be within [0, 1].');
     }
-    if (sprite.baseOffsetY < 0) {
-      error('Sprite "${entry.key}": baseOffsetY must not be negative.');
+    if (sprite.baseOffsetY < -64 || sprite.baseOffsetY > 64) {
+      error(
+        'Sprite "${entry.key}": baseOffsetY must stay within ±64 art '
+        'pixels of the ground anchor.',
+      );
     }
     if (sprite.sways && sprite.category != 'props') {
       warning('Sprite "${entry.key}": only props may sway in the wind.');

@@ -49,7 +49,7 @@
       "sways": false
     },
     "bridge.body.se": {
-      "baseOffsetY": 12,
+      "baseOffsetY": -12,
       "category": "bridges",
       "codeReferenced": true,
       "groundAnchor": [
@@ -62,7 +62,7 @@
       "sways": false
     },
     "bridge.body.sw": {
-      "baseOffsetY": 12,
+      "baseOffsetY": -12,
       "category": "bridges",
       "codeReferenced": true,
       "groundAnchor": [

@@ -47,13 +47,18 @@ String roadSpriteRole(int mask) {
   return 'road.t.se';
 }
 
+/// The ramp at a bridge end. Ramp sprites are named for the screen
+/// direction their deck descends toward, so the bank where the road
+/// continues must get the ramp that descends toward it: the west bank
+/// of an east-going span rises toward the water, which is the ramp
+/// named for the far side.
 String bridgeRampRole(CellCoord nearBank, CellCoord spanCell) {
   final dx = spanCell.column - nearBank.column;
   final dy = spanCell.row - nearBank.row;
-  if (dx > 0) return 'bridge.ramp.se';
-  if (dx < 0) return 'bridge.ramp.nw';
-  if (dy > 0) return 'bridge.ramp.sw';
-  return 'bridge.ramp.ne';
+  if (dx > 0) return 'bridge.ramp.nw';
+  if (dx < 0) return 'bridge.ramp.se';
+  if (dy > 0) return 'bridge.ramp.ne';
+  return 'bridge.ramp.sw';
 }
 
 String bridgeBodyRole(CellCoord nearBank, CellCoord farBank) =>

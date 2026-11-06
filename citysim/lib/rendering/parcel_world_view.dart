@@ -588,10 +588,12 @@ class _ParcelWorldPainter extends CustomPainter {
     );
     final bounds = _visibleCellBounds(size, scale, offset);
 
-    // Ground, roads, and bridges only change with the world or the camera,
-    // so they are recorded once and replayed while the ambient animations
-    // tick. Animated layers (water shimmer, swaying vegetation,
-    // pedestrians) are drawn on top every frame.
+    // Flat content — ground, roads, parcel outlines — only changes with
+    // the world or the camera, so it is recorded once and replayed
+    // while the ambient animations tick. Everything standing or
+    // elevated (bridges included) plus the animated layers (water
+    // shimmer, swaying vegetation, pedestrians) draw on top every
+    // frame, depth-sorted, so raised geometry occludes correctly.
     final cacheKey = (state, scale, offset, size, images.length);
     if (terrainCache.key != cacheKey) {
       _recordTerrainLayer(terrainCache, cacheKey, size, bounds);
@@ -691,7 +693,6 @@ class _ParcelWorldPainter extends CustomPainter {
 
     _drawOwnedParcels(canvas, size, bounds);
     _drawRoads(canvas, size, queries, bounds);
-    _drawBridges(canvas, size, bounds);
     cache.picture?.dispose();
     cache.picture = recorder.endRecording();
     cache.key = cacheKey;
@@ -733,8 +734,11 @@ class _ParcelWorldPainter extends CustomPainter {
     }
   }
 
-  /// Structures and ambient pedestrians share one depth-sorted pass so
-  /// people disappear behind buildings correctly.
+  /// Everything that stands on or rises above the ground — structures,
+  /// bridge decks and ramps, ambient pedestrians — shares one
+  /// back-to-front pass keyed by base-cell depth, so a raised bridge
+  /// deck occludes whatever is behind it and is occluded by whatever
+  /// is in front, exactly like any other standing object.
   void _drawActors(
     Canvas canvas,
     Size size,
@@ -742,26 +746,59 @@ class _ParcelWorldPainter extends CustomPainter {
     double seconds,
   ) {
     pedestrians.update(seconds, state, queries, content.ambience.pedestrians);
-    final actors = <(double, PlacedStructure?, _Pedestrian?)>[];
+    final actors = <(double, void Function())>[];
     for (final structure in queries.structuresInBounds(
       left: bounds.left - 5,
       right: bounds.right + 5,
       top: bounds.top - 5,
       bottom: bounds.bottom + 5,
     )) {
-      actors.add((_structureDepth(structure).toDouble(), structure, null));
+      actors.add((
+        _structureDepth(structure).toDouble(),
+        () => _drawStructure(canvas, size, structure, seconds),
+      ));
+    }
+    for (final bridge in queries.bridgesInBounds(
+      left: bounds.left - 5,
+      right: bounds.right + 5,
+      top: bounds.top - 5,
+      bottom: bounds.bottom + 5,
+    )) {
+      final bodyRole = bridgeBodyRole(bridge.nearBank, bridge.farBank);
+      for (final cell in bridge.waterCells) {
+        actors.add((
+          (cell.column + cell.row).toDouble(),
+          () => _drawTileRole(canvas, bodyRole, cell, size, scale, offset),
+        ));
+      }
+      final nearRamp = bridgeRampRole(bridge.nearBank, bridge.waterCells.first);
+      actors.add((
+        (bridge.nearBank.column + bridge.nearBank.row).toDouble(),
+        () => _drawTileRole(
+          canvas,
+          nearRamp,
+          bridge.nearBank,
+          size,
+          scale,
+          offset,
+        ),
+      ));
+      final farRamp = bridgeRampRole(bridge.farBank, bridge.waterCells.last);
+      actors.add((
+        (bridge.farBank.column + bridge.farBank.row).toDouble(),
+        () =>
+            _drawTileRole(canvas, farRamp, bridge.farBank, size, scale, offset),
+      ));
     }
     for (final pedestrian in pedestrians.list) {
-      actors.add((pedestrian.depth, null, pedestrian));
+      actors.add((
+        pedestrian.depth,
+        () => _drawPedestrian(canvas, size, pedestrian, seconds),
+      ));
     }
     actors.sort((a, b) => a.$1.compareTo(b.$1));
     for (final actor in actors) {
-      final structure = actor.$2;
-      if (structure != null) {
-        _drawStructure(canvas, size, structure, seconds);
-      } else {
-        _drawPedestrian(canvas, size, actor.$3!, seconds);
-      }
+      actor.$2();
     }
   }
 
@@ -1033,36 +1070,6 @@ class _ParcelWorldPainter extends CustomPainter {
     }
   }
 
-  void _drawBridges(Canvas canvas, Size size, _CellBounds bounds) {
-    for (final bridge in queries.bridgesInBounds(
-      left: bounds.left - 5,
-      right: bounds.right + 5,
-      top: bounds.top - 5,
-      bottom: bounds.bottom + 5,
-    )) {
-      final bodyRole = bridgeBodyRole(bridge.nearBank, bridge.farBank);
-      for (final cell in bridge.waterCells) {
-        _drawTileRole(canvas, bodyRole, cell, size, scale, offset);
-      }
-      _drawTileRole(
-        canvas,
-        bridgeRampRole(bridge.nearBank, bridge.waterCells.first),
-        bridge.nearBank,
-        size,
-        scale,
-        offset,
-      );
-      _drawTileRole(
-        canvas,
-        bridgeRampRole(bridge.farBank, bridge.waterCells.last),
-        bridge.farBank,
-        size,
-        scale,
-        offset,
-      );
-    }
-  }
-
   /// Draws a tile sprite at its natural aspect ratio with the sprite's
   /// ground diamond aligned to the cell's diamond. Standard 128×64 ground
   /// tiles land exactly where the old fixed 64×32 rect put them; taller
@@ -1276,19 +1283,31 @@ class _ParcelWorldPainter extends CustomPainter {
 
   void _drawSelection(Canvas canvas, Size size, WorldQueries queries) {
     if (selectedCell case final cell?) {
-      final center = _worldToScreen(
-        _cellWorldCenter(cell),
-        size,
-        scale,
-        offset,
-      );
-      _drawCellOutline(
-        canvas,
-        center,
-        const Color(0xFF1E6552),
-        scale,
-        fill: const Color(0x334BC69B),
-      );
+      // Selection highlights everything at the tapped cell: a
+      // structure's whole footprint (with its sprite washed in the
+      // selection colour), a bridge's full crossing between banks, or
+      // the bare tile.
+      final structure = queries.structuresByCell[cell];
+      final bridgeCells = structure == null ? _bridgeCellsAt(cell) : null;
+      final cells = structure?.footprint ?? bridgeCells ?? [cell];
+      for (final selected in cells) {
+        final center = _worldToScreen(
+          _cellWorldCenter(selected),
+          size,
+          scale,
+          offset,
+        );
+        _drawCellOutline(
+          canvas,
+          center,
+          const Color(0xFF1E6552),
+          scale,
+          fill: const Color(0x334BC69B),
+        );
+      }
+      if (structure != null) {
+        _tintStructureSprite(canvas, size, structure);
+      }
     }
     if (bridgeStartCell case final start?) {
       final center = _worldToScreen(
@@ -1344,6 +1363,50 @@ class _ParcelWorldPainter extends CustomPainter {
         }
       }
     }
+  }
+
+  /// The full crossing — every water cell plus both banks — when the
+  /// cell belongs to a bridge. Bank roads are shared with the road
+  /// network, so tapping a bank stays a plain road tile; only the
+  /// bridge's own deck cells select the crossing.
+  List<CellCoord>? _bridgeCellsAt(CellCoord cell) {
+    for (final bridge in state.bridges) {
+      if (bridge.waterCells.contains(cell)) {
+        return [...bridge.waterCells, bridge.nearBank, bridge.farBank];
+      }
+    }
+    return null;
+  }
+
+  /// Washes the selected structure's own sprite in the selection
+  /// colour, so the object itself reads as picked — not just the
+  /// footprint diamonds beneath it.
+  void _tintStructureSprite(
+    Canvas canvas,
+    Size size,
+    PlacedStructure structure,
+  ) {
+    final definition = content.structure(structure.catalogueId)!;
+    final role = structure.assetRole ?? definition.assetRoles.first;
+    final image = images[content.tryAssetPathFor(role, structure.facing)];
+    if (image == null) return;
+    final screenRect = _worldRectToScreen(
+      _structureRect(image, definition, structure, content),
+      size,
+      scale,
+      offset,
+    );
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+      screenRect,
+      Paint()
+        ..filterQuality = FilterQuality.medium
+        ..colorFilter = const ColorFilter.mode(
+          Color(0x664BC69B),
+          BlendMode.srcATop,
+        ),
+    );
   }
 
   void _drawParcelPreview(Canvas canvas, Size size, ParcelCoord parcel) {

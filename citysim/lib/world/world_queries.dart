@@ -149,18 +149,52 @@ class WorldQueries {
     return cells.every((cell) => !occupied.contains(cell));
   }
 
+  /// A building's road frontage must run along a whole side of its
+  /// footprint: every cell on one edge of the footprint has a
+  /// connected road beside it. Footprints larger than 1×1 therefore
+  /// need a road along an entire side, not a single touching corner;
+  /// for a 1×1 footprint the rule is exactly "any adjacent road".
   bool buildingHasRoadAccess(Iterable<CellCoord> footprint) {
+    final cells = footprint.toSet();
+    if (cells.isEmpty) return false;
     final connectedRoads = connectedRoadCells;
-    final footprintSet = footprint.toSet();
-    for (final cell in footprintSet) {
-      for (final neighbor in cell.neighbors) {
-        if (!footprintSet.contains(neighbor) &&
-            connectedRoads.contains(neighbor)) {
-          return true;
-        }
-      }
+    var minColumn = cells.first.column;
+    var maxColumn = cells.first.column;
+    var minRow = cells.first.row;
+    var maxRow = cells.first.row;
+    for (final cell in cells) {
+      if (cell.column < minColumn) minColumn = cell.column;
+      if (cell.column > maxColumn) maxColumn = cell.column;
+      if (cell.row < minRow) minRow = cell.row;
+      if (cell.row > maxRow) maxRow = cell.row;
     }
-    return false;
+    bool sideIsLined(
+      bool Function(CellCoord cell) onSide,
+      CellCoord Function(CellCoord cell) roadNeighbor,
+    ) {
+      for (final cell in cells) {
+        if (!onSide(cell)) continue;
+        if (!connectedRoads.contains(roadNeighbor(cell))) return false;
+      }
+      return true;
+    }
+
+    return sideIsLined(
+          (cell) => cell.row == minRow,
+          (cell) => CellCoord(cell.column, cell.row - 1),
+        ) ||
+        sideIsLined(
+          (cell) => cell.row == maxRow,
+          (cell) => CellCoord(cell.column, cell.row + 1),
+        ) ||
+        sideIsLined(
+          (cell) => cell.column == minColumn,
+          (cell) => CellCoord(cell.column - 1, cell.row),
+        ) ||
+        sideIsLined(
+          (cell) => cell.column == maxColumn,
+          (cell) => CellCoord(cell.column + 1, cell.row),
+        );
   }
 
   /// Door halves with road frontage for a footprint. The projection maps
