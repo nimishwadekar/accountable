@@ -262,13 +262,86 @@ These are candidates, not promises or requirements for the current prototype:
   separate product decision and must not turn spending or sensitive data into a
   requirement for ordinary settlement growth.
 
+### Check-in economy and settlement growth (future work)
+
+Decided direction from the 2026-11-06 design discussion; none of it is
+implemented yet and the first implementation stage is deliberately
+undecided — scope it when work starts.
+
+**Where population comes from (lore frame).** The mainland exists
+off-map; the starter road is the last stretch of an old trail that
+reaches it, and boats are the second route. Arrivals are households,
+they arrive in lumps tied to check-ins (never a smooth trickle), and
+they need a route plus housing. When land pressure builds, splinter
+households strike out and homestead disconnected land — another
+island, not a nearby corner, because settlements within walking
+distance merge and water is what keeps two towns two towns. They raise
+their own homes slowly, by their own labor. A cluster earns a town
+name at some size. Towns connect late — ferry first, bridge last,
+both player-built. As islands fill, new landmasses are colonized by
+boat: never grow an existing landmass, author a new one. The player is
+the founder-proprietor, and the role matures from pioneer (your
+check-in is the whole economy) to mayor-steward (the town funds itself
+through you). Settlers never build roads or infrastructure. Residents
+never leave — no churn penalties, flavor lines at most.
+
+**The economy.** One town treasury; the wallet merges into it. The
+check-in stays the only heartbeat: nothing progresses in real time or
+on simulated days, and taxes are collected *on* the check-in, never
+trickled between them. Each check-in becomes a town-report event —
+collect taxes, net upkeep, advance every active construction one stage
+(later also: household arrivals and rule-driven growth).
+
+- **Labor builds the town.** Homes and ordinary buildings are planned
+  without coins and advance one stage per check-in; stage counts are a
+  per-model content knob standing in for construction complexity.
+  Crew/concurrency limits gate how many projects can grow at once, and
+  population-gated capacity is the throughput curve.
+- **Taxes build the infrastructure.** Tax is X coins per building and
+  upkeep is Y coins per building — both content fields, editable in
+  the dashboard, netted each check-in. Infra and service buildings
+  cost more in upkeep than they pay in tax (roads: tax 0, positive
+  upkeep), so services are a real maintenance expense and the treasury
+  cannot compound exponentially; homes carry the tax base.
+- **Treasury purchases** are parcels, road stretch plans, bridges, and
+  civic services/landmarks. A road stretch plan is bought upfront and
+  then builds one tile per check-in — creeping construction replaces
+  per-tile coin funding.
+- **No coin-rush.** Growth costs check-ins, not money; a
+  pay-to-finish-a-stage knob can be reconsidered later if the waiting
+  ever feels dead.
+
+**Props.** Free to place — pure creativity, no economy. Some props are
+placed automatically by growth rules (traffic lights at four-way
+junctions, street lamps). Causality rule: the world reacts instantly
+to player actions, but only acts on its own during check-ins.
+
+**Growth rules as content.** Auto-growth rules live in the content
+layer, editor-tunable and deterministic, with outcomes stored in the
+save so rule edits grandfather what is already placed. Start with a
+tiny vocabulary (junction props, per-model tax and upkeep) and grow it
+one rule at a time — settler claims, town founding, splintering.
+
+**Open questions.** The occupancy model (homes fill
+household-by-household vs. full on completion); whether planning a
+home costs a small treasury fee or is a free settler claim; what
+happens when the treasury cannot pay upkeep (must never harshly
+penalize); the tax-base shape (per household vs. per building, shops
+vs. homes); bridge pricing under the new economy; whether splinter
+settlers ask permission or build unilaterally; whether settler
+construction renders as process (scaffolding) or arrives between
+sessions; save migration (coins-funded becomes stages-done
+proportionally, wallet becomes the treasury's opening balance).
+
 Before committing to additional mechanics, decide:
 
 1. ~~How and when should builder capacity increase, if at all?~~ Decided:
    population-threshold grants, editable in the content editor, starting
    capacity fixed at 1.
-2. Are current parcel, building, and bridge prices sustainable over months and
-   years of explicit check-ins?
+2. ~~Are current parcel, building, and bridge prices sustainable over months and
+   years of explicit check-ins?~~ Decided in direction: superseded by the
+   check-in economy above — coin prices give way to taxes, upkeep, and
+   check-in stages.
 3. Are current model-unlock thresholds and catalogue tiers satisfying?
 4. Which regional features, if any, are required for country-scale expansion?
 5. Which long-term presentation features belong in the game, versus remaining
@@ -276,7 +349,9 @@ Before committing to additional mechanics, decide:
 6. Permanence policy: no demolition is deliberate for buildings — it fits the
    accountability theme — but decide consciously whether road removal exists
    for dead-end cleanup in long-running settlements.
-7. Should asphalt roads be population-gated rather than a freely chosen style?
+7. ~~Should asphalt roads be population-gated rather than a freely chosen style?~~
+   Moot: dirt is gone and asphalt is the only style; population-gating road
+   access remains a content option if ever wanted.
 
 ## 9. Product boundaries
 

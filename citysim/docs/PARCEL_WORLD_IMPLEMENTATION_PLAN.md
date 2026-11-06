@@ -442,6 +442,40 @@ cell; single and stacked), codec round-trip plus old-save migration,
 mirror and variant round-trips, mirror-aware mask picking, and a
 render smoke test with props standing on a bridge deck.
 
+### Check-in economy and settlement growth (future work)
+
+Decided direction, not yet scheduled — the first implementation stage
+is deliberately undecided. Full design and lore frame: section 8 of
+the mechanics plan. The engineering shape when it lands:
+
+- **Content fields.** Per-model `taxCoins` and `upkeepCoins` (roads:
+  tax 0, positive upkeep), per-model stage counts for staged
+  construction, and a growth-rules category. Growth rules are
+  deterministic content; outcomes are stored in the save so rule edits
+  grandfather existing placements, and every rule type ships with
+  content validation.
+- **Reducer.** The check-in action becomes multi-effect: collect
+  taxes, net upkeep, then advance every active construction one stage.
+  Constructions move from coin funding to stage progress; the wallet
+  becomes the single town treasury. Nothing ever evaluates on
+  simulated-day advancement or real time — the causality rule is that
+  the world reacts instantly to player actions but only acts on its
+  own during check-ins.
+- **Roads.** A stretch plan is a treasury purchase upfront; tiles then
+  complete one per check-in, replacing per-tile coin funding.
+  Bridges' pricing model under the new economy is an open question.
+- **Validation.** Stage rules replace the building coin-cost checks;
+  tax and upkeep are non-negative content fields; growth-rule
+  evaluation must be deterministic and save-validatable.
+- **Migration.** Existing partially funded buildings convert
+  proportionally (coins funded becomes stages done); the wallet
+  carries over as the treasury's opening balance; the earned-minus-
+  spent ledger stays historical.
+- **Auto-placed props** (traffic lights at junctions and similar) ride
+  the growth-rules category and reuse the road junction masks the
+  renderer already computes; they interact with the free-prop-placement
+  sheet described above.
+
 ### Regression checks
 
 Maintain pure rule/reducer coverage, persistence tests, and responsive widget checks. Keep scenario/pacing tools synthetic and separate from the production finance app.
