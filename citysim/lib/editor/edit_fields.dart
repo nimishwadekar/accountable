@@ -43,6 +43,22 @@ List<(String, String)> spritePathEntries(Map<String, Object?> sprite) {
 Map<String, Object?> economyMap(Map<String, Object?> categories) =>
     (categories['economy.json'] as Map?)?.cast<String, Object?>() ?? const {};
 
+/// The tile footprint of the first catalogue model using [role], or 1×1
+/// when no model references it — the plot a sprite's preview stands on.
+(int, int) footprintForRole(Map<String, Object?> categories, String role) {
+  for (final model in modelList(categories)) {
+    final roles = model['assetRoles'];
+    if (roles is List && roles.contains(role)) {
+      final footprint = model['footprint'] as Map?;
+      return (
+        (footprint?['columns'] as num?)?.toInt() ?? 1,
+        (footprint?['rows'] as num?)?.toInt() ?? 1,
+      );
+    }
+  }
+  return (1, 1);
+}
+
 Map<String, Object?> ambienceMap(Map<String, Object?> categories) =>
     (categories['ambience.json'] as Map?)?.cast<String, Object?>() ?? const {};
 
@@ -210,6 +226,119 @@ class DoubleSlider extends StatelessWidget {
         divisions: divisions,
         label: displayValue?.call(value) ?? value.toStringAsFixed(2),
         onChanged: onChanged,
+      ),
+    ],
+  );
+}
+
+/// Slider with an editable number box beside its label: drag for coarse
+/// adjustment, type for exact values. The box tracks value changes made
+/// elsewhere (slider drags, reverts) but never fights the user mid-typing.
+class DoubleSliderField extends StatefulWidget {
+  const DoubleSliderField({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+    this.decimals = 3,
+    this.divisions,
+    this.help,
+    super.key,
+  });
+
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final ValueChanged<double> onChanged;
+  final int decimals;
+  final int? divisions;
+
+  /// One-sentence explanation shown beside the label.
+  final String? help;
+
+  @override
+  State<DoubleSliderField> createState() => _DoubleSliderFieldState();
+}
+
+class _DoubleSliderFieldState extends State<DoubleSliderField> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = widget.value.toStringAsFixed(widget.decimals);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant DoubleSliderField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Re-sync the box when the value moved elsewhere (slider drag,
+    // revert), unless the user is mid-typing something unparsable or the
+    // box already shows this value.
+    final typed = double.tryParse(_controller.text);
+    if (typed != null && (typed - widget.value).abs() > 1e-9) {
+      _controller.text = widget.value.toStringAsFixed(widget.decimals);
+    }
+  }
+
+  void _commit(String raw) {
+    final parsed = double.tryParse(raw);
+    if (parsed == null) return;
+    var next = parsed;
+    if (next < widget.min) next = widget.min;
+    if (next > widget.max) next = widget.max;
+    if ((next - widget.value).abs() > 1e-9) widget.onChanged(next);
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Flexible(
+            child: Text(
+              widget.label,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (widget.help != null) FieldHelp(widget.help!),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 62,
+            child: TextFormField(
+              controller: _controller,
+              decoration: const InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 6,
+                ),
+              ),
+              style: const TextStyle(fontSize: 12),
+              keyboardType: TextInputType.numberWithOptions(decimal: true),
+              onChanged: _commit,
+            ),
+          ),
+        ],
+      ),
+      Slider(
+        value: widget.value.clamp(widget.min, widget.max),
+        min: widget.min,
+        max: widget.max,
+        divisions: widget.divisions,
+        label: widget.value.toStringAsFixed(widget.decimals),
+        onChanged: widget.onChanged,
       ),
     ],
   );

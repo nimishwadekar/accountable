@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../edit_fields.dart';
+import '../preview_widgets.dart';
 
 /// Sprite editor organized by category → subcategory accordions (mirroring
 /// the catalogue page and the disk layout; only one subcategory expanded
@@ -243,7 +244,12 @@ class _SpritesPageState extends State<SpritesPage> {
                       fontFamily: 'monospace',
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
+                  // The sprite on its plot, placed exactly as the game
+                  // places it — tune scale and anchor here and watch it
+                  // settle live instead of hot-restarting the game.
+                  SpritePlotPreview(categories: widget.categories, role: role),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 12,
                     runSpacing: 2,
@@ -302,39 +308,45 @@ class _SpritesPageState extends State<SpritesPage> {
                         ),
                       ),
                       SizedBox(
-                        width: 170,
-                        child: DoubleSlider(
+                        width: 200,
+                        child: DoubleSliderField(
                           label: 'Anchor X',
                           value: asDouble(anchor[0], 0.5),
                           min: 0,
                           max: 1,
-                          divisions: 20,
+                          divisions: 100,
                           help:
                               'Horizontal point of the art pinned to the '
                               'footprint, as a fraction of image width '
-                              '(0.5 = centred).',
-                          onChanged: (v) => _editRole(
-                            role,
-                            (sprite) => (sprite['groundAnchor'] as List)[0] = v,
-                          ),
+                              '(0.5 = centred). Drag the slider or type an '
+                              'exact value.',
+                          onChanged: (v) => _editRole(role, (sprite) {
+                            if (sprite['groundAnchor'] is! List) {
+                              sprite['groundAnchor'] = [0.5, 1.0];
+                            }
+                            (sprite['groundAnchor'] as List)[0] = v;
+                          }),
                         ),
                       ),
                       SizedBox(
-                        width: 170,
-                        child: DoubleSlider(
+                        width: 200,
+                        child: DoubleSliderField(
                           label: 'Anchor Y',
                           value: asDouble(anchor.length > 1 ? anchor[1] : 1, 1),
                           min: 0,
                           max: 1,
-                          divisions: 20,
+                          divisions: 100,
                           help:
                               'Vertical point of the art pinned to the '
                               'footprint, as a fraction of image height '
-                              '(1 = bottom edge rests on the ground).',
-                          onChanged: (v) => _editRole(
-                            role,
-                            (sprite) => (sprite['groundAnchor'] as List)[1] = v,
-                          ),
+                              '(1 = bottom edge rests on the ground). Drag '
+                              'the slider or type an exact value.',
+                          onChanged: (v) => _editRole(role, (sprite) {
+                            if (sprite['groundAnchor'] is! List) {
+                              sprite['groundAnchor'] = [0.5, 1.0];
+                            }
+                            (sprite['groundAnchor'] as List)[1] = v;
+                          }),
                         ),
                       ),
                       // Only props sway in the wind; the option stays
