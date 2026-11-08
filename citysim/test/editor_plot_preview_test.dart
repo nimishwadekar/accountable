@@ -105,4 +105,98 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('1×1 plot · drawn tile-fit'), findsOneWidget);
   });
+
+  testWidgets('facings sprites get a road-side picker that applies the pull', (
+    tester,
+  ) async {
+    final categories = {
+      'catalogue.json': {
+        'models': [
+          {
+            'id': 'city-office',
+            'assetRoles': ['office-medium-white'],
+            'footprint': {'columns': 2, 'rows': 2},
+          },
+        ],
+      },
+      'sprites.json': {
+        'sprites': {
+          'office-medium-white': {
+            'facings': {
+              'left': 'sprites/buildings/offices/missing-left.png',
+              'right': 'sprites/buildings/offices/missing-right.png',
+            },
+            'renderScale': 0.5,
+            'groundAnchor': [0.5, 1.0],
+            'facingOffset': 0.25,
+            'category': 'buildings',
+            'subcategory': 'offices',
+          },
+          'road.straight.se': {'path': 'sprites/roads/straight/se-missing.png'},
+          'road.straight.sw': {'path': 'sprites/roads/straight/sw-missing.png'},
+        },
+      },
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SpritePlotPreview(
+            categories: categories,
+            role: 'office-medium-white',
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+
+    // Four road-side chips — north, east, south, west — with south
+    // selected by default.
+    final chips = find.byType(ChoiceChip);
+    expect(chips, findsNWidgets(4));
+    expect(
+      tester.widget<ChoiceChip>(chips.at(2)).selected,
+      isTrue,
+      reason: 'south is the default road side',
+    );
+
+    // Switching sides swaps to that half's art variant and re-renders
+    // the pulled plot without errors.
+    await tester.tap(chips.at(1)); // east
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(tester.widget<ChoiceChip>(chips.at(1)).selected, isTrue);
+    expect(find.text('2×2 plot'), findsOneWidget);
+  });
+
+  testWidgets('single-facing sprites keep the plain front-edge preview', (
+    tester,
+  ) async {
+    final categories = {
+      'sprites.json': {
+        'sprites': {
+          'park-bench': {
+            'path': 'sprites/props/benches/missing.png',
+            'renderScale': 0.5,
+            'groundAnchor': [0.5, 1.0],
+            'category': 'props',
+            'subcategory': 'benches',
+          },
+        },
+      },
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SpritePlotPreview(categories: categories, role: 'park-bench'),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.text('1×1 plot'), findsOneWidget);
+  });
 }

@@ -98,6 +98,28 @@ the stable provider API; keep shores independent of ownership order.
 - Preserve stable depth ordering for tall/multi-cell sprites; distinguish logical footprints from transparent image margins.
 - Share image caching and report load/retry failures visibly.
 - Derive road masks and shoreline sprites from logical neighbors; never store sprite filenames in durable state.
+- **Shores bank into the water (2026-11-08).** The land/water
+  transition renders on the outermost *water* tiles: shore sprites are
+  colour-masked at load into bank-only overlays (the land-coloured
+  pixels), drawn over the water after the shimmer so the bank stays dry
+  and the open half keeps its band. Land tiles render plain ground
+  right up to the tile boundary. Piece selection mirrors the old
+  land-side rule with the neighbour test flipped, which swaps the edge
+  and corner families' roles (two adjacent land neighbours → a corner
+  piece; diagonal-only land → an edge piece); the shore style follows
+  the adjacent land's ground style. A one-cell pond surrounded by land
+  stays open water — the bank halves would blanket it. The cell grid
+  baked into the water art is re-laid over banked tiles (a line-only
+  mask of the water tile, drawn above the bank) so the grid runs to
+  the tile boundary instead of stopping at the bank's waterline.
+  Colour-masked images feed a premultiplied-alpha descriptor, so their
+  RGB scales with the mask's alpha — colour under zero alpha renders
+  as amplified white (`shore_mask_render_test` pins this).
+- **Bridge selection tints the crossing (2026-11-08).** Tapping a
+  bridge deck still outlines the full crossing — every span tile plus
+  both banks — and now also washes the deck and ramp sprites in the
+  selection colour, the same wash structures get, using the same roles
+  and rects the actor pass draws.
 - Ambient animation (water shimmer, vegetation sway, road pedestrians) runs on a ticker-driven clock and repaints through the painter's `repaint` listenable. Ground, roads, and bridges are recorded into a cached `ui.Picture` keyed by world, camera, and image set, so per-frame work is limited to replaying that picture plus the animated layers. Ambient state is render-only: it is not persisted, does not touch rules, and the ticker is muted under reduced-motion preferences.
 - Audit supplied sprite alignment for dirt paths, shore masks, and bridge axes/ramps. Do not invent construction art or use damaged sprites as construction stages; project progress is separate from final building art.
 - Profile large worlds after terrain generation exists. Consider cached far-zoom summaries only when measurements justify them.
@@ -115,6 +137,10 @@ storage, and the exact shape of the game's future Google Spreadsheet:
   y = `CellCoord.row`). Roads carry their style, structures their model
   id/variant/door side at their origin (footprints derive from content),
   bridges one row per water cell (spans and ramps derive from geometry).
+  The structure `facing` is a compass road side — `north`, `east`,
+  `south`, or `west` — snapshotted at planning; the strict loader
+  rejects anything else (the legacy left/right halves were migrated
+  once, deduced from the live roads, all art-preserving).
   Status is `planned` or `complete`; building funding amounts live on the
   project row. The `project` column names a **live** project only — it
   ties a half-funded road stretch's completed and planned tiles together
@@ -339,7 +365,19 @@ funding:
   as the world's initial tile. Follow-up discussion (deferred): how
   population arrives at the settlement and outside connections.
 
-Migration: the live CSV save's dirt road rows become asphalt.
+Migration: the live CSV save's dirt road rows become asphalt; the
+structure `facing` column migrates from left/right halves to compass
+road sides (deduced from the live roads, art-preserving — all 70
+structures kept their variant).
+
+Facing offset (2026-11-08): structures save a compass facing and
+sprites carry a `facingOffset` in tiles (−0.5…0.5, default 0). The
+renderer's `_structureRect` — shared by drawing, tinting, and picking —
+shifts the art along the facing side's screen diagonal by that many
+tiles (`facingPullOffset`), so taps follow the lean. The dashboard's
+plot preview shows a four-way road-side picker (strip, art variant, and
+pull together) for facings sprites, and the sprites page edits the
+offset with a slider-plus-number field.
 
 Post-landed review (2026-11-06): completed bridges no longer require
 starter-road connectivity (a disconnected bridge's final coin used to

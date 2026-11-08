@@ -236,10 +236,12 @@ ParcelWorldState startStructureConstruction(
   final chosenRole =
       definition.assetRoles[(state.seed + state.nextEntityNumber) %
           definition.assetRoles.length];
-  // Door side: buildings face the adjacent road (any frontage on the
-  // footprint's screen-right half faces right, the left half faces left,
-  // and both halves honour the player's preview choice). Decorations
-  // with facings roll deterministically like the variant itself.
+  // Door side: buildings face the adjacent road — the saved cardinal is
+  // one of the bordering road sides, and the art follows its screen
+  // half (north/east right, south/west left). The player's preview
+  // choice wins while roads border both halves. Decorations with
+  // facings roll deterministically like the variant itself, between
+  // the two visible facade sides.
   final sprite = content.sprite(chosenRole);
   String? facing;
   if (sprite != null && sprite.hasFacings) {
@@ -247,16 +249,17 @@ ParcelWorldState startStructureConstruction(
       final sides = WorldQueries(
         state,
         terrainProvider,
-      ).adjacentDoorSides(quote.footprint);
-      facing = sides.length < 2
-          ? doorFacingForSides(sides)
-          : (preferredFacing == 'left' || preferredFacing == 'right'
-                ? preferredFacing
-                : 'right');
+      ).adjacentRoadSides(quote.footprint);
+      facing = facingForRoadSides(sides);
+      if (preferredFacing != null &&
+          sides.map(facingHalf).toSet().length > 1 &&
+          sides.contains(preferredFacing)) {
+        facing = preferredFacing;
+      }
     } else {
       facing = (state.seed + state.nextEntityNumber) % 2 == 0
-          ? 'left'
-          : 'right';
+          ? 'south'
+          : 'east';
     }
   }
   if (definition.kind == StructureKind.decoration) {
@@ -491,13 +494,15 @@ ParcelWorldState swapStructureFacing(
   final sides = WorldQueries(
     state,
     terrainProvider,
-  ).adjacentDoorSides(project.footprint);
-  if (sides.length < 2) {
+  ).adjacentRoadSides(project.footprint);
+  if (sides.map(facingHalf).toSet().length < 2) {
     throw const WorldRuleViolation(
       'The road touches only one side, so the door side is fixed.',
     );
   }
-  final flipped = project.facing == 'left' ? 'right' : 'left';
+  // A null facing (saves predating the snapshot) reads as the planning
+  // default half, so the flip still lands on a real side.
+  final flipped = flipFacing(project.facing ?? 'east', sides);
   final swapped = _copyConstruction(project, facing: flipped);
   return state.copyWith(
     constructions: state.constructions

@@ -349,6 +349,28 @@ class _SpritesPageState extends State<SpritesPage> {
                           }),
                         ),
                       ),
+                      // Only facings sprites can lean — their structures
+                      // are the ones that save a facing to pull toward.
+                      if (pathEntries.any((entry) => entry.$1.isNotEmpty))
+                        SizedBox(
+                          width: 200,
+                          child: DoubleSliderField(
+                            label: 'Facing offset',
+                            value: asDouble(meta['facingOffset']),
+                            min: -0.5,
+                            max: 0.5,
+                            divisions: 100,
+                            help:
+                                'Shifts the building toward the road its '
+                                'door faces, in tiles — negative pushes '
+                                'away. Tune it against the plot preview '
+                                'above, one road side at a time.',
+                            onChanged: (v) => _editRole(
+                              role,
+                              (sprite) => sprite['facingOffset'] = v,
+                            ),
+                          ),
+                        ),
                       // Only props sway in the wind; the option stays
                       // hidden for every other category.
                       if (category == 'props')

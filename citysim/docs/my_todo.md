@@ -1,5 +1,7 @@
 This is my note-taking for my own memory. AI shouldn't modify this file.
 
+- don't show unowned parcel fading all the time. And selecting parcels in parcel view should select parcel instead of individual cells.
+- Maybe disable grid view entirely and only show it when placing something.
 - terrain editing at smaller granularity, including puddles.
 - terrain elevation and slops and cliffs.
 - buildings get a concrete base below them.

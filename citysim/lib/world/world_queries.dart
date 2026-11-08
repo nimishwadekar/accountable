@@ -2,12 +2,32 @@ import 'coordinates.dart';
 import 'terrain_provider.dart';
 import 'world_state.dart';
 
-/// Door side for a building plan from its road frontage halves: any
-/// frontage on the screen-right half faces the door right, any on the
-/// left half faces it left. Both halves default to right — the player can
-/// swap while the plan is unfinished.
-String doorFacingForSides(Set<String> sides) =>
-    sides.contains('right') ? 'right' : 'left';
+import '../content/content_bundle.dart';
+
+/// The road side a building faces by default. Visible-facade sides win
+/// over around-the-corner ones and the screen-right half wins over the
+/// left — the door-half rule this generalises — so the order is east,
+/// north, south, west. Falls back to south, the left-half default, when
+/// no road borders the footprint yet (a placement preview before the
+/// roads exist).
+String facingForRoadSides(Set<String> sides) {
+  for (final side in const ['east', 'north', 'south', 'west']) {
+    if (sides.contains(side)) return side;
+  }
+  return 'south';
+}
+
+/// The road side a door swap moves to: the best side of the half the
+/// door does not currently face. Callers only offer the swap once roads
+/// border both halves, so the fallback arm just keeps the flip total.
+String flipFacing(String facing, Set<String> roadSides) {
+  final goingLeft = facingHalf(facing) == 'right';
+  for (final side
+      in goingLeft ? const ['south', 'west'] : const ['east', 'north']) {
+    if (roadSides.contains(side)) return side;
+  }
+  return goingLeft ? 'south' : 'east';
+}
 
 class WorldQueries {
   WorldQueries(this.state, this.terrainProvider)
@@ -161,14 +181,15 @@ class WorldQueries {
         );
   }
 
-  /// Door halves with road frontage for a footprint. The projection maps
-  /// grid north/east to the screen-right half of the diamond (up-right and
-  /// down-right) and grid south/west to the screen-left half, so a road on
-  /// the north or east side means the door can face right, and one on the
-  /// south or west side means it can face left. A road behind the
-  /// building still counts: the door goes on the visible facade around
-  /// the corner from it, on the same screen side.
-  Set<String> adjacentDoorSides(Iterable<CellCoord> footprint) {
+  /// Road sides bordering a footprint, as compass names. The projection
+  /// maps grid north/east to the screen-right half of the diamond
+  /// (up-right and down-right) and grid south/west to the screen-left
+  /// half, so a road on the north or east side means the door can face
+  /// right, and one on the south or west side means it can face left. A
+  /// road behind the building still counts: the door goes on the visible
+  /// facade around the corner from it, on the same screen side.
+  Set<String> adjacentRoadSides(Iterable<CellCoord> footprint) {
+    const sideNames = ['north', 'east', 'south', 'west'];
     final footprintSet = footprint.toSet();
     final sides = <String>{};
     for (final cell in footprintSet) {
@@ -178,7 +199,7 @@ class WorldQueries {
             !roadsByCell.containsKey(neighbors[side])) {
           continue;
         }
-        sides.add(side < 2 ? 'right' : 'left');
+        sides.add(sideNames[side]);
       }
     }
     return sides;

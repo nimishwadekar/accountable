@@ -40,7 +40,7 @@ void main() {
   });
 
   // A starter road, one asphalt tile east, and a 2×2 tall office at
-  // (6,3) facing left. The office's screen rectangle reaches high
+  // (6,3) facing south. The office's screen rectangle reaches high
   // above its footprint, covering ground tiles behind it — the region
   // whose taps used to be stolen by bounding-box picking.
   ParcelWorldState worldWithTallOffice({
@@ -69,7 +69,7 @@ void main() {
           'complete',
           'tall-office',
           'office-tall-blue',
-          'left',
+          'south',
           '',
         ],
         ...extraTiles,

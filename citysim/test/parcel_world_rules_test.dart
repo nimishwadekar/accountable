@@ -460,10 +460,10 @@ void main() {
       );
     });
 
-    test('building door sides follow the adjacent road half', () {
+    test('building facings follow the adjacent road side', () {
       // The starter road sits at (4,4): grid east of (3,4), south of
-      // (4,3), north of (4,5), and west of (5,4). North/east frontage
-      // faces the door right (screen-right half); south/west faces left.
+      // (4,3), north of (4,5), and west of (5,4). The saved facing is
+      // the bordering road side itself.
       var world = grantWorldDebugCoins(newWorld(), 30);
       world = startStructureConstruction(
         world,
@@ -472,7 +472,7 @@ void main() {
         catalogueId: 'small-home',
         origin: const CellCoord(3, 4),
       );
-      expect(world.constructions.single.facing, 'right');
+      expect(world.constructions.single.facing, 'east');
 
       world = fundStructureProject(
         world,
@@ -487,14 +487,14 @@ void main() {
         catalogueId: 'small-home',
         origin: const CellCoord(4, 3),
       );
-      expect(world.constructions.single.facing, 'left');
+      expect(world.constructions.single.facing, 'south');
       expect(
         () => validateParcelWorldState(world, content, terrain),
         returnsNormally,
       );
     });
 
-    test('door sides swap only while roads touch both halves', () {
+    test('facings swap only while roads border both screen halves', () {
       var world = grantWorldDebugCoins(newWorld(), 30);
       // A single-side plan is fixed: the road east of (3,4) is its only
       // frontage.
@@ -542,7 +542,7 @@ void main() {
         origin: const CellCoord(6, 5),
       );
       final project = world.constructions.single;
-      expect(project.facing, 'right', reason: 'both halves default right');
+      expect(project.facing, 'north', reason: 'right half wins by default');
 
       world = swapStructureFacing(
         world,
@@ -550,7 +550,7 @@ void main() {
         terrain,
         projectId: project.id,
       );
-      expect(world.constructions.single.facing, 'left');
+      expect(world.constructions.single.facing, 'west');
       world = fundStructureProject(
         world,
         content,
@@ -565,9 +565,9 @@ void main() {
         terrain,
         catalogueId: 'small-home',
         origin: const CellCoord(5, 6),
-        preferredFacing: 'left',
+        preferredFacing: 'west',
       );
-      expect(world.constructions.single.facing, 'left');
+      expect(world.constructions.single.facing, 'west');
       world = fundStructureProject(
         world,
         content,

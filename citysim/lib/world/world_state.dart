@@ -73,11 +73,11 @@ class PlacedStructure {
   /// variants — the model's first role is used.
   final String? assetRole;
 
-  /// Door side snapshotted at plan time from the road-side rule: 'right'
-  /// when the adjacent road sits on the footprint's screen-right half
-  /// (grid north/east), 'left' for the screen-left half (grid south/west).
-  /// Null when the chosen sprite has no facings or for decorations with a
-  /// single facing.
+  /// Road side the door faces, snapshotted at plan time from the
+  /// bordering roads: 'north', 'east', 'south', or 'west'. The art
+  /// variant follows the side's screen half — north/east draw the
+  /// right-facing door, south/west the left. Null when the chosen
+  /// sprite has no facings or for decorations with a single facing.
   final String? facing;
 }
 
@@ -152,9 +152,11 @@ class WorldConstruction {
   /// predating variants.
   final String? assetRole;
 
-  /// Door side chosen at plan time from the adjacent road; transferred to
-  /// the placed structure on completion. Null for sprites without
-  /// facings. The player may flip it while the plan is unfinished.
+  /// Road side the door faces, chosen at plan time from the bordering
+  /// roads ('north', 'east', 'south', 'west') and transferred to the
+  /// placed structure on completion. Null for sprites without facings.
+  /// The player may flip it to the other screen half while the plan is
+  /// unfinished.
   final String? facing;
 
   int get coinsRemaining => totalCostCoins - coinsFunded;

@@ -193,7 +193,7 @@ void main() {
             'complete',
             'large-home',
             'home-large-blue',
-            'left',
+            'south',
             '',
           ],
         ],

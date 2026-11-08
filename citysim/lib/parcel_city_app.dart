@@ -353,11 +353,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   /// The door-swap target under the current selection: an unfinished
   /// building plan when the selected cell sits on one, otherwise the
   /// pre-placement preview when a building model and cell are selected.
-  /// Null while the door side is fixed — the road touches only one half
-  /// of the footprint, or the sprite has no door facings.
-  ({WorldConstruction? job, String facing})? _doorSwapTarget(
-    ParcelWorldState world,
-  ) {
+  /// Null while the door side is fixed — the road borders only one
+  /// screen half of the footprint, or the sprite has no door facings.
+  ({WorldConstruction? job, String facing, Set<String> roadSides})?
+  _doorSwapTarget(ParcelWorldState world) {
     final cell = _selectedCell;
     if (cell == null) return null;
     final content = _requireContent;
@@ -380,8 +379,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       final sides = WorldQueries(
         world,
         _terrain,
-      ).adjacentDoorSides(job.footprint);
-      return sides.length >= 2 ? (job: job, facing: job.facing!) : null;
+      ).adjacentRoadSides(job.footprint);
+      return sides.map(facingHalf).toSet().length >= 2
+          ? (job: job, facing: job.facing!, roadSides: sides)
+          : null;
     }
 
     final catalogueId = _selectedCatalogueId;
@@ -396,15 +397,21 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     final sprite = content.sprite(role);
     if (sprite == null || !sprite.hasFacings) return null;
     final footprint = structureFootprint(definition, cell);
-    final sides = WorldQueries(world, _terrain).adjacentDoorSides(footprint);
-    if (sides.length < 2) return null;
-    return (job: null, facing: _facingOverride ?? doorFacingForSides(sides));
+    final sides = WorldQueries(world, _terrain).adjacentRoadSides(footprint);
+    if (sides.map(facingHalf).toSet().length < 2) return null;
+    return (
+      job: null,
+      facing: _facingOverride ?? facingForRoadSides(sides),
+      roadSides: sides,
+    );
   }
 
   /// Flips the door side: an unfinished plan updates through the reducer
   /// (validated, saved, and recorded as an event); the pre-placement
   /// preview just flips the local override that placement will honour.
-  void _swapDoorSide(({WorldConstruction? job, String facing}) target) {
+  void _swapDoorSide(
+    ({WorldConstruction? job, String facing, Set<String> roadSides}) target,
+  ) {
     final job = target.job;
     if (job != null) {
       _runAction(
@@ -418,7 +425,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       return;
     }
     setState(
-      () => _facingOverride = target.facing == 'left' ? 'right' : 'left',
+      () => _facingOverride = flipFacing(target.facing, target.roadSides),
     );
   }
 
@@ -775,11 +782,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
               ),
               onPressed: () => _swapDoorSide(target),
               icon: const Icon(Icons.swap_horiz_rounded),
-              label: Text(
-                target.facing == 'left'
-                    ? 'Door faces left · swap'
-                    : 'Door faces right · swap',
-              ),
+              label: Text('Door faces ${target.facing} · swap'),
             ),
           ),
         Positioned(

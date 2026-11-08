@@ -476,7 +476,11 @@ void validateParcelWorldState(
   // only valid on a sprite that has facings, and facings sprites must
   // carry one.
   bool facingMatchesSprite(String? facing, String? role) {
-    if (facing != null && facing != 'left' && facing != 'right') {
+    if (facing != null &&
+        facing != 'north' &&
+        facing != 'east' &&
+        facing != 'south' &&
+        facing != 'west') {
       return false;
     }
     final sprite = role == null ? null : content.sprite(role);

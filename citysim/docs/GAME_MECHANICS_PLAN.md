@@ -145,18 +145,26 @@ shop price.
   the structure, so repeated builds of the same model look varied while
   staying stable across reloads. Variants are content — editable in the
   dashboard.
-- **Door sides face the road.** A building sprite carries two hand-drawn
-  door facings (left and right). At planning the game looks at which half of
-  the footprint the adjacent finished road touches: grid north/east frontage
-  (the screen-right half) faces the door right, grid south/west frontage
-  (the screen-left half) faces it left, and a road behind the building still
-  counts — the door lands on the visible facade around the corner from it,
-  on the same screen side. A road on only one half fixes the door; roads on
-  both halves leave the choice to the player, who can flip it with a
-  floating swap button while the plan is unfinished. The chosen side is
-  snapshotted onto the plan and survives funding, saves, and reloads. While
-  a building plan is unfinished, a bobbing arrow above the site points at
-  the door side; it disappears once the building completes.
+- **Doors face the road.** A building sprite carries two hand-drawn door
+  facings (left and right art). At planning the game snapshots *which
+  road side* the door faces as a compass value — north, east, south, or
+  west — one of the sides with an adjacent finished road. The art variant
+  follows the side's screen half: grid north/east (screen-right) draws the
+  right-facing door, grid south/west (screen-left) the left; a road behind
+  the building still counts — the door lands on the visible facade around
+  the corner from it, on the same screen side. When only one half has
+  frontage the side is fixed; roads on both halves leave the choice to the
+  player, who can flip it to the other half with a floating swap button
+  while the plan is unfinished. The chosen side survives funding, saves,
+  and reloads. While a building plan is unfinished, a bobbing arrow above
+  the site points at the door side; it disappears once the building
+  completes.
+- **Facing offset (per-sprite content).** Each facings sprite carries a
+  `facingOffset` in tiles (−0.5 to 0.5, default 0) that shifts its art
+  toward the road side the door faces — main-street buildings can sit
+  close to their road from any direction while symmetric ones stay at
+  zero. Picking follows the shift, and the dashboard's plot preview tunes
+  it against all four road sides.
 - Contribute coins manually; the building appears when fully funded.
 - Unfinished buildings do not provide road access or count toward model-unlock
   milestones.

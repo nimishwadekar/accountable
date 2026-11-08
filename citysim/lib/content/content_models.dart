@@ -152,6 +152,13 @@ class StructureDefinition {
 // Sprites
 // ---------------------------------------------------------------------------
 
+/// Which art variant a facing side draws with: north/east doors sit on
+/// the screen-right facade, south/west ones on the screen-left. Maps the
+/// compass facings saved with a structure to the left/right keys of a
+/// sprite's `facings` art map.
+String facingHalf(String facing) =>
+    facing == 'north' || facing == 'east' ? 'right' : 'left';
+
 class SpriteDefinition {
   const SpriteDefinition({
     this.assetPath,
@@ -160,6 +167,7 @@ class SpriteDefinition {
     this.groundAnchorX = 0.5,
     this.groundAnchorY = 1,
     this.baseOffsetY = 0,
+    this.facingOffset = 0,
     this.sways = false,
     this.category = 'buildings',
     this.subcategory = '',
@@ -189,6 +197,13 @@ class SpriteDefinition {
   /// ground anchor to suggest wind. Only props may sway.
   final bool sways;
 
+  /// Render-time shift toward the facing road side, in tiles: positive
+  /// pulls the art toward the road the door faces, negative pushes it
+  /// away. Zero keeps the anchor placement. Only sprites with door
+  /// facings can pull — their structures are the ones that save a
+  /// facing.
+  final double facingOffset;
+
   /// Dashboard grouping: ground, shores, roads, bridges, buildings, props.
   final String category;
 
@@ -214,12 +229,15 @@ class SpriteDefinition {
     return assetPath == null ? const <String>[] : <String>[assetPath!];
   }
 
-  /// Resolves the art file for a door side. Single-facing sprites ignore
-  /// [facing]; facings sprites fall back to their left side.
+  /// Resolves the art file for a door side. Facings sprites keep one
+  /// variant per screen half — north/east draw the right-facing door,
+  /// south/west the left — so the compass facing maps to a half before
+  /// lookup, and a missing facing falls back to the left variant.
+  /// Single-facing sprites ignore [facing].
   String pathFor(String? facing) {
     final facings = facingPaths;
     if (facings == null) return assetPath!;
-    return facings[facing ?? 'left'] ?? facings['left']!;
+    return facings[facingHalf(facing ?? 'south')] ?? facings['left']!;
   }
 
   SpriteDefinition copyWith({
@@ -229,6 +247,7 @@ class SpriteDefinition {
     double? groundAnchorX,
     double? groundAnchorY,
     double? baseOffsetY,
+    double? facingOffset,
     bool? sways,
     String? category,
     String? subcategory,
@@ -240,6 +259,7 @@ class SpriteDefinition {
     groundAnchorX: groundAnchorX ?? this.groundAnchorX,
     groundAnchorY: groundAnchorY ?? this.groundAnchorY,
     baseOffsetY: baseOffsetY ?? this.baseOffsetY,
+    facingOffset: facingOffset ?? this.facingOffset,
     sways: sways ?? this.sways,
     category: category ?? this.category,
     subcategory: subcategory ?? this.subcategory,
@@ -251,6 +271,7 @@ class SpriteDefinition {
     'renderScale': renderScale,
     'groundAnchor': [groundAnchorX, groundAnchorY],
     'baseOffsetY': baseOffsetY,
+    'facingOffset': facingOffset,
     'sways': sways,
     'category': category,
     'subcategory': subcategory,
@@ -273,6 +294,7 @@ class SpriteDefinition {
       groundAnchorX: anchor.isNotEmpty ? anchor[0].toDouble() : 0.5,
       groundAnchorY: anchor.length > 1 ? anchor[1].toDouble() : 1,
       baseOffsetY: (json['baseOffsetY'] as num?)?.toDouble() ?? 0,
+      facingOffset: (json['facingOffset'] as num?)?.toDouble() ?? 0,
       sways: json['sways'] as bool? ?? false,
       category: category,
       subcategory: json['subcategory'] as String? ?? category,
@@ -779,6 +801,12 @@ List<ContentIssue> validateContentData({
       error(
         'Sprite "${entry.key}": baseOffsetY must stay within ±64 art '
         'pixels of the ground anchor.',
+      );
+    }
+    if (sprite.facingOffset < -0.5 || sprite.facingOffset > 0.5) {
+      error(
+        'Sprite "${entry.key}": facingOffset must stay within ±0.5 '
+        'tiles — half a tile toward or away from the road.',
       );
     }
     if (sprite.sways && sprite.category != 'props') {

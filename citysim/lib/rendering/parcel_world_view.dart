@@ -98,6 +98,12 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   final Map<String, ui.Image> _images = {};
   final Map<String, Future<ui.Image>> _imageRequests = {};
 
+  /// Line-only copy of the water tile art — its lighter diamond edges,
+  /// with the plain water made transparent — kept to redraw the cell
+  /// grid over shore banks so it runs to the tile boundary instead of
+  /// stopping at the bank's waterline. Null until the water art loads.
+  ui.Image? _waterGrid;
+
   /// Per-pixel picking masks for the decoded sprites, keyed by asset
   /// path. Filled alongside [_images]; taps read them synchronously.
   final Map<String, SpriteMask> _masks = {};
@@ -204,6 +210,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     for (final image in _images.values) {
       image.dispose();
     }
+    _waterGrid?.dispose();
     super.dispose();
   }
 
@@ -320,6 +327,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   terrainCache: _terrainCache,
                   pixelRatio: _pixelRatio,
                   shimmerProgram: _shimmerProgram,
+                  waterGrid: _waterGrid,
                   pedestrians: _pedestrians,
                 ),
               ),
@@ -469,6 +477,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
             if (mounted) {
               setState(() => _images[path] = image);
               unawaited(_loadMask(path, image));
+              unawaited(_deriveWaterGrid(path, image));
             } else {
               image.dispose();
             }
@@ -479,6 +488,15 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
       pending.add(request);
     }
     await Future.wait(pending);
+  }
+
+  /// Derives the water grid overlay when the plain water tile art
+  /// finishes loading; other paths are ignored.
+  Future<void> _deriveWaterGrid(String path, ui.Image image) async {
+    if (_spriteRoleForPath(path, widget.content) != 'terrain.water') return;
+    final grid = await maskWaterGrid(image);
+    if (!mounted || grid == null) return;
+    setState(() => _waterGrid = grid);
   }
 
   /// Builds the per-pixel picking mask for a decoded sprite and widens
@@ -504,10 +522,10 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
       final frame = await codec.getNextFrame();
       final role = _spriteRoleForPath(path, widget.content);
       if (role != null && role.startsWith('shore.')) {
-        final overlay = await _maskShoreOverlay(role, frame.image);
-        if (overlay != null) {
+        final bank = await maskShoreBank(role, frame.image);
+        if (bank != null) {
           frame.image.dispose();
-          return overlay;
+          return bank;
         }
       }
       return frame.image;
@@ -527,14 +545,15 @@ String? _spriteRoleForPath(String path, ContentBundle content) {
 
 // Reference colours sampled from the pack's plain ground tiles. Shore
 // sprites are full grass/dirt tiles carrying a water band; masking them
-// against these references turns them into water-only overlays that layer
-// over the base ground tile without painting grass over another piece's
-// water.
+// against these references turns them into bank-only overlays — the
+// land-coloured pixels — that layer over an outermost water tile. The
+// art's own water pixels go transparent so the shimmer band beneath
+// stays visible where the tile is still wet.
 const _shoreWaterRgb = (105, 156, 188);
 const _shoreGrassRgb = (155, 162, 81);
 const _shoreDirtRgb = (171, 158, 127);
 
-Future<ui.Image?> _maskShoreOverlay(String role, ui.Image image) async {
+Future<ui.Image?> maskShoreBank(String role, ui.Image image) async {
   final base = role.startsWith('shore.dirt') ? _shoreDirtRgb : _shoreGrassRgb;
   try {
     final bytes = await image.toByteData(
@@ -560,7 +579,14 @@ Future<ui.Image?> _maskShoreOverlay(String role, ui.Image image) async {
           (g - base.$2) * (g - base.$2) +
           (b - base.$3) * (b - base.$3);
       final waterShare = dWater / math.max(1.0, dWater + dBase);
-      final keep = (1.0 - waterShare).clamp(0.0, 1.0);
+      // Keep the bank: land-coloured pixels stay, water-coloured pixels
+      // vanish so the tile's own water shows through. The bytes feed a
+      // premultiplied-alpha descriptor, so RGB scales with alpha —
+      // leaving colour under zero alpha renders as amplified garbage.
+      final keep = waterShare.clamp(0.0, 1.0);
+      pixels[i] = (r * keep).round();
+      pixels[i + 1] = (g * keep).round();
+      pixels[i + 2] = (b * keep).round();
       pixels[i + 3] = (alpha * keep).round();
     }
     final buffer = await ui.ImmutableBuffer.fromUint8List(pixels);
@@ -576,6 +602,157 @@ Future<ui.Image?> _maskShoreOverlay(String role, ui.Image image) async {
       return overlayFrame.image;
     } finally {
       overlayCodec.dispose();
+      descriptor.dispose();
+    }
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Bank overlays for an outermost water tile: the land-coloured half
+/// of the shore pieces, drawn over the water so the shore runs half a
+/// tile into the lake instead of the water running half a tile into
+/// the land. Land tiles stay dry; their plain ground shows right up to
+/// the tile boundary.
+///
+/// The piece selection mirrors the pre-2026-11 land-side rule with the
+/// neighbour test flipped — land neighbours instead of water — which
+/// swaps the edge and corner families' roles: two adjacent land
+/// neighbours leave a single water wedge (a corner piece's "everything
+/// else" bank), and a diagonal-only land neighbour gets a bank wedge
+/// (an edge piece's vertex wedge). The pack's sprite families,
+/// verified from their pixels:
+/// - quarter (water_NE/SE/SW/NW): water along one edge plus the two
+///   adjacent vertex wedges — as a bank, the dry half facing one land
+///   neighbour;
+/// - edge (wateredge_N/E/S/W): water across a full half tile minus one
+///   vertex wedge — as a bank, a wedge of land reaching a diagonal
+///   neighbour;
+/// - corner (watercorner_N/E/S/W): a small water notch at one vertex —
+///   as a bank, everything except the wedge of water two adjacent land
+///   neighbours leave behind.
+List<String> waterBankRoles(
+  CellCoord cell,
+  TerrainCell Function(CellCoord) terrainAt,
+) {
+  // Each cardinal neighbour contributes its shore style when it is
+  // land; the style follows the land the bank belongs to, so future
+  // ground types pick their own shore family.
+  String? bankStyle(int dx, int dy) {
+    final terrain = terrainAt(cell.offset(dx, dy));
+    if (!terrain.isLand) return null;
+    return terrain.groundStyle == GroundStyle.dirt ? 'dirt' : 'grass';
+  }
+
+  final north = bankStyle(0, -1);
+  final east = bankStyle(1, 0);
+  final south = bankStyle(0, 1);
+  final west = bankStyle(-1, 0);
+  // A one-cell pond surrounded by land stays open water: the bank
+  // halves would blanket it entirely.
+  if (north != null && east != null && south != null && west != null) {
+    return const [];
+  }
+
+  final roles = <String>[];
+  var n = north;
+  var e = east;
+  var s = south;
+  var w = west;
+  // Two adjacent land neighbours meet at a vertex; the bank floods
+  // both their halves and leaves water only at the opposite vertex's
+  // wedge — the corner piece there. The pair's style comes from the
+  // first neighbour in north/east/south/west order.
+  if (n != null && e != null) {
+    roles.add('shore.$n.corner.w');
+    n = null;
+    e = null;
+  } else if (e != null && s != null) {
+    roles.add('shore.$e.corner.n');
+    e = null;
+    s = null;
+  } else if (s != null && w != null) {
+    roles.add('shore.$s.corner.e');
+    s = null;
+    w = null;
+  } else if (w != null && n != null) {
+    roles.add('shore.$n.corner.s');
+    w = null;
+    n = null;
+  }
+  // Single land neighbours bank the half of the tile facing them.
+  // (Opposite pairs — land north and south, or east and west — cover
+  // the tile between them; parcel-granular terrain cannot author the
+  // one-tile channels that would need it, and a half-bank each side
+  // reads as the shoreline pinching shut.)
+  if (n != null) roles.add('shore.$n.quarter.sw');
+  if (e != null) roles.add('shore.$e.quarter.nw');
+  if (s != null) roles.add('shore.$s.quarter.ne');
+  if (w != null) roles.add('shore.$w.quarter.se');
+
+  // Land touching only a diagonal corner fills the shared vertex with
+  // a bank wedge, unless a cardinal bank already covers it.
+  if (north == null && west == null && bankStyle(-1, -1) != null) {
+    roles.add('shore.${bankStyle(-1, -1)}.edge.s');
+  }
+  if (north == null && east == null && bankStyle(1, -1) != null) {
+    roles.add('shore.${bankStyle(1, -1)}.edge.w');
+  }
+  if (east == null && south == null && bankStyle(1, 1) != null) {
+    roles.add('shore.${bankStyle(1, 1)}.edge.n');
+  }
+  if (south == null && west == null && bankStyle(-1, 1) != null) {
+    roles.add('shore.${bankStyle(-1, 1)}.edge.e');
+  }
+  return roles;
+}
+
+/// Reference colour of the plain water tile, for isolating the lighter
+/// grid lines its art carries along the diamond edges.
+const _waterBaseRgb = (105, 156, 188);
+
+/// A line-only copy of the water tile: pixels close to the plain water
+/// colour go transparent, keeping the lighter diamond-edge grid lines.
+/// Drawn over shore banks so the cell grid keeps running across the
+/// bank instead of stopping at the waterline.
+Future<ui.Image?> maskWaterGrid(ui.Image image) async {
+  try {
+    final bytes = await image.toByteData(
+      format: ui.ImageByteFormat.rawStraightRgba,
+    );
+    if (bytes == null) return null;
+    final pixels = bytes.buffer.asUint8List(
+      bytes.offsetInBytes,
+      bytes.lengthInBytes,
+    );
+    final baseSum = _waterBaseRgb.$1 + _waterBaseRgb.$2 + _waterBaseRgb.$3;
+    for (var i = 0; i < pixels.length; i += 4) {
+      final alpha = pixels[i + 3];
+      if (alpha == 0) continue;
+      final brightness = pixels[i] + pixels[i + 1] + pixels[i + 2] - baseSum;
+      // The grid lines sit well above the base water; antialiased
+      // edge pixels ramp between. Darker speckles in the art drop out.
+      // RGB scales with alpha because the descriptor expects
+      // premultiplied bytes.
+      final keep = ((brightness - 16) / 32).clamp(0.0, 1.0);
+      pixels[i] = (pixels[i] * keep).round();
+      pixels[i + 1] = (pixels[i + 1] * keep).round();
+      pixels[i + 2] = (pixels[i + 2] * keep).round();
+      pixels[i + 3] = (alpha * keep).round();
+    }
+    final buffer = await ui.ImmutableBuffer.fromUint8List(pixels);
+    final descriptor = ui.ImageDescriptor.raw(
+      buffer,
+      width: image.width,
+      height: image.height,
+      pixelFormat: ui.PixelFormat.rgba8888,
+    );
+    final gridCodec = await descriptor.instantiateCodec();
+    try {
+      final gridFrame = await gridCodec.getNextFrame();
+      return gridFrame.image;
+    } finally {
+      gridCodec.dispose();
       descriptor.dispose();
     }
   } catch (_) {
@@ -676,6 +853,7 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.terrainCache,
     required this.pixelRatio,
     required this.shimmerProgram,
+    required this.waterGrid,
     required this.pedestrians,
   }) : super(repaint: ambient);
 
@@ -704,6 +882,10 @@ class _ParcelWorldPainter extends CustomPainter {
   final _TerrainChunkCache terrainCache;
   final double pixelRatio;
   final ui.FragmentProgram? shimmerProgram;
+
+  /// Line-only copy of the water art, redrawn over shore banks so the
+  /// cell grid reaches the tile boundary. Null until it derives.
+  final ui.Image? waterGrid;
   final _PedestrianSim pedestrians;
 
   @override
@@ -834,6 +1016,43 @@ class _ParcelWorldPainter extends CustomPainter {
       }
     }
     _paintWaterShimmer(canvas, size, drawn);
+    _drawShoreBanks(canvas, size, drawn);
+  }
+
+  /// Shore banks over the shimmer: each bank tile replays its masked
+  /// shore sprite through the camera transform. The art's water pixels
+  /// are transparent, so the band beneath stays visible on the open
+  /// half while the bank reads dry.
+  void _drawShoreBanks(Canvas canvas, Size size, List<_TerrainChunk> chunks) {
+    for (final chunk in chunks) {
+      for (final bank in chunk.banks) {
+        _drawTileRole(canvas, bank.$2, bank.$1, size, scale, offset);
+      }
+      // The bank covers the grid lines baked into the water art, so a
+      // line-only copy of that art re-lays the grid over each banked
+      // cell — the grid runs to the tile boundary instead of stopping
+      // at the bank's waterline.
+      final grid = waterGrid;
+      final waterSprite = grid == null ? null : content.sprite('terrain.water');
+      if (grid != null && waterSprite != null) {
+        final source = Rect.fromLTWH(
+          0,
+          0,
+          grid.width.toDouble(),
+          grid.height.toDouble(),
+        );
+        final paint = Paint()..filterQuality = FilterQuality.medium;
+        for (final cell in chunk.bankCells) {
+          ParcelWorldProbe.countActor();
+          canvas.drawImageRect(
+            grid,
+            source,
+            _tileScreenRect(grid, waterSprite, cell, size, scale, offset),
+            paint,
+          );
+        }
+      }
+    }
   }
 
   /// Replays a world-space recording through the camera transform.
@@ -953,7 +1172,7 @@ class _ParcelWorldPainter extends CustomPainter {
       final center = _cellWorldCenter(cell);
       final roles = anyWater
           ? const ['terrain.water']
-          : _terrainSpriteRoles(cell, terrain, queries);
+          : _terrainSpriteRoles(cell, terrain);
       for (final role in roles) {
         final path = content.tryAssetPath(role);
         if (path == null) continue;
@@ -967,6 +1186,15 @@ class _ParcelWorldPainter extends CustomPainter {
         _drawWorldCellWash(canvas, center, content.ambience.unownedLandWash);
       }
       if (anyWater) {
+        // Shore banks draw above the shimmer, so they are recorded as
+        // per-frame draws rather than baked into the chunk picture.
+        final bankRoles = waterBankRoles(cell, queries.terrainAt);
+        if (bankRoles.isNotEmpty) {
+          for (final role in bankRoles) {
+            chunk.banks.add((cell, role));
+          }
+          chunk.bankCells.add(cell);
+        }
         final band = (cell.column - cell.row) % shimmer.bands;
         shimmerCounts[band]++;
         final halfWidth = _logicalTileWidth / 2;
@@ -1428,20 +1656,9 @@ class _ParcelWorldPainter extends CustomPainter {
     );
   }
 
-  List<String> _terrainSpriteRoles(
-    CellCoord cell,
-    TerrainCell terrain,
-    WorldQueries queries,
-  ) {
+  List<String> _terrainSpriteRoles(CellCoord cell, TerrainCell terrain) {
     if (!terrain.isLand) return const ['terrain.water'];
-    final style = terrain.groundStyle == GroundStyle.dirt ? 'dirt' : 'grass';
-    bool water(int dx, int dy) =>
-        !queries.terrainAt(cell.offset(dx, dy)).isLand;
-    final waterNorth = water(0, -1);
-    final waterEast = water(1, 0);
-    final waterSouth = water(0, 1);
-    final waterWest = water(-1, 0);
-    final roles = <String>[
+    return [
       switch (terrain.groundStyle) {
         GroundStyle.grass => 'terrain.grass',
         GroundStyle.grassPuddle => 'terrain.grass.puddle',
@@ -1450,68 +1667,34 @@ class _ParcelWorldPainter extends CustomPainter {
         GroundStyle.concrete => 'terrain.concrete',
       },
     ];
+  }
 
-    // Cardinal water neighbours each need a water band along the shared
-    // edge (quarter pieces). Two adjacent water neighbours share a vertex,
-    // where the pack provides a pre-composed half-tile edge piece instead.
-    // The pack's sprite families, verified from their pixels:
-    // - quarter (water_NE/SE/SW/NW): water along one edge plus the two
-    //   adjacent vertex wedges, for a single cardinal water neighbour;
-    // - edge (wateredge_N/E/S/W): water across a full half tile, for two
-    //   adjacent cardinal water neighbours;
-    // - corner (watercorner_N/E/S/W): a small notch at one vertex, for
-    //   water touching the tile only diagonally.
-    var north = waterNorth;
-    var east = waterEast;
-    var south = waterSouth;
-    var west = waterWest;
-    if (north && east && south && west) {
-      // A one-cell island keeps its grass centre visible.
-      roles.addAll([
-        'shore.$style.quarter.ne',
-        'shore.$style.quarter.se',
-        'shore.$style.quarter.sw',
-        'shore.$style.quarter.nw',
-      ]);
-    } else {
-      if (north && east) {
-        roles.add('shore.$style.edge.e');
-        north = false;
-        east = false;
-      } else if (east && south) {
-        roles.add('shore.$style.edge.s');
-        east = false;
-        south = false;
-      } else if (south && west) {
-        roles.add('shore.$style.edge.w');
-        south = false;
-        west = false;
-      } else if (west && north) {
-        roles.add('shore.$style.edge.n');
-        west = false;
-        north = false;
-      }
-      if (north) roles.add('shore.$style.quarter.ne');
-      if (east) roles.add('shore.$style.quarter.se');
-      if (south) roles.add('shore.$style.quarter.sw');
-      if (west) roles.add('shore.$style.quarter.nw');
-    }
-
-    // Water touching only a diagonal corner fills the shared vertex with a
-    // notch, unless a cardinal quarter piece already covers that vertex.
-    if (!waterNorth && !waterWest && water(-1, -1)) {
-      roles.add('shore.$style.corner.n');
-    }
-    if (!waterNorth && !waterEast && water(1, -1)) {
-      roles.add('shore.$style.corner.e');
-    }
-    if (!waterEast && !waterSouth && water(1, 1)) {
-      roles.add('shore.$style.corner.s');
-    }
-    if (!waterSouth && !waterWest && water(-1, 1)) {
-      roles.add('shore.$style.corner.w');
-    }
-    return roles;
+  /// Screen rect for a tile-fit sprite at [cell] — width stretched to
+  /// the tile, height kept at the art's aspect, hanging below the
+  /// diamond by the sprite's baseOffsetY. Shared by tile drawing, the
+  /// water grid, and the bridge selection tint.
+  Rect _tileScreenRect(
+    ui.Image image,
+    SpriteDefinition sprite,
+    CellCoord cell,
+    Size size,
+    double scale,
+    Offset offset,
+  ) {
+    final center = _worldToScreen(_cellWorldCenter(cell), size, scale, offset);
+    final unit = (_logicalTileWidth * scale) / image.width;
+    final width = image.width * unit;
+    final height = image.height * unit;
+    final southVertexY =
+        center.dy +
+        (_logicalTileHeight / 2) * scale +
+        sprite.baseOffsetY * unit;
+    return Rect.fromLTWH(
+      center.dx - width / 2,
+      southVertexY - height,
+      width,
+      height,
+    );
   }
 
   /// Draws a tile sprite at its natural aspect ratio with the sprite's
@@ -1533,23 +1716,10 @@ class _ParcelWorldPainter extends CustomPainter {
     if (image == null) return;
     ParcelWorldProbe.countActor();
     final sprite = content.sprite(role)!;
-    final center = _worldToScreen(_cellWorldCenter(cell), size, scale, offset);
-    final unit = (_logicalTileWidth * scale) / image.width;
-    final width = image.width * unit;
-    final height = image.height * unit;
-    final southVertexY =
-        center.dy +
-        (_logicalTileHeight / 2) * scale +
-        sprite.baseOffsetY * unit;
     canvas.drawImageRect(
       image,
       Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-      Rect.fromLTWH(
-        center.dx - width / 2,
-        southVertexY - height,
-        width,
-        height,
-      ),
+      _tileScreenRect(image, sprite, cell, size, scale, offset),
       Paint()
         ..filterQuality = FilterQuality.medium
         ..color = const Color(0xFFFFFFFF),
@@ -1620,8 +1790,8 @@ class _ParcelWorldPainter extends CustomPainter {
   }
 
   /// Door-direction arrow shown while a building plan is unfinished: a
-  /// bold overlay-style arrow bobbing above the site, pointing toward the
-  /// screen half whose facade carries the door. Freezes along with the
+  /// bold overlay-style arrow bobbing above the site, pointing along
+  /// the road side the door will face. Freezes along with the
   /// ambient clock under reduced motion.
   void _drawFacingArrow(
     Canvas canvas,
@@ -1644,10 +1814,14 @@ class _ParcelWorldPainter extends CustomPainter {
       scale,
       offset,
     ).translate(0, -17 * scale + bob * scale);
-    // The door sits on the facade facing the road: right-facing doors are
-    // on the grid-east wall (screen south-east), left-facing ones on the
-    // grid-south wall (screen south-west).
-    final angle = facing == 'right' ? math.atan2(1, 2) : math.atan2(1, -2);
+    // The arrow points along the road side the door faces: north and
+    // east run along the screen-right diagonal, south and west the left.
+    final angle = switch (facing) {
+      'north' => math.atan2(-1, 2),
+      'east' => math.atan2(1, 2),
+      'south' => math.atan2(1, -2),
+      _ => math.atan2(-1, -2),
+    };
     _drawArrowGlyph(canvas, anchor, angle);
   }
 
@@ -1782,11 +1956,15 @@ class _ParcelWorldPainter extends CustomPainter {
     if (selectedCell case final cell?) {
       // Selection highlights everything at the tapped cell: a
       // structure's whole footprint (with its sprite washed in the
-      // selection colour), a bridge's full crossing between banks, or
-      // the bare tile.
+      // selection colour), a bridge's full crossing between banks
+      // (deck and ramps washed the same way), or the bare tile.
       final structure = queries.structuresByCell[cell];
-      final bridgeCells = structure == null ? _bridgeCellsAt(cell) : null;
-      final cells = structure?.footprint ?? bridgeCells ?? [cell];
+      final bridge = structure == null ? _bridgeAt(cell) : null;
+      final cells =
+          structure?.footprint ??
+          (bridge == null
+              ? [cell]
+              : [...bridge.waterCells, bridge.nearBank, bridge.farBank]);
       for (final selected in cells) {
         final center = _worldToScreen(
           _cellWorldCenter(selected),
@@ -1804,6 +1982,8 @@ class _ParcelWorldPainter extends CustomPainter {
       }
       if (structure != null) {
         _tintStructureSprite(canvas, size, structure);
+      } else if (bridge != null) {
+        _tintBridgeSprite(canvas, size, bridge);
       }
     }
     if (bridgeStartCell case final start?) {
@@ -1857,7 +2037,8 @@ class _ParcelWorldPainter extends CustomPainter {
         }
         // Pre-placement preview: show the door side this plan would get,
         // using the same roll and road-side rule placement will apply.
-        // The player's preview choice wins while roads touch both halves.
+        // The player's preview choice wins while roads touch both halves
+        // and still name a bordering road.
         if (definition.kind == StructureKind.building) {
           final role =
               definition.assetRoles[(state.seed + state.nextEntityNumber) %
@@ -1865,14 +2046,15 @@ class _ParcelWorldPainter extends CustomPainter {
           final sprite = content.sprite(role);
           if (sprite != null && sprite.hasFacings) {
             final footprint = structureFootprint(definition, selectedCell!);
-            final sides = queries.adjacentDoorSides(footprint);
+            final sides = queries.adjacentRoadSides(footprint);
             _drawFacingArrow(
               canvas,
               size,
               footprint,
-              sides.length < 2
-                  ? doorFacingForSides(sides)
-                  : (facingOverride ?? doorFacingForSides(sides)),
+              sides.map(facingHalf).toSet().length > 1 &&
+                      sides.contains(facingOverride)
+                  ? facingOverride!
+                  : facingForRoadSides(sides),
             );
           }
         }
@@ -1880,15 +2062,12 @@ class _ParcelWorldPainter extends CustomPainter {
     }
   }
 
-  /// The full crossing — every water cell plus both banks — when the
-  /// cell belongs to a bridge. Bank roads are shared with the road
-  /// network, so tapping a bank stays a plain road tile; only the
-  /// bridge's own deck cells select the crossing.
-  List<CellCoord>? _bridgeCellsAt(CellCoord cell) {
+  /// The bridge whose deck covers [cell]. Bank roads are shared with
+  /// the road network, so tapping a bank stays a plain road tile; only
+  /// the bridge's own deck cells select the crossing.
+  CompletedBridge? _bridgeAt(CellCoord cell) {
     for (final bridge in state.bridges) {
-      if (bridge.waterCells.contains(cell)) {
-        return [...bridge.waterCells, bridge.nearBank, bridge.farBank];
-      }
+      if (bridge.waterCells.contains(cell)) return bridge;
     }
     return null;
   }
@@ -1921,6 +2100,42 @@ class _ParcelWorldPainter extends CustomPainter {
           Color(0x664BC69B),
           BlendMode.srcATop,
         ),
+    );
+  }
+
+  /// Washes the selected bridge's deck and ramps in the selection
+  /// colour — the same wash structures get — so the crossing itself
+  /// reads as picked, not just the tiles beneath it. The same roles
+  /// and rects the actor pass draws, repainted through a colour
+  /// filter.
+  void _tintBridgeSprite(Canvas canvas, Size size, CompletedBridge bridge) {
+    const wash = ColorFilter.mode(Color(0x664BC69B), BlendMode.srcATop);
+    void tinted(String role, CellCoord cell) {
+      final path = content.tryAssetPath(role);
+      final image = path == null ? null : images[path];
+      final sprite = content.sprite(role);
+      if (image == null || sprite == null) return;
+      canvas.drawImageRect(
+        image,
+        Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+        _tileScreenRect(image, sprite, cell, size, scale, offset),
+        Paint()
+          ..filterQuality = FilterQuality.medium
+          ..colorFilter = wash,
+      );
+    }
+
+    final bodyRole = bridgeBodyRole(bridge.nearBank, bridge.farBank);
+    for (final cell in bridge.waterCells) {
+      tinted(bodyRole, cell);
+    }
+    tinted(
+      bridgeRampRole(bridge.nearBank, bridge.waterCells.first),
+      bridge.nearBank,
+    );
+    tinted(
+      bridgeRampRole(bridge.farBank, bridge.waterCells.last),
+      bridge.farBank,
     );
   }
 
@@ -2050,13 +2265,33 @@ Rect _structureRect(
   )!;
   final width = image.width * sprite.renderScale;
   final height = image.height * sprite.renderScale;
-  return Rect.fromLTWH(
+  final rect = Rect.fromLTWH(
     anchorX - width * sprite.groundAnchorX,
     bottomY - height * sprite.groundAnchorY,
     width,
     height,
   );
+  // The facing offset leans the art toward the road the door faces;
+  // picking and tinting share this rect, so taps follow the lean.
+  final facing = structure.facing;
+  if (facing == null || sprite.facingOffset == 0) return rect;
+  return rect.shift(facingPullOffset(facing, sprite.facingOffset));
 }
+
+/// World-space shift for a structure pulled [offset] tiles toward its
+/// facing road side: north/east run along the screen-right diagonal,
+/// south/west along the left, each a half tile wide and a quarter tile
+/// tall per tile of offset.
+Offset facingPullOffset(String facing, double offset) => Offset(
+  (facing == 'north' || facing == 'east' ? 1 : -1) *
+      _logicalTileWidth /
+      2 *
+      offset,
+  (facing == 'east' || facing == 'south' ? 1 : -1) *
+      _logicalTileHeight /
+      2 *
+      offset,
+);
 
 /// Draws a tile sprite at its natural aspect ratio in world space:
 /// the sprite's ground diamond aligned to the cell's diamond.
@@ -2268,6 +2503,16 @@ class _TerrainChunk {
 
   /// World-space water-shimmer contours, one path per band.
   List<Path>? shimmerPaths;
+
+  /// Shore-bank draws for this chunk's outermost water tiles — one
+  /// (cell, role) per masked shore piece — replayed every frame above
+  /// the shimmer instead of baked into [picture].
+  final List<(CellCoord, String)> banks = [];
+
+  /// The distinct water cells those banks cover; the water grid redraws
+  /// once per cell over its bank. Insertion-ordered for stable draw
+  /// order.
+  final Set<CellCoord> bankCells = {};
 
   /// Water-cell count per shimmer band (the contours in each path).
   List<int>? shimmerCounts;

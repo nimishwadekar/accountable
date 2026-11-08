@@ -192,7 +192,7 @@ ParcelWorldState sheetTablesToWorld(
         completedAtDay: 0,
         population: definition.population,
         assetRole: _orNull(row[5]),
-        facing: _orNull(row[6]),
+        facing: _parseFacing(row[6]),
       ),
     );
   }
@@ -237,7 +237,7 @@ ParcelWorldState sheetTablesToWorld(
             startedAtDay: 0,
             population: definition.population,
             assetRole: _orNull(tile[5]),
-            facing: _orNull(tile[6]),
+            facing: _parseFacing(tile[6]),
           ),
         );
       case 'road':
@@ -502,6 +502,21 @@ CellCoord _cell(String x, String y) =>
 RoadStyle _parseStyle(String name) => RoadStyle.asphalt;
 
 String? _orNull(String value) => value.isEmpty ? null : value;
+
+/// Structure facings are compass road sides. Anything else — including
+/// the left/right halves older saves stored — fails the load loudly
+/// instead of silently falling back to an art variant.
+String? _parseFacing(String raw) {
+  final value = _orNull(raw);
+  if (value != null && !_cardinalFacings.contains(value)) {
+    throw FormatException(
+      'Structure facing "$raw" is not one of north, east, south, west.',
+    );
+  }
+  return value;
+}
+
+const _cardinalFacings = {'north', 'east', 'south', 'west'};
 
 List<int> _parseTarget(String target) {
   final parts = target.split(':');

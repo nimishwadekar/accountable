@@ -271,11 +271,15 @@ Rect _previewTileRect(ui.Image image, Offset center, {double baseOffsetY = 0}) {
 }
 
 /// A sprite rendered the way the game renders it, standing on its plot:
-/// the footprint's tile diamonds outlined, a road strip along the front
-/// edge for scale, and the art placed with its own render scale and ground
-/// anchor — so tuning either here shows exactly how the sprite sits in
-/// the world. Tile-category sprites (ground, roads, shores, bridges)
-/// render tile-style instead: width fitted to the tile, height kept.
+/// the footprint's tile diamonds outlined, a road strip along one edge
+/// for scale and frontage, and the art placed with its own render scale
+/// and ground anchor — so tuning either here shows exactly how the
+/// sprite sits in the world. Sprites with door facings get a four-way
+/// road-side picker: it moves the strip, swaps to that side's art
+/// variant, and applies the facing offset toward it, so one number can
+/// be tuned against every direction it can meet. Tile-category sprites
+/// (ground, roads, shores, bridges) render tile-style instead: width
+/// fitted to the tile, height kept.
 class SpritePlotPreview extends StatefulWidget {
   const SpritePlotPreview({
     required this.categories,
@@ -296,12 +300,17 @@ class SpritePlotPreview extends StatefulWidget {
 
 class _SpritePlotPreviewState extends State<SpritePlotPreview> {
   ui.Image? _image;
-  ui.Image? _roadImage;
+  ui.Image? _roadColumnAxisImage; // Strips running down-right (se art).
+  ui.Image? _roadRowAxisImage; // Strips running down-left (sw art).
   String? _loadedPath;
   ImageStream? _spriteStream;
   ImageStreamListener? _spriteListener;
-  ImageStream? _roadStream;
-  ImageStreamListener? _roadListener;
+  final List<ImageStream> _roadStreams = [];
+  final List<ImageStreamListener> _roadListeners = [];
+
+  /// Road side the preview faces: where the strip runs, which art
+  /// variant shows, and which way the facing offset pulls.
+  String _roadSide = 'south';
 
   Map<String, Object?> get _sprite {
     final raw = spriteMap(widget.categories)[widget.role];
@@ -312,33 +321,48 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
   void initState() {
     super.initState();
     _resolveSprite();
-    _resolveRoad();
+    _resolveRoads();
   }
 
   @override
   void didUpdateWidget(covariant SpritePlotPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_spritePath() != _loadedPath) _resolveSprite();
+    if (_spritePath(_roadSide) != _loadedPath) _resolveSprite();
   }
 
   @override
   void dispose() {
-    _detachSprite();
-    _detachRoad();
+    if (_spriteStream != null && _spriteListener != null) {
+      _spriteStream!.removeListener(_spriteListener!);
+    }
+    for (var index = 0; index < _roadStreams.length; index++) {
+      _roadStreams[index].removeListener(_roadListeners[index]);
+    }
     super.dispose();
   }
 
-  String? _spritePath() {
+  bool get _hasFacings =>
+      spritePathEntries(_sprite).any((entry) => entry.$1.isNotEmpty);
+
+  /// The art file for a road side: facings sprites pick the variant for
+  /// the side's screen half (north/east right, south/west left);
+  /// single-facing sprites keep their only file.
+  String? _spritePath(String side) {
     final entries = spritePathEntries(_sprite);
+    final half = side == 'north' || side == 'east' ? 'right' : 'left';
     for (final entry in entries) {
-      if (entry.$1 == 'left') return entry.$2;
+      if (entry.$1 == half) return entry.$2;
     }
     return entries.isEmpty ? null : entries.first.$2;
   }
 
   void _resolveSprite() {
-    _detachSprite();
-    _loadedPath = _spritePath();
+    if (_spriteStream != null && _spriteListener != null) {
+      _spriteStream!.removeListener(_spriteListener!);
+    }
+    _spriteStream = null;
+    _spriteListener = null;
+    _loadedPath = _spritePath(_roadSide);
     final path = _loadedPath;
     if (path == null) return;
     final stream = NetworkImage(ContentApi().assetUrl(path))
@@ -356,39 +380,35 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
     stream.addListener(listener);
   }
 
-  void _resolveRoad() {
-    _detachRoad();
-    final road = spriteMap(widget.categories)['road.straight.se'];
+  void _resolveRoads() {
+    _resolveRoad('road.straight.se', (image) {
+      _roadColumnAxisImage = image;
+    });
+    _resolveRoad('road.straight.sw', (image) {
+      _roadRowAxisImage = image;
+    });
+  }
+
+  void _resolveRoad(String role, void Function(ui.Image) setImage) {
+    final road = spriteMap(widget.categories)[role];
     final path = road is Map ? road['path'] as String? : null;
     if (path == null) return;
     final stream = NetworkImage(ContentApi().assetUrl(path))
         .resolve(const ImageConfiguration());
     late ImageStreamListener listener;
     listener = ImageStreamListener((frame, _) {
-      if (mounted) setState(() => _roadImage = frame.image);
+      if (mounted) setState(() => setImage(frame.image));
     }, onError: (Object error, StackTrace? stackTrace) {});
-    _roadStream = stream;
-    _roadListener = listener;
+    _roadStreams.add(stream);
+    _roadListeners.add(listener);
     stream.addListener(listener);
   }
 
-  // The decoded images stay owned by Flutter's image cache — the sprite
-  // thumbs share the same URLs — so keeping the stream listeners attached
-  // is what keeps them alive; this state never disposes them itself.
-  void _detachSprite() {
-    if (_spriteStream != null && _spriteListener != null) {
-      _spriteStream!.removeListener(_spriteListener!);
-    }
-    _spriteStream = null;
-    _spriteListener = null;
-  }
-
-  void _detachRoad() {
-    if (_roadStream != null && _roadListener != null) {
-      _roadStream!.removeListener(_roadListener!);
-    }
-    _roadStream = null;
-    _roadListener = null;
+  void _setRoadSide(String side) {
+    if (side == _roadSide) return;
+    setState(() => _roadSide = side);
+    // The facing's art variant changes with the side.
+    _resolveSprite();
   }
 
   @override
@@ -399,6 +419,7 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
     final anchorX = anchor.isNotEmpty ? (anchor[0] as num).toDouble() : 0.5;
     final anchorY = anchor.length > 1 ? (anchor[1] as num).toDouble() : 1.0;
     final baseOffsetY = (meta['baseOffsetY'] as num?)?.toDouble() ?? 0.0;
+    final facingOffset = (meta['facingOffset'] as num?)?.toDouble() ?? 0.0;
     final category = meta['category'] as String? ?? 'buildings';
     final tileStyle = const {
       'ground',
@@ -407,6 +428,11 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
       'bridges',
     }.contains(category);
     final (columns, rows) = footprintForRole(widget.categories, widget.role);
+    // Only facings sprites can lean — their structures are the ones
+    // that save a facing to pull toward.
+    final pull = _hasFacings
+        ? _previewPull(_roadSide, facingOffset)
+        : Offset.zero;
 
     // Logical-space bounds of everything drawn: plot diamonds, the road
     // strip, and the sprite's rect once its art has decoded.
@@ -429,8 +455,7 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
       }
     }
     if (!tileStyle) {
-      for (var column = -1; column <= columns; column++) {
-        final center = _previewCellCenter(column, rows);
+      for (final center in _roadStripCenters(columns, rows, _roadSide)) {
         bounds = bounds.expandToInclude(
           Rect.fromCenter(
             center: center,
@@ -455,7 +480,7 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
               anchorY: anchorY,
               columns: columns,
               rows: rows,
-            );
+            ).shift(pull);
       bounds = bounds.expandToInclude(rect);
     }
     bounds = bounds.inflate(6);
@@ -467,6 +492,27 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_hasFacings)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Row(
+              children: [
+                for (final side in const ['north', 'east', 'south', 'west'])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: ChoiceChip(
+                      label: Text(side[0].toUpperCase()),
+                      tooltip: 'Road on the $side side',
+                      selected: _roadSide == side,
+                      onSelected: (_) => _setRoadSide(side),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         CustomPaint(
           size: Size(widget.width, height),
           painter: _SpritePlotPainter(
@@ -475,11 +521,14 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
             rows: rows,
             tileStyle: tileStyle,
             image: image,
-            roadImage: _roadImage,
+            roadColumnAxisImage: _roadColumnAxisImage,
+            roadRowAxisImage: _roadRowAxisImage,
+            roadSide: _roadSide,
             renderScale: renderScale,
             anchorX: anchorX,
             anchorY: anchorY,
             baseOffsetY: baseOffsetY,
+            pull: pull,
           ),
         ),
         Text(
@@ -502,11 +551,14 @@ class _SpritePlotPainter extends CustomPainter {
     required this.rows,
     required this.tileStyle,
     required this.image,
-    required this.roadImage,
+    required this.roadColumnAxisImage,
+    required this.roadRowAxisImage,
+    required this.roadSide,
     required this.renderScale,
     required this.anchorX,
     required this.anchorY,
     required this.baseOffsetY,
+    required this.pull,
   });
 
   final Rect bounds;
@@ -514,11 +566,14 @@ class _SpritePlotPainter extends CustomPainter {
   final int rows;
   final bool tileStyle;
   final ui.Image? image;
-  final ui.Image? roadImage;
+  final ui.Image? roadColumnAxisImage;
+  final ui.Image? roadRowAxisImage;
+  final String roadSide;
   final double renderScale;
   final double anchorX;
   final double anchorY;
   final double baseOffsetY;
+  final Offset pull;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -540,14 +595,18 @@ class _SpritePlotPainter extends CustomPainter {
       ..lineTo(center.dx - _previewTileWidth / 2, center.dy)
       ..close();
 
-    // Road strip along the plot's front edge, for scale and frontage.
-    final road = roadImage;
+    // Road strip along the chosen side, for scale and frontage. Strips
+    // on the north/south edges run along the column axis (down-right,
+    // se art); east/west strips run along the row axis (down-left, sw).
+    final road = roadSide == 'east' || roadSide == 'west'
+        ? roadRowAxisImage
+        : roadColumnAxisImage;
     if (!tileStyle && road != null) {
-      for (var column = -1; column <= columns; column++) {
+      for (final center in _roadStripCenters(columns, rows, roadSide)) {
         canvas.drawImageRect(
           road,
           Rect.fromLTWH(0, 0, road.width.toDouble(), road.height.toDouble()),
-          _previewTileRect(road, _previewCellCenter(column, rows)),
+          _previewTileRect(road, center),
           Paint()..filterQuality = FilterQuality.medium,
         );
       }
@@ -567,7 +626,8 @@ class _SpritePlotPainter extends CustomPainter {
       }
     }
 
-    // The sprite itself, placed exactly as the game places it.
+    // The sprite itself, placed exactly as the game places it, leaning
+    // toward the chosen road side by its facing offset.
     final image = this.image;
     if (image != null) {
       final rect = tileStyle
@@ -583,7 +643,7 @@ class _SpritePlotPainter extends CustomPainter {
               anchorY: anchorY,
               columns: columns,
               rows: rows,
-            );
+            ).shift(pull);
       canvas.drawImageRect(
         image,
         Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
@@ -601,9 +661,48 @@ class _SpritePlotPainter extends CustomPainter {
       oldDelegate.rows != rows ||
       oldDelegate.tileStyle != tileStyle ||
       oldDelegate.image != image ||
-      oldDelegate.roadImage != roadImage ||
+      oldDelegate.roadColumnAxisImage != roadColumnAxisImage ||
+      oldDelegate.roadRowAxisImage != roadRowAxisImage ||
+      oldDelegate.roadSide != roadSide ||
       oldDelegate.renderScale != renderScale ||
       oldDelegate.anchorX != anchorX ||
       oldDelegate.anchorY != anchorY ||
-      oldDelegate.baseOffsetY != baseOffsetY;
+      oldDelegate.baseOffsetY != baseOffsetY ||
+      oldDelegate.pull != pull;
 }
+
+/// Cell centres of a road strip along one side of a plot, one tile past
+/// each end so the strip reads as a running road.
+List<Offset> _roadStripCenters(int columns, int rows, String side) {
+  switch (side) {
+    case 'north':
+      return [
+        for (var column = -1; column <= columns; column++)
+          _previewCellCenter(column, -1),
+      ];
+    case 'east':
+      return [
+        for (var row = -1; row <= rows; row++) _previewCellCenter(columns, row),
+      ];
+    case 'west':
+      return [
+        for (var row = -1; row <= rows; row++) _previewCellCenter(-1, row),
+      ];
+    default: // south — the plot's front edge
+      return [
+        for (var column = -1; column <= columns; column++)
+          _previewCellCenter(column, rows),
+      ];
+  }
+}
+
+/// The preview's copy of the renderer's facing pull: [offset] tiles
+/// along the road side's screen diagonal — north/east toward the
+/// plot's right corners, south/west toward its left.
+Offset _previewPull(String side, double offset) => Offset(
+  (side == 'north' || side == 'east' ? 1 : -1) * _previewTileWidth / 2 * offset,
+  (side == 'east' || side == 'south' ? 1 : -1) *
+      _previewTileHeight /
+      2 *
+      offset,
+);

@@ -53,10 +53,10 @@ void main() {
         'complete',
         'small-home',
         'home-small-yellow',
-        'right',
+        'east',
         '',
       ],
-      ['6', '5', 'structure', 'planned', 'cafe', 'cafe', 'right', ''],
+      ['6', '5', 'structure', 'planned', 'cafe', 'cafe', 'east', ''],
     ],
     projects: [
       ['2', 'structure', 'cafe', '6:5', '1'],
@@ -98,7 +98,7 @@ void main() {
     final cottage = world.structures.single;
     expect(cottage.catalogueId, 'small-home');
     expect(cottage.assetRole, 'home-small-yellow');
-    expect(cottage.facing, 'right');
+    expect(cottage.facing, 'east');
     expect(cottage.footprint, [const CellCoord(3, 4)]);
     expect(cottage.population, 1);
 
@@ -256,6 +256,22 @@ void main() {
       ),
       throwsA(isA<FormatException>()),
       reason: 'two entities on one cell',
+    );
+    expect(
+      () => sheetTablesToWorld(
+        SheetTables(
+          userData: handwrittenTables().userData,
+          ownedParcels: handwrittenTables().ownedParcels,
+          tiles: [
+            ...handwrittenTables().tiles,
+            ['9', '6', 'structure', 'complete', 'small-home', '', 'left', ''],
+          ],
+        ),
+        content: content,
+        terrainProvider: terrain,
+      ),
+      throwsA(isA<FormatException>()),
+      reason: 'legacy left/right facings must migrate to cardinals first',
     );
   });
 }

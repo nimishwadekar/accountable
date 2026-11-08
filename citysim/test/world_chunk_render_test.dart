@@ -231,6 +231,54 @@ void main() {
             'positions',
       );
 
+      // The shore lives on the water side of the boundary: (8,4) is an
+      // outermost water tile with grass land to its west, so its
+      // north-west half banks toward the land while the open half
+      // stays water, and the land tile (7,4) stays dry right up to the
+      // tile edge where the overflow water used to lap.
+      Offset screenHalf(CellCoord cell, int dx, int dy) => _screenCenterOf(cell)
+          .translate(((dx - dy) * 16).toDouble(), ((dx + dy) * 8).toDouble());
+      expect(
+        isGrass(
+          pixel(
+            imageA,
+            bytesA!,
+            _screenCenterOf(const CellCoord(8, 4)).translate(-16, -4),
+          ),
+        ),
+        isTrue,
+        reason: 'the outermost water tile banks toward the land',
+      );
+      expect(
+        isWater(pixel(imageA, bytesA, screenHalf(const CellCoord(8, 4), 1, 0))),
+        isTrue,
+        reason: 'the open half of the boundary water tile stays water',
+      );
+      expect(
+        isGrass(pixel(imageA, bytesA, screenHalf(const CellCoord(7, 4), 1, 0))),
+        isTrue,
+        reason: 'land next to water stays dry up to the tile edge',
+      );
+
+      // The water grid continues over the bank: the diamond-edge lines
+      // baked into the water art are re-laid above the bank, so the
+      // vertex crossings on the banked side read as light grid-line
+      // blue rather than the grass around them.
+      bool isGridLine(int rgba) {
+        final r = rgba >> 24, b = (rgba >> 8) & 0xFF;
+        return b > 175 && b - r > 25;
+      }
+
+      final bankedVertices = [
+        _screenCenterOf(const CellCoord(8, 4)).translate(-32, 0),
+        _screenCenterOf(const CellCoord(8, 4)).translate(0, -16),
+      ];
+      expect(
+        bankedVertices.map((p) => pixel(imageA, bytesA, p)).any(isGridLine),
+        isTrue,
+        reason: 'the water grid runs over the bank to the tile edge',
+      );
+
       // ---- Capture B: the picture-replay path ----------------------
       debugDrawChunksViaPictures = true;
       await tester.pumpWidget(
@@ -249,7 +297,7 @@ void main() {
       var differing = 0;
       final total = imageA.width * imageA.height;
       for (var i = 0; i < total; i++) {
-        final a = bytesA!.getUint32(i * 4);
+        final a = bytesA.getUint32(i * 4);
         final b = bytesB!.getUint32(i * 4);
         for (final shift in [0, 8, 16]) {
           if (((a >> shift) & 0xFF) - ((b >> shift) & 0xFF) > 32 ||

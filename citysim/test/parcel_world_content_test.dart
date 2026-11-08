@@ -34,6 +34,56 @@ void main() {
     },
   );
 
+  test('sprite facing offsets validate within half a tile', () {
+    // The seeded sprites carry no out-of-range offsets.
+    final seeded = validateContentData(
+      catalogue: content.catalogue,
+      sprites: content.sprites,
+      economy: content.economy,
+      ambience: content.ambience,
+      terrain: content.terrain,
+    );
+    expect(
+      seeded.where((issue) => issue.message.contains('facingOffset')),
+      isEmpty,
+    );
+
+    // A sprite pushed past half a tile fails validation, and one inside
+    // the range passes.
+    final role = content.catalogue.first.assetRoles.first;
+    final outOfRange = {
+      ...content.sprites,
+      role: content.sprites[role]!.copyWith(facingOffset: 0.75),
+    };
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: outOfRange,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: content.terrain,
+      ).any(
+        (issue) =>
+            issue.severity == 'error' && issue.message.contains('facingOffset'),
+      ),
+      isTrue,
+    );
+    final inRange = {
+      ...content.sprites,
+      role: content.sprites[role]!.copyWith(facingOffset: -0.5),
+    };
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: inRange,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: content.terrain,
+      ).where((issue) => issue.message.contains('facingOffset')),
+      isEmpty,
+    );
+  });
+
   test('content seed snapshot holds the seeded defaults', () {
     // Snapshot guard: these values are the seeded defaults the dashboard
     // starts from — the original nine models, the promoted Buggy
