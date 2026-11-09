@@ -6,6 +6,13 @@ editor's grouping:
 - `sprites/<category>/<subcategory>/` — every sprite referenced by
   `assets/content/sprites.json`, organized exactly as the editor displays
   it (buildings/houses, props/trees, ground/grass, roads/end, …).
+  The six ground tiles (grass, grass puddle, dirt, asphalt, concrete,
+  water) were replaced with borderless versions on 2026-11-09: the
+  3.5px edge band painted the tile's dominant colour and the diamond
+  edge hardened to full opacity, removing the baked cell grid and the
+  alpha-seam hairlines between tiles. The grid-lined originals were
+  returned to `buggy_studio/Roads and Grounds/` — the only copies,
+  since the pack originals were moved out during promotion.
 - `characters/` — ambient pedestrian walk and idle frames, loaded directly
   by the renderer.
 - `content/` — the JSON content layer (catalogue, sprites, economy,
@@ -59,6 +66,10 @@ tree: **119 sprites are left to migrate.**
   variation/weathering layer. The promoted grass puddle is the
   singular-`puddle` art and was moved out of the pack; the plural
   variant here is distinct, different art.
+- The six plain ground tiles here (`tile_ground_grass`, `_dirt`,
+  `_asphalt`, `_concrete`, `_water`, and the singular grass
+  `_puddle_clean`) are the **grid-lined originals** of the borderless
+  promoted tiles, returned 2026-11-09 — not migration candidates.
 
 ### Vehicles — 104 candidates
 All 4-direction driving sprites; the biggest untouched category and
