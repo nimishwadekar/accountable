@@ -87,7 +87,6 @@ void main() {
   test('the tile grid validates its alpha and colour channels', () {
     final bad = AmbienceContent(
       ambientTimeScale: content.ambience.ambientTimeScale,
-      waterShimmer: content.ambience.waterShimmer,
       vegetationSway: content.ambience.vegetationSway,
       pedestrians: content.ambience.pedestrians,
       unownedLandWash: content.ambience.unownedLandWash,
@@ -178,7 +177,6 @@ void main() {
 
     expect(content.ambience.ambientTimeScale, 1.0);
     expect(content.ambience.pedestrians.spriteScale, closeTo(0.7, 0.001));
-    expect(content.ambience.waterShimmer.bands, 6);
   });
 
   test('negative cell coordinates map to the correct neighboring parcels', () {

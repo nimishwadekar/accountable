@@ -23,9 +23,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  shaders:
-    - shaders/water_shimmer.frag
-
   assets:
     - assets/config.json
     - assets/content/
@@ -48,9 +45,7 @@ flutter:
     - assets/sprites/ground/dirt/
     - assets/sprites/ground/grass/
     - assets/sprites/ground/water/
-    - assets/sprites/shores/corner/
-    - assets/sprites/shores/edge/
-    - assets/sprites/shores/quarter/
+    - assets/sprites/shores/masks/
     - assets/sprites/roads/corner/
     - assets/sprites/roads/cross/
     - assets/sprites/roads/end/

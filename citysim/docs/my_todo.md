@@ -8,6 +8,7 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 - terrain elevation and slops and cliffs.
 - buildings get a concrete base below them.
 - clouds obscuring beyond current map so i'm not restricted to only ocean but also hidden contiguous land beyond.
+- have similar fade masks to shores for all terrain meetings, so that there's no harsh boundary anywhere.
 - auto-growth of citizens.
 - region borders: parcel granularity. Parcels can group together under a "settlement", later could be states. Local economy and coin banks stay local to a settlement unless explicitly transferred.
 - Maybe AI would be good at splicing together new assets from existing ones.

@@ -30,12 +30,6 @@ const _logicalTileHeight = 32.0;
 @visibleForTesting
 bool debugDrawChunksViaPictures = false;
 
-/// Debug/test switch: draw the water shimmer with the merged-path
-/// fallback instead of the fragment shader. Tests use this to prove
-/// both shimmer paths produce identical pixels.
-@visibleForTesting
-bool debugDrawShimmerViaPaths = false;
-
 class ParcelWorldView extends StatefulWidget {
   const ParcelWorldView({
     required this.state,
@@ -114,6 +108,15 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   /// path. Filled alongside [_images]; taps read them synchronously.
   final Map<String, SpriteMask> _masks = {};
 
+  /// Composed bank overlays — the ground material cut by its baked
+  /// shore mask — keyed by shore role ('shore.grass.quarter.sw').
+  /// Filled after the material and mask sprites load.
+  final Map<String, ui.Image> _bankImages = {};
+
+  /// Guards [_composeShoreBanks] against overlapping runs when
+  /// [_loadMissingImages] is re-triggered mid-composition.
+  bool _composingBanks = false;
+
   /// How many cells a sprite's art can reach above its footprint — the
   /// candidate window for picking. Starts wide enough for the pack's
   /// tallest building and grows if taller art loads.
@@ -133,9 +136,9 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   Offset _panZoomStartPosition = Offset.zero;
   bool _cameraInitialized = false;
 
-  /// Drives water shimmer, vegetation sway, and ambient pedestrians. The
-  /// clock is muted when the platform requests reduced motion; the ambient
-  /// time scale comes from content so the editor can tune it live.
+  /// Drives vegetation sway and ambient pedestrians. The clock is muted
+  /// when the platform requests reduced motion; the ambient time scale
+  /// comes from content so the editor can tune it live.
   final _AmbientClock _ambient = _AmbientClock();
   late final Ticker _ambientTicker = createTicker(
     (elapsed) => _ambient.tick(
@@ -149,10 +152,6 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   /// rasterize at the display's real density.
   double _pixelRatio = 1.0;
 
-  /// Water-shimmer fragment program; null until it loads or when the
-  /// platform cannot run it, in which case the shimmer falls back to
-  /// merged path drawing.
-  ui.FragmentProgram? _shimmerProgram;
   final _PedestrianSim _pedestrians = _PedestrianSim();
 
   /// Hovered cell for desktop live previews (touch never hovers).
@@ -170,19 +169,6 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     super.initState();
     _loading = _loadMissingImages();
     _ambientTicker.start();
-    _loadShimmerShader();
-  }
-
-  Future<void> _loadShimmerShader() async {
-    try {
-      final program = await ui.FragmentProgram.fromAsset(
-        'shaders/water_shimmer.frag',
-      );
-      if (!mounted) return;
-      setState(() => _shimmerProgram = program);
-    } catch (_) {
-      // Shimmer stays on the merged-path fallback.
-    }
   }
 
   @override
@@ -331,7 +317,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   ambient: _ambient,
                   terrainCache: _terrainCache,
                   pixelRatio: _pixelRatio,
-                  shimmerProgram: _shimmerProgram,
+                  banks: _bankImages,
                   parcelMode: widget.parcelMode,
                   showTileGrid: widget.showTileGrid,
                   pedestrians: _pedestrians,
@@ -493,6 +479,87 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
       pending.add(request);
     }
     await Future.wait(pending);
+    await _composeShoreBanks();
+  }
+
+  /// The twelve shore shapes; each has one baked mask shared by the
+  /// grass and dirt materials.
+  static const _shoreShapes = [
+    ('edge', 'n'),
+    ('edge', 'e'),
+    ('edge', 's'),
+    ('edge', 'w'),
+    ('corner', 'n'),
+    ('corner', 'e'),
+    ('corner', 's'),
+    ('corner', 'w'),
+    ('quarter', 'ne'),
+    ('quarter', 'nw'),
+    ('quarter', 'se'),
+    ('quarter', 'sw'),
+  ];
+
+  /// Composes every bank overlay the shoreline can draw: the terrain
+  /// material cut by its shape's baked mask — Factorio-style, the mask
+  /// shared by the grass and dirt materials. Each mask's pixels are
+  /// read once and cut by both materials; runs after sprite loads and
+  /// skips roles already composed.
+  Future<void> _composeShoreBanks() async {
+    if (_composingBanks) return;
+    _composingBanks = true;
+    try {
+      final content = widget.content;
+      final maskPixels = <String, Uint8List>{};
+      for (final (family, dir) in _shoreShapes) {
+        final maskPath = content.tryAssetPath('shore.$family.$dir');
+        final mask = maskPath == null ? null : _images[maskPath];
+        if (mask == null) continue;
+        final data = await mask.toByteData(
+          format: ui.ImageByteFormat.rawStraightRgba,
+        );
+        if (data == null) continue;
+        maskPixels['$family.$dir'] = data.buffer.asUint8List(
+          data.offsetInBytes,
+          data.lengthInBytes,
+        );
+      }
+      for (final style in const ['grass', 'dirt']) {
+        final materialPath = content.tryAssetPath('terrain.$style');
+        final material = materialPath == null ? null : _images[materialPath];
+        if (material == null) continue;
+        final matData = await material.toByteData(
+          format: ui.ImageByteFormat.rawStraightRgba,
+        );
+        if (matData == null) continue;
+        final matPixels = matData.buffer.asUint8List(
+          matData.offsetInBytes,
+          matData.lengthInBytes,
+        );
+        for (final (family, dir) in _shoreShapes) {
+          final role = 'shore.$style.$family.$dir';
+          if (_bankImages.containsKey(role)) continue;
+          final msk = maskPixels['$family.$dir'];
+          if (msk == null) continue;
+          final bank = await decodeRgbaImage(
+            composeShoreBankPixels(
+              matPixels,
+              msk,
+              material.width,
+              material.height,
+            ),
+            material.width,
+            material.height,
+          );
+          if (!mounted) {
+            bank?.dispose();
+            return;
+          }
+          if (bank != null) setState(() => _bankImages[role] = bank);
+        }
+      }
+    } finally {
+      _composingBanks = false;
+    }
   }
 
   /// Builds the per-pixel picking mask for a decoded sprite and widens
@@ -515,16 +582,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     final data = await rootBundle.load(path);
     final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
     try {
-      final frame = await codec.getNextFrame();
-      final role = _spriteRoleForPath(path, widget.content);
-      if (role != null && role.startsWith('shore.')) {
-        final bank = await maskShoreBank(role, frame.image);
-        if (bank != null) {
-          frame.image.dispose();
-          return bank;
-        }
-      }
-      return frame.image;
+      return (await codec.getNextFrame()).image;
     } finally {
       codec.dispose();
     }
@@ -539,71 +597,130 @@ String? _spriteRoleForPath(String path, ContentBundle content) {
   return null;
 }
 
-// Reference colours sampled from the pack's plain ground tiles. Shore
-// sprites are full grass/dirt tiles carrying a water band; masking them
-// against these references turns them into bank-only overlays — the
-// land-coloured pixels — that layer over an outermost water tile. The
-// art's own water pixels go transparent so the shimmer band beneath
-// stays visible where the tile is still wet.
-const _shoreWaterRgb = (105, 156, 188);
-const _shoreGrassRgb = (155, 162, 81);
-const _shoreDirtRgb = (171, 158, 127);
-
-Future<ui.Image?> maskShoreBank(String role, ui.Image image) async {
-  final base = role.startsWith('shore.dirt') ? _shoreDirtRgb : _shoreGrassRgb;
+/// Composes one bank overlay from decoded images: the ground material
+/// cut by the baked shore mask. See [composeShoreBankPixels].
+Future<ui.Image?> composeShoreBank(ui.Image material, ui.Image mask) async {
   try {
-    final bytes = await image.toByteData(
+    if (material.width != mask.width || material.height != mask.height) {
+      return null;
+    }
+    final matData = await material.toByteData(
       format: ui.ImageByteFormat.rawStraightRgba,
     );
-    if (bytes == null) return null;
-    final pixels = bytes.buffer.asUint8List(
-      bytes.offsetInBytes,
-      bytes.lengthInBytes,
+    final maskData = await mask.toByteData(
+      format: ui.ImageByteFormat.rawStraightRgba,
     );
-    for (var i = 0; i < pixels.length; i += 4) {
-      final alpha = pixels[i + 3];
-      if (alpha == 0) continue;
-      final r = pixels[i];
-      final g = pixels[i + 1];
-      final b = pixels[i + 2];
-      final dWater =
-          (r - _shoreWaterRgb.$1) * (r - _shoreWaterRgb.$1) +
-          (g - _shoreWaterRgb.$2) * (g - _shoreWaterRgb.$2) +
-          (b - _shoreWaterRgb.$3) * (b - _shoreWaterRgb.$3);
-      final dBase =
-          (r - base.$1) * (r - base.$1) +
-          (g - base.$2) * (g - base.$2) +
-          (b - base.$3) * (b - base.$3);
-      final waterShare = dWater / math.max(1.0, dWater + dBase);
-      // Keep the bank: land-coloured pixels stay, water-coloured pixels
-      // vanish so the tile's own water shows through. The bytes feed a
-      // premultiplied-alpha descriptor, so RGB scales with the output
-      // alpha — colour under zero alpha renders as amplified garbage.
-      final keep = waterShare.clamp(0.0, 1.0);
-      final alphaOut = (alpha * keep).round();
-      pixels[i] = (r * alphaOut / 255).round();
-      pixels[i + 1] = (g * alphaOut / 255).round();
-      pixels[i + 2] = (b * alphaOut / 255).round();
-      pixels[i + 3] = alphaOut;
-    }
+    if (matData == null || maskData == null) return null;
+    final matPixels = matData.buffer.asUint8List(
+      matData.offsetInBytes,
+      matData.lengthInBytes,
+    );
+    final maskPixels = maskData.buffer.asUint8List(
+      maskData.offsetInBytes,
+      maskData.lengthInBytes,
+    );
+    return await decodeRgbaImage(
+      composeShoreBankPixels(
+        matPixels,
+        maskPixels,
+        material.width,
+        material.height,
+      ),
+      material.width,
+      material.height,
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Decodes premultiplied RGBA bytes into a [ui.Image] through the raw
+/// descriptor (the same path the old runtime bank mask used).
+Future<ui.Image?> decodeRgbaImage(
+  Uint8List pixels,
+  int width,
+  int height,
+) async {
+  try {
     final buffer = await ui.ImmutableBuffer.fromUint8List(pixels);
     final descriptor = ui.ImageDescriptor.raw(
       buffer,
-      width: image.width,
-      height: image.height,
+      width: width,
+      height: height,
       pixelFormat: ui.PixelFormat.rgba8888,
     );
-    final overlayCodec = await descriptor.instantiateCodec();
+    final codec = await descriptor.instantiateCodec();
     try {
-      final overlayFrame = await overlayCodec.getNextFrame();
-      return overlayFrame.image;
+      return (await codec.getNextFrame()).image;
     } finally {
-      overlayCodec.dispose();
+      codec.dispose();
       descriptor.dispose();
     }
   } catch (_) {
     return null;
   }
+}
+
+/// Composes bank pixels (premultiplied): the ground material cut by
+/// the baked shore mask (greyscale — the waterline gradient).
+///
+/// The material's transparent pixels are repaired first, but only
+/// where the mask has coverage — elsewhere the RGB is never sampled.
+/// The pack art carries a jagged transparent fringe along its diamond
+/// edges and small alpha holes near the waterline; the mask is opaque
+/// in places the material never painted, which would otherwise draw
+/// solid black edge pixels along the bank's borders. Colours dilate
+/// from the nearest painted neighbour; alpha stays 0 so the mask
+/// alone decides opacity. The input [matPixels] is not modified.
+Uint8List composeShoreBankPixels(
+  Uint8List matPixels,
+  Uint8List maskPixels,
+  int width,
+  int height,
+) {
+  final pixels = Uint8List.fromList(matPixels);
+
+  final needing = <int>[];
+  for (var i = 0; i < width * height; i++) {
+    if (maskPixels[i * 4] > 0 && pixels[i * 4 + 3] == 0) {
+      needing.add(i);
+    }
+  }
+  final repaired = Uint8List(width * height);
+  var remaining = needing.length;
+  while (remaining > 0) {
+    var progress = false;
+    for (final i in needing) {
+      if (repaired[i] == 1) continue;
+      final x = i % width;
+      final y = i ~/ width;
+      for (final delta in const [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
+        final nx = x + delta.$1;
+        final ny = y + delta.$2;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        final j = ny * width + nx;
+        if (pixels[j * 4 + 3] == 0 && repaired[j] == 0) continue;
+        pixels[i * 4] = pixels[j * 4];
+        pixels[i * 4 + 1] = pixels[j * 4 + 1];
+        pixels[i * 4 + 2] = pixels[j * 4 + 2];
+        repaired[i] = 1;
+        remaining--;
+        progress = true;
+        break;
+      }
+    }
+    if (!progress) break; // Unfillable island: leave as-is.
+  }
+
+  // Cut the material through the mask; premultiplied output.
+  for (var i = 0; i < width * height; i++) {
+    final a = maskPixels[i * 4];
+    pixels[i * 4] = (pixels[i * 4] * a / 255).round();
+    pixels[i * 4 + 1] = (pixels[i * 4 + 1] * a / 255).round();
+    pixels[i * 4 + 2] = (pixels[i * 4 + 2] * a / 255).round();
+    pixels[i * 4 + 3] = a;
+  }
+  return pixels;
 }
 
 /// Bank overlays for an outermost water tile: the land-coloured half
@@ -817,7 +934,7 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.ambient,
     required this.terrainCache,
     required this.pixelRatio,
-    required this.shimmerProgram,
+    required this.banks,
     required this.parcelMode,
     required this.showTileGrid,
     required this.pedestrians,
@@ -847,7 +964,10 @@ class _ParcelWorldPainter extends CustomPainter {
   final _AmbientClock ambient;
   final _TerrainChunkCache terrainCache;
   final double pixelRatio;
-  final ui.FragmentProgram? shimmerProgram;
+
+  /// Composed bank overlays by shore role — the ground material cut
+  /// by the baked shape mask.
+  final Map<String, ui.Image> banks;
 
   /// Parcel-tool view mode: unowned shading and the strong parcel grid.
   final bool parcelMode;
@@ -876,8 +996,8 @@ class _ParcelWorldPainter extends CustomPainter {
     // independent, so panning and zooming replay cached textures
     // instead of re-recording; only world or sprite changes (or
     // entering unseen areas) record. Everything standing or elevated
-    // (bridges included) plus the animated layers (water shimmer,
-    // swaying vegetation, pedestrians) draw on top every frame,
+    // (bridges included) plus the animated layers (swaying
+    // vegetation, pedestrians) draw on top every frame,
     // depth-sorted, so raised geometry occludes correctly.
     ParcelWorldProbe.beginTerrain();
     _drawTerrainChunks(canvas, size, bounds, viewport);
@@ -948,7 +1068,7 @@ class _ParcelWorldPainter extends CustomPainter {
     }
   }
 
-  /// Draws the visible terrain chunks and the water shimmer. Chunks
+  /// Draws the visible terrain chunks. Chunks
   /// draw from rasterized textures; a chunk without a fresh texture
   /// falls back to replaying its world-space recording under the
   /// camera transform, which is slower but always correct.
@@ -990,20 +1110,47 @@ class _ParcelWorldPainter extends CustomPainter {
         _drawWorldPicture(canvas, size, chunk.worldRect, picture);
       }
     }
-    _paintWaterShimmer(canvas, size, drawn);
     _drawShoreBanks(canvas, size, drawn);
   }
 
-  /// Shore banks over the shimmer: each bank tile replays its masked
-  /// shore sprite through the camera transform. The art's water pixels
-  /// are transparent, so the band beneath stays visible on the open
-  /// half while the bank reads dry.
+  /// Shore banks: each bank tile replays its composed overlay — the
+  /// ground material cut by the baked shape mask — through the camera
+  /// transform. The mask's water half is transparent, so the water
+  /// tile beneath stays visible while the bank reads as dry land in
+  /// the neighbouring style's material.
   void _drawShoreBanks(Canvas canvas, Size size, List<_TerrainChunk> chunks) {
     for (final chunk in chunks) {
       for (final bank in chunk.banks) {
-        _drawTileRole(canvas, bank.$2, bank.$1, size, scale, offset);
+        _drawBankRole(canvas, bank.$2, bank.$1, size, scale, offset);
       }
     }
+  }
+
+  /// Draws one composed bank tile. Bank roles carry the material
+  /// style ('shore.grass.quarter.sw'); the sprite metadata comes from
+  /// the shape's mask entry.
+  void _drawBankRole(
+    Canvas canvas,
+    String role,
+    CellCoord cell,
+    Size size,
+    double scale,
+    Offset offset,
+  ) {
+    final image = banks[role];
+    if (image == null) return;
+    final parts = role.split('.');
+    final sprite = content.sprite('shore.${parts[2]}.${parts[3]}');
+    if (sprite == null) return;
+    ParcelWorldProbe.countActor();
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+      _tileScreenRect(image, sprite, cell, size, scale, offset),
+      Paint()
+        ..filterQuality = FilterQuality.medium
+        ..color = const Color(0xFFFFFFFF),
+    );
   }
 
   /// The parcel's diamond outline in screen space.
@@ -1285,8 +1432,8 @@ class _ParcelWorldPainter extends CustomPainter {
   }
 
   /// Records one parcel chunk in world space: terrain, unowned wash,
-  /// roads, shimmer contours, and — separately, so it can draw above
-  /// neighbouring chunks — the owned-parcel outline.
+  /// roads, and — separately, so it can draw above neighbouring
+  /// chunks — the owned-parcel outline.
   _TerrainChunk _recordChunk(ParcelCoord coord) {
     final parcelSize = state.parcelSize;
     final worldRect = _chunkWorldRect(coord, parcelSize);
@@ -1298,10 +1445,6 @@ class _ParcelWorldPainter extends CustomPainter {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Offset.zero & worldRect.size);
     canvas.translate(-worldRect.left, -worldRect.top);
-
-    final shimmer = content.ambience.waterShimmer;
-    final shimmerBuckets = List<Path>.generate(shimmer.bands, (_) => Path());
-    final shimmerCounts = List<int>.filled(shimmer.bands, 0);
 
     // Road neighbour masks read the road set around the chunk.
     final roadCells = <CellCoord>{
@@ -1331,21 +1474,11 @@ class _ParcelWorldPainter extends CustomPainter {
         _drawWorldCellWash(canvas, center, content.ambience.unownedLandWash);
       }
       if (anyWater) {
-        // Shore banks draw above the shimmer, so they are recorded as
-        // per-frame draws rather than baked into the chunk picture.
+        // Shore banks are recorded as per-frame draws rather than
+        // baked into the chunk picture.
         for (final role in waterBankRoles(cell, queries.terrainAt)) {
           chunk.banks.add((cell, role));
         }
-        final band = (cell.column - cell.row) % shimmer.bands;
-        shimmerCounts[band]++;
-        final halfWidth = _logicalTileWidth / 2;
-        final halfHeight = _logicalTileHeight / 2;
-        shimmerBuckets[band]
-          ..moveTo(center.dx, center.dy - halfHeight)
-          ..lineTo(center.dx + halfWidth, center.dy)
-          ..lineTo(center.dx, center.dy + halfHeight)
-          ..lineTo(center.dx - halfWidth, center.dy)
-          ..close();
       }
       final road = queries.roadsByCell[cell];
       if (road != null) {
@@ -1361,21 +1494,6 @@ class _ParcelWorldPainter extends CustomPainter {
     }
 
     chunk.picture = recorder.endRecording();
-    chunk.shimmerPaths = shimmerBuckets;
-    chunk.shimmerCounts = shimmerCounts;
-
-    // The shimmer shader's coverage mask: the same water diamonds as
-    // one filled shape.
-    if (shimmerCounts.any((count) => count > 0)) {
-      final maskRecorder = ui.PictureRecorder();
-      final maskCanvas = Canvas(maskRecorder, Offset.zero & worldRect.size);
-      maskCanvas.translate(-worldRect.left, -worldRect.top);
-      final white = Paint()..color = const Color(0xFFFFFFFF);
-      for (final path in shimmerBuckets) {
-        maskCanvas.drawPath(path, white);
-      }
-      chunk.waterMaskPicture = maskRecorder.endRecording();
-    }
     return chunk;
   }
 
@@ -1408,138 +1526,11 @@ class _ParcelWorldPainter extends CustomPainter {
       chunk.imageMatchesBucket = true;
       oldImage?.dispose();
       oldWrapper?.dispose();
-      if (chunk.waterMaskPicture case final maskPicture?) {
-        final maskWrapper = ui.PictureRecorder();
-        final maskCanvas = Canvas(
-          maskWrapper,
-          Offset.zero & Size(width.toDouble(), height.toDouble()),
-        );
-        maskCanvas
-          ..scale(factor)
-          ..drawPicture(maskPicture);
-        final maskWrapperPicture = maskWrapper.endRecording();
-        final oldMask = chunk.waterMask;
-        final oldMaskWrapper = chunk.waterMaskWrapper;
-        chunk.waterMask = maskWrapperPicture.toImageSync(width, height);
-        chunk.waterMaskWrapper = maskWrapperPicture;
-        oldMask?.dispose();
-        oldMaskWrapper?.dispose();
-      }
     } catch (_) {
       // Rasterization unavailable (for example without a GPU
       // context): keep drawing via the picture replay path.
       chunk.imageMatchesBucket = true;
     }
-  }
-
-  /// A gentle travelling highlight over the water: diagonal bands of
-  /// translucent white whose brightness rises and falls out of phase,
-  /// reading as ripples moving across rivers, lakes, and the ocean.
-  /// Drawn by the fragment shader when available — one textured quad
-  /// per water chunk, with the band pattern computed per pixel — and
-  /// by merged world-space paths otherwise.
-  void _paintWaterShimmer(Canvas canvas, Size size, List<_TerrainChunk> drawn) {
-    final program = shimmerProgram;
-    if (program != null && !debugDrawShimmerViaPaths) {
-      _paintWaterShimmerViaShader(canvas, size, drawn, program);
-    } else {
-      _paintWaterShimmerViaPaths(canvas, size, drawn);
-    }
-  }
-
-  void _paintWaterShimmerViaShader(
-    Canvas canvas,
-    Size size,
-    List<_TerrainChunk> drawn,
-    ui.FragmentProgram program,
-  ) {
-    final shimmer = content.ambience.waterShimmer;
-    var quads = 0;
-    for (final chunk in drawn) {
-      final mask = chunk.waterMask;
-      if (mask == null) continue;
-      // One shader instance per quad: uniform and sampler values are
-      // read at raster time, so a shared instance would draw every
-      // quad with the last quad's mask and origin. Indices follow the
-      // shader's declaration order, counting only non-sampler
-      // uniforms.
-      final shader = program.fragmentShader();
-      shader.setFloat(0, ambient.seconds);
-      shader.setFloat(1, shimmer.periodSeconds);
-      shader.setFloat(2, shimmer.bands.toDouble());
-      shader.setFloat(3, shimmer.maxOpacity);
-      final tint = shimmer.colorRgb;
-      shader.setFloat(4, tint.isNotEmpty ? tint[0] / 255 : 1);
-      shader.setFloat(5, tint.length > 1 ? tint[1] / 255 : 1);
-      shader.setFloat(6, tint.length > 2 ? tint[2] / 255 : 1);
-      shader.setFloat(7, 1);
-      shader.setFloat(8, chunk.worldRect.left);
-      shader.setFloat(9, chunk.worldRect.top);
-      shader.setFloat(10, chunk.worldRect.width);
-      shader.setFloat(11, chunk.worldRect.height);
-      shader.setImageSampler(0, mask, filterQuality: FilterQuality.medium);
-      final paint = Paint()..shader = shader;
-      quads++;
-      canvas
-        ..save()
-        ..translate(size.width / 2 + offset.dx, size.height / 2 + offset.dy)
-        ..scale(scale)
-        ..translate(chunk.worldRect.left, chunk.worldRect.top)
-        ..drawRect(Offset.zero & chunk.worldRect.size, paint)
-        ..restore();
-    }
-    ParcelWorldProbe.noteShimmerQuads(quads);
-  }
-
-  void _paintWaterShimmerViaPaths(
-    Canvas canvas,
-    Size size,
-    List<_TerrainChunk> drawn,
-  ) {
-    final shimmer = content.ambience.waterShimmer;
-    final bands = shimmer.bands;
-    final merged = List<Path>.generate(bands, (_) => Path());
-    var contours = 0;
-    var anyWater = false;
-    for (final chunk in drawn) {
-      final paths = chunk.shimmerPaths;
-      final counts = chunk.shimmerCounts;
-      if (paths == null || counts == null) continue;
-      for (var band = 0; band < bands; band++) {
-        if (counts[band] == 0) continue;
-        merged[band].addPath(paths[band], Offset.zero);
-        contours += counts[band];
-        anyWater = true;
-      }
-    }
-    ParcelWorldProbe.noteShimmerContours(contours);
-    if (!anyWater) return;
-    canvas.save();
-    canvas.translate(size.width / 2 + offset.dx, size.height / 2 + offset.dy);
-    canvas.scale(scale);
-    for (var band = 0; band < bands; band++) {
-      final wave =
-          0.5 +
-          0.5 *
-              math.sin(
-                2 * math.pi * (ambient.seconds / shimmer.periodSeconds) -
-                    band * 2 * math.pi / bands,
-              );
-      final alpha = wave * shimmer.maxOpacity;
-      if (alpha < 0.006) continue;
-      final tint = shimmer.colorRgb;
-      canvas.drawPath(
-        merged[band],
-        Paint()
-          ..color = Color.fromARGB(
-            (alpha * 255).round(),
-            tint.isNotEmpty ? tint[0] : 255,
-            tint.length > 1 ? tint[1] : 255,
-            tint.length > 2 ? tint[2] : 255,
-          ),
-      );
-    }
-    canvas.restore();
   }
 
   /// Everything that stands on or rises above the ground — structures,
@@ -2587,27 +2578,10 @@ class _TerrainChunk {
   /// Whether [image] was rasterized at the cache's current factor.
   bool imageMatchesBucket = false;
 
-  /// World-space water-shimmer contours, one path per band.
-  List<Path>? shimmerPaths;
-
   /// Shore-bank draws for this chunk's outermost water tiles — one
-  /// (cell, role) per masked shore piece — replayed every frame above
-  /// the shimmer instead of baked into [picture].
+  /// (cell, role) per masked shore piece — replayed every frame
+  /// instead of baked into [picture].
   final List<(CellCoord, String)> banks = [];
-
-  /// Water-cell count per shimmer band (the contours in each path).
-  List<int>? shimmerCounts;
-
-  /// World-space recording of the chunk's water coverage (filled
-  /// diamonds), rasterized into [waterMask] for the shimmer shader.
-  ui.Picture? waterMaskPicture;
-
-  /// Rasterized water-coverage mask at the cache's texture factor.
-  ui.Image? waterMask;
-
-  /// The scaling wrapper recorded around [waterMaskPicture] for
-  /// [waterMask]; retained while rasterization may reference it.
-  ui.Picture? waterMaskWrapper;
 
   /// Cache generation this chunk was recorded in.
   int generation = -1;
@@ -2619,17 +2593,9 @@ class _TerrainChunk {
     picture?.dispose();
     image?.dispose();
     rasterWrapper?.dispose();
-    waterMaskPicture?.dispose();
-    waterMask?.dispose();
-    waterMaskWrapper?.dispose();
     picture = null;
     image = null;
     rasterWrapper = null;
-    waterMaskPicture = null;
-    waterMask = null;
-    waterMaskWrapper = null;
-    shimmerPaths = null;
-    shimmerCounts = null;
   }
 }
 

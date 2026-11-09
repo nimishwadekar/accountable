@@ -1305,7 +1305,7 @@
       "subcategory": "rocks",
       "sways": false
     },
-    "shore.dirt.corner.e": {
+    "shore.corner.e": {
       "baseOffsetY": 0,
       "category": "shores",
       "codeReferenced": true,
@@ -1313,12 +1313,12 @@
         0.5,
         1
       ],
-      "path": "sprites/shores/corner/tile_ground_dirt_watercorner_E_clean.png",
+      "path": "sprites/shores/masks/shore_corner_e.png",
       "renderScale": 0.5,
       "subcategory": "corner",
       "sways": false
     },
-    "shore.dirt.corner.n": {
+    "shore.corner.n": {
       "baseOffsetY": 0,
       "category": "shores",
       "codeReferenced": true,
@@ -1326,12 +1326,12 @@
         0.5,
         1
       ],
-      "path": "sprites/shores/corner/tile_ground_dirt_watercorner_N_clean.png",
+      "path": "sprites/shores/masks/shore_corner_n.png",
       "renderScale": 0.5,
       "subcategory": "corner",
       "sways": false
     },
-    "shore.dirt.corner.s": {
+    "shore.corner.s": {
       "baseOffsetY": 0,
       "category": "shores",
       "codeReferenced": true,
@@ -1339,12 +1339,12 @@
         0.5,
         1
       ],
-      "path": "sprites/shores/corner/tile_ground_dirt_watercorner_S_clean.png",
+      "path": "sprites/shores/masks/shore_corner_s.png",
       "renderScale": 0.5,
       "subcategory": "corner",
       "sways": false
     },
-    "shore.dirt.corner.w": {
+    "shore.corner.w": {
       "baseOffsetY": 0,
       "category": "shores",
       "codeReferenced": true,
@@ -1352,12 +1352,12 @@
         0.5,
         1
       ],
-      "path": "sprites/shores/corner/tile_ground_dirt_watercorner_W_clean.png",
+      "path": "sprites/shores/masks/shore_corner_w.png",
       "renderScale": 0.5,
       "subcategory": "corner",
       "sways": false
     },
-    "shore.dirt.edge.e": {
+    "shore.edge.e": {
       "baseOffsetY": 0,
       "category": "shores",
       "codeReferenced": true,
@@ -1365,12 +1365,12 @@
         0.5,
         1
       ],
-      "path": "sprites/shores/edge/tile_ground_dirt_wateredge_E_clean.png",
+      "path": "sprites/shores/masks/shore_edge_e.png",
       "renderScale": 0.5,
       "subcategory": "edge",
       "sways": false
     },
-    "shore.dirt.edge.n": {
+    "shore.edge.n": {
       "baseOffsetY": 0,
       "category": "shores",
       "codeReferenced": true,
@@ -1378,12 +1378,12 @@
         0.5,
         1
       ],
-      "path": "sprites/shores/edge/tile_ground_dirt_wateredge_N_clean.png",
+      "path": "sprites/shores/masks/shore_edge_n.png",
       "renderScale": 0.5,
       "subcategory": "edge",
       "sways": false
     },
-    "shore.dirt.edge.s": {
+    "shore.edge.s": {
       "baseOffsetY": 0,
       "category": "shores",
       "codeReferenced": true,
@@ -1391,12 +1391,12 @@
         0.5,
         1
       ],
-      "path": "sprites/shores/edge/tile_ground_dirt_wateredge_S_clean.png",
+      "path": "sprites/shores/masks/shore_edge_s.png",
       "renderScale": 0.5,
       "subcategory": "edge",
       "sways": false
     },
-    "shore.dirt.edge.w": {
+    "shore.edge.w": {
       "baseOffsetY": 0,
       "category": "shores",
       "codeReferenced": true,
@@ -1404,12 +1404,12 @@
         0.5,
         1
       ],
-      "path": "sprites/shores/edge/tile_ground_dirt_wateredge_W_clean.png",
+      "path": "sprites/shores/masks/shore_edge_w.png",
       "renderScale": 0.5,
       "subcategory": "edge",
       "sways": false
     },
-    "shore.dirt.quarter.ne": {
+    "shore.quarter.ne": {
       "baseOffsetY": 0,
       "category": "shores",
       "codeReferenced": true,
@@ -1417,12 +1417,12 @@
         0.5,
         1
       ],
-      "path": "sprites/shores/quarter/tile_ground_dirt_water_NE_clean.png",
+      "path": "sprites/shores/masks/shore_quarter_ne.png",
       "renderScale": 0.5,
       "subcategory": "quarter",
       "sways": false
     },
-    "shore.dirt.quarter.nw": {
+    "shore.quarter.nw": {
       "baseOffsetY": 0,
       "category": "shores",
       "codeReferenced": true,
@@ -1430,12 +1430,12 @@
         0.5,
         1
       ],
-      "path": "sprites/shores/quarter/tile_ground_dirt_water_NW_clean.png",
+      "path": "sprites/shores/masks/shore_quarter_nw.png",
       "renderScale": 0.5,
       "subcategory": "quarter",
       "sways": false
     },
-    "shore.dirt.quarter.se": {
+    "shore.quarter.se": {
       "baseOffsetY": 0,
       "category": "shores",
       "codeReferenced": true,
@@ -1443,12 +1443,12 @@
         0.5,
         1
       ],
-      "path": "sprites/shores/quarter/tile_ground_dirt_water_SE_clean.png",
+      "path": "sprites/shores/masks/shore_quarter_se.png",
       "renderScale": 0.5,
       "subcategory": "quarter",
       "sways": false
     },
-    "shore.dirt.quarter.sw": {
+    "shore.quarter.sw": {
       "baseOffsetY": 0,
       "category": "shores",
       "codeReferenced": true,
@@ -1456,163 +1456,7 @@
         0.5,
         1
       ],
-      "path": "sprites/shores/quarter/tile_ground_dirt_water_SW_clean.png",
-      "renderScale": 0.5,
-      "subcategory": "quarter",
-      "sways": false
-    },
-    "shore.grass.corner.e": {
-      "baseOffsetY": 0,
-      "category": "shores",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/shores/corner/tile_ground_grass_watercorner_E_clean.png",
-      "renderScale": 0.5,
-      "subcategory": "corner",
-      "sways": false
-    },
-    "shore.grass.corner.n": {
-      "baseOffsetY": 0,
-      "category": "shores",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/shores/corner/tile_ground_grass_watercorner_N_clean.png",
-      "renderScale": 0.5,
-      "subcategory": "corner",
-      "sways": false
-    },
-    "shore.grass.corner.s": {
-      "baseOffsetY": 0,
-      "category": "shores",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/shores/corner/tile_ground_grass_watercorner_S_clean.png",
-      "renderScale": 0.5,
-      "subcategory": "corner",
-      "sways": false
-    },
-    "shore.grass.corner.w": {
-      "baseOffsetY": 0,
-      "category": "shores",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/shores/corner/tile_ground_grass_watercorner_W_clean.png",
-      "renderScale": 0.5,
-      "subcategory": "corner",
-      "sways": false
-    },
-    "shore.grass.edge.e": {
-      "baseOffsetY": 0,
-      "category": "shores",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/shores/edge/tile_ground_grass_wateredge_E_clean.png",
-      "renderScale": 0.5,
-      "subcategory": "edge",
-      "sways": false
-    },
-    "shore.grass.edge.n": {
-      "baseOffsetY": 0,
-      "category": "shores",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/shores/edge/tile_ground_grass_wateredge_N_clean.png",
-      "renderScale": 0.5,
-      "subcategory": "edge",
-      "sways": false
-    },
-    "shore.grass.edge.s": {
-      "baseOffsetY": 0,
-      "category": "shores",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/shores/edge/tile_ground_grass_wateredge_S_clean.png",
-      "renderScale": 0.5,
-      "subcategory": "edge",
-      "sways": false
-    },
-    "shore.grass.edge.w": {
-      "baseOffsetY": 0,
-      "category": "shores",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/shores/edge/tile_ground_grass_wateredge_W_clean.png",
-      "renderScale": 0.5,
-      "subcategory": "edge",
-      "sways": false
-    },
-    "shore.grass.quarter.ne": {
-      "baseOffsetY": 0,
-      "category": "shores",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/shores/quarter/tile_ground_grass_water_NE_clean.png",
-      "renderScale": 0.5,
-      "subcategory": "quarter",
-      "sways": false
-    },
-    "shore.grass.quarter.nw": {
-      "baseOffsetY": 0,
-      "category": "shores",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/shores/quarter/tile_ground_grass_water_NW_clean.png",
-      "renderScale": 0.5,
-      "subcategory": "quarter",
-      "sways": false
-    },
-    "shore.grass.quarter.se": {
-      "baseOffsetY": 0,
-      "category": "shores",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/shores/quarter/tile_ground_grass_water_SE_clean.png",
-      "renderScale": 0.5,
-      "subcategory": "quarter",
-      "sways": false
-    },
-    "shore.grass.quarter.sw": {
-      "baseOffsetY": 0,
-      "category": "shores",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/shores/quarter/tile_ground_grass_water_SW_clean.png",
+      "path": "sprites/shores/masks/shore_quarter_sw.png",
       "renderScale": 0.5,
       "subcategory": "quarter",
       "sways": false

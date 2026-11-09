@@ -397,35 +397,6 @@ class EconomyContent {
 // Ambience
 // ---------------------------------------------------------------------------
 
-class WaterShimmerContent {
-  const WaterShimmerContent({
-    required this.bands,
-    required this.periodSeconds,
-    required this.maxOpacity,
-    required this.colorRgb,
-  });
-
-  final int bands;
-  final double periodSeconds;
-  final double maxOpacity;
-  final List<int> colorRgb;
-
-  Map<String, Object?> toJson() => {
-    'bands': bands,
-    'periodSeconds': periodSeconds,
-    'maxOpacity': maxOpacity,
-    'colorRgb': colorRgb,
-  };
-
-  static WaterShimmerContent fromJson(Map<String, Object?> json) =>
-      WaterShimmerContent(
-        bands: json['bands']! as int,
-        periodSeconds: (json['periodSeconds']! as num).toDouble(),
-        maxOpacity: (json['maxOpacity']! as num).toDouble(),
-        colorRgb: [for (final value in json['colorRgb']! as List) value as int],
-      );
-}
-
 class VegetationSwayContent {
   const VegetationSwayContent({
     required this.maxAngleRadians,
@@ -550,7 +521,6 @@ class TileGridContent {
 class AmbienceContent {
   const AmbienceContent({
     required this.ambientTimeScale,
-    required this.waterShimmer,
     required this.vegetationSway,
     required this.pedestrians,
     required this.unownedLandWash,
@@ -558,7 +528,6 @@ class AmbienceContent {
   });
 
   final double ambientTimeScale;
-  final WaterShimmerContent waterShimmer;
   final VegetationSwayContent vegetationSway;
   final PedestrianContent pedestrians;
   final UnownedLandWashContent unownedLandWash;
@@ -566,7 +535,6 @@ class AmbienceContent {
 
   Map<String, Object?> toJson() => {
     'ambientTimeScale': ambientTimeScale,
-    'waterShimmer': waterShimmer.toJson(),
     'vegetationSway': vegetationSway.toJson(),
     'pedestrians': pedestrians.toJson(),
     'unownedLandWash': unownedLandWash.toJson(),
@@ -575,9 +543,6 @@ class AmbienceContent {
 
   static AmbienceContent fromJson(Map<String, Object?> json) => AmbienceContent(
     ambientTimeScale: (json['ambientTimeScale']! as num).toDouble(),
-    waterShimmer: WaterShimmerContent.fromJson(
-      json['waterShimmer']! as Map<String, Object?>,
-    ),
     vegetationSway: VegetationSwayContent.fromJson(
       json['vegetationSway']! as Map<String, Object?>,
     ),
@@ -692,13 +657,13 @@ final requiredSpriteRoles = <String>[
   'terrain.asphalt',
   'terrain.concrete',
   'terrain.water',
-  for (final style in ['grass', 'dirt']) ...[
-    for (final edge in ['n', 'e', 's', 'w']) ...[
-      'shore.$style.edge.$edge',
-      'shore.$style.corner.$edge',
-    ],
-    for (final dir in ['ne', 'se', 'sw', 'nw']) 'shore.$style.quarter.$dir',
+  // Shore banks are composed at load: the terrain material cut by a
+  // baked shape mask (one mask per shape, shared by grass and dirt).
+  for (final edge in ['n', 'e', 's', 'w']) ...[
+    'shore.edge.$edge',
+    'shore.corner.$edge',
   ],
+  for (final dir in ['ne', 'se', 'sw', 'nw']) 'shore.quarter.$dir',
   for (final dir in ['ne', 'nw', 'se', 'sw']) 'road.end.$dir',
   'road.straight.se',
   'road.straight.sw',
@@ -892,16 +857,6 @@ List<ContentIssue> validateContentData({
 
   if (ambience.ambientTimeScale <= 0) {
     error('Ambient time scale must be positive.');
-  }
-  if (ambience.waterShimmer.bands < 1) {
-    error('Water shimmer needs at least one band.');
-  }
-  if (ambience.waterShimmer.periodSeconds <= 0) {
-    error('Water shimmer period must be positive.');
-  }
-  if (ambience.waterShimmer.maxOpacity < 0 ||
-      ambience.waterShimmer.maxOpacity > 1) {
-    error('Water shimmer opacity must be within [0, 1].');
   }
   if (ambience.tileGrid.alpha < 0 ||
       ambience.tileGrid.alpha > 255 ||

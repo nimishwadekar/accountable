@@ -6,8 +6,7 @@
 ///   of that is the terrain layer (chunk records, rasterizations, and
 ///   chunk texture draws);
 /// - how many raster quads the frame carries (chunk textures plus
-///   actors) and how many water-shimmer contours the animated layer
-///   tessellates, because op count — not pixels — is what dominates
+///   actors), because op count — not pixels — is what dominates
 ///   zoomed-out frames;
 /// - how much chunk re-recording happened (world or sprite changes,
 ///   or entering previously unseen areas);
@@ -39,8 +38,6 @@ class FrameSample {
     required this.washOps,
     required this.roadOps,
     required this.outlineOps,
-    required this.shimmerContours,
-    required this.shimmerQuads,
     required this.actorOps,
     required this.boundsCells,
     required this.drawnCells,
@@ -52,8 +49,8 @@ class FrameSample {
   /// Total UI-thread time spent in `paint()` for this frame.
   final int paintMicros;
 
-  /// Time in the terrain layer: chunk records, rasterizations, chunk
-  /// draws, and the water shimmer pass.
+  /// Time in the terrain layer: chunk records, rasterizations, and
+  /// chunk draws.
   final int terrainMicros;
 
   /// Chunk textures (or world-space picture replays) drawn this frame.
@@ -67,13 +64,6 @@ class FrameSample {
   final int washOps;
   final int roadOps;
   final int outlineOps;
-
-  /// Water-shimmer contours tessellated by the path fallback this
-  /// frame (zero in shader mode).
-  final int shimmerContours;
-
-  /// Water-shimmer shader quads drawn this frame (zero in path mode).
-  final int shimmerQuads;
 
   final int actorOps;
 
@@ -117,8 +107,6 @@ class ProbeStats {
       meanChunkDraws = _mean(source.map((s) => s.chunkDraws)),
       meanTotalOps = _mean(source.map((s) => s.totalOps)),
       meanActorOps = _mean(source.map((s) => s.actorOps)),
-      meanShimmerContours = _mean(source.map((s) => s.shimmerContours)),
-      meanShimmerQuads = _mean(source.map((s) => s.shimmerQuads)),
       meanTerrainOps = _mean(source.map((s) => s.terrainOps)),
       meanWashOps = _mean(source.map((s) => s.washOps)),
       meanRoadOps = _mean(source.map((s) => s.roadOps)),
@@ -139,8 +127,6 @@ class ProbeStats {
   final double meanChunkDraws;
   final double meanTotalOps;
   final double meanActorOps;
-  final double meanShimmerContours;
-  final double meanShimmerQuads;
   final double meanTerrainOps;
   final double meanWashOps;
   final double meanRoadOps;
@@ -164,9 +150,7 @@ class ProbeStats {
       ' max ${maxTerrainMs.toStringAsFixed(1)}ms)\n'
       '   draws/frame: ${_fmt(meanTotalOps)} total'
       ' - chunks ${_fmt(meanChunkDraws)},'
-      ' actors ${_fmt(meanActorOps)},'
-      ' shimmer ${_fmt(meanShimmerQuads)} quads /'
-      ' ${_fmt(meanShimmerContours)} contours\n'
+      ' actors ${_fmt(meanActorOps)}\n'
       '   record work/frame: terrain ${_fmt(meanTerrainOps)},'
       ' wash ${_fmt(meanWashOps)},'
       ' roads ${_fmt(meanRoadOps)},'
@@ -226,8 +210,6 @@ class ParcelWorldProbe {
   static int _washOps = 0;
   static int _roadOps = 0;
   static int _outlineOps = 0;
-  static int _shimmerContours = 0;
-  static int _shimmerQuads = 0;
   static int _actorOps = 0;
   static int _boundsCells = 0;
   static int _drawnCells = 0;
@@ -274,8 +256,6 @@ class ParcelWorldProbe {
     _washOps = 0;
     _roadOps = 0;
     _outlineOps = 0;
-    _shimmerContours = 0;
-    _shimmerQuads = 0;
     _actorOps = 0;
     _boundsCells = 0;
     _drawnCells = 0;
@@ -330,17 +310,6 @@ class ParcelWorldProbe {
     if (_paintClock != null) _actorOps++;
   }
 
-  /// Water-shimmer contours tessellated by the path fallback this
-  /// frame.
-  static void noteShimmerContours(int contours) {
-    if (_paintClock != null) _shimmerContours = contours;
-  }
-
-  /// Water-shimmer shader quads drawn this frame.
-  static void noteShimmerQuads(int quads) {
-    if (_paintClock != null) _shimmerQuads = quads;
-  }
-
   /// Cells covered by drawn chunks.
   static void noteDrawnCells(int cells) {
     if (_paintClock != null) _drawnCells += cells;
@@ -372,8 +341,6 @@ class ParcelWorldProbe {
         washOps: _carryWashOps,
         roadOps: _carryRoadOps,
         outlineOps: _carryOutlineOps,
-        shimmerContours: _shimmerContours,
-        shimmerQuads: _shimmerQuads,
         actorOps: _actorOps,
         boundsCells: _boundsCells,
         drawnCells: _drawnCells,
@@ -413,9 +380,7 @@ class ParcelWorldProbe {
             ' ${stats.chunkRecords} chunk records)',
         'draws ${ProbeStats._fmt(stats.meanTotalOps)}'
             ' (chunks ${ProbeStats._fmt(stats.meanChunkDraws)},'
-            ' actors ${ProbeStats._fmt(stats.meanActorOps)})'
-            ' + shimmer ${ProbeStats._fmt(stats.meanShimmerQuads)}q/'
-            '${ProbeStats._fmt(stats.meanShimmerContours)}c',
+            ' actors ${ProbeStats._fmt(stats.meanActorOps)})',
         'zoom ${stats.meanScale.toStringAsFixed(2)}'
             ' - drawn ${ProbeStats._fmt(stats.meanDrawnCells)},'
             ' onscreen ~${ProbeStats._fmt(stats.meanOnscreenCells)}'

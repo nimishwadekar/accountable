@@ -12,8 +12,8 @@
 ///    lights this up immediately.
 /// 2. A/B test: render the same frozen frame through textures and
 ///    through picture replay, then require the pixels to match. The
-///    ambient clock is muted for the captures so water shimmer and
-///    pedestrians cannot move between them.
+///    ambient clock is muted for the captures so pedestrians cannot
+///    move between them.
 ///
 /// The world is small and controlled on purpose: three asphalt road
 /// cells, no bridges, no structures — clean anchors, no overhanging
@@ -151,8 +151,38 @@ void main() {
       }
       expect(settled, isTrue, reason: 'chunks should finish recording');
 
+      // The composed shore banks chain after the sprite loads, and
+      // every engine round-trip (byte reads, image decoding) needs a
+      // real-async window — wait until the bank actually renders
+      // before freezing the captures.
+      var bankDrawn = false;
+      final bankPoint = _screenCenterOf(const CellCoord(8, 4))
+          .translate(-16, -4);
+      for (var attempt = 0; attempt < 15 && !bankDrawn; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 200)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        final probe = await _capture(tester, boundaryKey);
+        if (probe == null) continue;
+        final probeBytes = await tester.runAsync(() => probe.toByteData());
+        if (probeBytes != null) {
+          final x = bankPoint.dx.round().clamp(0, probe.width - 1);
+          final y = bankPoint.dy.round().clamp(0, probe.height - 1);
+          final rgba = probeBytes.getUint32((y * probe.width + x) * 4);
+          final g = (rgba >> 16) & 0xFF, b = (rgba >> 8) & 0xFF;
+          bankDrawn = g > 100 && g - b > 20;
+        }
+        probe.dispose();
+      }
+      expect(
+        bankDrawn,
+        isTrue,
+        reason: 'the composed shore bank should render before capture',
+      );
+
       // Freeze the ambient clock so the two captures cannot differ
-      // through shimmer phase or pedestrian positions.
+      // through pedestrian positions.
       await tester.pumpWidget(
         MediaQuery(
           data: const MediaQueryData(disableAnimations: true),
@@ -160,6 +190,12 @@ void main() {
         ),
       );
       await tester.pump(const Duration(milliseconds: 100));
+      // The composed shore banks chain after the sprite loads; give
+      // that async stage a real-async window to finish before the
+      // captures freeze the frame.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
       await tester.pumpWidget(
         MediaQuery(
           data: const MediaQueryData(disableAnimations: true),
@@ -344,7 +380,6 @@ void main() {
       economy: content.economy,
       ambience: AmbienceContent(
         ambientTimeScale: content.ambience.ambientTimeScale,
-        waterShimmer: content.ambience.waterShimmer,
         vegetationSway: content.ambience.vegetationSway,
         pedestrians: content.ambience.pedestrians,
         unownedLandWash: content.ambience.unownedLandWash,
@@ -414,8 +449,8 @@ void main() {
     }
     expect(settled, isTrue, reason: 'normal-mode chunks should settle');
 
-    // Freeze the clock here so every capture below shares one shimmer
-    // phase.
+    // Freeze the clock here so every capture below shares one
+    // pedestrian phase.
     await tester.pumpWidget(app(frozen: true));
     await tester.pump(const Duration(milliseconds: 100));
 

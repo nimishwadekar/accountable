@@ -13,6 +13,12 @@ editor's grouping:
   alpha-seam hairlines between tiles. The grid-lined originals were
   returned to `buggy_studio/Roads and Grounds/` — the only copies,
   since the pack originals were moved out during promotion.
+  The 24 pack shore sprites (grass/dirt × edge/corner/quarter) were
+  retired the same day: shore banks are now composed at load from the
+  terrain material cut by 12 baked greyscale shape masks
+  (`sprites/shores/masks/`, one per shape, shared by both materials —
+  the Factorio mask approach). The pack shore art was returned to
+  `buggy_studio/Roads and Grounds/`.
 - `characters/` — ambient pedestrian walk and idle frames, loaded directly
   by the renderer.
 - `content/` — the JSON content layer (catalogue, sprites, economy,

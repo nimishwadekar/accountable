@@ -6,11 +6,13 @@ import 'package:citysim/rendering/parcel_world_view.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Render-level regression tests for the colour-masked shore art. The
-/// masks feed `ui.ImageDescriptor.raw` with premultiplied RGBA bytes —
-/// leaving colour under zero alpha renders as amplified garbage (the
-/// banks once drew solid white), so these tests draw the real masked
-/// art and read the canvas back.
+/// Render-level regression tests for the composed shore banks: the
+/// ground material cut by the baked shape mask. The mask is opaque in
+/// places the pack's material never painted (a jagged transparent
+/// fringe along its diamond edges) — without the RGB repair inside
+/// [composeShoreBank] those pixels draw solid black along the bank's
+/// borders. The output bytes feed a premultiplied-alpha descriptor,
+/// so RGB must scale with the mask alpha.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -31,70 +33,75 @@ void main() {
     }
   }
 
-  test('masked banks draw grass and stay transparent over water', () async {
-    final image = await decode(content.tryAssetPath('shore.grass.quarter.se')!);
-    final bank = await maskShoreBank('shore.grass.quarter.se', image);
+  test('banks are the material cut by the mask, without black edges', () async {
+    final material = await decode(content.tryAssetPath('terrain.grass')!);
+    final maskImage = await decode(content.tryAssetPath('shore.quarter.sw')!);
+    final bank = await composeShoreBank(material, maskImage);
     expect(bank, isNotNull);
 
-    // Draw the bank over a flat blue "water" background and read it
-    // back — the same drawImageRect the painter performs.
-    final recorder = ui.PictureRecorder();
-    final canvas = ui.Canvas(recorder);
-    canvas.drawRect(
-      const Rect.fromLTWH(0, 0, 128, 64),
-      ui.Paint()..color = const ui.Color(0xFF699CBC),
-    );
-    canvas.drawImageRect(
-      bank!,
-      const Rect.fromLTWH(0, 0, 128, 64),
-      const Rect.fromLTWH(0, 0, 128, 64),
-      ui.Paint()..filterQuality = ui.FilterQuality.medium,
-    );
-    final picture = recorder.endRecording();
-    final rendered = await picture.toImage(128, 64);
-    final bytes = await rendered.toByteData(
+    final bankBytes = await bank!.toByteData(
       format: ui.ImageByteFormat.rawStraightRgba,
     );
-    int rgbaAt(int x, int y) => bytes!.getUint32((y * 128 + x) * 4);
-
-    // The bank half: opaque grass, not white — the premultiplied-alpha
-    // regression turned this pixel white.
-    final grass = rgbaAt(32, 24);
-    expect((grass >> 16) & 0xFF, greaterThan(140), reason: 'grass green');
-    expect((grass >> 8) & 0xFF, lessThan(120), reason: 'not washed out');
-    expect(grass & 0xFF, 255, reason: 'opaque');
-
-    // The masked-out half: the background shows through untouched.
-    final open = rgbaAt(96, 40);
-    expect((open >> 16) & 0xFF, inInclusiveRange(130, 190));
-    expect((open >> 8) & 0xFF, greaterThan(150), reason: 'blue background');
-    expect(open & 0xFF, 255, reason: 'opaque');
-
-    // And a downscaled draw — the game draws 128×64 art at 64×32 —
-    // must not blow out along the waterline either.
-    final small = await picture.toImage(64, 32);
-    final smallBytes = await small.toByteData(
+    final maskBytes = await maskImage.toByteData(
       format: ui.ImageByteFormat.rawStraightRgba,
     );
-    for (var x = 0; x < 64; x++) {
-      for (var y = 0; y < 32; y++) {
-        final rgba = smallBytes!.getUint32((y * 64 + x) * 4);
-        final r = (rgba >> 24) & 0xFF,
-            g = (rgba >> 16) & 0xFF,
-            b = (rgba >> 8) & 0xFF;
-        expect(
-          r < 250 || g < 250 || b < 250,
-          isTrue,
-          reason:
-              'no amplified-white pixels at ($x,$y) '
-              '($r,$g,$b) — premultiplied regression',
-        );
+    expect(bankBytes, isNotNull);
+    expect(maskBytes, isNotNull);
+    final pixels = bankBytes!.buffer.asUint8List(
+      bankBytes.offsetInBytes,
+      bankBytes.lengthInBytes,
+    );
+    final maskPixels = maskBytes!.buffer.asUint8List(
+      maskBytes.offsetInBytes,
+      maskBytes.lengthInBytes,
+    );
+
+    // The land half draws the material at the mask's full opacity —
+    // (90,14) sits on the material's flattened edge band (flat grass,
+    // no speckle) inside quarter.sw's land.
+    final land = (90 * 4) + (14 * 128 * 4);
+    expect(pixels[land + 3], 255, reason: 'land is opaque');
+    expect(pixels[land + 1] > pixels[land], isTrue, reason: 'green grass');
+    expect(pixels[land], greaterThan(140), reason: 'not black, not white');
+
+    // The waterline keeps its greyscale gradient: alpha follows the
+    // mask's partial value and the colour stays the material's.
+    final ramp = (64 * 4) + (37 * 128 * 4);
+    expect(pixels[ramp + 3], maskPixels[ramp], reason: 'waterline alpha');
+    expect(
+      pixels[ramp + 3],
+      inInclusiveRange(1, 254),
+      reason: 'waterline is partial',
+    );
+    expect(
+      pixels[ramp + 1] > pixels[ramp + 2],
+      isTrue,
+      reason: 'material colour through the ramp',
+    );
+
+    // The open water half is fully transparent.
+    final water = (64 * 4) + (44 * 128 * 4);
+    expect(pixels[water + 3], 0, reason: 'water half shows the water tile');
+
+    // No black edges: wherever the bank has coverage, the colour must
+    // come from the material, never from unpainted transparency.
+    var blackLeaks = 0;
+    for (var i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 3] > 40 &&
+          pixels[i] < 30 &&
+          pixels[i + 1] < 30 &&
+          pixels[i + 2] < 30) {
+        blackLeaks++;
       }
     }
+    expect(
+      blackLeaks,
+      0,
+      reason: 'mask must never expose unpainted (black) material',
+    );
 
-    image.dispose();
+    material.dispose();
+    maskImage.dispose();
     bank.dispose();
-    rendered.dispose();
-    small.dispose();
   });
 }

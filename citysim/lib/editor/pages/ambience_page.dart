@@ -25,7 +25,6 @@ class _AmbiencePageState extends State<AmbiencePage> {
   @override
   Widget build(BuildContext context) {
     final ambience = ambienceMap(widget.categories);
-    final shimmer = subMap(ambience, 'waterShimmer');
     final sway = subMap(ambience, 'vegetationSway');
     final pedestrians = subMap(ambience, 'pedestrians');
     final wash = subMap(ambience, 'unownedLandWash');
@@ -55,62 +54,6 @@ class _AmbiencePageState extends State<AmbiencePage> {
           description:
               '1.0 is real time; 0.5 halves water, wind, and '
               'pedestrian speed together.',
-        ),
-        _section(
-          'Water shimmer',
-          [
-            SizedBox(
-              width: 240,
-              child: DoubleSlider(
-                label: 'Sweep period (s)',
-                value: asDouble(shimmer['periodSeconds'], 6.5),
-                min: 1,
-                max: 20,
-                divisions: 38,
-                help:
-                    'Seconds for one shimmer sweep across the water. '
-                    'Longer is calmer.',
-                onChanged: (v) => _edit(
-                  (a) => (a['waterShimmer'] as Map)['periodSeconds'] = v,
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 240,
-              child: DoubleSlider(
-                label: 'Peak opacity',
-                value: asDouble(shimmer['maxOpacity'], 0.08),
-                min: 0.01,
-                max: 0.3,
-                divisions: 29,
-                help:
-                    'Maximum overlay opacity of a shimmer band at its '
-                    'brightest moment.',
-                onChanged: (v) =>
-                    _edit((a) => (a['waterShimmer'] as Map)['maxOpacity'] = v),
-              ),
-            ),
-            SizedBox(
-              width: 150,
-              child: IntField(
-                label: 'Bands',
-                value: asInt(shimmer['bands'], 6),
-                min: 1,
-                max: 16,
-                help: 'Number of diagonal highlight bands across the water.',
-                onChanged: (v) =>
-                    _edit((a) => (a['waterShimmer'] as Map)['bands'] = v),
-              ),
-            ),
-            WaterShimmerPreview(
-              period: asDouble(shimmer['periodSeconds'], 6.5),
-              maxOpacity: asDouble(shimmer['maxOpacity'], 0.08),
-              bands: asInt(shimmer['bands'], 6),
-            ),
-          ],
-          description:
-              'Diagonal highlight bands sweeping the water. More '
-              'bands or a longer period gives calmer ripples.',
         ),
         _section(
           'Vegetation sway',
