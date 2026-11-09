@@ -18,6 +18,15 @@
       207
     ]
   },
+  "tileGrid": {
+    "enabled": false,
+    "alpha": 55,
+    "colorRgb": [
+      30,
+      101,
+      82
+    ]
+  },
   "vegetationSway": {
     "baseFrequency": 1.1,
     "frequencyStep": 0.13,

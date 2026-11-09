@@ -54,6 +54,8 @@ class ParcelWorldView extends StatefulWidget {
     this.facingOverride,
     this.structurePicking = true,
     this.dimStructures = false,
+    this.parcelMode = false,
+    this.showTileGrid = true,
     super.key,
   });
 
@@ -89,6 +91,16 @@ class ParcelWorldView extends StatefulWidget {
   /// buildings stay visible.
   final bool dimStructures;
 
+  /// Parcel-tool view: the cell grid hides (line-free ground tiles),
+  /// unowned parcels shade, a strong parcel grid covers the authored
+  /// map, and hover highlights the unowned parcel under the pointer.
+  final bool parcelMode;
+
+  /// Whether the faint tile grid draws over the ground — every mode
+  /// except inspect, where the world renders clean for viewing, and
+  /// parcel mode, whose strong parcel grid replaces it.
+  final bool showTileGrid;
+
   @override
   State<ParcelWorldView> createState() => _ParcelWorldViewState();
 }
@@ -97,12 +109,6 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     with SingleTickerProviderStateMixin {
   final Map<String, ui.Image> _images = {};
   final Map<String, Future<ui.Image>> _imageRequests = {};
-
-  /// Line-only copy of the water tile art — its lighter diamond edges,
-  /// with the plain water made transparent — kept to redraw the cell
-  /// grid over shore banks so it runs to the tile boundary instead of
-  /// stopping at the bank's waterline. Null until the water art loads.
-  ui.Image? _waterGrid;
 
   /// Per-pixel picking masks for the decoded sprites, keyed by asset
   /// path. Filled alongside [_images]; taps read them synchronously.
@@ -210,7 +216,6 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     for (final image in _images.values) {
       image.dispose();
     }
-    _waterGrid?.dispose();
     super.dispose();
   }
 
@@ -327,7 +332,8 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   terrainCache: _terrainCache,
                   pixelRatio: _pixelRatio,
                   shimmerProgram: _shimmerProgram,
-                  waterGrid: _waterGrid,
+                  parcelMode: widget.parcelMode,
+                  showTileGrid: widget.showTileGrid,
                   pedestrians: _pedestrians,
                 ),
               ),
@@ -477,7 +483,6 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
             if (mounted) {
               setState(() => _images[path] = image);
               unawaited(_loadMask(path, image));
-              unawaited(_deriveWaterGrid(path, image));
             } else {
               image.dispose();
             }
@@ -488,15 +493,6 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
       pending.add(request);
     }
     await Future.wait(pending);
-  }
-
-  /// Derives the water grid overlay when the plain water tile art
-  /// finishes loading; other paths are ignored.
-  Future<void> _deriveWaterGrid(String path, ui.Image image) async {
-    if (_spriteRoleForPath(path, widget.content) != 'terrain.water') return;
-    final grid = await maskWaterGrid(image);
-    if (!mounted || grid == null) return;
-    setState(() => _waterGrid = grid);
   }
 
   /// Builds the per-pixel picking mask for a decoded sprite and widens
@@ -581,13 +577,14 @@ Future<ui.Image?> maskShoreBank(String role, ui.Image image) async {
       final waterShare = dWater / math.max(1.0, dWater + dBase);
       // Keep the bank: land-coloured pixels stay, water-coloured pixels
       // vanish so the tile's own water shows through. The bytes feed a
-      // premultiplied-alpha descriptor, so RGB scales with alpha —
-      // leaving colour under zero alpha renders as amplified garbage.
+      // premultiplied-alpha descriptor, so RGB scales with the output
+      // alpha — colour under zero alpha renders as amplified garbage.
       final keep = waterShare.clamp(0.0, 1.0);
-      pixels[i] = (r * keep).round();
-      pixels[i + 1] = (g * keep).round();
-      pixels[i + 2] = (b * keep).round();
-      pixels[i + 3] = (alpha * keep).round();
+      final alphaOut = (alpha * keep).round();
+      pixels[i] = (r * alphaOut / 255).round();
+      pixels[i + 1] = (g * alphaOut / 255).round();
+      pixels[i + 2] = (b * alphaOut / 255).round();
+      pixels[i + 3] = alphaOut;
     }
     final buffer = await ui.ImmutableBuffer.fromUint8List(pixels);
     final descriptor = ui.ImageDescriptor.raw(
@@ -707,64 +704,32 @@ List<String> waterBankRoles(
   return roles;
 }
 
-/// Reference colour of the plain water tile, for isolating the lighter
-/// grid lines its art carries along the diamond edges.
-const _waterBaseRgb = (105, 156, 188);
-
-/// A line-only copy of the water tile: pixels close to the plain water
-/// colour go transparent, keeping the lighter diamond-edge grid lines.
-/// Drawn over shore banks so the cell grid keeps running across the
-/// bank instead of stopping at the waterline.
-Future<ui.Image?> maskWaterGrid(ui.Image image) async {
-  try {
-    final bytes = await image.toByteData(
-      format: ui.ImageByteFormat.rawStraightRgba,
-    );
-    if (bytes == null) return null;
-    final pixels = bytes.buffer.asUint8List(
-      bytes.offsetInBytes,
-      bytes.lengthInBytes,
-    );
-    final baseSum = _waterBaseRgb.$1 + _waterBaseRgb.$2 + _waterBaseRgb.$3;
-    for (var i = 0; i < pixels.length; i += 4) {
-      final alpha = pixels[i + 3];
-      if (alpha == 0) continue;
-      final brightness = pixels[i] + pixels[i + 1] + pixels[i + 2] - baseSum;
-      // The grid lines sit well above the base water; antialiased
-      // edge pixels ramp between. Darker speckles in the art drop out.
-      // RGB scales with alpha because the descriptor expects
-      // premultiplied bytes.
-      final keep = ((brightness - 16) / 32).clamp(0.0, 1.0);
-      pixels[i] = (pixels[i] * keep).round();
-      pixels[i + 1] = (pixels[i + 1] * keep).round();
-      pixels[i + 2] = (pixels[i + 2] * keep).round();
-      pixels[i + 3] = (alpha * keep).round();
-    }
-    final buffer = await ui.ImmutableBuffer.fromUint8List(pixels);
-    final descriptor = ui.ImageDescriptor.raw(
-      buffer,
-      width: image.width,
-      height: image.height,
-      pixelFormat: ui.PixelFormat.rgba8888,
-    );
-    final gridCodec = await descriptor.instantiateCodec();
-    try {
-      final gridFrame = await gridCodec.getNextFrame();
-      return gridFrame.image;
-    } finally {
-      gridCodec.dispose();
-      descriptor.dispose();
-    }
-  } catch (_) {
-    return null;
-  }
-}
-
 class _WorldHit {
   const _WorldHit(this.cell, this.structureId);
 
   final CellCoord cell;
   final String? structureId;
+}
+
+/// Strokes [source] as dashes — [dash] drawn, [gap] skipped, in the
+/// path's own coordinate units — so the result scales with whatever
+/// transform the source was built in.
+Path _dashPath(Path source, double dash, double gap) {
+  final dashed = Path();
+  for (final metric in source.computeMetrics()) {
+    var distance = 0.0;
+    var draw = true;
+    while (distance < metric.length) {
+      final length = draw ? dash : gap;
+      final next = math.min(distance + length, metric.length);
+      if (draw) {
+        dashed.addPath(metric.extractPath(distance, next), Offset.zero);
+      }
+      distance = next;
+      draw = !draw;
+    }
+  }
+  return dashed;
 }
 
 /// Every structure hit by a tap, in front-to-back painter order —
@@ -853,7 +818,8 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.terrainCache,
     required this.pixelRatio,
     required this.shimmerProgram,
-    required this.waterGrid,
+    required this.parcelMode,
+    required this.showTileGrid,
     required this.pedestrians,
   }) : super(repaint: ambient);
 
@@ -883,9 +849,11 @@ class _ParcelWorldPainter extends CustomPainter {
   final double pixelRatio;
   final ui.FragmentProgram? shimmerProgram;
 
-  /// Line-only copy of the water art, redrawn over shore banks so the
-  /// cell grid reaches the tile boundary. Null until it derives.
-  final ui.Image? waterGrid;
+  /// Parcel-tool view mode: unowned shading and the strong parcel grid.
+  final bool parcelMode;
+
+  /// Whether the faint tile grid draws — every mode except inspect.
+  final bool showTileGrid;
   final _PedestrianSim pedestrians;
 
   @override
@@ -914,6 +882,13 @@ class _ParcelWorldPainter extends CustomPainter {
     ParcelWorldProbe.beginTerrain();
     _drawTerrainChunks(canvas, size, bounds, viewport);
     ParcelWorldProbe.endTerrain();
+    if (showTileGrid && !parcelMode) {
+      _drawTileGrid(canvas, size, bounds);
+    }
+    _drawOwnedOutline(canvas, size, bounds, viewport);
+    if (parcelMode) {
+      _drawParcelGrid(canvas, size, bounds, viewport);
+    }
     _drawPlannedGround(canvas, size);
     _drawActors(canvas, size, bounds, ambient.seconds);
     _drawPendingConstructions(canvas, size);
@@ -983,7 +958,7 @@ class _ParcelWorldPainter extends CustomPainter {
     _CellBounds bounds,
     _ViewportGeometry viewport,
   ) {
-    terrainCache.resetFor(state, images.length);
+    terrainCache.resetFor(state, images.length, parcelMode);
     terrainCache.setTextureFactor(_textureFactorFor(scale, pixelRatio));
     terrainCache.evictDistant();
     final drawn = <_TerrainChunk>[];
@@ -1028,30 +1003,198 @@ class _ParcelWorldPainter extends CustomPainter {
       for (final bank in chunk.banks) {
         _drawTileRole(canvas, bank.$2, bank.$1, size, scale, offset);
       }
-      // The bank covers the grid lines baked into the water art, so a
-      // line-only copy of that art re-lays the grid over each banked
-      // cell — the grid runs to the tile boundary instead of stopping
-      // at the bank's waterline.
-      final grid = waterGrid;
-      final waterSprite = grid == null ? null : content.sprite('terrain.water');
-      if (grid != null && waterSprite != null) {
-        final source = Rect.fromLTWH(
-          0,
-          0,
-          grid.width.toDouble(),
-          grid.height.toDouble(),
-        );
-        final paint = Paint()..filterQuality = FilterQuality.medium;
-        for (final cell in chunk.bankCells) {
-          ParcelWorldProbe.countActor();
-          canvas.drawImageRect(
-            grid,
-            source,
-            _tileScreenRect(grid, waterSprite, cell, size, scale, offset),
-            paint,
-          );
-        }
+    }
+  }
+
+  /// The parcel's diamond outline in screen space.
+  Path _parcelScreenPath(ParcelCoord parcel, Size size) {
+    final origin = parcel.origin(state.parcelSize);
+    final vertices = [
+      origin,
+      origin.offset(state.parcelSize, 0),
+      origin.offset(state.parcelSize, state.parcelSize),
+      origin.offset(0, state.parcelSize),
+    ];
+    final path = Path();
+    for (var i = 0; i < vertices.length; i++) {
+      final point = _worldToScreen(
+        _cellWorldCorner(vertices[i]),
+        size,
+        scale,
+        offset,
+      );
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
       }
+    }
+    path.close();
+    return path;
+  }
+
+  /// The faint cell grid — one renderer-owned lattice over every
+  /// visible cell, replacing the inconsistent lines the ground art
+  /// used to bake in. Each cell adds only its north and west edges, so
+  /// shared edges never double-draw, and one colour reads over land,
+  /// water, banks, and roads alike. Drawn above the terrain and below
+  /// everything standing.
+  void _drawTileGrid(Canvas canvas, Size size, _CellBounds bounds) {
+    final grid = content.ambience.tileGrid;
+    if (!grid.enabled) return;
+    final path = Path();
+    Offset corner(int column, int row) => _worldToScreen(
+      _cellWorldCorner(CellCoord(column, row)),
+      size,
+      scale,
+      offset,
+    );
+    for (var row = bounds.top - 1; row <= bounds.bottom + 1; row++) {
+      for (var column = bounds.left - 1; column <= bounds.right + 1; column++) {
+        final north = corner(column, row);
+        final east = corner(column + 1, row);
+        final west = corner(column, row + 1);
+        path
+          ..moveTo(north.dx, north.dy)
+          ..lineTo(east.dx, east.dy)
+          ..moveTo(north.dx, north.dy)
+          ..lineTo(west.dx, west.dy);
+      }
+    }
+    final rgb = grid.colorRgb;
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Color.fromARGB(grid.alpha, rgb[0], rgb[1], rgb[2])
+        ..strokeWidth = math.max(1.0, scale)
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  /// The settlement's usable area: a thick dashed white line along the
+  /// boundary of the owned region — every owned-parcel edge that faces
+  /// unowned land or open water. Edges between owned parcels draw
+  /// nothing, so the whole owned region reads as one shape. Visible in
+  /// every mode.
+  void _drawOwnedOutline(
+    Canvas canvas,
+    Size size,
+    _CellBounds bounds,
+    _ViewportGeometry viewport,
+  ) {
+    var hasEdges = false;
+    final path = Path();
+    for (final coord in _visibleChunkCoords(bounds, viewport)) {
+      if (!queries.ownsParcel(coord)) continue;
+      final corners = _parcelCorners(coord);
+      for (var side = 0; side < 4; side++) {
+        if (queries.ownsParcel(coord.neighbors[side])) continue;
+        final a = _worldToScreen(
+          _cellWorldCorner(corners[side]),
+          size,
+          scale,
+          offset,
+        );
+        final b = _worldToScreen(
+          _cellWorldCorner(corners[(side + 1) % 4]),
+          size,
+          scale,
+          offset,
+        );
+        hasEdges = true;
+        path
+          ..moveTo(a.dx, a.dy)
+          ..lineTo(b.dx, b.dy);
+      }
+    }
+    if (!hasEdges) return;
+    canvas.drawPath(
+      _dashPath(path, 10 * scale, 6 * scale),
+      Paint()
+        ..color = const Color(0xF2FFFFFF)
+        ..strokeWidth = math.max(2.0, 3.0 * scale)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  /// The four lattice corners of a parcel's diamond, in north, east,
+  /// south, west order — edge `i` runs from corner `i` to corner
+  /// `i + 1` and faces `coord.neighbors[i]`.
+  List<CellCoord> _parcelCorners(ParcelCoord coord) {
+    final origin = coord.origin(state.parcelSize);
+    final size = state.parcelSize;
+    return [
+      origin,
+      origin.offset(size, 0),
+      origin.offset(size, size),
+      origin.offset(0, size),
+    ];
+  }
+
+  /// Parcel-mode overlay, drawn ground-level after the terrain: a
+  /// strong grid over the unowned region — edges between unowned
+  /// parcels (and toward open water; the owned frontier belongs to the
+  /// dashed outline) — plus a soft highlight over the unowned parcel
+  /// under the pointer, a desktop-only hover affordance. Inside the
+  /// owned region nothing draws: the dashed white outline already
+  /// marks it. The selected parcel keeps its own treatment in
+  /// [_drawSelection].
+  void _drawParcelGrid(
+    Canvas canvas,
+    Size size,
+    _CellBounds bounds,
+    _ViewportGeometry viewport,
+  ) {
+    final grid = Paint()
+      ..color = const Color(0xE0537662)
+      ..strokeWidth = math.max(1.5, 2.5 * scale)
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round;
+    for (final coord in _visibleChunkCoords(bounds, viewport)) {
+      if (!content.terrain.parcels.containsKey(coord)) continue;
+      if (queries.ownsParcel(coord)) continue;
+      final corners = _parcelCorners(coord);
+      for (var side = 0; side < 4; side++) {
+        // The owned frontier is the dashed outline's job; boundaries
+        // stay visible only within the unowned region.
+        if (queries.ownsParcel(coord.neighbors[side])) continue;
+        final a = _worldToScreen(
+          _cellWorldCorner(corners[side]),
+          size,
+          scale,
+          offset,
+        );
+        final b = _worldToScreen(
+          _cellWorldCorner(corners[(side + 1) % 4]),
+          size,
+          scale,
+          offset,
+        );
+        canvas.drawPath(
+          Path()
+            ..moveTo(a.dx, a.dy)
+            ..lineTo(b.dx, b.dy),
+          grid,
+        );
+      }
+    }
+
+    final hover = hoverCell;
+    if (hover == null) return;
+    final parcel = parcelForCell(hover, parcelSize: state.parcelSize);
+    if (content.terrain.parcels.containsKey(parcel) &&
+        !queries.ownsParcel(parcel) &&
+        parcel != selectedParcel) {
+      final path = _parcelScreenPath(parcel, size);
+      canvas.drawPath(path, Paint()..color = const Color(0x224BC69B));
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = const Color(0xFF25745C)
+          ..strokeWidth = math.max(1.0, 2.0 * scale)
+          ..style = PaintingStyle.stroke,
+      );
     }
   }
 
@@ -1181,19 +1324,17 @@ class _ParcelWorldPainter extends CustomPainter {
         ParcelWorldProbe.countTerrain();
         _drawImageAtWorldCenter(canvas, image, center);
       }
-      if (!queries.ownsCell(cell)) {
+      // The unowned wash is a parcel-mode cue; normal play shows
+      // unowned terrain as-is.
+      if (parcelMode && !queries.ownsCell(cell)) {
         ParcelWorldProbe.countWash();
         _drawWorldCellWash(canvas, center, content.ambience.unownedLandWash);
       }
       if (anyWater) {
         // Shore banks draw above the shimmer, so they are recorded as
         // per-frame draws rather than baked into the chunk picture.
-        final bankRoles = waterBankRoles(cell, queries.terrainAt);
-        if (bankRoles.isNotEmpty) {
-          for (final role in bankRoles) {
-            chunk.banks.add((cell, role));
-          }
-          chunk.bankCells.add(cell);
+        for (final role in waterBankRoles(cell, queries.terrainAt)) {
+          chunk.banks.add((cell, role));
         }
         final band = (cell.column - cell.row) % shimmer.bands;
         shimmerCounts[band]++;
@@ -1217,15 +1358,6 @@ class _ParcelWorldPainter extends CustomPainter {
           _drawImageAtWorldCenter(canvas, image, center);
         }
       }
-    }
-
-    // The owned-parcel outline draws after the chunk's cells. Its
-    // stroke bleeds ~0.6 world px into the neighbouring chunk, which
-    // the margin covers; a neighbour's tiles may paint over that
-    // outer half, which reads fine at 1.2 px.
-    if (queries.ownsParcel(coord)) {
-      ParcelWorldProbe.countOutline();
-      _drawWorldParcelOutline(canvas, coord, parcelSize);
     }
 
     chunk.picture = recorder.endRecording();
@@ -2014,8 +2146,7 @@ class _ParcelWorldPainter extends CustomPainter {
       );
     }
     if (selectedParcel case final parcel?) {
-      final owned = queries.ownsParcel(parcel);
-      if (!owned) _drawParcelPreview(canvas, size, parcel);
+      _drawParcelSelection(canvas, size, parcel);
     }
     if (selectedCatalogueId != null && selectedCell != null) {
       final definition = content.structure(selectedCatalogueId!);
@@ -2139,29 +2270,14 @@ class _ParcelWorldPainter extends CustomPainter {
     );
   }
 
-  void _drawParcelPreview(Canvas canvas, Size size, ParcelCoord parcel) {
-    final origin = parcel.origin(state.parcelSize);
-    final vertices = [
-      origin,
-      origin.offset(state.parcelSize, 0),
-      origin.offset(state.parcelSize, state.parcelSize),
-      origin.offset(0, state.parcelSize),
-    ];
-    final path = Path();
-    for (var i = 0; i < vertices.length; i++) {
-      final point = _worldToScreen(
-        _cellWorldCorner(vertices[i]),
-        size,
-        scale,
-        offset,
-      );
-      if (i == 0) {
-        path.moveTo(point.dx, point.dy);
-      } else {
-        path.lineTo(point.dx, point.dy);
-      }
+  /// The selected parcel in parcel mode: a light fill on owned land
+  /// (unowned keeps just the outline so the map beneath still reads)
+  /// and the strong green outline either way.
+  void _drawParcelSelection(Canvas canvas, Size size, ParcelCoord parcel) {
+    final path = _parcelScreenPath(parcel, size);
+    if (queries.ownsParcel(parcel)) {
+      canvas.drawPath(path, Paint()..color = const Color(0x264BC69B));
     }
-    path.close();
     canvas.drawPath(
       path,
       Paint()
@@ -2183,6 +2299,8 @@ class _ParcelWorldPainter extends CustomPainter {
       oldDelegate.bridgeEndCell != bridgeEndCell ||
       oldDelegate.facingOverride != facingOverride ||
       oldDelegate.dimStructures != dimStructures ||
+      oldDelegate.parcelMode != parcelMode ||
+      oldDelegate.showTileGrid != showTileGrid ||
       !listEquals(oldDelegate.roadPlanCells, roadPlanCells) ||
       oldDelegate.roadStartCell != roadStartCell ||
       !setEquals(oldDelegate.highlightCells, highlightCells) ||
@@ -2305,38 +2423,6 @@ void _drawImageAtWorldCenter(Canvas canvas, ui.Image image, Offset center) {
       height: _logicalTileHeight,
     ),
     Paint()..filterQuality = FilterQuality.medium,
-  );
-}
-
-/// Draws the parcel-outline stroke in world space.
-void _drawWorldParcelOutline(
-  Canvas canvas,
-  ParcelCoord parcel,
-  int parcelSize,
-) {
-  final origin = parcel.origin(parcelSize);
-  final vertices = [
-    origin,
-    origin.offset(parcelSize, 0),
-    origin.offset(parcelSize, parcelSize),
-    origin.offset(0, parcelSize),
-  ];
-  final path = Path();
-  for (var i = 0; i < vertices.length; i++) {
-    final point = _cellWorldCorner(vertices[i]);
-    if (i == 0) {
-      path.moveTo(point.dx, point.dy);
-    } else {
-      path.lineTo(point.dx, point.dy);
-    }
-  }
-  path.close();
-  canvas.drawPath(
-    path,
-    Paint()
-      ..color = const Color(0x66537662)
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke,
   );
 }
 
@@ -2509,11 +2595,6 @@ class _TerrainChunk {
   /// the shimmer instead of baked into [picture].
   final List<(CellCoord, String)> banks = [];
 
-  /// The distinct water cells those banks cover; the water grid redraws
-  /// once per cell over its bank. Insertion-ordered for stable draw
-  /// order.
-  final Set<CellCoord> bankCells = {};
-
   /// Water-cell count per shimmer band (the contours in each path).
   List<int>? shimmerCounts;
 
@@ -2563,6 +2644,7 @@ class _TerrainChunkCache {
   final Map<ParcelCoord, _TerrainChunk> chunks = {};
   Object? worldKey;
   int imageCount = -1;
+  bool parcelModeKey = false;
   double textureFactor = 1;
   int generation = 0;
   int _stamp = 0;
@@ -2573,11 +2655,18 @@ class _TerrainChunkCache {
 
   int nextStamp() => ++_stamp;
 
-  /// Drops every chunk when the world or the sprite set changed.
-  void resetFor(Object world, int images) {
-    if (worldKey == world && imageCount == images) return;
+  /// Drops every chunk when the world, the sprite set, or the terrain
+  /// view mode changed — parcel mode swaps the ground tiles, the
+  /// unowned wash, and the owned outlines inside the recording.
+  void resetFor(Object world, int images, bool parcelMode) {
+    if (worldKey == world &&
+        imageCount == images &&
+        parcelModeKey == parcelMode) {
+      return;
+    }
     worldKey = world;
     imageCount = images;
+    parcelModeKey = parcelMode;
     generation++;
     for (final chunk in chunks.values) {
       chunk.dispose();

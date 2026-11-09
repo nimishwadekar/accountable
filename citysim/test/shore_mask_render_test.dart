@@ -97,27 +97,4 @@ void main() {
     rendered.dispose();
     small.dispose();
   });
-
-  test('masked water grid keeps only the light line pixels', () async {
-    final image = await decode(content.tryAssetPath('terrain.water')!);
-    final grid = await maskWaterGrid(image);
-    expect(grid, isNotNull);
-
-    final gridBytes = await grid!.toByteData(
-      format: ui.ImageByteFormat.rawStraightRgba,
-    );
-    int rgbaAt(int x, int y) => gridBytes!.getUint32((y * 128 + x) * 4);
-
-    // A point on the diamond outline carries the light line colour at
-    // full alpha; a mid-water point is fully transparent with zeroed
-    // colour (valid premultiplied).
-    final line = rgbaAt(64, 0); // The north vertex's line pixels.
-    expect((line >> 8) & 0xFF, greaterThan(150), reason: 'light blue line');
-    expect(line & 0xFF, greaterThan(200), reason: 'near-opaque line');
-    final open = rgbaAt(64, 32); // Tile centre, plain water.
-    expect(open, 0, reason: 'plain water fully transparent');
-
-    image.dispose();
-    grid.dispose();
-  });
 }

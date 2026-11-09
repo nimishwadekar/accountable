@@ -108,13 +108,38 @@ the stable provider API; keep shores independent of ownership order.
   and corner families' roles (two adjacent land neighbours → a corner
   piece; diagonal-only land → an edge piece); the shore style follows
   the adjacent land's ground style. A one-cell pond surrounded by land
-  stays open water — the bank halves would blanket it. The cell grid
-  baked into the water art is re-laid over banked tiles (a line-only
-  mask of the water tile, drawn above the bank) so the grid runs to
-  the tile boundary instead of stopping at the bank's waterline.
+  stays open water — the bank halves would blanket it.
   Colour-masked images feed a premultiplied-alpha descriptor, so their
   RGB scales with the mask's alpha — colour under zero alpha renders
   as amplified white (`shore_mask_render_test` pins this).
+- **The grid is a renderer pass, not art (2026-11-08).** One faint
+  lattice can cover the visible cells — each cell adds only its north
+  and west edges, one colour, one thickness, over land, water, banks,
+  and roads alike, drawn on the terrain layer beneath models. It is
+  the `tileGrid` ambience content (dashboard editable, with an enabled
+  switch), shows in every tool except inspect and parcel mode, and is
+  currently **disabled by default**: the ground art's own edge shading
+  already tiles into a natural grid, so the overlay is redundant. The
+  owned region's boundary — owned-parcel edges facing unowned land or
+  open water, internal owned edges skipped — carries a thick dashed
+  white outline in every mode, replacing the old thin baked parcel
+  outline. The ground art's edge shading stays as-is: it is texture,
+  not a grid, and earlier attempts to flatten it in art space
+  (plain-variant tiles, band-flattening inside the bank mask) damaged
+  the shore water band because colour deviation cannot tell shore
+  water from edge shading — the bank mask is a pure water/land split
+  again.
+- **Parcel mode view (2026-11-08).** The unowned wash renders only in
+  the parcel tool; normal play shows unowned terrain as-is. In parcel
+  mode the wash shades unowned parcels, the strong parcel grid draws
+  only within the unowned region (frontier edges belong to the dashed
+  outline; the owned region stays clean), the pointer hover highlights
+  the unowned parcel under it (desktop hover events only), and taps
+  select whole parcels — no cell outline, no road-section highlights.
+  Owned parcels get a light selection fill at parcel scale; unowned
+  keep the buy-preview outline. Toggling the mode re-records terrain
+  chunks once through the cache's mode key (the wash is baked; the grid
+  and outlines are per-frame passes).
 - **Bridge selection tints the crossing (2026-11-08).** Tapping a
   bridge deck still outlines the full crossing — every span tile plus
   both banks — and now also washes the deck and ramp sprites in the

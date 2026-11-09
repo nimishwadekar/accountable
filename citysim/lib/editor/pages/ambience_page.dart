@@ -29,6 +29,7 @@ class _AmbiencePageState extends State<AmbiencePage> {
     final sway = subMap(ambience, 'vegetationSway');
     final pedestrians = subMap(ambience, 'pedestrians');
     final wash = subMap(ambience, 'unownedLandWash');
+    final tileGrid = subMap(ambience, 'tileGrid');
 
     return ListView(
       padding: const EdgeInsets.all(10),
@@ -275,6 +276,50 @@ class _AmbiencePageState extends State<AmbiencePage> {
           description:
               'Fades unowned land toward the map background once '
               'per composed cell.',
+        ),
+        _section(
+          'Tile grid',
+          [
+            SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: const Text(
+                'Draw the tile grid',
+                style: TextStyle(fontSize: 13),
+              ),
+              subtitle: const Text(
+                'The ground art\'s own edges already tile into a '
+                'natural grid; this switches off the renderer\'s '
+                'overlay so only the art shows.',
+                style: TextStyle(fontSize: 11),
+              ),
+              value: tileGrid['enabled'] != false,
+              onChanged: (v) =>
+                  _edit((a) => (a['tileGrid'] as Map)['enabled'] = v),
+            ),
+            _RgbFields(
+              alpha: asInt(tileGrid['alpha'], 55),
+              rgb: ((tileGrid['colorRgb'] as List?) ?? const [30, 101, 82])
+                  .map((v) => asInt(v))
+                  .toList(),
+              onChangedAlpha: (v) =>
+                  _edit((a) => (a['tileGrid'] as Map)['alpha'] = v),
+              onChangedRgb: (index, v) => _edit(
+                (a) => (a['tileGrid'] as Map)['colorRgb'] = [
+                  for (var i = 0; i < 3; i++)
+                    i == index
+                        ? v
+                        : asInt(
+                            ((a['tileGrid'] as Map)['colorRgb'] as List)[i],
+                          ),
+                ],
+              ),
+            ),
+          ],
+          description:
+              'The faint cell grid drawn over every tile in every tool '
+              'except inspect — one renderer-owned lattice on top of '
+              'the art\'s natural edges.',
         ),
       ],
     );

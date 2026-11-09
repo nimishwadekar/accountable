@@ -32,11 +32,24 @@ import 'package:citysim/storage/world_sheet_codec.dart';
 import 'package:citysim/world/coordinates.dart';
 import 'package:citysim/world/terrain_provider.dart';
 import 'package:citysim/world/world_state.dart';
+import 'package:flutter/gestures.dart' show PointerHoverEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter_test/flutter_test.dart';
 
-ParcelWorldState _anchorWorld(ContentBundle content) => sheetTablesToWorld(
+/// Reads one big-endian RGBA pixel from a captured image.
+int _pixelAt(ui.Image image, ByteData bytes, Offset point) {
+  final x = point.dx.round().clamp(0, image.width - 1);
+  final y = point.dy.round().clamp(0, image.height - 1);
+  return bytes.getUint32((y * image.width + x) * 4);
+}
+
+ParcelWorldState _anchorWorld(
+  ContentBundle content, {
+  List<List<String>> ownedParcels = const [
+    ['0', '0'],
+  ],
+}) => sheetTablesToWorld(
   SheetTables(
     userData: const {
       'seed': '7',
@@ -47,9 +60,7 @@ ParcelWorldState _anchorWorld(ContentBundle content) => sheetTablesToWorld(
       'high_water_date': '2026-11-05',
       'construction_day': '0',
     },
-    ownedParcels: const [
-      ['0', '0'],
-    ],
+    ownedParcels: ownedParcels,
     tiles: const [
       ['4', '4', 'road', 'complete', 'asphalt', '', '', ''],
       ['5', '4', 'road', 'complete', 'asphalt', '', '', ''],
@@ -254,29 +265,18 @@ void main() {
         isTrue,
         reason: 'the open half of the boundary water tile stays water',
       );
+      // The dry-land sample sits in the tile's south-east interior —
+      // the boundary itself now carries the dashed owned outline.
       expect(
-        isGrass(pixel(imageA, bytesA, screenHalf(const CellCoord(7, 4), 1, 0))),
+        isGrass(
+          pixel(
+            imageA,
+            bytesA,
+            _screenCenterOf(const CellCoord(7, 4)).translate(8, 4),
+          ),
+        ),
         isTrue,
         reason: 'land next to water stays dry up to the tile edge',
-      );
-
-      // The water grid continues over the bank: the diamond-edge lines
-      // baked into the water art are re-laid above the bank, so the
-      // vertex crossings on the banked side read as light grid-line
-      // blue rather than the grass around them.
-      bool isGridLine(int rgba) {
-        final r = rgba >> 24, b = (rgba >> 8) & 0xFF;
-        return b > 175 && b - r > 25;
-      }
-
-      final bankedVertices = [
-        _screenCenterOf(const CellCoord(8, 4)).translate(-32, 0),
-        _screenCenterOf(const CellCoord(8, 4)).translate(0, -16),
-      ];
-      expect(
-        bankedVertices.map((p) => pixel(imageA, bytesA, p)).any(isGridLine),
-        isTrue,
-        reason: 'the water grid runs over the bank to the tile edge',
       );
 
       // ---- Capture B: the picture-replay path ----------------------
@@ -314,4 +314,287 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
+
+  testWidgets('parcel mode swaps the cell grid for the parcel grid', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // Three owned parcels: (0,0) grass, plus the adjacent pair
+    // (−1,0) water and (−1,1) grass, whose shared boundary is an edge
+    // *inside* the owned region — the strong parcel grid must not draw
+    // there.
+    final world = _anchorWorld(
+      content,
+      ownedParcels: const [
+        ['0', '0'],
+        ['-1', '0'],
+        ['-1', '1'],
+      ],
+    );
+    // The live ambience content is dashboard-tunable (the grid alpha
+    // may be set to 0 while tuning), so this test pins its own grid.
+    final gridContent = ContentBundle(
+      manifest: content.manifest,
+      catalogue: content.catalogue,
+      sprites: content.sprites,
+      economy: content.economy,
+      ambience: AmbienceContent(
+        ambientTimeScale: content.ambience.ambientTimeScale,
+        waterShimmer: content.ambience.waterShimmer,
+        vegetationSway: content.ambience.vegetationSway,
+        pedestrians: content.ambience.pedestrians,
+        unownedLandWash: content.ambience.unownedLandWash,
+        tileGrid: const TileGridContent(alpha: 55, colorRgb: [30, 101, 82]),
+      ),
+      terrain: content.terrain,
+    );
+    ParcelWorldProbe.recording = true;
+    ParcelWorldProbe.reset();
+
+    final boundaryKey = GlobalKey();
+    Widget view({
+      bool parcelMode = false,
+      ParcelCoord? selectedParcel,
+      bool showTileGrid = true,
+    }) => ParcelWorldView(
+      state: world,
+      content: gridContent,
+      terrainProvider: ContentTerrainProvider(content.terrain),
+      onCellTap: (cell, structureId) {},
+      parcelMode: parcelMode,
+      selectedParcel: selectedParcel,
+      showTileGrid: showTileGrid,
+    );
+    Widget app({
+      bool parcelMode = false,
+      ParcelCoord? selectedParcel,
+      bool showTileGrid = true,
+      bool frozen = false,
+    }) => MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: RepaintBoundary(
+          key: boundaryKey,
+          // The MediaQuery stays in the tree for every variant so
+          // toggling the freeze never restructures it — only the data
+          // flips, which mutes the ambient ticker without recreating
+          // the view state or its loaded art.
+          child: MediaQuery(
+            data: MediaQueryData(disableAnimations: frozen),
+            child: view(
+              parcelMode: parcelMode,
+              selectedParcel: selectedParcel,
+              showTileGrid: showTileGrid,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // Settle normal mode first — decode art, record and rasterize
+    // chunks — with the ambient clock running so pumps produce frames.
+    await tester.pumpWidget(app());
+    var settled = false;
+    for (var attempt = 0; attempt < 10 && !settled; attempt++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      ParcelWorldProbe.reset();
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      settled =
+          ParcelWorldProbe.samples.isNotEmpty &&
+          ParcelWorldProbe.samples.every((s) => s.chunkRecords == 0);
+    }
+    expect(settled, isTrue, reason: 'normal-mode chunks should settle');
+
+    // Freeze the clock here so every capture below shares one shimmer
+    // phase.
+    await tester.pumpWidget(app(frozen: true));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final normal = (await _capture(tester, boundaryKey))!;
+    final normalBytes = (await tester.runAsync(() => normal.toByteData()))!;
+
+    // Switch to parcel mode and let the chunks re-record for it.
+    await tester.pumpWidget(app(parcelMode: true, frozen: true));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+    }
+    final parcel = (await _capture(tester, boundaryKey))!;
+    final parcelBytes = (await tester.runAsync(() => parcel.toByteData()))!;
+    int parcelPixel(Offset point) => _pixelAt(parcel, parcelBytes, point);
+
+    int brightness(ui.Image image, ByteData bytes, Offset point) {
+      final rgba = _pixelAt(image, bytes, point);
+      return ((rgba >> 24) & 0xFF) +
+          ((rgba >> 16) & 0xFF) +
+          ((rgba >> 8) & 0xFF);
+    }
+
+    // Unowned water shades in parcel mode only: the wash tints the
+    // unowned parcel (1,0) toward the map background.
+    final openWater = _screenCenterOf(const CellCoord(12, 4));
+    expect(
+      brightness(parcel, parcelBytes, openWater) -
+          brightness(normal, normalBytes, openWater),
+      greaterThan(15),
+      reason: 'unowned water washes in parcel mode',
+    );
+
+    // The faint tile grid is the one renderer-owned lattice. The art's
+    // own edge shading darkens cell edges too, so the grid is measured
+    // as the difference between grid-on and grid-off renders of the
+    // same frozen frame.
+    final grassEdge = _screenCenterOf(const CellCoord(2, 2)).translate(-16, -8);
+    final grassCentre = _screenCenterOf(const CellCoord(2, 2));
+    await tester.pumpWidget(app(showTileGrid: false, frozen: true));
+    await tester.pump(const Duration(milliseconds: 100));
+    final inspect = (await _capture(tester, boundaryKey))!;
+    final inspectBytes = (await tester.runAsync(() => inspect.toByteData()))!;
+    expect(
+      brightness(inspect, inspectBytes, grassEdge) -
+          brightness(normal, normalBytes, grassEdge),
+      greaterThan(8),
+      reason: 'the faint tile grid tints cell edges',
+    );
+    expect(
+      (brightness(inspect, inspectBytes, grassCentre) -
+              brightness(normal, normalBytes, grassCentre))
+          .abs(),
+      lessThan(5),
+      reason: 'the tile grid leaves cell centres alone',
+    );
+
+    // Parcel mode replaces the tile grid with its own parcel grid: its
+    // cell edges match the grid-off render exactly.
+    expect(
+      (brightness(parcel, parcelBytes, grassEdge) -
+              brightness(inspect, inspectBytes, grassEdge))
+          .abs(),
+      lessThan(5),
+      reason: 'parcel mode hides the tile grid',
+    );
+    inspect.dispose();
+
+    // The owned region's boundary is a thick dashed white line, on the
+    // frontier between owned (0,0) and unowned (1,0).
+    bool isWhiteDash(int rgba) {
+      final r = rgba >> 24, g = (rgba >> 16) & 0xFF, b = (rgba >> 8) & 0xFF;
+      return r + g + b > 600;
+    }
+
+    final frontier = [
+      for (final cell in [const CellCoord(8, 4), const CellCoord(8, 5)])
+        for (final t in [0.2, 0.5, 0.8])
+          _screenCenterOf(cell).translate(-32.0 * t, -16.0 + 16.0 * t),
+    ];
+    expect(
+      frontier.map(parcelPixel).any(isWhiteDash),
+      isTrue,
+      reason: 'the dashed white outline marks the owned frontier',
+    );
+
+    // The strong parcel grid lives only in the unowned region: it
+    // draws along the southern boundary of unowned (1,0)...
+    bool isParcelStroke(int rgba) {
+      final r = rgba >> 24, g = (rgba >> 16) & 0xFF, b = (rgba >> 8) & 0xFF;
+      return g - r > 18 && r + g + b < 340;
+    }
+
+    final unownedBoundary = [
+      for (final cell in [const CellCoord(10, 8), const CellCoord(12, 8)])
+        _screenCenterOf(cell).translate(16, -8),
+    ];
+    expect(
+      unownedBoundary.map(parcelPixel).any(isParcelStroke),
+      isTrue,
+      reason: 'the strong parcel grid draws in the unowned region',
+    );
+    // ...and never inside the owned region, along the shared edge of
+    // owned (−1,0) and owned (−1,1) — no stroke, no white dash.
+    final ownedInterior = [
+      for (final cell in [
+        const CellCoord(-4, 8),
+        const CellCoord(-3, 8),
+        const CellCoord(-2, 8),
+      ])
+        _screenCenterOf(cell).translate(16, -8),
+    ];
+    expect(
+      ownedInterior
+          .map(parcelPixel)
+          .any((rgba) => isParcelStroke(rgba) || isWhiteDash(rgba)),
+      isFalse,
+      reason: 'no parcel boundaries inside the owned region',
+    );
+
+    // Hovering the pointer over an unowned parcel highlights it —
+    // desktop hover events only. The highlight fill greens the washed
+    // water under the pointer.
+    await tester.sendEventToBinding(PointerHoverEvent(position: openWater));
+    await tester.pumpWidget(app(parcelMode: true, frozen: true));
+    await tester.pump(const Duration(milliseconds: 100));
+    final hovered = (await _capture(tester, boundaryKey))!;
+    final hoveredBytes = (await tester.runAsync(() => hovered.toByteData()))!;
+    final before = parcelPixel(openWater);
+    final after = _pixelAt(hovered, hoveredBytes, openWater);
+    expect(
+      ((before >> 24) & 0xFF) - ((after >> 24) & 0xFF),
+      greaterThan(4),
+      reason: 'hover fills the unowned parcel under the pointer',
+    );
+
+    // Hovering an owned parcel highlights nothing.
+    await tester.sendEventToBinding(
+      PointerHoverEvent(position: _screenCenterOf(const CellCoord(2, 2))),
+    );
+    await tester.pumpWidget(app(parcelMode: true, frozen: true));
+    await tester.pump(const Duration(milliseconds: 100));
+    final ownedHover = (await _capture(tester, boundaryKey))!;
+    final ownedHoverBytes = await tester.runAsync(
+      () => ownedHover.toByteData(),
+    );
+    final grassPoint = _screenCenterOf(const CellCoord(2, 2));
+    final hoveredOwned = _pixelAt(ownedHover, ownedHoverBytes!, grassPoint);
+    final plainOwned = parcelPixel(grassPoint);
+    for (final shift in [0, 8, 16]) {
+      expect(
+        (((hoveredOwned >> shift) & 0xFF) - ((plainOwned >> shift) & 0xFF))
+            .abs(),
+        lessThan(4),
+        reason: 'owned parcels get no hover highlight',
+      );
+    }
+
+    // Selecting a parcel fills it at parcel scale — owned land gets a
+    // light selection wash just like cells do in other tools.
+    await tester.pumpWidget(
+      app(parcelMode: true, frozen: true, selectedParcel: ParcelCoord(0, 0)),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    final selected = (await _capture(tester, boundaryKey))!;
+    final selectedBytes = await tester.runAsync(() => selected.toByteData());
+    final selectedPixel = _pixelAt(selected, selectedBytes!, grassPoint);
+    expect(
+      ((plainOwned >> 24) & 0xFF) - ((selectedPixel >> 24) & 0xFF),
+      greaterThan(4),
+      reason: 'the selected owned parcel fills with the selection wash',
+    );
+
+    normal.dispose();
+    parcel.dispose();
+    hovered.dispose();
+    ownedHover.dispose();
+    selected.dispose();
+  }, timeout: const Timeout(Duration(minutes: 3)));
 }

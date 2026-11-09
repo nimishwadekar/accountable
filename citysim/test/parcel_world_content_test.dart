@@ -84,6 +84,30 @@ void main() {
     );
   });
 
+  test('the tile grid validates its alpha and colour channels', () {
+    final bad = AmbienceContent(
+      ambientTimeScale: content.ambience.ambientTimeScale,
+      waterShimmer: content.ambience.waterShimmer,
+      vegetationSway: content.ambience.vegetationSway,
+      pedestrians: content.ambience.pedestrians,
+      unownedLandWash: content.ambience.unownedLandWash,
+      tileGrid: const TileGridContent(alpha: 300, colorRgb: [30, 101, 82]),
+    );
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: bad,
+        terrain: content.terrain,
+      ).any(
+        (issue) =>
+            issue.severity == 'error' && issue.message.contains('Tile grid'),
+      ),
+      isTrue,
+    );
+  });
+
   test('content seed snapshot holds the seeded defaults', () {
     // Snapshot guard: these values are the seeded defaults the dashboard
     // starts from — the original nine models, the promoted Buggy

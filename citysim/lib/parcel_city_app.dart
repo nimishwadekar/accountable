@@ -272,12 +272,18 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       return;
     }
     setState(() {
-      _selectedCell = cell;
       if (_tool == _WorldTool.parcel) {
+        // Parcel mode selects at parcel granularity: no cell outline,
+        // no road-section highlights — just the parcel under the tap.
         _selectedParcel = parcelForCell(cell);
+        _selectedCell = null;
         _selectedCatalogueId = null;
         _bridgeStartCell = null;
-      } else if (_tool == _WorldTool.bridge) {
+        _highlightCells = const {};
+        return;
+      }
+      _selectedCell = cell;
+      if (_tool == _WorldTool.bridge) {
         _selectedParcel = null;
         _selectedCatalogueId = null;
         if (_bridgeStartCell == null) {
@@ -766,6 +772,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             structurePicking: _tool == _WorldTool.inspect,
             dimStructures:
                 _tool == _WorldTool.road || _tool == _WorldTool.bridge,
+            parcelMode: _tool == _WorldTool.parcel,
+            showTileGrid: _tool != _WorldTool.inspect,
             cameraResetToken: _cameraResetToken,
             onCellTap: _onCellTap,
           ),

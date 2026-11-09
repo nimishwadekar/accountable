@@ -150,6 +150,66 @@ void main() {
     },
   );
 
+  testWidgets('parcel mode selects parcels, not cells', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = _MemoryParcelStore();
+
+    await tester.pumpWidget(ParcelCityApp(store: store, content: content));
+    for (var i = 0; i < 50; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Parcels').first);
+    await tester.pump();
+    final mapRect = tester.getRect(find.byType(ParcelWorldView));
+    // A tap inside the starter parcel selects that whole parcel and
+    // nothing at cell granularity.
+    await tester.tapAt(mapRect.center + const Offset(16, 8));
+    await tester.pump();
+
+    final view = tester.widget<ParcelWorldView>(find.byType(ParcelWorldView));
+    expect(view.parcelMode, isTrue);
+    expect(view.selectedParcel, const ParcelCoord(0, 0));
+    expect(view.selectedCell, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the tile grid hides for inspect and shows for tools', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = _MemoryParcelStore();
+
+    await tester.pumpWidget(ParcelCityApp(store: store, content: content));
+    for (var i = 0; i < 50; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+
+    ParcelWorldView view() =>
+        tester.widget<ParcelWorldView>(find.byType(ParcelWorldView));
+    // The default inspect tool renders the world clean...
+    expect(view().showTileGrid, isFalse, reason: 'inspect hides the grid');
+    // ...and every working tool shows it.
+    await tester.tap(find.text('Roads').first);
+    await tester.pump();
+    expect(view().showTileGrid, isTrue, reason: 'the road tool shows the grid');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a bridged world renders through the depth-sorted pass', (
     tester,
   ) async {

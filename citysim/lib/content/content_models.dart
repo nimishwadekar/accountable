@@ -515,6 +515,38 @@ class UnownedLandWashContent {
       );
 }
 
+/// The faint cell grid drawn over every tile — one renderer-owned
+/// lattice in addition to the natural grid the ground art's edge
+/// shading tiles into. Tuned like the wash: enabled plus alpha plus
+/// colour. Disabled, the renderer draws nothing and only the art's
+/// own edges show.
+class TileGridContent {
+  const TileGridContent({
+    this.enabled = true,
+    required this.alpha,
+    required this.colorRgb,
+  });
+
+  final bool enabled;
+  final int alpha;
+  final List<int> colorRgb;
+
+  Map<String, Object?> toJson() => {
+    'enabled': enabled,
+    'alpha': alpha,
+    'colorRgb': colorRgb,
+  };
+
+  static TileGridContent fromJson(Map<String, Object?> json) => TileGridContent(
+    enabled: json['enabled'] as bool? ?? true,
+    alpha: json['alpha'] as int? ?? 55,
+    colorRgb: [
+      for (final value in (json['colorRgb'] as List?) ?? const [30, 101, 82])
+        value as int,
+    ],
+  );
+}
+
 class AmbienceContent {
   const AmbienceContent({
     required this.ambientTimeScale,
@@ -522,6 +554,7 @@ class AmbienceContent {
     required this.vegetationSway,
     required this.pedestrians,
     required this.unownedLandWash,
+    required this.tileGrid,
   });
 
   final double ambientTimeScale;
@@ -529,6 +562,7 @@ class AmbienceContent {
   final VegetationSwayContent vegetationSway;
   final PedestrianContent pedestrians;
   final UnownedLandWashContent unownedLandWash;
+  final TileGridContent tileGrid;
 
   Map<String, Object?> toJson() => {
     'ambientTimeScale': ambientTimeScale,
@@ -536,6 +570,7 @@ class AmbienceContent {
     'vegetationSway': vegetationSway.toJson(),
     'pedestrians': pedestrians.toJson(),
     'unownedLandWash': unownedLandWash.toJson(),
+    'tileGrid': tileGrid.toJson(),
   };
 
   static AmbienceContent fromJson(Map<String, Object?> json) => AmbienceContent(
@@ -551,6 +586,9 @@ class AmbienceContent {
     ),
     unownedLandWash: UnownedLandWashContent.fromJson(
       json['unownedLandWash']! as Map<String, Object?>,
+    ),
+    tileGrid: TileGridContent.fromJson(
+      (json['tileGrid'] as Map?)?.cast<String, Object?>() ?? const {},
     ),
   );
 }
@@ -864,6 +902,14 @@ List<ContentIssue> validateContentData({
   if (ambience.waterShimmer.maxOpacity < 0 ||
       ambience.waterShimmer.maxOpacity > 1) {
     error('Water shimmer opacity must be within [0, 1].');
+  }
+  if (ambience.tileGrid.alpha < 0 ||
+      ambience.tileGrid.alpha > 255 ||
+      ambience.tileGrid.colorRgb.length != 3 ||
+      ambience.tileGrid.colorRgb.any(
+        (channel) => channel < 0 || channel > 255,
+      )) {
+    error('Tile grid needs an alpha and RGB channels within [0, 255].');
   }
   if (ambience.vegetationSway.maxAngleRadians < 0 ||
       ambience.vegetationSway.maxAngleRadians > 0.5) {
