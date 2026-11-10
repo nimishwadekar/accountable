@@ -108,3 +108,27 @@ license file in the ZIP. Source/license confirmation:
 Sprites moved into `sprites/` and `characters/` originate from that same
 pack; this is a reorganization, not new artwork. Keep the origin clear if
 assets are later moved or the project is redistributed.
+
+## Future work — terrain boundary masks
+
+- Boundary fade masks exist today only for water↔land shores. Extending
+  the same approach to every terrain meeting (grass↔dirt, ground↔road
+  shoulder, …) would remove the hard boundary lines between all ground
+  styles.
+- Known wrinkle, deliberately kept as-is (2026-11-09): the shipped
+  edge-piece masks put their land wedge on the role letter's own vertex
+  (`edge.n` → land at the north vertex), while the pack art
+  (`wateredge_N`) and `waterBankRoles`' diagonal semantics point the
+  other way — `edge.n` is assigned to SE-diagonal land, which touches
+  the **south** vertex. Diagonal-only land contact therefore renders
+  its bank wedge on the opposite vertex. Revisit the edge-family
+  wedge orientation (and the boundary system generally) when taking up
+  the masks-for-all-terrain-meetings work.
+- Wavy waterlines (parked before implementation, 2026-11-09): the
+  pack art's waterline is a scallop — it tucks ~12.5px landward at
+  every tile seam, relaxes onto the canonical line at tile centres,
+  plus small 2-3px ripples at ~30px wavelength. If taken up: carry
+  the scallop as a deterministic lattice-periodic bow (identical for
+  every piece sharing a seam, so contiguity survives) and layer
+  per-tile random ripple variants whose envelope fades to zero at
+  the seam crossings.

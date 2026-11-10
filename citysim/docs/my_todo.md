@@ -1,6 +1,5 @@
 This is my note-taking for my own memory. AI shouldn't modify this file.
 
-- don't show unowned parcel fading all the time. And selecting parcels in parcel view should select parcel instead of individual cells.
 - In bridge selection draws the far end over the bridge.
 - single facing offset doesn't work for asymmetric sprites. show 4 fields and also 4 previews.
 - Maybe disable grid view entirely and only show it when placing something. But have an option to enable it in the current debug mod UI.
