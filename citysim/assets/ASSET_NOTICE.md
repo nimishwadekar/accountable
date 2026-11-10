@@ -13,6 +13,23 @@ editor's grouping:
   alpha-seam hairlines between tiles. The grid-lined originals were
   returned to `buggy_studio/Roads and Grounds/` — the only copies,
   since the pack originals were moved out during promotion.
+  On 2026-11-10 the six tiles gained opaque skirts: a ~4-art-px
+  (~2-world-px) band past each diamond, filled by dilating the
+  nearest opaque colour. The borderless pass's planned bleed had
+  never actually been applied — every pixel outside the diamonds
+  was fully transparent — so bilinear resampling at any zoom let
+  the mint map background bleed through hairlines along tile edges
+  (zoomed out) and along parcel boundaries (zoomed in, between the
+  cached parcel textures). The skirt is the industry-standard fix
+  for texture bleeding (extrusion / edge padding; Godot tilesets
+  and Unity sprite atlases apply it by default). `_chunkWorldRect`'s
+  margin grew from 2 to 4 world px so the skirt survives chunk
+  rasterization, and `test/ground_skirt_seam_test.dart` pins the
+  result: zero background bleed at every draw scale and detail
+  bucket. Tradeoff: where different materials meet, the
+  later-drawn tile's skirt reads as a ~2px fringe of its colour —
+  to be absorbed by the fade-masks-for-all-terrain-meetings future
+  work.
   The 24 pack shore sprites (grass/dirt × edge/corner/quarter) were
   retired the same day: shore banks are now composed at load from the
   terrain material cut by 12 baked greyscale shape masks

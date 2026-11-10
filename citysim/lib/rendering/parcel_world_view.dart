@@ -1095,22 +1095,82 @@ class _ParcelWorldPainter extends CustomPainter {
         _rasterizeChunk(chunk);
       }
     }
+    // Blit ocean parcels before land parcels: the water tiles'
+    // opaque skirts must never paint over neighbouring land at
+    // shores, and the bank overlay only reaches ~1 world px past
+    // the shared edge — not far enough to cover a 2 px skirt.
+    // Authored terrain is uniform per parcel, so the origin cell's
+    // kind classifies the chunk.
+    final waterChunks = <_TerrainChunk>[];
+    final landChunks = <_TerrainChunk>[];
     for (final chunk in drawn) {
-      ParcelWorldProbe.countChunkDraw();
-      ParcelWorldProbe.noteDrawnCells(state.parcelSize * state.parcelSize);
-      final image = chunk.image;
-      if (!debugDrawChunksViaPictures && image != null) {
+      final origin = chunk.coord.origin(state.parcelSize);
+      (queries.terrainAt(origin).isLand ? landChunks : waterChunks).add(chunk);
+    }
+    for (final chunk in waterChunks) {
+      _blitChunk(canvas, size, chunk);
+    }
+    for (final chunk in landChunks) {
+      _blitChunk(canvas, size, chunk);
+    }
+    _drawRoads(canvas, size, bounds);
+    _drawShoreBanks(canvas, size, drawn);
+  }
+
+  /// Draws one cached chunk: its rasterized texture when fresh, or a
+  /// replay of its world-space recording otherwise.
+  void _blitChunk(Canvas canvas, Size size, _TerrainChunk chunk) {
+    ParcelWorldProbe.countChunkDraw();
+    ParcelWorldProbe.noteDrawnCells(state.parcelSize * state.parcelSize);
+    final image = chunk.image;
+    if (!debugDrawChunksViaPictures && image != null) {
+      canvas.drawImageRect(
+        image,
+        Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+        _worldRectToScreen(chunk.worldRect, size, scale, offset),
+        Paint()..filterQuality = FilterQuality.medium,
+      );
+    } else if (chunk.picture case final picture?) {
+      _drawWorldPicture(canvas, size, chunk.worldRect, picture);
+    }
+  }
+
+  /// Roads, drawn per frame above every terrain chunk and below the
+  /// shore banks. They used to bake into the chunk pictures,
+  /// interleaved per cell with terrain — but the ground tiles'
+  /// opaque skirts then painted over road art wherever a later cell
+  /// (or a later chunk, at parcel boundaries) held plain terrain.
+  /// Layered drawing — every ground tile before any road — is the
+  /// standard tilemap order (Tiled layers, Godot tilemap layers,
+  /// Unity sorting layers), and replaying the few dozen visible
+  /// roads per frame is cheap next to the cached terrain.
+  void _drawRoads(Canvas canvas, Size size, _CellBounds bounds) {
+    // Road neighbour masks read the road set around the view.
+    final roadCells = <CellCoord>{
+      ...queries.roadsByCell.keys,
+      for (final bridge in state.bridges) ...bridge.waterCells,
+    };
+    for (var row = bounds.top - 1; row <= bounds.bottom + 1; row++) {
+      for (var column = bounds.left - 1; column <= bounds.right + 1; column++) {
+        final cell = CellCoord(column, row);
+        final road = queries.roadsByCell[cell];
+        if (road == null) continue;
+        final role = roadSpriteRole(roadNeighborMask(cell, roadCells));
+        final path = content.tryAssetPath(role);
+        final image = path == null ? null : images[path];
+        final sprite = path == null ? null : content.sprite(role);
+        if (image == null || sprite == null) continue;
+        ParcelWorldProbe.countRoad();
         canvas.drawImageRect(
           image,
           Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-          _worldRectToScreen(chunk.worldRect, size, scale, offset),
-          Paint()..filterQuality = FilterQuality.medium,
+          _tileScreenRect(image, sprite, cell, size, scale, offset),
+          Paint()
+            ..filterQuality = FilterQuality.medium
+            ..color = const Color(0xFFFFFFFF),
         );
-      } else if (chunk.picture case final picture?) {
-        _drawWorldPicture(canvas, size, chunk.worldRect, picture);
       }
     }
-    _drawShoreBanks(canvas, size, drawn);
   }
 
   /// Shore banks: each bank tile replays its composed overlay — the
@@ -1446,19 +1506,18 @@ class _ParcelWorldPainter extends CustomPainter {
     final canvas = Canvas(recorder, Offset.zero & worldRect.size);
     canvas.translate(-worldRect.left, -worldRect.top);
 
-    // Road neighbour masks read the road set around the chunk.
-    final roadCells = <CellCoord>{
-      ...queries.roadsByCell.keys,
-      for (final bridge in state.bridges) ...bridge.waterCells,
-    };
+    final cells = [
+      for (final cell in coord.cells(parcelSize))
+        (cell, queries.terrainAt(cell), _cellWorldCenter(cell)),
+    ];
 
-    for (final cell in coord.cells(parcelSize)) {
-      final terrain = queries.terrainAt(cell);
-      final anyWater = !terrain.isLand;
-      final center = _cellWorldCenter(cell);
-      final roles = anyWater
-          ? const ['terrain.water']
-          : _terrainSpriteRoles(cell, terrain);
+    // Terrain pass. Roads deliberately do not bake into the chunk:
+    // they draw as a per-frame layer above every chunk (see
+    // [_drawRoads]) so no terrain skirt can ever paint over them.
+    for (final (cell, terrain, center) in cells) {
+      final roles = terrain.isLand
+          ? _terrainSpriteRoles(cell, terrain)
+          : const ['terrain.water'];
       for (final role in roles) {
         final path = content.tryAssetPath(role);
         if (path == null) continue;
@@ -1467,29 +1526,24 @@ class _ParcelWorldPainter extends CustomPainter {
         ParcelWorldProbe.countTerrain();
         _drawImageAtWorldCenter(canvas, image, center);
       }
-      // The unowned wash is a parcel-mode cue; normal play shows
-      // unowned terrain as-is.
-      if (parcelMode && !queries.ownsCell(cell)) {
-        ParcelWorldProbe.countWash();
-        _drawWorldCellWash(canvas, center, content.ambience.unownedLandWash);
-      }
-      if (anyWater) {
+      if (!terrain.isLand) {
         // Shore banks are recorded as per-frame draws rather than
         // baked into the chunk picture.
         for (final role in waterBankRoles(cell, queries.terrainAt)) {
           chunk.banks.add((cell, role));
         }
       }
-      final road = queries.roadsByCell[cell];
-      if (road != null) {
-        final path = content.tryAssetPath(
-          roadSpriteRole(roadNeighborMask(cell, roadCells)),
-        );
-        final image = path == null ? null : images[path];
-        if (image != null) {
-          ParcelWorldProbe.countRoad();
-          _drawImageAtWorldCenter(canvas, image, center);
-        }
+    }
+
+    // Wash pass, after every terrain tile in this chunk so the
+    // later cells' opaque skirts cannot punch un-washed fringes
+    // through the tint. The unowned wash is a parcel-mode cue;
+    // normal play shows unowned terrain as-is.
+    if (parcelMode) {
+      for (final (cell, _, center) in cells) {
+        if (queries.ownsCell(cell)) continue;
+        ParcelWorldProbe.countWash();
+        _drawWorldCellWash(canvas, center, content.ambience.unownedLandWash);
       }
     }
 
@@ -2418,10 +2472,11 @@ void _drawImageAtWorldCenter(Canvas canvas, ui.Image image, Offset center) {
 }
 
 /// World-space rect covering every cell diamond in a parcel chunk,
-/// plus a margin so anti-aliased edges and outline strokes that bleed
-/// past the boundary survive rasterization.
+/// plus a margin so the tiles' opaque skirts (2 world px past their
+/// diamonds, added 2026-11-10 to stop background bleed along tile and
+/// parcel seams) and anti-aliased edges survive rasterization.
 Rect _chunkWorldRect(ParcelCoord parcel, int parcelSize) {
-  const margin = 2.0;
+  const margin = 4.0;
   final halfWidth = _logicalTileWidth / 2;
   final halfHeight = _logicalTileHeight / 2;
   final firstColumn = parcel.x * parcelSize;
