@@ -74,6 +74,15 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   _WorldTool _tool = _WorldTool.inspect;
   String? _selectedCatalogueId;
   CellCoord? _selectedCell;
+
+  /// Where in the selected cell the last tap landed (0..7 on the
+  /// subtile lattice) — decoration placement anchors there.
+  int _selectedSubtileX = propFrontSubtile;
+  int _selectedSubtileY = propFrontSubtile;
+
+  /// The selected prop's id — several props may share a tile, so
+  /// prop selection is by id, not cell.
+  String? _selectedPropId;
   ParcelCoord? _selectedParcel;
   CellCoord? _bridgeStartCell;
   CellCoord? _bridgeEndCell;
@@ -214,9 +223,22 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _onCellTap(CellCoord cell, String? structureId) {
+  void _onCellTap(
+    CellCoord cell,
+    String? structureId,
+    int subtileX,
+    int subtileY,
+  ) {
     final world = _world;
     if (world == null) return;
+    _selectedSubtileX = subtileX;
+    _selectedSubtileY = subtileY;
+    // A prop hit selects that specific prop — several may share a
+    // tile, so prop selection is by id.
+    _selectedPropId =
+        structureId != null && world.props.any((prop) => prop.id == structureId)
+        ? structureId
+        : null;
     if (_tool == _WorldTool.road) {
       final roadProject = world.constructions
           .where((job) => job.kind == WorldConstructionKind.road)
@@ -343,6 +365,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     setState(() {
       _tool = tool;
       _selectedCell = null;
+      _selectedPropId = null;
       _selectedParcel = null;
       _bridgeStartCell = null;
       _bridgeEndCell = null;
@@ -466,6 +489,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         _saveError = null;
         _roadPlanCells = const [];
         _selectedCell = null;
+        _selectedPropId = null;
         _selectedParcel = null;
         _selectedCatalogueId = null;
         _bridgeStartCell = null;
@@ -531,6 +555,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         _terrain,
         catalogueId: catalogueId,
         origin: cell,
+        subtileX: _selectedSubtileX,
+        subtileY: _selectedSubtileY,
       );
       final definition = _requireContent.structure(catalogueId)!;
       final confirmed = await showDialog<bool>(
@@ -572,6 +598,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           catalogueId: catalogueId,
           origin: cell,
           preferredFacing: _facingOverride,
+          subtileX: _selectedSubtileX,
+          subtileY: _selectedSubtileY,
         ),
       );
       setState(() {
@@ -579,12 +607,51 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         // arrow and the swap button stay visible while it is unfinished;
         // decorations place instantly and clear the selection.
         _selectedCell = definition.kind == StructureKind.building ? cell : null;
+        _selectedPropId = null;
         _selectedCatalogueId = null;
         _facingOverride = null;
       });
     } on WorldRuleViolation catch (error) {
       _showMessage(error.message);
     }
+  }
+
+  /// Picks the selected prop back up — free, no refund. The game's
+  /// one removal action, scoped to decorations; buildings stay
+  /// permanent.
+  Future<void> _confirmPickUp() async {
+    final world = _world;
+    final propId = _selectedPropId;
+    if (world == null || propId == null) return;
+    final prop = world.props.where((prop) => prop.id == propId).firstOrNull;
+    if (prop == null) return;
+    final definition = _requireContent.structure(prop.catalogueId)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Pick up ${definition.name.toLowerCase()}?'),
+        content: const Text(
+          'Free — no coins are refunded. The tile and subtile become '
+          'placeable again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Pick up'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    _runAction((state) => pickUpProp(state, _requireContent, propId: propId));
+    setState(() {
+      _selectedCell = null;
+      _selectedPropId = null;
+    });
   }
 
   void _startRoadProject() {
@@ -760,6 +827,9 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             state: world,
             terrainProvider: _terrain,
             selectedCell: _selectedCell,
+            selectedPropId: _selectedPropId,
+            selectedSubtileX: _selectedSubtileX,
+            selectedSubtileY: _selectedSubtileY,
             selectedParcel: _tool == _WorldTool.parcel ? _selectedParcel : null,
             content: _requireContent,
             selectedCatalogueId: _selectedCatalogueId,
@@ -1133,6 +1203,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           _terrain,
           catalogueId: catalogueId,
           origin: cell,
+          subtileX: _selectedSubtileX,
+          subtileY: _selectedSubtileY,
         );
       } on WorldRuleViolation catch (error) {
         failure = error.message;
@@ -1282,6 +1354,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                         ? () => setState(() {
                             _selectedCatalogueId = definition.id;
                             _selectedCell = null;
+                            _selectedPropId = null;
                             _selectedParcel = null;
                             _bridgeStartCell = null;
                           })
@@ -1301,6 +1374,33 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       return const _PanelCard(
         title: 'World tools',
         child: Text('Choose parcels, connect roads, then place buildings.'),
+      );
+    }
+    // A selected prop shows its own card: several props may share the
+    // tile, and the pick-up action targets the id, not the cell.
+    final selectedProp = _selectedPropId == null
+        ? null
+        : world.props.where((prop) => prop.id == _selectedPropId).firstOrNull;
+    if (selectedProp != null) {
+      final definition = _requireContent.structure(selectedProp.catalogueId)!;
+      return _PanelCard(
+        title: definition.name,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(definition.description),
+            const SizedBox(height: 4),
+            Text(
+              'Decoration · subtile ${selectedProp.subtileX},'
+              '${selectedProp.subtileY} of tile ${selectedProp.cell.key}',
+            ),
+            const SizedBox(height: 6),
+            FilledButton(
+              onPressed: _confirmPickUp,
+              child: const Text('Pick up · free'),
+            ),
+          ],
+        ),
       );
     }
     final queries = WorldQueries(world, _terrain);

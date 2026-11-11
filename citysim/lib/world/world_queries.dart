@@ -43,6 +43,8 @@ class WorldQueries {
         state.structures,
         (structure) => structure.footprint,
       ),
+      propChunks = _groupByChunks(state.props, (prop) => [prop.cell]),
+      propsByCell = _groupByCell(state.props, (prop) => prop.cell),
       bridgeChunks = _groupByChunks(
         state.bridges,
         (bridge) => [...bridge.waterCells, bridge.nearBank, bridge.farBank],
@@ -60,8 +62,36 @@ class WorldQueries {
   final Map<CellCoord, TerrainCell> terrainByCell;
   final Map<WorldChunkCoord, List<RoadSegment>> roadChunks;
   final Map<WorldChunkCoord, List<PlacedStructure>> structureChunks;
+  final Map<WorldChunkCoord, List<PlacedProp>> propChunks;
+
+  /// Several props may share a tile; the list holds them all.
+  final Map<CellCoord, List<PlacedProp>> propsByCell;
+
   final Map<WorldChunkCoord, List<CompletedBridge>> bridgeChunks;
   final Map<WorldChunkCoord, List<OwnedParcel>> parcelChunks;
+
+  late final Map<String, PlacedProp> propsById = {
+    for (final prop in state.props) prop.id: prop,
+  };
+
+  /// One prop per subtile: the anchor key is (cell, subtileX, subtileY).
+  late final Map<(CellCoord, int, int), PlacedProp> propsByAnchor = {
+    for (final prop in state.props)
+      (prop.cell, prop.subtileX, prop.subtileY): prop,
+  };
+
+  /// Completed bridge deck cells — valid ground for props.
+  late final Set<CellCoord> bridgeDeckCells = Set.unmodifiable({
+    for (final bridge in state.bridges) ...bridge.waterCells,
+  });
+
+  /// Cells reserved by PENDING construction only. Unlike
+  /// [reservedCells] — which also folds in completed bridge decks so
+  /// new construction avoids them — this is the set new props must
+  /// avoid, because a prop may stand on a completed deck.
+  late final Set<CellCoord> constructionReservedCells = Set.unmodifiable(
+    state.reservedCells,
+  );
 
   late final Set<CellCoord> _reservedCells = Set.unmodifiable({
     ...state.reservedCells,
@@ -126,10 +156,23 @@ class WorldQueries {
     final occupied = <CellCoord>{
       ...roadsByCell.keys,
       ...structuresByCell.keys,
+      ...propsByCell.keys,
       ...reservedCells,
     };
     return cells.every((cell) => !occupied.contains(cell));
   }
+
+  /// The prop placement surface: ground, completed roads, and
+  /// completed bridge decks. Open water and building footprints never
+  /// accept props.
+  bool cellAcceptsProps(CellCoord cell) =>
+      terrainAt(cell).isLand ||
+      roadsByCell.containsKey(cell) ||
+      bridgeDeckCells.contains(cell);
+
+  /// The prop standing at a subtile, if any.
+  PlacedProp? propAt(CellCoord cell, int subtileX, int subtileY) =>
+      propsByAnchor[(cell, subtileX, subtileY)];
 
   /// A building's road frontage must run along a whole side of its
   /// footprint: every cell on one edge of the footprint has a
@@ -257,6 +300,13 @@ class WorldQueries {
     required int bottom,
   }) => _itemsInBounds(structureChunks, left, right, top, bottom);
 
+  List<PlacedProp> propsInBounds({
+    required int left,
+    required int right,
+    required int top,
+    required int bottom,
+  }) => _itemsInBounds(propChunks, left, right, top, bottom);
+
   List<CompletedBridge> bridgesInBounds({
     required int left,
     required int right,
@@ -281,6 +331,20 @@ Map<WorldChunkCoord, List<T>> _groupByChunks<T>(
     for (final cell in cellsFor(value)) {
       result.putIfAbsent(WorldChunkCoord.fromCell(cell), () => []).add(value);
     }
+  }
+  return {
+    for (final entry in result.entries)
+      entry.key: List.unmodifiable(entry.value),
+  };
+}
+
+Map<CellCoord, List<T>> _groupByCell<T>(
+  Iterable<T> values,
+  CellCoord Function(T value) cellFor,
+) {
+  final result = <CellCoord, List<T>>{};
+  for (final value in values) {
+    result.putIfAbsent(cellFor(value), () => []).add(value);
   }
   return {
     for (final entry in result.entries)

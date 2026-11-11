@@ -1,4 +1,4 @@
-/// Translates between [ParcelWorldState] and the four storage sheets.
+/// Translates between [ParcelWorldState] and the five storage sheets.
 ///
 /// The sheets store only player facts — IDs, coordinates, and construction
 /// stages. Everything else is re-derived on load: parcel terrain is
@@ -26,7 +26,7 @@ const _lastCheckInDateKey = 'last_checkin_date';
 const _checkInCountKey = 'checkin_count';
 const _constructionDayKey = 'construction_day';
 
-/// Writes the world's player-visible facts into the four sheets.
+/// Writes the world's player-visible facts into the five sheets.
 SheetTables worldToSheetTables(ParcelWorldState state) {
   final userData = <String, String>{
     _seedKey: '${state.seed}',
@@ -69,6 +69,19 @@ SheetTables worldToSheetTables(ParcelWorldState state) {
       ..._plannedTilesFor(job, {for (final road in state.roads) road.cell}),
   ];
 
+  final props = [
+    for (final prop in state.props)
+      [
+        '${prop.cell.column}',
+        '${prop.cell.row}',
+        '${prop.subtileX}',
+        '${prop.subtileY}',
+        prop.catalogueId,
+        prop.assetRole ?? '',
+        prop.facing ?? '',
+      ],
+  ];
+
   final parcels = [
     for (final parcel in state.parcels)
       ['${parcel.coord.x}', '${parcel.coord.y}'],
@@ -79,12 +92,13 @@ SheetTables worldToSheetTables(ParcelWorldState state) {
   return SheetTables(
     userData: userData,
     tiles: tiles,
+    props: props,
     ownedParcels: parcels,
     projects: projects,
   );
 }
 
-/// Rebuilds a world from the four sheets. Throws [FormatException] on
+/// Rebuilds a world from the five sheets. Throws [FormatException] on
 /// structurally invalid tables (hand edits, truncated writes); the store
 /// then surfaces the failure instead of silently rendering a broken
 /// world.
@@ -180,6 +194,11 @@ ParcelWorldState sheetTablesToWorld(
     if (definition == null) {
       throw FormatException('Unknown structure model "${row[4]}".');
     }
+    if (definition.kind == StructureKind.decoration) {
+      throw FormatException(
+        'Decoration "${row[4]}" lives in the Props sheet, not Tiles.',
+      );
+    }
     structures.add(
       PlacedStructure(
         id: 'structure:${origin.key}',
@@ -195,6 +214,63 @@ ParcelWorldState sheetTablesToWorld(
         facing: _parseFacing(row[6]),
       ),
     );
+  }
+
+  // Placed props: several per tile, one per subtile. Structural checks
+  // only — placement rules (owned, ground/road/deck) live in
+  // validateParcelWorldState with the other world rules.
+  final props = <PlacedProp>[];
+  {
+    final anchors = <String>{};
+    for (final row in tables.props) {
+      final cell = _cell(row[0], row[1]);
+      final subtileX = _parseInt(row[2], 'prop subtile x');
+      final subtileY = _parseInt(row[3], 'prop subtile y');
+      if (subtileX < 0 ||
+          subtileX >= propSubtilesPerAxis ||
+          subtileY < 0 ||
+          subtileY >= propSubtilesPerAxis) {
+        throw FormatException(
+          'Prop at ${cell.key} has a subtile outside '
+          '0..${propSubtilesPerAxis - 1}.',
+        );
+      }
+      final definition = content.structure(row[4]);
+      if (definition == null) {
+        throw FormatException('Unknown prop model "${row[4]}".');
+      }
+      if (definition.kind != StructureKind.decoration) {
+        throw FormatException(
+          '"${row[4]}" is a building model; buildings live in the Tiles '
+          'sheet.',
+        );
+      }
+      final assetRole = _orNull(row[5]);
+      if (assetRole != null && !definition.assetRoles.contains(assetRole)) {
+        throw FormatException(
+          'Prop at ${cell.key} rolls unknown variant "$assetRole".',
+        );
+      }
+      if (!anchors.add('${cell.key}:$subtileX.$subtileY')) {
+        throw FormatException(
+          'Two props share the subtile at ${cell.key} '
+          '($subtileX, $subtileY).',
+        );
+      }
+      props.add(
+        PlacedProp(
+          id: 'prop:${cell.key}:$subtileX.$subtileY',
+          catalogueId: definition.id,
+          cell: cell,
+          subtileX: subtileX,
+          subtileY: subtileY,
+          pricePaid: definition.costCoins,
+          placedAtDay: 0,
+          assetRole: assetRole,
+          facing: _parseFacing(row[6]),
+        ),
+      );
+    }
   }
 
   final bridges = _bridgeRuns(tileRows, roadsByCell, content);
@@ -328,6 +404,7 @@ ParcelWorldState sheetTablesToWorld(
     parcels: parcels,
     roads: roadsByCell.values.toList(),
     structures: structures,
+    props: props,
     bridges: bridges,
     constructions: constructions,
     events: const [],

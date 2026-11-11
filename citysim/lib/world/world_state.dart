@@ -81,6 +81,52 @@ class PlacedStructure {
   final String? facing;
 }
 
+/// Subtiles per tile axis on the prop lattice: 8×8 = 64 positions,
+/// and one tile's occupancy fits a 64-bit mask.
+const propSubtilesPerAxis = 8;
+
+/// The subtile where props sat before the lattice existed — the
+/// tile's own south vertex, so migrated and default placements
+/// render exactly where 1×1 structures did.
+const propFrontSubtile = propSubtilesPerAxis - 1;
+
+/// A placed decoration: a point object on the subtile lattice, drawn
+/// with the standing content but stored apart from buildings. One
+/// prop per subtile; sprites may overlap freely.
+class PlacedProp {
+  PlacedProp({
+    required this.id,
+    required this.catalogueId,
+    required this.cell,
+    required this.subtileX,
+    required this.subtileY,
+    required this.pricePaid,
+    required this.placedAtDay,
+    this.assetRole,
+    this.facing,
+  });
+
+  final String id;
+  final String catalogueId;
+
+  /// The tile the prop stands on: ground, a completed road, or a
+  /// completed bridge deck.
+  final CellCoord cell;
+
+  /// Position on the tile's 8×8 subtile lattice (0..7). The sprite
+  /// anchors at the subtile's south vertex, so [propFrontSubtile] on
+  /// both axes is the tile's own south vertex.
+  final int subtileX;
+  final int subtileY;
+  final int pricePaid;
+  final int placedAtDay;
+
+  /// Rolled sprite variant and facade side, snapshotted at placement
+  /// exactly like a structure's.
+  final String? assetRole;
+  final String? facing;
+}
+
 class CompletedBridge {
   CompletedBridge({
     required this.id,
@@ -205,6 +251,7 @@ class ParcelWorldState {
     required List<OwnedParcel> parcels,
     required List<RoadSegment> roads,
     required List<PlacedStructure> structures,
+    required List<PlacedProp> props,
     required List<CompletedBridge> bridges,
     required List<WorldConstruction> constructions,
     required List<WorldEvent> events,
@@ -212,6 +259,7 @@ class ParcelWorldState {
        parcels = List.unmodifiable(parcels),
        roads = List.unmodifiable(roads),
        structures = List.unmodifiable(structures),
+       props = List.unmodifiable(props),
        bridges = List.unmodifiable(bridges),
        constructions = List.unmodifiable(constructions),
        events = List.unmodifiable(events);
@@ -245,6 +293,7 @@ class ParcelWorldState {
   final List<OwnedParcel> parcels;
   final List<RoadSegment> roads;
   final List<PlacedStructure> structures;
+  final List<PlacedProp> props;
   final List<CompletedBridge> bridges;
   final List<WorldConstruction> constructions;
   final List<WorldEvent> events;
@@ -295,6 +344,7 @@ class ParcelWorldState {
     List<OwnedParcel>? parcels,
     List<RoadSegment>? roads,
     List<PlacedStructure>? structures,
+    List<PlacedProp>? props,
     List<CompletedBridge>? bridges,
     List<WorldConstruction>? constructions,
     List<WorldEvent>? events,
@@ -320,6 +370,7 @@ class ParcelWorldState {
     parcels: parcels ?? this.parcels,
     roads: roads ?? this.roads,
     structures: structures ?? this.structures,
+    props: props ?? this.props,
     bridges: bridges ?? this.bridges,
     constructions: constructions ?? this.constructions,
     events: events ?? this.events,
@@ -386,6 +437,7 @@ ParcelWorldState newParcelWorldState({
       ),
     ],
     structures: const [],
+    props: const [],
     bridges: const [],
     constructions: const [],
     events: const [],

@@ -93,6 +93,7 @@ class ServerSheetParcelWorldStore implements ParcelWorldStore {
     final tables = decodeSheetTables(
       userData: documents?[userDataSheetName] ?? '',
       tiles: documents?[tilesSheetName] ?? '',
+      props: documents?[propsSheetName] ?? '',
       ownedParcels: documents?[ownedParcelsSheetName] ?? '',
       projects: documents?[projectsSheetName] ?? '',
     );

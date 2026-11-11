@@ -221,6 +221,8 @@ ParcelWorldState startStructureConstruction(
   required CellCoord origin,
   int quarterTurns = 0,
   String? preferredFacing,
+  int subtileX = propFrontSubtile,
+  int subtileY = propFrontSubtile,
 }) {
   final quote = quoteStructurePlacement(
     state,
@@ -229,6 +231,8 @@ ParcelWorldState startStructureConstruction(
     catalogueId: catalogueId,
     origin: origin,
     quarterTurns: quarterTurns,
+    subtileX: subtileX,
+    subtileY: subtileY,
   );
   final definition = content.structure(catalogueId)!;
   // Deterministic variant roll: unique per placement, stable across
@@ -264,16 +268,14 @@ ParcelWorldState startStructureConstruction(
   }
   if (definition.kind == StructureKind.decoration) {
     _requireWallet(state, quote.price);
-    final decor = PlacedStructure(
-      id: 'structure-${state.nextEntityNumber}',
+    final prop = PlacedProp(
+      id: 'prop:${origin.key}:$subtileX.$subtileY',
       catalogueId: catalogueId,
-      kind: definition.kind,
-      origin: origin,
-      quarterTurns: quote.quarterTurns,
-      footprint: quote.footprint,
+      cell: origin,
+      subtileX: subtileX,
+      subtileY: subtileY,
       pricePaid: quote.price,
-      completedAtDay: state.constructionDay,
-      population: definition.population,
+      placedAtDay: state.constructionDay,
       assetRole: chosenRole,
       facing: facing,
     );
@@ -281,7 +283,7 @@ ParcelWorldState startStructureConstruction(
       coins: state.coins - quote.price,
       totalCoinsSpent: state.totalCoinsSpent + quote.price,
       nextEntityNumber: state.nextEntityNumber + 1,
-      structures: [...state.structures, decor],
+      props: [...state.props, prop],
       events: [
         ...state.events,
         _event(
@@ -291,7 +293,8 @@ ParcelWorldState startStructureConstruction(
               '${definition.name} placed instantly · −${quote.price} coins',
           payload: {
             'catalogueId': catalogueId,
-            'origin': origin.toJson(),
+            'cell': origin.toJson(),
+            'subtile': [subtileX, subtileY],
             'pricePaid': quote.price,
           },
         ),
@@ -335,6 +338,48 @@ ParcelWorldState startStructureConstruction(
           'totalCostCoins': quote.price,
           'builderSlot': builderSlot,
           'facing': facing,
+        },
+      ),
+    ],
+    nextEventNumber: state.nextEventNumber + 1,
+  );
+}
+
+/// Picks a placed prop back up: free, no refund, and the tile and
+/// subtile become placeable again. Buildings keep the permanence
+/// rule — this is the game's one removal action, scoped to
+/// decorations.
+ParcelWorldState pickUpProp(
+  ParcelWorldState state,
+  ContentBundle content, {
+  required String propId,
+}) {
+  PlacedProp? target;
+  for (final prop in state.props) {
+    if (prop.id == propId) {
+      target = prop;
+      break;
+    }
+  }
+  if (target == null) {
+    throw const WorldRuleViolation('That prop is no longer placed.');
+  }
+  final definition = content.structure(target.catalogueId)!;
+  return state.copyWith(
+    props: [
+      for (final prop in state.props)
+        if (prop.id != propId) prop,
+    ],
+    events: [
+      ...state.events,
+      _event(
+        state,
+        kind: 'prop-picked-up',
+        description: '${definition.name} picked up',
+        payload: {
+          'catalogueId': target.catalogueId,
+          'cell': target.cell.toJson(),
+          'subtile': [target.subtileX, target.subtileY],
         },
       ),
     ],

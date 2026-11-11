@@ -75,6 +75,12 @@ WorldUsage computeWorldUsage(SheetTables tables, ContentBundle content) {
       occupied.add(near.offset(step.column * index, step.row * index));
     }
   }
+  // Props occupy their tile — the map editor treats a propped tile as
+  // locked exactly like a roaded or built one.
+  for (final row in tables.props) {
+    final cell = _cell(row[0], row[1]);
+    if (cell != null) occupied.add(cell);
+  }
   return WorldUsage(
     occupiedCells: occupied,
     ownedParcels: {

@@ -132,7 +132,7 @@ void main() {
             parcelMode: false,
             showTileGrid: false,
             selectedCell: selected,
-            onCellTap: (cell, structureId) {},
+            onCellTap: (cell, structureId, subtileX, subtileY) {},
           ),
         ),
       ),

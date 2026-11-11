@@ -45,6 +45,8 @@ void main() {
   // whose taps used to be stolen by bounding-box picking.
   ParcelWorldState worldWithTallOffice({
     List<List<String>> extraTiles = const [],
+    List<List<String>> props = const [],
+    bool includeOffice = true,
   }) => sheetTablesToWorld(
     SheetTables(
       userData: const {
@@ -62,18 +64,20 @@ void main() {
       tiles: [
         const ['4', '4', 'road', 'complete', 'dirt', '', '', ''],
         const ['5', '4', 'road', 'complete', 'asphalt', '', '', ''],
-        const [
-          '6',
-          '3',
-          'structure',
-          'complete',
-          'tall-office',
-          'office-tall-blue',
-          'south',
-          '',
-        ],
+        if (includeOffice)
+          const [
+            '6',
+            '3',
+            'structure',
+            'complete',
+            'tall-office',
+            'office-tall-blue',
+            'south',
+            '',
+          ],
         ...extraTiles,
       ],
+      props: props,
       projects: const [],
     ),
     content: content,
@@ -115,10 +119,21 @@ void main() {
   Future<void> pumpView(
     WidgetTester tester,
     ParcelWorldState world, {
-    required void Function(CellCoord cell, String? structureId) onTap,
+    required void Function(
+      CellCoord cell,
+      String? structureId,
+      int subtileX,
+      int subtileY,
+    )
+    onTap,
     bool structurePicking = true,
     bool dimStructures = false,
     GlobalKey? boundaryKey,
+    String? selectedPropId,
+    CellCoord? selectedCell,
+    String? selectedCatalogueId,
+    int selectedSubtileX = propFrontSubtile,
+    int selectedSubtileY = propFrontSubtile,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -133,6 +148,11 @@ void main() {
               onCellTap: onTap,
               structurePicking: structurePicking,
               dimStructures: dimStructures,
+              selectedCell: selectedCell,
+              selectedPropId: selectedPropId,
+              selectedCatalogueId: selectedCatalogueId,
+              selectedSubtileX: selectedSubtileX,
+              selectedSubtileY: selectedSubtileY,
             ),
           ),
         ),
@@ -146,6 +166,87 @@ void main() {
             tester.renderObject(find.byKey(key)) as RenderRepaintBoundary;
         return boundary.toImage(pixelRatio: 1);
       });
+
+  /// A capture plus its bytes, for pixel assertions.
+  Future<(ui.Image, ByteData)> captureBytes(
+    WidgetTester tester,
+    GlobalKey key,
+  ) async {
+    final image = (await captureView(tester, key))!;
+    final bytes = await tester.runAsync<ByteData?>(() => image.toByteData());
+    expect(bytes, isNotNull);
+    return (image, bytes!);
+  }
+
+  /// The captured pixel at a screen point, as big-endian R,G,B,A —
+  /// the same layout [Art.rgba] reads from decoded sprites.
+  int pixelAt((ui.Image, ByteData) capture, Offset screen) {
+    final (image, bytes) = capture;
+    final x = screen.dx.round().clamp(0, image.width - 1);
+    final y = screen.dy.round().clamp(0, image.height - 1);
+    return bytes.getUint32((y * image.width + x) * 4);
+  }
+
+  /// Largest per-channel gap between two captured pixels.
+  int channelGap(int a, int b) {
+    var worst = 0;
+    for (var shift = 24; shift >= 8; shift -= 8) {
+      final gap = (((a >> shift) & 0xFF) - ((b >> shift) & 0xFF)).abs();
+      if (gap > worst) worst = gap;
+    }
+    return worst;
+  }
+
+  /// Finds a pixel of [back] that sits under opaque art of [front],
+  /// interior to both — the pixel and its neighbours are near-solid
+  /// in each sprite, so resampling and anti-aliased edges cannot
+  /// fake a match. Null when the two sprites never overlap like that.
+  (int, int)? overlapInteriorPixel({required Art back, required Art front}) {
+    bool solid3x3(Art art, int x, int y) {
+      for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+          final px = x + dx;
+          final py = y + dy;
+          if (px < 0 || px >= art.width || py < 0 || py >= art.height) {
+            return false;
+          }
+          if (art.alpha[(py * art.width + px) * 4 + 3] < 200) return false;
+        }
+      }
+      return true;
+    }
+
+    for (var y = 1; y < back.height - 1; y++) {
+      for (var x = 1; x < back.width - 1; x++) {
+        if (!solid3x3(back, x, y)) continue;
+        final world = back.worldPoint((x, y));
+        final frontPixel = front.pixelAt(world);
+        if (frontPixel == null) continue;
+        if (!solid3x3(front, frontPixel.$1, frontPixel.$2)) continue;
+        return (x, y);
+      }
+    }
+    return null;
+  }
+
+  /// Any near-solid interior pixel of [art].
+  (int, int)? interiorPixel(Art art) {
+    for (var y = 1; y < art.height - 1; y++) {
+      for (var x = 1; x < art.width - 1; x++) {
+        var solid = true;
+        for (var dy = -1; dy <= 1 && solid; dy++) {
+          for (var dx = -1; dx <= 1; dx++) {
+            if (art.alpha[((y + dy) * art.width + (x + dx)) * 4 + 3] < 200) {
+              solid = false;
+              break;
+            }
+          }
+        }
+        if (solid) return (x, y);
+      }
+    }
+    return null;
+  }
 
   /// The nearest cell to a world point — the renderer's picking math.
   (int, int) nearestCellOf(Offset world) {
@@ -289,20 +390,12 @@ void main() {
     await pumpView(
       tester,
       worldWithTallOffice(
-        extraTiles: [
-          [
-            '6',
-            '2',
-            'structure',
-            'complete',
-            'pine-tree',
-            'pine-medium',
-            '',
-            '',
-          ],
+        props: const [
+          ['6', '2', '7', '7', 'pine-tree', 'pine-medium', ''],
         ],
       ),
-      onTap: (cell, structureId) => taps.add((cell, structureId)),
+      onTap: (cell, structureId, subtileX, subtileY) =>
+          taps.add((cell, structureId)),
     );
     await pumpUntilArtLoads(tester);
 
@@ -318,10 +411,406 @@ void main() {
     final ground = nearestCellOf(pine.worldPoint(overlap));
     expect(taps, [
       (const CellCoord(6, 3), 'structure:6,3'), // front: the office
-      (const CellCoord(6, 2), 'structure:6,2'), // hidden: the pine
+      (const CellCoord(6, 2), 'prop:6,2:7.7'), // hidden: the pine
       (CellCoord(ground.$1, ground.$2), null), // the ground diamond
       (const CellCoord(6, 3), 'structure:6,3'), // wraps to the front
     ]);
+  });
+
+  testWidgets('taps report the subtile under the point', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final taps = <(CellCoord, int, int)>[];
+    await pumpView(
+      tester,
+      worldWithTallOffice(),
+      onTap: (cell, structureId, subtileX, subtileY) =>
+          taps.add((cell, subtileX, subtileY)),
+    );
+    await pumpUntilArtLoads(tester);
+
+    // Screen points around cell (5,5)'s world centre (0, 160); the
+    // default camera centres world (0, 128) at the viewport centre
+    // (400, 300) at scale 1. Points stay off the diamond's vertices,
+    // where cell rounding is ambiguous.
+    Offset screenFor(Offset world) =>
+        const Offset(400, 300) + (world - const Offset(0, 128));
+    // Dead centre of the tile — the corner shared by the four middle
+    // subtiles; the floor picks the south-east one.
+    await tester.tapAt(screenFor(const Offset(0, 160)));
+    await tester.pump();
+    // A quarter tile east along the column axis.
+    await tester.tapAt(screenFor(const Offset(8, 164)));
+    await tester.pump();
+    // East and a little south.
+    await tester.tapAt(screenFor(const Offset(4, 166)));
+    await tester.pump();
+    expect(taps, [
+      (const CellCoord(5, 5), 4, 4),
+      (const CellCoord(5, 5), 6, 4),
+      (const CellCoord(5, 5), 6, 5),
+    ]);
+  });
+
+  testWidgets('a front-corner prop draws behind the structure in front', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // A street-lamp prop at (6,2)'s front subtile — depth 8.94 —
+    // under the 2×2 tall office at (6,3)–(7,4) — depth 11. The prop
+    // must draw behind the office where their art overlaps.
+    final lamp = (await tester.runAsync(
+      () => loadArt(
+        'assets/sprites/props/streetside/prop_lightpole_a.png',
+        'lightpole-a',
+        [(6, 2)],
+      ),
+    ))!;
+    final office = (await tester.runAsync(
+      () => loadArt(
+        'assets/sprites/buildings/offices/bld_office_tall_blue_a.png',
+        'office-tall-blue',
+        officeCells,
+      ),
+    ))!;
+    final overlap = overlapInteriorPixel(back: lamp, front: office);
+    expect(overlap, isNotNull, reason: 'the office covers part of the lamp');
+    final officePixel = office.pixelAt(lamp.worldPoint(overlap!))!;
+    expect(
+      channelGap(
+        lamp.rgba(overlap.$1, overlap.$2),
+        office.rgba(officePixel.$1, officePixel.$2),
+      ),
+      greaterThan(20),
+      reason: 'the overlap pixel discriminates lamp from office',
+    );
+
+    final boundaryKey = GlobalKey();
+    Future<(ui.Image, ByteData)> render(bool withProp) async {
+      await pumpView(
+        tester,
+        worldWithTallOffice(
+          props: withProp
+              ? const [
+                  ['6', '2', '7', '7', 'street-lamp', 'lightpole-a', ''],
+                ]
+              : const [],
+        ),
+        onTap: (cell, structureId, subtileX, subtileY) {},
+        boundaryKey: boundaryKey,
+      );
+      await pumpUntilArtLoads(tester);
+      return captureBytes(tester, boundaryKey);
+    }
+
+    final withProp = await render(true);
+    final officeOnly = await render(false);
+    final center = tester.getRect(find.byType(ParcelWorldView)).center;
+    final point = lamp.screenTap(center, overlap);
+    expect(
+      channelGap(pixelAt(withProp, point), pixelAt(officeOnly, point)),
+      lessThanOrEqualTo(3),
+      reason:
+          'the structure on the tiles in front paints over the '
+          'front-corner prop',
+    );
+  });
+
+  testWidgets('a prop draws in front of the structure behind it', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // A street-lamp prop mid-tile at (6,2) — depth 8.5 — over a tall
+    // office behind at (4,0)–(5,1) — depth 6. The prop must paint
+    // over the office where their art overlaps. (The front office is
+    // left out of this world so nothing stands between them.)
+    final lampBytes = (await tester.runAsync(() async {
+      final data = await rootBundle.load(
+        'assets/sprites/props/streetside/prop_lightpole_a.png',
+      );
+      final codec = await ui.instantiateImageCodec(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+      );
+      final frame = await codec.getNextFrame();
+      final bytes = await frame.image.toByteData(
+        format: ui.ImageByteFormat.rawStraightRgba,
+      );
+      final size = (frame.image.width, frame.image.height);
+      frame.image.dispose();
+      codec.dispose();
+      return (size.$1, size.$2, bytes);
+    }))!;
+    final lamp = Art.forProp(
+      lampBytes.$1,
+      lampBytes.$2,
+      lampBytes.$3!,
+      content.sprite('lightpole-a')!,
+      cell: (6, 2),
+      subtileX: 4,
+      subtileY: 4,
+    );
+    final officeBehindCells = [(4, 0), (5, 0), (4, 1), (5, 1)];
+    final office = (await tester.runAsync(
+      () => loadArt(
+        'assets/sprites/buildings/offices/bld_office_tall_blue_a.png',
+        'office-tall-blue',
+        officeBehindCells,
+      ),
+    ))!;
+    final overlap = overlapInteriorPixel(back: office, front: lamp);
+    expect(overlap, isNotNull, reason: 'the lamp covers part of the office');
+    final lampPixel = lamp.pixelAt(office.worldPoint(overlap!))!;
+    expect(
+      channelGap(
+        office.rgba(overlap.$1, overlap.$2),
+        lamp.rgba(lampPixel.$1, lampPixel.$2),
+      ),
+      greaterThan(20),
+      reason: 'the overlap pixel discriminates office from lamp',
+    );
+
+    final boundaryKey = GlobalKey();
+    Future<(ui.Image, ByteData)> render(bool withOffice) async {
+      await pumpView(
+        tester,
+        worldWithTallOffice(
+          includeOffice: false,
+          extraTiles: withOffice
+              ? [
+                  const [
+                    '4',
+                    '0',
+                    'structure',
+                    'complete',
+                    'tall-office',
+                    'office-tall-blue',
+                    'south',
+                    '',
+                  ],
+                ]
+              : const [],
+          props: const [
+            ['6', '2', '4', '4', 'street-lamp', 'lightpole-a', ''],
+          ],
+        ),
+        onTap: (cell, structureId, subtileX, subtileY) {},
+        boundaryKey: boundaryKey,
+      );
+      await pumpUntilArtLoads(tester);
+      return captureBytes(tester, boundaryKey);
+    }
+
+    final withOffice = await render(true);
+    final lampOnly = await render(false);
+    final center = tester.getRect(find.byType(ParcelWorldView)).center;
+    final point = office.screenTap(center, overlap);
+    expect(
+      channelGap(pixelAt(withOffice, point), pixelAt(lampOnly, point)),
+      lessThanOrEqualTo(3),
+      reason: 'the prop paints over the structure on the tiles behind',
+    );
+  });
+
+  test('prop depths stay inside their tile slot', () {
+    PlacedProp prop(int column, int row, int subtileX, int subtileY) =>
+        PlacedProp(
+          id: 'prop:$column,$row:$subtileX.$subtileY',
+          catalogueId: 'street-lamp',
+          cell: CellCoord(column, row),
+          subtileX: subtileX,
+          subtileY: subtileY,
+          pricePaid: 3,
+          placedAtDay: 0,
+        );
+    // The half-weight subtile depth keeps every prop strictly between
+    // its own tile's depth (8) and the next tile's (9): a
+    // front-corner prop stays behind whatever stands on the tile in
+    // front, exactly like the 1×1 structures props used to be.
+    // Pedestrian-weight fractions would reach 9.875 and flip this.
+    final frontCorner = prop(6, 2, 7, 7);
+    expect(propDepth(frontCorner), greaterThan(8));
+    expect(propDepth(frontCorner), lessThan(9));
+    // A back-corner prop on the tile in front sorts ahead of it.
+    expect(propDepth(prop(6, 3, 0, 0)), greaterThan(propDepth(frontCorner)));
+    // Same-tile subtiles order back to front.
+    expect(propDepth(prop(6, 2, 0, 0)), lessThan(propDepth(frontCorner)));
+  });
+
+  testWidgets('the decor ghost previews the pending subtile', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // A pine model selected with cell (5,5) and subtile (2,3) tapped
+    // (the touch path — no hover in tests): the ghost draws the
+    // sprite translucent at that subtile, plus the small filled
+    // diamond centred on it.
+    final role = content.structure('pine-tree')!.assetRoles.first;
+    final sprite = content.sprite(role)!;
+    final path = content.tryAssetPathFor(role, null)!;
+    final (width, height, raw) = (await tester.runAsync(() async {
+      final data = await rootBundle.load(path);
+      final codec = await ui.instantiateImageCodec(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+      );
+      final frame = await codec.getNextFrame();
+      final bytes = await frame.image.toByteData(
+        format: ui.ImageByteFormat.rawStraightRgba,
+      );
+      final size = (frame.image.width, frame.image.height);
+      frame.image.dispose();
+      codec.dispose();
+      return (size.$1, size.$2, bytes);
+    }))!;
+    final pine = Art.forProp(
+      width,
+      height,
+      raw!,
+      sprite,
+      cell: (5, 5),
+      subtileX: 2,
+      subtileY: 3,
+    );
+    final pixel = interiorPixel(pine);
+    expect(pixel, isNotNull, reason: 'the ghost art has interior pixels');
+
+    final boundaryKey = GlobalKey();
+    Future<(ui.Image, ByteData)> render(bool selected) async {
+      await pumpView(
+        tester,
+        worldWithTallOffice(),
+        onTap: (cell, structureId, subtileX, subtileY) {},
+        boundaryKey: boundaryKey,
+        selectedCatalogueId: selected ? 'pine-tree' : null,
+        selectedCell: selected ? const CellCoord(5, 5) : null,
+        selectedSubtileX: 2,
+        selectedSubtileY: 3,
+      );
+      await pumpUntilArtLoads(tester);
+      return captureBytes(tester, boundaryKey);
+    }
+
+    final plain = await render(false);
+    final ghost = await render(true);
+    final center = tester.getRect(find.byType(ParcelWorldView)).center;
+    final point = pine.screenTap(center, pixel!);
+
+    // The ghost is the sprite at 45% opacity (0x73) over whatever was
+    // there — the plain render's grass.
+    final grassPx = pixelAt(plain, point);
+    final ghostPx = pixelAt(ghost, point);
+    final artPx = pine.rgba(pixel.$1, pixel.$2);
+    int blended(int art, int grass) => (0.451 * art + 0.549 * grass).round();
+    expect(
+      ((ghostPx >> 24) & 0xFF) -
+          blended((artPx >> 24) & 0xFF, (grassPx >> 24) & 0xFF),
+      lessThanOrEqualTo(8),
+      reason: 'ghost red channel',
+    );
+    expect(
+      ((ghostPx >> 16) & 0xFF) -
+          blended((artPx >> 16) & 0xFF, (grassPx >> 16) & 0xFF),
+      lessThanOrEqualTo(8),
+      reason: 'ghost green channel',
+    );
+    expect(
+      ((ghostPx >> 8) & 0xFF) -
+          blended((artPx >> 8) & 0xFF, (grassPx >> 8) & 0xFF),
+      lessThanOrEqualTo(8),
+      reason: 'ghost blue channel',
+    );
+
+    // The subtile diamond marker: the wash colour over the trunk or
+    // grass reads strongly green.
+    final fx = (2 + 0.5) / propSubtilesPerAxis - 0.5;
+    final fy = (3 + 0.5) / propSubtilesPerAxis - 0.5;
+    final markerWorld = Offset(
+      (5 - 5) * 32.0 + (fx - fy) * 32,
+      (5 + 5) * 16.0 + (fx + fy) * 16,
+    );
+    final markerScreen = center + markerWorld - const Offset(0, 128);
+    final markerPx = pixelAt(ghost, markerScreen);
+    expect(
+      ((markerPx >> 16) & 0xFF) - ((markerPx >> 24) & 0xFF),
+      greaterThan(25),
+      reason: 'the wash-coloured marker shows on the target subtile',
+    );
+  });
+
+  testWidgets('selecting a prop washes its sprite in place', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // A lone lamp far from the office, so nothing else overlaps it.
+    final lamp = (await tester.runAsync(
+      () => loadArt(
+        'assets/sprites/props/streetside/prop_lightpole_a.png',
+        'lightpole-a',
+        [(2, 2)],
+      ),
+    ))!;
+    final pixel = interiorPixel(lamp);
+    expect(pixel, isNotNull, reason: 'the lamp has interior art');
+
+    final boundaryKey = GlobalKey();
+    ParcelWorldState world() => worldWithTallOffice(
+      props: const [
+        ['2', '2', '7', '7', 'street-lamp', 'lightpole-a', ''],
+      ],
+    );
+    await pumpView(
+      tester,
+      world(),
+      onTap: (cell, structureId, subtileX, subtileY) {},
+      boundaryKey: boundaryKey,
+    );
+    await pumpUntilArtLoads(tester);
+    final before = await captureBytes(tester, boundaryKey);
+    await pumpView(
+      tester,
+      world(),
+      onTap: (cell, structureId, subtileX, subtileY) {},
+      boundaryKey: boundaryKey,
+      selectedCell: const CellCoord(2, 2),
+      selectedPropId: 'prop:2,2:7.7',
+    );
+    await tester.pump();
+    final after = await captureBytes(tester, boundaryKey);
+
+    final center = tester.getRect(find.byType(ParcelWorldView)).center;
+    final point = lamp.screenTap(center, pixel!);
+    final beforePx = pixelAt(before, point);
+    final afterPx = pixelAt(after, point);
+    // The selection wash: srcATop with 0x664BC69B over opaque art is
+    // 60% original blended with 40% of the wash colour.
+    int washed(int beforeChannel, int washChannel) =>
+        (0.6 * beforeChannel + 0.4 * washChannel).round();
+    expect(
+      ((afterPx >> 24) & 0xFF) - washed((beforePx >> 24) & 0xFF, 0x4B),
+      lessThanOrEqualTo(3),
+    );
+    expect(
+      ((afterPx >> 16) & 0xFF) - washed((beforePx >> 16) & 0xFF, 0xC6),
+      lessThanOrEqualTo(3),
+    );
+    expect(
+      ((afterPx >> 8) & 0xFF) - washed((beforePx >> 8) & 0xFF, 0x9B),
+      lessThanOrEqualTo(3),
+    );
   });
 
   testWidgets('repeated taps at a different spot restart the cycle', (
@@ -349,7 +838,8 @@ void main() {
     await pumpView(
       tester,
       worldWithTallOffice(),
-      onTap: (cell, structureId) => taps.add((cell, structureId)),
+      onTap: (cell, structureId, subtileX, subtileY) =>
+          taps.add((cell, structureId)),
     );
     await pumpUntilArtLoads(tester);
 
@@ -388,7 +878,8 @@ void main() {
     await pumpView(
       tester,
       worldWithTallOffice(),
-      onTap: (cell, structureId) => taps.add((cell, structureId)),
+      onTap: (cell, structureId, subtileX, subtileY) =>
+          taps.add((cell, structureId)),
       structurePicking: false,
     );
     await pumpUntilArtLoads(tester);
@@ -438,7 +929,7 @@ void main() {
     await pumpView(
       tester,
       world,
-      onTap: (cell, structureId) {},
+      onTap: (cell, structureId, subtileX, subtileY) {},
       dimStructures: false,
       boundaryKey: boundaryKey,
     );
@@ -449,7 +940,7 @@ void main() {
     await pumpView(
       tester,
       world,
-      onTap: (cell, structureId) {},
+      onTap: (cell, structureId, subtileX, subtileY) {},
       dimStructures: true,
       boundaryKey: boundaryKey,
     );
@@ -542,6 +1033,54 @@ class Art {
         bytes.lengthInBytes,
       );
 
+  /// The renderer's prop anchor: the sprite's ground anchor pinned to
+  /// a subtile's south vertex — the sub-lattice version of the
+  /// footprint anchor above.
+  Art.forProp(
+    this.width,
+    this.height,
+    ByteData bytes,
+    this.sprite, {
+    required (int, int) cell,
+    required int subtileX,
+    required int subtileY,
+  }) : worldRect = _propAnchorRect(
+         sprite,
+         width,
+         height,
+         cell,
+         subtileX,
+         subtileY,
+       ),
+       alpha = bytes.buffer.asUint8List(
+         bytes.offsetInBytes,
+         bytes.lengthInBytes,
+       );
+
+  static Rect _propAnchorRect(
+    SpriteDefinition sprite,
+    int width,
+    int height,
+    (int, int) cell,
+    int subtileX,
+    int subtileY,
+  ) {
+    final centerX = (cell.$1 - cell.$2) * 32.0;
+    final centerY = (cell.$1 + cell.$2) * 16.0;
+    final fx = (subtileX + 0.5) / propSubtilesPerAxis - 0.5;
+    final fy = (subtileY + 0.5) / propSubtilesPerAxis - 0.5;
+    final anchorX = centerX + (fx - fy) * 32.0;
+    final bottomY = centerY + (fx + fy) * 16.0 + 2.0;
+    final drawnWidth = width * sprite.renderScale;
+    final drawnHeight = height * sprite.renderScale;
+    return Rect.fromLTWH(
+      anchorX - drawnWidth * sprite.groundAnchorX,
+      bottomY - drawnHeight * sprite.groundAnchorY,
+      drawnWidth,
+      drawnHeight,
+    );
+  }
+
   static Rect _footprintRect(
     SpriteDefinition sprite,
     int width,
@@ -572,6 +1111,15 @@ class Art {
 
   bool opaque(int x, int y) =>
       alpha[(y * width + x) * 4 + 3] >= SpriteMask.alphaThreshold;
+
+  /// The sprite pixel's straight RGBA, laid out like captured pixels.
+  int rgba(int x, int y) {
+    final i = (y * width + x) * 4;
+    return (alpha[i] << 24) |
+        (alpha[i + 1] << 16) |
+        (alpha[i + 2] << 8) |
+        alpha[i + 3];
+  }
 
   (int, int)? firstOpaque() {
     for (var y = 0; y < height; y++) {

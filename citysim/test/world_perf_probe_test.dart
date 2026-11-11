@@ -53,6 +53,7 @@ Future<ParcelWorldState> _loadSampleTown(ContentBundle content) async {
   final tables = decodeSheetTables(
     userData: await sheet('UserData'),
     tiles: await sheet('Tiles'),
+    props: await sheet('Props'),
     ownedParcels: await sheet('OwnedParcels'),
     projects: await sheet('Projects'),
   );

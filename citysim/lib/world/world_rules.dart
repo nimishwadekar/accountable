@@ -199,6 +199,7 @@ RoadProjectQuote quoteRoadStretch(
     }
     if (queries.roadsByCell.containsKey(cell) ||
         queries.structuresByCell.containsKey(cell) ||
+        queries.propsByCell.containsKey(cell) ||
         queries.reservedCells.contains(cell)) {
       throw const WorldRuleViolation(
         'That road stretch overlaps an occupied tile.',
@@ -260,6 +261,8 @@ StructurePlacementQuote quoteStructurePlacement(
   required String catalogueId,
   required CellCoord origin,
   int quarterTurns = 0,
+  int subtileX = propFrontSubtile,
+  int subtileY = propFrontSubtile,
 }) {
   final definition = content.structure(catalogueId);
   if (definition == null ||
@@ -270,12 +273,38 @@ StructurePlacementQuote quoteStructurePlacement(
   final builderSlot = definition.kind == StructureKind.building
       ? _freeBuilderSlot(state)
       : null;
+  final queries = WorldQueries(state, terrainProvider);
+  if (definition.kind == StructureKind.decoration) {
+    // Decorations place as props on the subtile lattice, over a wider
+    // surface than buildings: owned ground, completed roads, and
+    // bridge decks — never open water, building footprints, or
+    // pending construction — and one prop per subtile.
+    if (!queries.ownsCell(origin)) {
+      throw const WorldRuleViolation('Every footprint cell needs owned land.');
+    }
+    if (queries.structuresByCell.containsKey(origin) ||
+        queries.constructionReservedCells.contains(origin) ||
+        !queries.cellAcceptsProps(origin)) {
+      throw const WorldRuleViolation(
+        'Props need vacant ground, road, or bridge deck.',
+      );
+    }
+    if (queries.propAt(origin, subtileX, subtileY) != null) {
+      throw const WorldRuleViolation('That subtile already holds a prop.');
+    }
+    return StructurePlacementQuote(
+      catalogueId: catalogueId,
+      origin: origin,
+      quarterTurns: 0,
+      footprint: [origin],
+      price: definition.costCoins,
+    );
+  }
   final footprint = structureFootprint(
     definition,
     origin,
     quarterTurns: quarterTurns,
   );
-  final queries = WorldQueries(state, terrainProvider);
   if (footprint.any((cell) => !queries.ownsCell(cell))) {
     throw const WorldRuleViolation('Every footprint cell needs owned land.');
   }
@@ -333,6 +362,7 @@ BridgeQuote quoteBridge(
   bool occupied(CellCoord cell) =>
       queries.roadsByCell.containsKey(cell) ||
       queries.structuresByCell.containsKey(cell) ||
+      queries.propsByCell.containsKey(cell) ||
       queries.reservedCells.contains(cell);
   for (final bank in [nearBank, farBank]) {
     if (!queries.terrainAt(bank).isLand || !queries.ownsCell(bank)) {
@@ -537,6 +567,41 @@ void validateParcelWorldState(
         !queries.buildingHasRoadAccess(structure.footprint)) {
       throw const FormatException(
         'The parcel-world save has a building without connected road access.',
+      );
+    }
+  }
+  // Props: one per subtile, on the placement surface (ground, road,
+  // or completed deck) and never under a building or a pending
+  // project. Roads and completed decks may carry props, so — unlike
+  // buildings — props are not checked against the occupied set.
+  final propAnchors = <String>{};
+  for (final prop in state.props) {
+    final definition = content.structure(prop.catalogueId);
+    if (definition == null ||
+        definition.kind != StructureKind.decoration ||
+        prop.pricePaid < 0 ||
+        prop.placedAtDay < 0 ||
+        prop.placedAtDay > state.constructionDay ||
+        prop.subtileX < 0 ||
+        prop.subtileX >= propSubtilesPerAxis ||
+        prop.subtileY < 0 ||
+        prop.subtileY >= propSubtilesPerAxis ||
+        !state.unlockedCatalogueIds.contains(prop.catalogueId) ||
+        (prop.assetRole != null &&
+            !definition.assetRoles.contains(prop.assetRole)) ||
+        !facingMatchesSprite(
+          prop.facing,
+          prop.assetRole ?? definition.assetRoles.first,
+        ) ||
+        !queries.ownsCell(prop.cell) ||
+        !queries.cellAcceptsProps(prop.cell) ||
+        queries.structuresByCell.containsKey(prop.cell) ||
+        queries.constructionReservedCells.contains(prop.cell) ||
+        !propAnchors.add(
+          '${prop.cell.key}:${prop.subtileX}.${prop.subtileY}',
+        )) {
+      throw const FormatException(
+        'The parcel-world save contains an invalid prop.',
       );
     }
   }

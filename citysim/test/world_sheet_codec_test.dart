@@ -4,6 +4,7 @@ import 'package:citysim/storage/sheet_tables.dart';
 import 'package:citysim/storage/world_sheet_codec.dart';
 import 'package:citysim/world/coordinates.dart';
 import 'package:citysim/world/terrain_provider.dart';
+import 'package:citysim/world/world_queries.dart';
 import 'package:citysim/world/world_rules.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -272,6 +273,141 @@ void main() {
       ),
       throwsA(isA<FormatException>()),
       reason: 'legacy left/right facings must migrate to cardinals first',
+    );
+  });
+
+  SheetTables withProps(List<List<String>> props) {
+    final base = handwrittenTables();
+    return SheetTables(
+      userData: base.userData,
+      tiles: base.tiles,
+      props: props,
+      ownedParcels: base.ownedParcels,
+      projects: base.projects,
+    );
+  }
+
+  test('props decode onto the subtile lattice and validate', () {
+    final world = sheetTablesToWorld(
+      withProps(const [
+        ['5', '5', '3', '3', 'pine-tree', 'pine-small', ''],
+        ['5', '5', '6', '2', 'wild-grass', '', ''],
+        ['5', '4', '0', '0', 'street-lamp', '', ''],
+        ['10', '4', '7', '7', 'rocks', '', ''],
+      ]),
+      content: content,
+      terrainProvider: terrain,
+    );
+    expect(world.props, hasLength(4));
+    expect(world.props.first.id, 'prop:5,5:3.3');
+    final queries = WorldQueries(world, terrain);
+    expect(queries.propsByCell[const CellCoord(5, 5)], hasLength(2));
+    // Ground, completed road, and bridge deck all carry props.
+    expect(queries.propAt(const CellCoord(5, 4), 0, 0), isNotNull);
+    expect(queries.propAt(const CellCoord(10, 4), 7, 7), isNotNull);
+    expect(
+      () => validateParcelWorldState(world, content, terrain),
+      returnsNormally,
+    );
+  });
+
+  test('props round-trip as a fixed point', () {
+    final world = sheetTablesToWorld(
+      withProps(const [
+        ['5', '5', '3', '3', 'pine-tree', 'pine-small', ''],
+        ['5', '5', '6', '2', 'wild-grass', '', ''],
+        ['10', '4', '7', '7', 'rocks', '', ''],
+      ]),
+      content: content,
+      terrainProvider: terrain,
+    );
+    final again = sheetTablesToWorld(
+      worldToSheetTables(world),
+      content: content,
+      terrainProvider: terrain,
+    );
+    expect(again.props, hasLength(3));
+    expect(
+      encodeSheetTables(worldToSheetTables(again)),
+      encodeSheetTables(worldToSheetTables(world)),
+    );
+  });
+
+  test('two props on one subtile fail the load', () {
+    expect(
+      () => sheetTablesToWorld(
+        withProps(const [
+          ['5', '5', '3', '3', 'pine-tree', '', ''],
+          ['5', '5', '3', '3', 'rocks', '', ''],
+        ]),
+        content: content,
+        terrainProvider: terrain,
+      ),
+      throwsA(isA<FormatException>()),
+      reason: 'one prop per subtile',
+    );
+  });
+
+  test('decorations are rejected in the Tiles sheet', () {
+    final base = handwrittenTables();
+    expect(
+      () => sheetTablesToWorld(
+        SheetTables(
+          userData: base.userData,
+          ownedParcels: base.ownedParcels,
+          tiles: [
+            ...base.tiles,
+            ['9', '6', 'structure', 'complete', 'pine-tree', '', '', ''],
+          ],
+          projects: base.projects,
+        ),
+        content: content,
+        terrainProvider: terrain,
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => '$error',
+          'message',
+          contains('Props sheet'),
+        ),
+      ),
+      reason: 'decorations live in the Props sheet since the lattice',
+    );
+  });
+
+  test('prop rows validate their lattice and model kind', () {
+    expect(
+      () => sheetTablesToWorld(
+        withProps(const [
+          ['5', '5', '8', '0', 'rocks', '', ''],
+        ]),
+        content: content,
+        terrainProvider: terrain,
+      ),
+      throwsA(isA<FormatException>()),
+      reason: 'subtile 8 is outside the 8×8 lattice',
+    );
+    expect(
+      () => sheetTablesToWorld(
+        withProps(const [
+          ['5', '5', '0', '0', 'small-home', '', ''],
+        ]),
+        content: content,
+        terrainProvider: terrain,
+      ),
+      throwsA(isA<FormatException>()),
+      reason: 'buildings live in the Tiles sheet',
+    );
+    expect(
+      () => sheetTablesToWorld(
+        withProps(const [
+          ['5', '5', '0', '0', 'pine-tree', 'not-a-role', ''],
+        ]),
+        content: content,
+        terrainProvider: terrain,
+      ),
+      throwsA(isA<FormatException>()),
+      reason: 'unknown sprite variant',
     );
   });
 }

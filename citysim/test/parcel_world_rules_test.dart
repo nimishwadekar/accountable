@@ -231,11 +231,11 @@ void main() {
       );
 
       expect(world.coins, 1);
-      expect(world.structures.single.kind, StructureKind.decoration);
-      expect(world.structures.single.population, 0);
+      expect(world.structures, isEmpty);
+      expect(world.props.single.catalogueId, 'flower-garden');
       expect(
         content.structure('flower-garden')!.assetRoles,
-        contains(world.structures.single.assetRole),
+        contains(world.props.single.assetRole),
         reason: 'the rolled variant must be one of the model\'s roles',
       );
       expect(world.constructions, isEmpty);
@@ -266,19 +266,15 @@ void main() {
         );
       }
 
-      final placed = world.structures;
+      final placed = world.props;
       expect(placed, hasLength(3));
-      expect(
-        placed.every((structure) => structure.kind == StructureKind.decoration),
-        isTrue,
-      );
       for (final catalogueId in ['street-lamp', 'rocks', 'common-tree']) {
-        final structure = placed.singleWhere(
-          (structure) => structure.catalogueId == catalogueId,
+        final prop = placed.singleWhere(
+          (prop) => prop.catalogueId == catalogueId,
         );
         expect(
           content.structure(catalogueId)!.assetRoles,
-          contains(structure.assetRole),
+          contains(prop.assetRole),
           reason: 'the rolled variant must be one of the model\'s roles',
         );
       }

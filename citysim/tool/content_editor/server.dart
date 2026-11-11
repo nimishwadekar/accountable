@@ -24,6 +24,7 @@ const editorPort = 9200;
 const worldSheetNames = [
   userDataSheetName,
   tilesSheetName,
+  propsSheetName,
   ownedParcelsSheetName,
   projectsSheetName,
 ];
@@ -198,7 +199,7 @@ void _addCorsHeaders(HttpRequest request) {
 Directory _testSheetsDir(Directory assetsDir) =>
     Directory('${assetsDir.path}/test_sheets');
 
-/// Reads the four world sheet documents; missing files read as empty.
+/// Reads the five world sheet documents; missing files read as empty.
 Map<String, String> _readWorldDocuments(Directory assetsDir) => {
   for (final name in worldSheetNames) name: _readWorldDocument(assetsDir, name),
 };
@@ -243,6 +244,7 @@ Future<void> _getWorldSummary(
   final tables = decodeSheetTables(
     userData: _readWorldDocument(assetsDir, userDataSheetName),
     tiles: _readWorldDocument(assetsDir, tilesSheetName),
+    props: _readWorldDocument(assetsDir, propsSheetName),
     ownedParcels: _readWorldDocument(assetsDir, ownedParcelsSheetName),
     projects: _readWorldDocument(assetsDir, projectsSheetName),
   );
@@ -375,6 +377,7 @@ List<String> _terrainOccupationIssues(
   final tables = decodeSheetTables(
     userData: _readWorldDocument(assetsDir, userDataSheetName),
     tiles: _readWorldDocument(assetsDir, tilesSheetName),
+    props: _readWorldDocument(assetsDir, propsSheetName),
     ownedParcels: _readWorldDocument(assetsDir, ownedParcelsSheetName),
     projects: _readWorldDocument(assetsDir, projectsSheetName),
   );

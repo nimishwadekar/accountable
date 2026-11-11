@@ -137,7 +137,7 @@ void main() {
               terrainProvider: const _ShoreTerrain(),
               parcelMode: false,
               showTileGrid: false,
-              onCellTap: (cell, structureId) {},
+              onCellTap: (cell, structureId, subtileX, subtileY) {},
             ),
           ),
         ),

@@ -202,7 +202,7 @@ void main() {
             terrainProvider: const _AllGrass(),
             parcelMode: false,
             showTileGrid: false,
-            onCellTap: (cell, structureId) {},
+            onCellTap: (cell, structureId, subtileX, subtileY) {},
           ),
         ),
       ),

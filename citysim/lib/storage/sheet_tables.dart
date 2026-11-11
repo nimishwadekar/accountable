@@ -1,16 +1,19 @@
-/// The four sheets that store a parcel world — the analogue of the main
+/// The five sheets that store a parcel world — the analogue of the main
 /// app's table schemas, and the shape of the future Google Spreadsheet.
 ///
 /// Storage is state, not history: `UserData` holds the world's scalar
 /// fields as key/value rows, `Tiles` holds one row per coordinate the
-/// player has touched (roads, bridges, structures — keyed by global tile
-/// x/y), `OwnedParcels` holds owned parcel coordinates, and `Projects` holds
-/// currently active construction projects only (rows are deleted as
-/// projects finish — and the `Tiles` project column names a live project
-/// only: finished roads drop the reference when their project completes). Everything else — terrain, footprints, bridge spans,
-/// unlocks, entity counters — derives from codebase content and the
-/// tables themselves. No versions are stored anywhere; content edits are
-/// live updates validated against the current save by the editors.
+/// player has touched (roads, bridges, buildings — keyed by global tile
+/// x/y), `Props` holds placed decorations at subtile positions (several
+/// per tile), `OwnedParcels` holds owned parcel coordinates, and
+/// `Projects` holds currently active construction projects only (rows
+/// are deleted as projects finish — and the `Tiles` project column
+/// names a live project only: finished roads drop the reference when
+/// their project completes). Everything else — terrain, footprints,
+/// bridge spans, unlocks, entity counters — derives from codebase
+/// content and the tables themselves. No versions are stored anywhere;
+/// content edits are live updates validated against the current save by
+/// the editors.
 library;
 
 import 'package:csv/csv.dart';
@@ -19,6 +22,7 @@ class SheetTables {
   const SheetTables({
     this.userData = const {},
     this.tiles = const [],
+    this.props = const [],
     this.ownedParcels = const [],
     this.projects = const [],
   });
@@ -29,6 +33,11 @@ class SheetTables {
   /// Rows of `x, y, kind, status, detail, variant, facing, project`.
   final List<List<String>> tiles;
 
+  /// Rows of `x, y, subtile_x, subtile_y, model, variant, facing` —
+  /// placed decoration props; several may share a tile at different
+  /// subtiles.
+  final List<List<String>> props;
+
   /// Rows of `x, y` — owned parcel coordinates (parcel space).
   final List<List<String>> ownedParcels;
 
@@ -38,6 +47,7 @@ class SheetTables {
   bool get isEmpty =>
       userData.isEmpty &&
       tiles.isEmpty &&
+      props.isEmpty &&
       ownedParcels.isEmpty &&
       projects.isEmpty;
 }
@@ -55,11 +65,21 @@ const tilesHeaders = <String>[
   'facing',
   'project',
 ];
+const propsHeaders = <String>[
+  'x',
+  'y',
+  'subtile_x',
+  'subtile_y',
+  'model',
+  'variant',
+  'facing',
+];
 const ownedParcelsHeaders = <String>['x', 'y'];
 const projectsHeaders = <String>['id', 'kind', 'detail', 'target', 'funded'];
 
 const userDataSheetName = 'UserData';
 const tilesSheetName = 'Tiles';
+const propsSheetName = 'Props';
 const ownedParcelsSheetName = 'OwnedParcels';
 const projectsSheetName = 'Projects';
 
@@ -78,11 +98,12 @@ List<List<String>> decodeCsvRows(String text) {
 String encodeCsvRows(List<String> headers, List<List<String>> rows) =>
     csv.encode([headers, ...rows]);
 
-/// Reads a bundle of the four sheets from raw CSV documents. Missing
+/// Reads a bundle of the five sheets from raw CSV documents. Missing
 /// documents are treated as empty tables.
 SheetTables decodeSheetTables({
   String userData = '',
   String tiles = '',
+  String props = '',
   String ownedParcels = '',
   String projects = '',
 }) => SheetTables(
@@ -91,6 +112,7 @@ SheetTables decodeSheetTables({
       if (row.length >= 2 && row[0].isNotEmpty) row[0]: row[1],
   },
   tiles: _padRows(decodeCsvRows(tiles), tilesHeaders.length),
+  props: _padRows(decodeCsvRows(props), propsHeaders.length),
   ownedParcels: _padRows(
     decodeCsvRows(ownedParcels),
     ownedParcelsHeaders.length,
@@ -98,7 +120,7 @@ SheetTables decodeSheetTables({
   projects: _padRows(decodeCsvRows(projects), projectsHeaders.length),
 );
 
-/// Encodes the four sheets back into CSV documents.
+/// Encodes the five sheets back into CSV documents.
 Map<String, String> encodeSheetTables(SheetTables tables) => {
   userDataSheetName: encodeCsvRows(userDataHeaders, [
     for (final entry
@@ -107,6 +129,7 @@ Map<String, String> encodeSheetTables(SheetTables tables) => {
       [entry.key, entry.value],
   ]),
   tilesSheetName: encodeCsvRows(tilesHeaders, tables.tiles),
+  propsSheetName: encodeCsvRows(propsHeaders, tables.props),
   ownedParcelsSheetName: encodeCsvRows(
     ownedParcelsHeaders,
     tables.ownedParcels,
