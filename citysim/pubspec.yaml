@@ -45,6 +45,8 @@ flutter:
     - assets/sprites/ground/dirt/
     - assets/sprites/ground/grass/
     - assets/sprites/ground/water/
+    - assets/sprites/ground/fog/
+    - assets/sprites/fog/
     - assets/sprites/shores/masks/
     - assets/sprites/roads/corner/
     - assets/sprites/roads/cross/

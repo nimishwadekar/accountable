@@ -8,13 +8,14 @@ import '../../storage/world_usage.dart';
 import '../../world/coordinates.dart';
 
 /// Map editor: the terrain map as an isometric canvas. Authored parcels
-/// render as diamonds (grass green, water blue); the void beyond them is
-/// the page background. A `+` button on every void-facing edge grows the
-/// map with a same-kind neighbour; selecting a parcel allows changing
-/// its kind or deleting it — locked when the current save occupies its
-/// cells (roads, structures, bridges, and plans all count, with
-/// footprints and spans expanded), when it is owned (delete only), or
-/// when it is the starter parcel.
+/// render as diamonds (grass green, water blue, fog pale); the void
+/// beyond them is the page background and renders in-game as fog —
+/// authoring a parcel is what clears it. A `+` button on every
+/// void-facing edge grows the map with a same-kind neighbour;
+/// selecting a parcel allows changing its kind or deleting it — locked
+/// when the current save occupies its cells (roads, structures,
+/// bridges, and plans all count, with footprints and spans expanded),
+/// when it is owned (delete only), or when it is the starter parcel.
 class MapPage extends StatefulWidget {
   const MapPage({
     required this.categories,
@@ -294,6 +295,7 @@ class _MapPageState extends State<MapPage> {
                     items: const [
                       DropdownMenuItem(value: 'grass', child: Text('grass')),
                       DropdownMenuItem(value: 'water', child: Text('water')),
+                      DropdownMenuItem(value: 'fog', child: Text('fog')),
                     ],
                     onChanged: kindLocked
                         ? null
@@ -398,9 +400,7 @@ class _ParcelTile extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
                   iconSize: 16,
-                  tooltip:
-                      'Add a ${kind == 'water' ? 'water' : 'grass'} '
-                      'parcel ${_directionLabel(dir)}',
+                  tooltip: 'Add a $kind parcel ${_directionLabel(dir)}',
                   onPressed: () => onAddNeighbor(coord, dir[0], dir[1]),
                   icon: const Icon(Icons.add_rounded),
                 ),
@@ -464,7 +464,12 @@ class _ParcelPainter extends CustomPainter {
       ..close();
     canvas.drawPath(
       diamond,
-      Paint()..color = kind == 'water' ? waterFill : grassFill,
+      Paint()
+        ..color = switch (kind) {
+          'water' => waterFill,
+          'fog' => fogFill,
+          _ => grassFill,
+        },
     );
 
     // Faint 8×8 cell grid; cells occupied in the current save are
@@ -531,6 +536,7 @@ class _ParcelPainter extends CustomPainter {
 
   static const grassFill = Color(0xFFA5C77A);
   static const waterFill = Color(0xFF6FA8DC);
+  static const fogFill = Color(0xFFDCE9E3);
   static const ownedOutline = Color(0xFFF5A623);
   static const selectionOutline = Color(0xFF1E6552);
 

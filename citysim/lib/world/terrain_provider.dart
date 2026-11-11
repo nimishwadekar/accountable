@@ -30,8 +30,10 @@ abstract interface class TerrainProvider {
 }
 
 /// Samples the authored `terrain.json` map. Authored parcels return
-/// their base terrain; any parcel without an entry is open ocean —
-/// unbuyable, unbridgeable, rendered as sea with natural coastlines.
+/// their base terrain; any parcel without an entry is fog — the
+/// uncharted cloud deck around the known world, rendered from the
+/// fog sprites. Authoring a parcel (editing the map) is what clears
+/// the fog.
 class ContentTerrainProvider implements TerrainProvider {
   const ContentTerrainProvider(this.content);
 
@@ -42,7 +44,7 @@ class ContentTerrainProvider implements TerrainProvider {
 
   @override
   TerrainCell sample(CellCoord coord, int seed) {
-    final kind = content.parcels[parcelForCell(coord)] ?? TerrainKind.water;
+    final kind = content.parcels[parcelForCell(coord)] ?? TerrainKind.fog;
     return TerrainCell(coord: coord, kind: kind);
   }
 }

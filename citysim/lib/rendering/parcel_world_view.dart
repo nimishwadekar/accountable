@@ -1295,13 +1295,23 @@ class _ParcelWorldPainter extends CustomPainter {
     // opaque skirts must never paint over neighbouring land at
     // shores, and the bank overlay only reaches ~1 world px past
     // the shared edge — not far enough to cover a 2 px skirt.
-    // Authored terrain is uniform per parcel, so the origin cell's
-    // kind classifies the chunk.
+    // Fog parcels blit after land: the cloud deck sits above every
+    // other ground, so its tiles cover the terrain edge where the
+    // known world ends. Authored terrain is uniform per parcel, so
+    // the origin cell's kind classifies the chunk.
     final waterChunks = <_TerrainChunk>[];
     final landChunks = <_TerrainChunk>[];
+    final fogChunks = <_TerrainChunk>[];
     for (final chunk in drawn) {
       final origin = chunk.coord.origin(state.parcelSize);
-      (queries.terrainAt(origin).isLand ? landChunks : waterChunks).add(chunk);
+      switch (queries.terrainAt(origin).kind) {
+        case TerrainKind.water:
+          waterChunks.add(chunk);
+        case TerrainKind.grass:
+          landChunks.add(chunk);
+        case TerrainKind.fog:
+          fogChunks.add(chunk);
+      }
     }
     for (final chunk in waterChunks) {
       _blitChunk(canvas, size, chunk);
@@ -1309,8 +1319,55 @@ class _ParcelWorldPainter extends CustomPainter {
     for (final chunk in landChunks) {
       _blitChunk(canvas, size, chunk);
     }
+    for (final chunk in fogChunks) {
+      _blitChunk(canvas, size, chunk);
+    }
     _drawRoads(canvas, size, bounds);
     _drawShoreBanks(canvas, size, drawn);
+    _drawFogWisps(canvas, size, drawn);
+  }
+
+  /// The wisp role for a fog cell — one of three, picked from a
+  /// different slice of the placement hash so all variants appear.
+  String _fogWispRole(int hash) => switch ((hash >> 9) % 3) {
+    0 => 'fog.wisp.a',
+    1 => 'fog.wisp.b',
+    _ => 'fog.wisp.c',
+  };
+
+  /// Replays the fog wisps — large soft cloud sprites over the fog
+  /// deck, drawn above the banks (clouds ride over roads and banks)
+  /// and below everything standing. Each sprite spans two to three
+  /// cells and is jittered within its cell by the same hash that
+  /// picked it, so the scatter never reads as a lattice.
+  void _drawFogWisps(Canvas canvas, Size size, List<_TerrainChunk> chunks) {
+    for (final chunk in chunks) {
+      for (final (cell, role) in chunk.fogWisps) {
+        final path = content.tryAssetPath(role);
+        final image = path == null ? null : images[path];
+        if (image == null) continue;
+        ParcelWorldProbe.countActor();
+        final hash =
+            (cell.column * 73856093) ^ (cell.row * 19349663) ^ state.seed;
+        final jitterX = ((hash >> 3) % 17 - 8).toDouble();
+        final jitterY = ((hash >> 6) % 9 - 4).toDouble();
+        final center = _worldToScreen(
+          _cellWorldCenter(cell) + Offset(jitterX, jitterY),
+          size,
+          scale,
+          offset,
+        );
+        // Art is 2x world density (renderScale 0.5).
+        final width = image.width * scale * 0.5;
+        final height = image.height * scale * 0.5;
+        canvas.drawImageRect(
+          image,
+          Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+          Rect.fromCenter(center: center, width: width, height: height),
+          Paint()..filterQuality = FilterQuality.medium,
+        );
+      }
+    }
   }
 
   /// Draws one cached chunk: its rasterized texture when fresh, or a
@@ -1454,6 +1511,10 @@ class _ParcelWorldPainter extends CustomPainter {
     );
     for (var row = bounds.top - 1; row <= bounds.bottom + 1; row++) {
       for (var column = bounds.left - 1; column <= bounds.right + 1; column++) {
+        // The fog is uncharted — no survey grid over the clouds.
+        if (queries.terrainAt(CellCoord(column, row)).kind == TerrainKind.fog) {
+          continue;
+        }
         final north = corner(column, row);
         final east = corner(column + 1, row);
         final west = corner(column, row + 1);
@@ -1555,7 +1616,10 @@ class _ParcelWorldPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.round;
     for (final coord in _visibleChunkCoords(bounds, viewport)) {
-      if (!content.terrain.parcels.containsKey(coord)) continue;
+      // Fog parcels are hidden — no grid and no hover over the
+      // clouds; there is nothing to buy there.
+      final kind = content.terrain.parcels[coord];
+      if (kind == null || kind == TerrainKind.fog) continue;
       if (queries.ownsParcel(coord)) continue;
       final corners = _parcelCorners(coord);
       for (var side = 0; side < 4; side++) {
@@ -1586,7 +1650,9 @@ class _ParcelWorldPainter extends CustomPainter {
     final hover = hoverCell;
     if (hover == null) return;
     final parcel = parcelForCell(hover, parcelSize: state.parcelSize);
-    if (content.terrain.parcels.containsKey(parcel) &&
+    final hoverKind = content.terrain.parcels[parcel];
+    if (hoverKind != null &&
+        hoverKind != TerrainKind.fog &&
         !queries.ownsParcel(parcel) &&
         parcel != selectedParcel) {
       final path = _parcelScreenPath(parcel, size);
@@ -1711,10 +1777,7 @@ class _ParcelWorldPainter extends CustomPainter {
     // they draw as a per-frame layer above every chunk (see
     // [_drawRoads]) so no terrain skirt can ever paint over them.
     for (final (cell, terrain, center) in cells) {
-      final roles = terrain.isLand
-          ? _terrainSpriteRoles(cell, terrain)
-          : const ['terrain.water'];
-      for (final role in roles) {
+      for (final role in _terrainSpriteRoles(cell, terrain)) {
         final path = content.tryAssetPath(role);
         if (path == null) continue;
         final image = images[path];
@@ -1722,11 +1785,23 @@ class _ParcelWorldPainter extends CustomPainter {
         ParcelWorldProbe.countTerrain();
         _drawImageAtWorldCenter(canvas, image, center);
       }
-      if (!terrain.isLand) {
+      if (terrain.kind == TerrainKind.water) {
         // Shore banks are recorded as per-frame draws rather than
-        // baked into the chunk picture.
+        // baked into the chunk picture. Fog cells never bank — the
+        // cloud deck is their whole look, and the boundary is
+        // deliberately plain.
         for (final role in waterBankRoles(cell, queries.terrainAt)) {
           chunk.banks.add((cell, role));
+        }
+      }
+      if (terrain.kind == TerrainKind.fog) {
+        // Wisps: hash-scattered cloud sprites over roughly a third
+        // of the fog cells. No boundary logic — the same rule
+        // everywhere the fog is.
+        final hash =
+            (cell.column * 73856093) ^ (cell.row * 19349663) ^ state.seed;
+        if (hash % 3 == 0) {
+          chunk.fogWisps.add((cell, _fogWispRole(hash)));
         }
       }
     }
@@ -1734,10 +1809,13 @@ class _ParcelWorldPainter extends CustomPainter {
     // Wash pass, after every terrain tile in this chunk so the
     // later cells' opaque skirts cannot punch un-washed fringes
     // through the tint. The unowned wash is a parcel-mode cue;
-    // normal play shows unowned terrain as-is.
+    // normal play shows unowned terrain as-is. Fog parcels never
+    // wash — they are unbuyable, and the cloud stays clean.
     if (parcelMode) {
-      for (final (cell, _, center) in cells) {
-        if (queries.ownsCell(cell)) continue;
+      for (final (cell, terrain, center) in cells) {
+        if (queries.ownsCell(cell) || terrain.kind == TerrainKind.fog) {
+          continue;
+        }
         ParcelWorldProbe.countWash();
         _drawWorldCellWash(canvas, center, content.ambience.unownedLandWash);
       }
@@ -2106,6 +2184,10 @@ class _ParcelWorldPainter extends CustomPainter {
   }
 
   List<String> _terrainSpriteRoles(CellCoord cell, TerrainCell terrain) {
+    // The deck is one periodic tile: every cell samples it at the
+    // same world-anchored phase, so neighbours continue each other
+    // seamlessly.
+    if (terrain.kind == TerrainKind.fog) return const ['terrain.fog'];
     if (!terrain.isLand) return const ['terrain.water'];
     return [
       switch (terrain.groundStyle) {
@@ -3207,6 +3289,13 @@ class _TerrainChunk {
   /// (cell, role) per masked shore piece — replayed every frame
   /// instead of baked into [picture].
   final List<(CellCoord, String)> banks = [];
+
+  /// Fog-wisp draws for this chunk's fog cells — one (cell, role)
+  /// per hash-scattered cloud sprite — replayed every frame above
+  /// the banks. Per-frame rather than baked because the sprites
+  /// overhang their cell, and the chunk picture is clipped to its
+  /// rect; replaying keeps every wisp whole.
+  final List<(CellCoord, String)> fogWisps = [];
 
   /// Cache generation this chunk was recorded in.
   int generation = -1;

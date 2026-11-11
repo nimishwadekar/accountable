@@ -8,6 +8,7 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 - fade out stuff in front if selecting a tile behind them.
 - buildings get a concrete base below them.
 - clouds obscuring beyond current map so i'm not restricted to only ocean but also hidden contiguous land beyond.
+- decide how people move into the place.
 - composite sprite editor: create new sprite from existing sprites.
 - have similar fade masks to shores for all terrain meetings, so that there's no harsh boundary anywhere.
 - auto-growth of citizens.

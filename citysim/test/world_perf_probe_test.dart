@@ -214,8 +214,11 @@ void main() {
       expect(panOut.chunkRecords, lessThanOrEqualTo(60));
       // 3. Frame draws are chunk textures plus actors — hundreds, not
       //    the thousands of per-cell draws the unchunked renderer
-      //    pushed at zoom-out.
-      expect(panOut.meanTotalOps, lessThan(600));
+      //    pushed at zoom-out. The fog's wisp sprites are the one
+      //    per-cell-priced layer left (a third of the fog cells at
+      //    zoom-out), which is what the ocean-era ceiling of 600 no
+      //    longer covers.
+      expect(panOut.meanTotalOps, lessThan(1000));
       // 4. More chunks are visible zoomed out than zoomed in.
       expect(panOut.meanChunkDraws, greaterThan(panIn.meanChunkDraws));
       // 5. Chunk-granularity culling: drawn cells stay near the

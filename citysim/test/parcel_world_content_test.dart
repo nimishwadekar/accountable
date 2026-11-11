@@ -226,13 +226,29 @@ void main() {
       provider.sample(const CellCoord(-4, 2), 145).kind,
       TerrainKind.water,
     );
-    // Beyond the authored map is open ocean.
-    expect(
-      provider.sample(const CellCoord(40, 2), 145).kind,
-      TerrainKind.water,
-    );
+    // Beyond the authored map is fog — the uncharted default.
+    expect(provider.sample(const CellCoord(40, 2), 145).kind, TerrainKind.fog);
     expect(content.terrain.isOnMap(const ParcelCoord(1, 0)), isTrue);
     expect(content.terrain.isOnMap(const ParcelCoord(9, 9)), isFalse);
     expect(content.terrain.parcels, hasLength(49));
+  });
+
+  test('authored fog parcels parse and stay hidden', () {
+    final terrain = TerrainContent.fromJson(const {
+      'generatorVersion': 1,
+      'parcels': {'0,0': 'grass', '2,2': 'fog'},
+    });
+    final provider = ContentTerrainProvider(terrain);
+    expect(provider.sample(const CellCoord(4, 4), 7).kind, TerrainKind.grass);
+    expect(
+      provider.sample(const CellCoord(18, 18), 7).kind,
+      TerrainKind.fog,
+      reason: 'an authored fog parcel is on the map but still fog',
+    );
+    expect(
+      provider.sample(const CellCoord(40, 40), 7).kind,
+      TerrainKind.fog,
+      reason: 'unauthored parcels default to fog',
+    );
   });
 }

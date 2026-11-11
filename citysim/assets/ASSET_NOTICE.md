@@ -39,6 +39,32 @@ editor's grouping:
   (`sprites/shores/masks/`, one per shape, shared by both materials —
   the Factorio mask approach). The pack shore art was returned to
   `buggy_studio/Roads and Grounds/`.
+- `sprites/ground/fog/` and `sprites/fog/` — the fog sprite set
+  (**programmer-generated placeholder**, 2026-11-11,
+  `tool/art/generate_fog_tiles.py`, for the pack artist to replace).
+  Fog is a terrain like grass and water — unauthored parcels default
+  to it — and renders from these sprites and nothing else: one
+  PERIODIC deck tile (`terrain.fog`) whose fine grain wraps with the
+  cell lattice, so neighbouring tiles continue each other seamlessly
+  (opaque skirts included — a skirt pixel is the periodic
+  continuation of what it covers; this is what removes the per-tile
+  borders that read as a grid), plus three large soft wisp sprites
+  (`fog.wisp.a/b/c`) hash-scattered over a third of the fog cells,
+  replayed per frame because they overhang their cell. Replacement
+  art constraints: the deck must stay periodic (edges continue into
+  their opposite sides) with fine grain well under a cell, alpha
+  mask matching the water tile's chamfer-dilated diamond, and
+  palette from the approved mockup (`fog_mockup_wispy.png`): base
+  (222, 233, 227), shade (201, 216, 208); the wisps must be fully
+  transparent at their borders with their noise-eaten alpha baked
+  in. **The fog/terrain boundary is deliberately plain** (2026-11-11)
+  — fog tiles meet terrain directly, with no edge overlay, bank, or
+  transition logic. Soft-edge treatments (12-shape edge overlays
+  over a terrain underlay, creep wisps, noise-bitten fades) were
+  mocked up extensively (`tool/mockups/fog_sprite_preview.py`) and
+  dropped: every variant showed repeating cell-scale artifacts or a
+  weird border, and the simple boundary reads fine. Revisit only
+  with hand-drawn art, not generated fades.
 - `characters/` — ambient pedestrian walk and idle frames, loaded directly
   by the renderer.
 - `content/` — the JSON content layer (catalogue, sprites, economy,

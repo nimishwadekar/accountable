@@ -161,11 +161,15 @@ ParcelPurchaseQuote quoteParcelPurchase(
   if (!candidate.neighbors.any(queries.ownsParcel)) {
     throw const WorldRuleViolation('Buy a neighboring parcel to expand there.');
   }
-  // Buyable means authored on the terrain map — grass or water alike.
-  // Owning a parcel and being able to build on it are different things:
-  // building stays gated by land reachability, which bridges grant.
-  if (!content.terrain.isOnMap(candidate)) {
-    throw const WorldRuleViolation('That parcel is open ocean.');
+  // Buyable means charted terrain — grass or water alike. Fog is the
+  // uncharted default beyond the authored map, and authored fog
+  // parcels stay hidden too: you cannot buy what you cannot see.
+  // Owning a parcel and being able to build on it are different
+  // things: building stays gated by land reachability, which bridges
+  // grant.
+  final origin = candidate.origin(state.parcelSize);
+  if (terrainProvider.sample(origin, state.seed).kind == TerrainKind.fog) {
+    throw const WorldRuleViolation('That parcel is hidden in the fog.');
   }
   final cells = candidate
       .cells(state.parcelSize)

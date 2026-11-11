@@ -703,7 +703,7 @@ void main() {
       );
     });
 
-    test('water parcels are buyable but open ocean beyond the map is not', () {
+    test('water parcels are buyable but fog beyond the map is not', () {
       var world = grantWorldDebugCoins(newWorld(), 100);
       world = purchaseAdjacentParcel(
         world,
@@ -720,7 +720,7 @@ void main() {
             'owning the west water parcel does not reach the land '
             'beyond it',
       );
-      // Buy out to the authored edge, then the ocean refuses.
+      // Buy out to the authored edge, then the fog refuses.
       world = purchaseAdjacentParcel(
         world,
         content,
@@ -741,7 +741,7 @@ void main() {
           const ParcelCoord(-4, 0),
         ),
         throwsA(isA<WorldRuleViolation>()),
-        reason: 'beyond the authored map is open ocean',
+        reason: 'beyond the authored map is fog — uncharted and unbuyable',
       );
     });
   });

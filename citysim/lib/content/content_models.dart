@@ -17,7 +17,7 @@ enum RoadStyle { asphalt }
 
 enum StructureKind { building, decoration }
 
-enum TerrainKind { grass, water }
+enum TerrainKind { grass, water, fog }
 
 enum GroundStyle { grass, grassPuddle, dirt, asphalt, concrete }
 
@@ -566,16 +566,20 @@ class AmbienceContent {
 /// shape contains a cell determines that cell's water; land otherwise.
 /// Authored geography: the `terrain.json` category. The map *is* the
 /// entries — every authored parcel maps to its base terrain, and any
-/// parcel without an entry is open ocean (unbuyable, unbridgeable,
-/// rendered as sea). Cell-level detail layers will be added on top of
-/// this later.
+/// parcel without an entry is fog: uncharted, unbuyable, rendered as
+/// the cloud deck that rings the known world. Authoring a parcel is
+/// what clears the fog — nothing in the save tracks it, because the
+/// fog is fully derived from the content. Cell-level detail layers
+/// will be added on top of this later.
 class TerrainContent {
   const TerrainContent({required this.generatorVersion, required this.parcels});
 
   final int generatorVersion;
   final Map<ParcelCoord, TerrainKind> parcels;
 
-  /// Whether a parcel is authored on the map (buyable, bridgeable).
+  /// Whether a parcel is authored on the map. Authored fog parcels
+  /// are on the map but stay hidden — buying is gated by terrain
+  /// kind, not authorship.
   bool isOnMap(ParcelCoord coord) => parcels.containsKey(coord);
 
   Map<String, Object?> toJson() => {
@@ -673,6 +677,19 @@ final requiredSpriteRoles = <String>[
   'bridge.body.se',
   'bridge.body.sw',
   for (final dir in ['ne', 'nw', 'se', 'sw']) 'bridge.ramp.$dir',
+  // The fog deck over uncharted parcels — a terrain like any other,
+  // rendered from sprites like grass and water. One PERIODIC tile:
+  // its grain wraps, so every cell continues its neighbours
+  // seamlessly (no per-tile borders reading as a grid). The wisps
+  // are large soft cloud sprites hash-scattered over fog cells at
+  // low density — their overlap is the foggy look. The boundary is
+  // deliberately plain: fog tiles meet terrain directly, with no
+  // edge-overlay or bank logic (tried in previews and dropped —
+  // see ASSET_NOTICE).
+  'terrain.fog',
+  'fog.wisp.a',
+  'fog.wisp.b',
+  'fog.wisp.c',
 ];
 
 /// Structural validation: cross-references, ranges, and ordering. File
