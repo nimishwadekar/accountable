@@ -30,21 +30,9 @@ editor's grouping:
   later-drawn tile's skirt reads as a ~2px fringe of its colour —
   to be absorbed by the fade-masks-for-all-terrain-meetings future
   work. The road and bridge sprites (15 road pieces, 2 deck bodies,
-  4 ramps) gained the same skirts the same day, with a directional
-  twist: tiles draw back-to-front in row-major order, so a skirt can
-  exist only on the bottom edges — bottom-right toward the east
-  neighbour, bottom-left toward the south neighbour, the ones that
-  draw later and cover it. A top-edge skirt would paint over the
-  already-drawn west/north neighbour. Top-facing seams need no
-  skirt: every west/north seam is also the neighbour's east/south
-  seam, and that neighbour's bottom skirt is the opaque backing
-  under the softened edge. Skirt zones follow each role's open
-  directions (a north-south straight skirts only bottom-left, an
-  east-west straight only bottom-right, west/north-pointing
-  dead-ends none at all); bridge decks skirt the downhill cut along
-  their span at full art height so the railing and pillar seams
-  close too, near ramps skirt their deck-facing cut, and far ramps
-  carry none. Pinned by `test/road_skirt_test.dart`.
+  4 ramps) were given the same directional bottom-edge skirts on
+  2026-11-10 and reverted to the unedited pack art later that day —
+  a deliberate choice, not an oversight.
   The 24 pack shore sprites (grass/dirt × edge/corner/quarter) were
   retired the same day: shore banks are now composed at load from the
   terrain material cut by 12 baked greyscale shape masks
