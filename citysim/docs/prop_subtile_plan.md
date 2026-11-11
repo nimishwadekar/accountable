@@ -189,3 +189,25 @@ facings) work exactly as today, seeded by `nextEntityNumber`.
   invariant, or an editor resize would brick old saves. The 64-bit
   per-tile mask makes the overlap check a bit AND when that day
   comes.
+- Placing objects on bridges (banned 2026-11-11): prop placement on
+  bridge decks is off — the sprite-hit tap correction and the
+  deck-surface lift (`_surfaceLift`) both work and stay tested, but
+  aiming the fine subtile lattice on raised, art-covered decks felt
+  finicky. Re-enable by widening `WorldQueries.cellAcceptsProps`
+  back to deck cells; the ghost's lift and the red invalid preview
+  follow automatically.
+- Terrain elevation (discussed 2026-11-11, parked): hills, cliffs,
+  and slopes eventually need real elevation math, because terrain is
+  baked into cached chunks — sprite hit-testing cannot cover it. The
+  system entails: per-cell heights authored in the terrain content
+  (the provider's sample gains an elevation; saves stay untouched,
+  since terrain re-derives); depth becomes col + row + z, which
+  breaks the flat-chunk/actor-pass split (elevated terrain must join
+  the depth sort); cliff and slope art per material with seam rules
+  at every height step — build cliffs before slopes, they are the
+  cheap half; top-down height-aware picking (walk heights, or walk
+  cells south of the ground projection); and rules for building and
+  walking on slopes. Bridges become consumers of elevation (deck
+  height matches bank terrain). The `_surfaceLift` lookup that came
+  with bridge sprite hit-testing is the seed: it already answers
+  "how high does something standing here sit?"

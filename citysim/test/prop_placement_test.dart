@@ -145,7 +145,7 @@ void main() {
     );
   });
 
-  test('props place on ground, roads, and bridge decks — nowhere else', () {
+  test('props place on ground and roads — nowhere else', () {
     var world = town();
     void place(CellCoord cell, {int subtileX = 0, int subtileY = 0}) =>
         world = startStructureConstruction(
@@ -159,8 +159,12 @@ void main() {
         );
     place(const CellCoord(5, 5)); // vacant ground
     place(const CellCoord(5, 4)); // completed road
-    place(const CellCoord(10, 4), subtileX: 7, subtileY: 7); // bridge deck
-    expect(world.props, hasLength(3));
+    expect(world.props, hasLength(2));
+    expect(
+      () => place(const CellCoord(10, 4), subtileX: 7, subtileY: 7),
+      throwsA(isA<WorldRuleViolation>()),
+      reason: 'bridge decks are off the prop surface (future work)',
+    );
     expect(
       () => place(const CellCoord(10, 5)),
       throwsA(isA<WorldRuleViolation>()),

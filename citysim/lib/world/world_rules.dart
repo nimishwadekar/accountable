@@ -254,6 +254,35 @@ StructureFundingQuote quoteStructureFunding(
   );
 }
 
+/// The prop placement check, shared by the placement quote and the
+/// renderer's live preview (which passes its prebuilt queries, so the
+/// preview never rebuilds indexes): throws [WorldRuleViolation] when
+/// [cell] at the subtile cannot hold a prop of [definition].
+void checkPropPlacement(
+  ParcelWorldState state,
+  WorldQueries queries, {
+  required StructureDefinition definition,
+  required CellCoord cell,
+  required int subtileX,
+  required int subtileY,
+}) {
+  if (!definition.enabled ||
+      !state.unlockedCatalogueIds.contains(definition.id)) {
+    throw const WorldRuleViolation('That model has not been unlocked.');
+  }
+  if (!queries.ownsCell(cell)) {
+    throw const WorldRuleViolation('Every footprint cell needs owned land.');
+  }
+  if (queries.structuresByCell.containsKey(cell) ||
+      queries.constructionReservedCells.contains(cell) ||
+      !queries.cellAcceptsProps(cell)) {
+    throw const WorldRuleViolation('Props need vacant ground or road.');
+  }
+  if (queries.propAt(cell, subtileX, subtileY) != null) {
+    throw const WorldRuleViolation('That subtile already holds a prop.');
+  }
+}
+
 StructurePlacementQuote quoteStructurePlacement(
   ParcelWorldState state,
   ContentBundle content,
@@ -275,23 +304,16 @@ StructurePlacementQuote quoteStructurePlacement(
       : null;
   final queries = WorldQueries(state, terrainProvider);
   if (definition.kind == StructureKind.decoration) {
-    // Decorations place as props on the subtile lattice, over a wider
-    // surface than buildings: owned ground, completed roads, and
-    // bridge decks — never open water, building footprints, or
-    // pending construction — and one prop per subtile.
-    if (!queries.ownsCell(origin)) {
-      throw const WorldRuleViolation('Every footprint cell needs owned land.');
-    }
-    if (queries.structuresByCell.containsKey(origin) ||
-        queries.constructionReservedCells.contains(origin) ||
-        !queries.cellAcceptsProps(origin)) {
-      throw const WorldRuleViolation(
-        'Props need vacant ground, road, or bridge deck.',
-      );
-    }
-    if (queries.propAt(origin, subtileX, subtileY) != null) {
-      throw const WorldRuleViolation('That subtile already holds a prop.');
-    }
+    // Decorations place as props on the subtile lattice; the surface
+    // rules live in [checkPropPlacement], shared with the preview.
+    checkPropPlacement(
+      state,
+      queries,
+      definition: definition,
+      cell: origin,
+      subtileX: subtileX,
+      subtileY: subtileY,
+    );
     return StructurePlacementQuote(
       catalogueId: catalogueId,
       origin: origin,

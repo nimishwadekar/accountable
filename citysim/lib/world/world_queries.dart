@@ -162,13 +162,13 @@ class WorldQueries {
     return cells.every((cell) => !occupied.contains(cell));
   }
 
-  /// The prop placement surface: ground, completed roads, and
-  /// completed bridge decks. Open water and building footprints never
-  /// accept props.
+  /// The prop placement surface: ground and completed roads. Bridge
+  /// decks were briefly part of it (2026-11-11), but aiming the fine
+  /// subtile lattice on raised, art-covered decks felt finicky —
+  /// placing objects on bridges is future work (see the prop plan's
+  /// future notes).
   bool cellAcceptsProps(CellCoord cell) =>
-      terrainAt(cell).isLand ||
-      roadsByCell.containsKey(cell) ||
-      bridgeDeckCells.contains(cell);
+      terrainAt(cell).isLand || roadsByCell.containsKey(cell);
 
   /// The prop standing at a subtile, if any.
   PlacedProp? propAt(CellCoord cell, int subtileX, int subtileY) =>

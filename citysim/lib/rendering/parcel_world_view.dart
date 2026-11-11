@@ -187,6 +187,13 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   int _hoverSubtileX = 0;
   int _hoverSubtileY = 0;
 
+  /// Whether the decor ghost is pinned to the last tapped spot: a
+  /// tap locks the preview in place (so it stays put while the
+  /// pointer travels to the confirm button), the next tap elsewhere
+  /// releases it back to following the cursor, and re-tapping the
+  /// same spot keeps the lock.
+  bool _ghostPinned = false;
+
   void _updateHover(Offset position, Size size) {
     final world = _screenToWorld(position, size, _scale, _offset);
     final cell = _nearestCell(world);
@@ -227,6 +234,8 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     }
     if (oldWidget.selectedCatalogueId != widget.selectedCatalogueId) {
       _loading = _loadMissingImages();
+      // Picking a fresh model starts the ghost in cursor-follow mode.
+      _ghostPinned = false;
     }
     if (widget.cameraResetToken != oldWidget.cameraResetToken) {
       _cameraInitialized = false;
@@ -350,6 +359,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   selectedSubtileY: widget.selectedSubtileY,
                   hoverSubtileX: _hoverSubtileX,
                   hoverSubtileY: _hoverSubtileY,
+                  ghostPinned: _ghostPinned,
                   bridgeStartCell: widget.bridgeStartCell,
                   bridgeEndCell: widget.bridgeEndCell,
                   roadPlanCells: widget.roadPlanCells,
@@ -425,19 +435,21 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
 
   void _dispatchTap(Offset position, Size size) {
     final world = _screenToWorld(position, size, _scale, _offset);
-    final structureHits = widget.structurePicking
-        ? _hitStructures(
-            position,
-            size,
-            _scale,
-            _offset,
-            _queries,
-            _images,
-            _masks,
-            _spriteReachCells,
-            widget.content,
-          )
-        : const <_WorldHit>[];
+    final structureHits = _hitStructures(
+      position,
+      size,
+      _scale,
+      _offset,
+      _queries,
+      _images,
+      _masks,
+      _spriteReachCells,
+      widget.content,
+      // Non-inspect tools target the tapped cell directly — except
+      // that raised bridge decks still sprite-hit, correcting the
+      // ground projection for every tool.
+      bridgesOnly: !widget.structurePicking,
+    );
     // The chain every tap walks: pixel-hit structures front to back,
     // then the ground diamond under the tap.
     final chain = [...structureHits, _WorldHit(_nearestCell(world), null)];
@@ -454,7 +466,20 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     _tapCycleIndex = index;
 
     final hit = chain[index];
-    final (subtileX, subtileY) = _subtileUnder(world);
+    // The tapped subtile resolves on the hit's surface: a deck tap
+    // ground-projects too far north, so un-project at deck height.
+    final lift = _surfaceLift(hit.cell, _queries, widget.content);
+    final (subtileX, subtileY) = _subtileUnder(world + Offset(0, lift));
+    // The tap drives the ghost pin: a free ghost locks onto the
+    // tapped spot; a pinned ghost releases when the tap lands
+    // elsewhere and holds when it lands on the same spot.
+    if (!_ghostPinned) {
+      _ghostPinned = true;
+    } else if (hit.cell != widget.selectedCell ||
+        subtileX != widget.selectedSubtileX ||
+        subtileY != widget.selectedSubtileY) {
+      _ghostPinned = false;
+    }
     widget.onCellTap(hit.cell, hit.structureId, subtileX, subtileY);
   }
 
@@ -897,9 +922,13 @@ Path _dashPath(Path source, double dash, double gap) {
   return dashed;
 }
 
-/// Every structure or prop hit by a tap, in front-to-back painter
-/// order — each entry is one sprite with an opaque pixel under the
-/// tap point.
+/// Every structure, prop, or bridge tile hit by a tap, in
+/// front-to-back painter order — each entry is one sprite with an
+/// opaque pixel under the tap point. With [bridgesOnly], used by the
+/// non-inspect tools that target the tapped cell directly, only the
+/// elevated bridge tiles hit-test: their sprite hits correct the
+/// ground projection, which lands north of the deck because decks
+/// are raised.
 List<_WorldHit> _hitStructures(
   Offset position,
   Size size,
@@ -909,16 +938,17 @@ List<_WorldHit> _hitStructures(
   Map<String, ui.Image> images,
   Map<String, SpriteMask> masks,
   int reachCells,
-  ContentBundle content,
-) {
+  ContentBundle content, {
+  bool bridgesOnly = false,
+}) {
   final world = _screenToWorld(position, size, scale, offset);
   final cell = _nearestCell(world);
-  // Candidates are every structure and prop whose art could reach the
-  // tap, ordered exactly as the painter draws them (back to front)
-  // and walked front to back. Every sprite with an opaque pixel under
-  // the tap joins the result in that order, so repeated taps can
-  // cycle through what the front one hides; the ground diamond below
-  // is the caller's fallback.
+  // Candidates are every structure, prop, and bridge tile whose art
+  // could reach the tap, ordered exactly as the painter draws them
+  // (back to front) and walked front to back. Every sprite with an
+  // opaque pixel under the tap joins the result in that order, so
+  // repeated taps can cycle through what the front one hides; the
+  // ground diamond below is the caller's fallback.
 
   _WorldHit? hitAt(Rect screenRect, String? path, _WorldHit hit) {
     if (!screenRect.contains(position)) return null;
@@ -956,7 +986,12 @@ List<_WorldHit> _hitStructures(
     if (image == null) return null;
     return hitAt(
       _worldRectToScreen(
-        _propRect(image, content.sprite(role)!, prop),
+        _propRect(
+          image,
+          content.sprite(role)!,
+          prop,
+          surfaceLift: _surfaceLift(prop.cell, queries, content),
+        ),
         size,
         scale,
         offset,
@@ -966,22 +1001,73 @@ List<_WorldHit> _hitStructures(
     );
   }
 
-  final structures = queries.structuresInBounds(
-    left: cell.column - reachCells,
-    right: cell.column + reachCells,
-    top: cell.row - reachCells,
-    bottom: cell.row + reachCells,
-  )..sort(_compareStructureDepth);
-  final props = queries.propsInBounds(
-    left: cell.column - reachCells,
-    right: cell.column + reachCells,
-    top: cell.row - reachCells,
-    bottom: cell.row + reachCells,
-  );
+  // A bridge deck or ramp tile: tile-fit art at its cell, hit-tested
+  // like any standing sprite. Decks report their own cell — the
+  // correction that makes raised bridges tappable across their full
+  // width — and ramps report their bank cell. Transparent gaps under
+  // the deck miss and let the tap fall through to the ground.
+  _WorldHit? bridgeTileHit(CellCoord tileCell, String role) {
+    final path = content.tryAssetPath(role);
+    final image = path == null ? null : images[path];
+    final sprite = path == null ? null : content.sprite(role);
+    if (image == null || sprite == null) return null;
+    return hitAt(
+      _tileScreenRect(image, sprite, tileCell, size, scale, offset),
+      path,
+      _WorldHit(tileCell, null),
+    );
+  }
+
+  final bridgeCandidates = <(double, _WorldHit?)>[
+    for (final bridge in queries.bridgesInBounds(
+      left: cell.column - reachCells,
+      right: cell.column + reachCells,
+      top: cell.row - reachCells,
+      bottom: cell.row + reachCells,
+    )) ...[
+      for (final deckCell in bridge.waterCells)
+        (
+          (deckCell.column + deckCell.row).toDouble(),
+          bridgeTileHit(
+            deckCell,
+            bridgeBodyRole(bridge.nearBank, bridge.farBank),
+          ),
+        ),
+      (
+        (bridge.nearBank.column + bridge.nearBank.row).toDouble(),
+        bridgeTileHit(
+          bridge.nearBank,
+          bridgeRampRole(bridge.nearBank, bridge.waterCells.first),
+        ),
+      ),
+      (
+        (bridge.farBank.column + bridge.farBank.row).toDouble(),
+        bridgeTileHit(
+          bridge.farBank,
+          bridgeRampRole(bridge.farBank, bridge.waterCells.last),
+        ),
+      ),
+    ],
+  ];
+
   final candidates = <(double, _WorldHit?)>[
-    for (final structure in structures)
-      (_structureDepth(structure).toDouble(), structureHit(structure)),
-    for (final prop in props) (propDepth(prop), propHit(prop)),
+    if (!bridgesOnly)
+      for (final structure in queries.structuresInBounds(
+        left: cell.column - reachCells,
+        right: cell.column + reachCells,
+        top: cell.row - reachCells,
+        bottom: cell.row + reachCells,
+      )..sort(_compareStructureDepth))
+        (_structureDepth(structure).toDouble(), structureHit(structure)),
+    if (!bridgesOnly)
+      for (final prop in queries.propsInBounds(
+        left: cell.column - reachCells,
+        right: cell.column + reachCells,
+        top: cell.row - reachCells,
+        bottom: cell.row + reachCells,
+      ))
+        (propDepth(prop), propHit(prop)),
+    ...bridgeCandidates,
   ]..sort((a, b) => b.$1.compareTo(a.$1));
   return [
     for (final candidate in candidates)
@@ -1014,6 +1100,7 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.selectedSubtileY,
     required this.hoverSubtileX,
     required this.hoverSubtileY,
+    required this.ghostPinned,
     required this.bridgeStartCell,
     required this.bridgeEndCell,
     required this.roadPlanCells,
@@ -1054,6 +1141,10 @@ class _ParcelWorldPainter extends CustomPainter {
   /// on desktop.
   final int hoverSubtileX;
   final int hoverSubtileY;
+
+  /// Whether the decor ghost holds the tapped spot instead of
+  /// following the cursor.
+  final bool ghostPinned;
   final CellCoord? bridgeStartCell;
   final CellCoord? bridgeEndCell;
   final List<CellCoord> roadPlanCells;
@@ -1906,7 +1997,12 @@ class _ParcelWorldPainter extends CustomPainter {
     ParcelWorldProbe.countActor();
     final sprite = content.sprite(role)!;
     final rect = _worldRectToScreen(
-      _propRect(image, sprite, prop),
+      _propRect(
+        image,
+        sprite,
+        prop,
+        surfaceLift: _surfaceLift(prop.cell, queries, content),
+      ),
       size,
       scale,
       offset,
@@ -1921,7 +2017,10 @@ class _ParcelWorldPainter extends CustomPainter {
     if (dimStructures) {
       paint.color = const Color(0x66FFFFFF);
     }
-    if (!sprite.sways) {
+    // A selected prop holds still: the selection wash repaints the
+    // unswayed sprite, and the swaying original behind it used to
+    // show through as a double image.
+    if (!sprite.sways || prop.id == selectedPropId) {
       canvas.drawImageRect(image, source, rect, paint);
       return;
     }
@@ -2017,34 +2116,6 @@ class _ParcelWorldPainter extends CustomPainter {
         GroundStyle.concrete => 'terrain.concrete',
       },
     ];
-  }
-
-  /// Screen rect for a tile-fit sprite at [cell] — width stretched to
-  /// the tile, height kept at the art's aspect, hanging below the
-  /// diamond by the sprite's baseOffsetY. Shared by tile drawing, the
-  /// water grid, and the bridge selection tint.
-  Rect _tileScreenRect(
-    ui.Image image,
-    SpriteDefinition sprite,
-    CellCoord cell,
-    Size size,
-    double scale,
-    Offset offset,
-  ) {
-    final center = _worldToScreen(_cellWorldCenter(cell), size, scale, offset);
-    final unit = (_logicalTileWidth * scale) / image.width;
-    final width = image.width * unit;
-    final height = image.height * unit;
-    final southVertexY =
-        center.dy +
-        (_logicalTileHeight / 2) * scale +
-        sprite.baseOffsetY * unit;
-    return Rect.fromLTWH(
-      center.dx - width / 2,
-      southVertexY - height,
-      width,
-      height,
-    );
   }
 
   /// Draws a tile sprite at its natural aspect ratio with the sprite's
@@ -2375,13 +2446,35 @@ class _ParcelWorldPainter extends CustomPainter {
     if (selectedCatalogueId != null) {
       final definition = content.structure(selectedCatalogueId!);
       if (definition != null) {
+        // Placement validity for the decor preview: the same check
+        // the quote runs, on the painter's prebuilt queries, so an
+        // invalid spot shows red instead of green.
+        bool propSpotValid(CellCoord cell, int subtileX, int subtileY) {
+          try {
+            checkPropPlacement(
+              state,
+              queries,
+              definition: definition,
+              cell: cell,
+              subtileX: subtileX,
+              subtileY: subtileY,
+            );
+            return true;
+          } on WorldRuleViolation {
+            return false;
+          }
+        }
+
         // The decor tool's ghost: a translucent sprite at the pending
         // subtile with a small diamond marking the target — the hover
         // point on desktop, the tapped cell and subtile on touch.
         if (definition.kind == StructureKind.decoration) {
-          _drawPropGhost(canvas, size, definition);
+          _drawPropGhost(canvas, size, definition, propSpotValid);
         }
         if (selectedCell != null) {
+          final invalid =
+              definition.kind == StructureKind.decoration &&
+              !propSpotValid(selectedCell!, selectedSubtileX, selectedSubtileY);
           for (final cell in structureFootprint(definition, selectedCell!)) {
             final center = _worldToScreen(
               _cellWorldCenter(cell),
@@ -2392,9 +2485,9 @@ class _ParcelWorldPainter extends CustomPainter {
             _drawCellOutline(
               canvas,
               center,
-              const Color(0xFF367D63),
+              invalid ? const Color(0xFFB3261E) : const Color(0xFF367D63),
               scale,
-              fill: const Color(0x334BC69B),
+              fill: invalid ? const Color(0x33B3261E) : const Color(0x334BC69B),
             );
           }
         }
@@ -2430,20 +2523,28 @@ class _ParcelWorldPainter extends CustomPainter {
   /// and its subtile on touch — plus a small filled diamond on the
   /// target subtile. Approved as mockup A (prop_ghost_preview.png):
   /// a subtile diamond is only ~8×4 screen px, but together with the
-  /// sprite it reads as "lands here".
+  /// sprite it reads as "lands here". [spotValid] decides the
+  /// palette: green when the placement quote would pass, red when it
+  /// would not.
   void _drawPropGhost(
     Canvas canvas,
     Size size,
     StructureDefinition definition,
+    bool Function(CellCoord cell, int subtileX, int subtileY) spotValid,
   ) {
     (CellCoord, int, int)? pending;
     if (hoverCell case final cell?) {
-      pending = (cell, hoverSubtileX, hoverSubtileY);
-    } else if (selectedCell case final cell?) {
-      pending = (cell, selectedSubtileX, selectedSubtileY);
+      // A pinned ghost holds the tapped spot even under the cursor.
+      if (!ghostPinned) pending = (cell, hoverSubtileX, hoverSubtileY);
+    }
+    if (pending == null) {
+      if (selectedCell case final cell?) {
+        pending = (cell, selectedSubtileX, selectedSubtileY);
+      }
     }
     if (pending == null) return;
     final (cell, subtileX, subtileY) = pending;
+    final invalid = !spotValid(cell, subtileX, subtileY);
 
     final role = definition.assetRoles.first;
     final path = content.tryAssetPathFor(role, null);
@@ -2454,14 +2555,21 @@ class _ParcelWorldPainter extends CustomPainter {
         image,
         Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
         _worldRectToScreen(
-          _propAnchorWorldRect(image, sprite, cell, subtileX, subtileY),
+          _propAnchorWorldRect(
+            image,
+            sprite,
+            cell,
+            subtileX,
+            subtileY,
+            surfaceLift: _surfaceLift(cell, queries, content),
+          ),
           size,
           scale,
           offset,
         ),
         Paint()
           ..filterQuality = FilterQuality.medium
-          ..color = const Color(0x73FFFFFF),
+          ..color = invalid ? const Color(0x73B3261E) : const Color(0x73FFFFFF),
       );
     }
 
@@ -2486,11 +2594,15 @@ class _ParcelWorldPainter extends CustomPainter {
       ..lineTo(marker.dx, marker.dy + halfHeight)
       ..lineTo(marker.dx - halfWidth, marker.dy)
       ..close();
-    canvas.drawPath(diamond, Paint()..color = const Color(0x804BC69B));
     canvas.drawPath(
       diamond,
       Paint()
-        ..color = const Color(0xFF1E6552)
+        ..color = invalid ? const Color(0x66B3261E) : const Color(0x804BC69B),
+    );
+    canvas.drawPath(
+      diamond,
+      Paint()
+        ..color = invalid ? const Color(0xFFB3261E) : const Color(0xFF1E6552)
         ..strokeWidth = 1.5 * scale.clamp(0.7, 1.6)
         ..style = PaintingStyle.stroke,
     );
@@ -2549,7 +2661,17 @@ class _ParcelWorldPainter extends CustomPainter {
     canvas.drawImageRect(
       image,
       Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-      _worldRectToScreen(_propRect(image, sprite, prop), size, scale, offset),
+      _worldRectToScreen(
+        _propRect(
+          image,
+          sprite,
+          prop,
+          surfaceLift: _surfaceLift(prop.cell, queries, content),
+        ),
+        size,
+        scale,
+        offset,
+      ),
       Paint()
         ..filterQuality = FilterQuality.medium
         ..colorFilter = const ColorFilter.mode(
@@ -2640,6 +2762,7 @@ class _ParcelWorldPainter extends CustomPainter {
       oldDelegate.selectedSubtileY != selectedSubtileY ||
       oldDelegate.hoverSubtileX != hoverSubtileX ||
       oldDelegate.hoverSubtileY != hoverSubtileY ||
+      oldDelegate.ghostPinned != ghostPinned ||
       oldDelegate.bridgeStartCell != bridgeStartCell ||
       oldDelegate.bridgeEndCell != bridgeEndCell ||
       oldDelegate.facingOverride != facingOverride ||
@@ -2762,13 +2885,19 @@ Offset facingPullOffset(String facing, double offset) => Offset(
 /// ([propFrontSubtile] on both axes) is the tile's own south vertex,
 /// so a prop placed there renders exactly where the 1×1 structures of
 /// pre-lattice saves did.
-Rect _propRect(ui.Image image, SpriteDefinition sprite, PlacedProp prop) {
+Rect _propRect(
+  ui.Image image,
+  SpriteDefinition sprite,
+  PlacedProp prop, {
+  double surfaceLift = 0,
+}) {
   final rect = _propAnchorWorldRect(
     image,
     sprite,
     prop.cell,
     prop.subtileX,
     prop.subtileY,
+    surfaceLift: surfaceLift,
   );
   // The facing offset leans the art toward the road the door faces.
   final facing = prop.facing;
@@ -2781,13 +2910,16 @@ Rect _propRect(ui.Image image, SpriteDefinition sprite, PlacedProp prop) {
 /// footprint's south vertex. The front subtile
 /// ([propFrontSubtile] on both axes) is the tile's own south vertex,
 /// so props from before the lattice render pixel-identically.
+/// [surfaceLift] raises the anchor onto elevated ground — today, a
+/// bridge deck.
 Rect _propAnchorWorldRect(
   ui.Image image,
   SpriteDefinition sprite,
   CellCoord cell,
   int subtileX,
-  int subtileY,
-) {
+  int subtileY, {
+  double surfaceLift = 0,
+}) {
   final center = _cellWorldCenter(cell);
   final fx = (subtileX + 0.5) / propSubtilesPerAxis - 0.5;
   final fy = (subtileY + 0.5) / propSubtilesPerAxis - 0.5;
@@ -2795,7 +2927,8 @@ Rect _propAnchorWorldRect(
   final bottomY =
       center.dy +
       (fx + fy) * _logicalTileHeight / 2 +
-      _logicalTileHeight / (propSubtilesPerAxis * 2);
+      _logicalTileHeight / (propSubtilesPerAxis * 2) -
+      surfaceLift;
   final width = image.width * sprite.renderScale;
   final height = image.height * sprite.renderScale;
   return Rect.fromLTWH(
@@ -2926,6 +3059,53 @@ Offset _cellWorldCorner(CellCoord gridCorner) => Offset(
 
 Offset _worldToScreen(Offset point, Size size, double scale, Offset offset) =>
     size.center(Offset.zero) + offset + point * scale;
+
+/// Screen rect for a tile-fit sprite at [cell] — width stretched to
+/// the tile, height kept at the art's aspect, hanging below the
+/// diamond by the sprite's baseOffsetY. Shared by tile drawing, the
+/// water grid, the bridge selection tint, and bridge hit-testing.
+Rect _tileScreenRect(
+  ui.Image image,
+  SpriteDefinition sprite,
+  CellCoord cell,
+  Size size,
+  double scale,
+  Offset offset,
+) {
+  final center = _worldToScreen(_cellWorldCenter(cell), size, scale, offset);
+  final unit = (_logicalTileWidth * scale) / image.width;
+  final width = image.width * unit;
+  final height = image.height * unit;
+  final southVertexY =
+      center.dy + (_logicalTileHeight / 2) * scale + sprite.baseOffsetY * unit;
+  return Rect.fromLTWH(
+    center.dx - width / 2,
+    southVertexY - height,
+    width,
+    height,
+  );
+}
+
+/// The body sprite's art width — the tile-fit unit for bridge deck
+/// rects is [_logicalTileWidth] divided by this.
+const _bridgeBodyArtWidth = 128.0;
+
+/// World-px lift for things standing on a cell. Bridge decks are the
+/// one elevated surface today: the body sprite hangs its bottom
+/// |baseOffsetY| art px above the cell's south vertex, and props
+/// stand on that deck — a lift of 6 world px for the current art.
+/// Ground cells lift nothing. This is the seed of the future
+/// terrain-elevation lookup (see the prop plan's future notes).
+double _surfaceLift(
+  CellCoord cell,
+  WorldQueries queries,
+  ContentBundle content,
+) {
+  if (!queries.bridgeDeckCells.contains(cell)) return 0;
+  final sprite = content.sprite('bridge.body.se');
+  if (sprite == null) return 0;
+  return -sprite.baseOffsetY * (_logicalTileWidth / _bridgeBodyArtWidth);
+}
 
 /// The subtile of [world] within its own nearest cell — where on the
 /// 8×8 lattice a tap or hover lands. Offsets from the cell centre:

@@ -293,7 +293,7 @@ void main() {
         ['5', '5', '3', '3', 'pine-tree', 'pine-small', ''],
         ['5', '5', '6', '2', 'wild-grass', '', ''],
         ['5', '4', '0', '0', 'street-lamp', '', ''],
-        ['10', '4', '7', '7', 'rocks', '', ''],
+        ['5', '6', '7', '7', 'rocks', '', ''],
       ]),
       content: content,
       terrainProvider: terrain,
@@ -302,9 +302,9 @@ void main() {
     expect(world.props.first.id, 'prop:5,5:3.3');
     final queries = WorldQueries(world, terrain);
     expect(queries.propsByCell[const CellCoord(5, 5)], hasLength(2));
-    // Ground, completed road, and bridge deck all carry props.
+    // Ground and completed road carry props.
     expect(queries.propAt(const CellCoord(5, 4), 0, 0), isNotNull);
-    expect(queries.propAt(const CellCoord(10, 4), 7, 7), isNotNull);
+    expect(queries.propAt(const CellCoord(5, 6), 7, 7), isNotNull);
     expect(
       () => validateParcelWorldState(world, content, terrain),
       returnsNormally,

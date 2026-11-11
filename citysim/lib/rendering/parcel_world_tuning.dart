@@ -9,7 +9,7 @@ library;
 const double cameraMinZoom = 0.42;
 
 /// Furthest zoom-in allowed by every zoom input.
-const double cameraMaxZoom = 3.2;
+const double cameraMaxZoom = 4.0;
 
 /// Mouse-wheel zoom responsiveness: scroll distance is converted to a zoom
 /// factor through `exp(-delta * sensitivity)`. Larger values zoom faster

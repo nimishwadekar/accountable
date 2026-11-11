@@ -87,25 +87,35 @@ void main() {
   /// Decodes a sprite's alpha through real async — the same art the
   /// app loads — so tap points derive from actual pixels. [cells] is
   /// the footprint the sprite stands on, for the renderer's anchor
-  /// math.
+  /// math; [tileFit] uses the tile-fit anchor (bridge decks and
+  /// ramps) instead of the structure anchor.
   Future<Art> loadArt(
     String assetPath,
     String role,
-    List<(int, int)> cells,
-  ) async {
+    List<(int, int)> cells, {
+    bool tileFit = false,
+  }) async {
     final data = await rootBundle.load(assetPath);
     final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
     final frame = await codec.getNextFrame();
     final bytes = await frame.image.toByteData(
       format: ui.ImageByteFormat.rawStraightRgba,
     );
-    final art = Art.forFootprint(
-      frame.image.width,
-      frame.image.height,
-      bytes!,
-      content.sprite(role)!,
-      cells,
-    );
+    final art = tileFit
+        ? Art.forTileFit(
+            frame.image.width,
+            frame.image.height,
+            bytes!,
+            content.sprite(role)!,
+            cells.first,
+          )
+        : Art.forFootprint(
+            frame.image.width,
+            frame.image.height,
+            bytes!,
+            content.sprite(role)!,
+            cells,
+          );
     frame.image.dispose();
     codec.dispose();
     return art;
@@ -113,6 +123,42 @@ void main() {
 
   final officeCells = [(6, 3), (7, 3), (6, 4), (7, 4)];
   final pineCells = [(6, 2)];
+
+  /// A bridge world in the codec test's shape: a road to the river,
+  /// the eight-tile crossing over the east water parcel, and a road
+  /// on the far bank. No structures — bridges are the subject.
+  ParcelWorldState worldWithBridge({List<List<String>> props = const []}) =>
+      sheetTablesToWorld(
+        SheetTables(
+          userData: const {
+            'seed': '7',
+            'coins': '50',
+            'coins_earned': '50',
+            'coins_spent': '0',
+            'simulated_date': '2026-11-05',
+            'high_water_date': '2026-11-05',
+            'construction_day': '10',
+          },
+          ownedParcels: const [
+            ['0', '0'],
+            ['1', '0'],
+            ['2', '0'],
+          ],
+          tiles: [
+            const ['4', '4', 'road', 'complete', 'dirt', '', '', ''],
+            const ['5', '4', 'road', 'complete', 'asphalt', '', '', ''],
+            const ['6', '4', 'road', 'complete', 'asphalt', '', '', ''],
+            const ['7', '4', 'road', 'complete', 'asphalt', '', '', ''],
+            for (var column = 8; column <= 15; column++)
+              ['$column', '4', 'bridge', 'complete', '', '', '', ''],
+            const ['16', '4', 'road', 'complete', 'asphalt', '', '', ''],
+          ],
+          props: props,
+          projects: const [],
+        ),
+        content: content,
+        terrainProvider: terrain,
+      );
 
   /// Pumps the map view standalone with a tap recorder, so tests can
   /// assert exactly which (cell, structure) each tap dispatched.
@@ -129,6 +175,7 @@ void main() {
     bool structurePicking = true,
     bool dimStructures = false,
     GlobalKey? boundaryKey,
+    Key? viewKey,
     String? selectedPropId,
     CellCoord? selectedCell,
     String? selectedCatalogueId,
@@ -142,6 +189,7 @@ void main() {
           body: RepaintBoundary(
             key: boundaryKey,
             child: ParcelWorldView(
+              key: viewKey,
               state: world,
               content: content,
               terrainProvider: terrain,
@@ -749,6 +797,322 @@ void main() {
     );
   });
 
+  testWidgets('taps on a raised bridge deck resolve to the deck cell', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // The west-most deck tile at (8,4): its top railing sits well
+    // above the cell, so the ground projection of a railing tap
+    // lands on a different tile — the old bug that made half the
+    // bridge unclickable. The sprite hit must report the deck cell.
+    final deck = (await tester.runAsync(
+      () => loadArt(
+        'assets/sprites/bridges/body/tile_road_bridge_body_SE_normal.png',
+        'bridge.body.se',
+        [(8, 4)],
+        tileFit: true,
+      ),
+    ))!;
+    final pixel = deck.firstOpaque();
+    expect(pixel, isNotNull, reason: 'the deck art has opaque pixels');
+    final projected = nearestCellOf(deck.worldPoint(pixel!));
+    expect(
+      CellCoord(projected.$1, projected.$2),
+      isNot(const CellCoord(8, 4)),
+      reason: 'the railing tap ground-projects off the deck cell',
+    );
+
+    for (final picking in [true, false]) {
+      final taps = <(CellCoord, String?)>[];
+      // A fresh view per round: the tap-cycle state (same-spot
+      // window) must not carry across rounds.
+      await pumpView(
+        tester,
+        worldWithBridge(),
+        onTap: (cell, structureId, subtileX, subtileY) =>
+            taps.add((cell, structureId)),
+        structurePicking: picking,
+        viewKey: UniqueKey(),
+      );
+      await pumpUntilArtLoads(tester);
+      await tester.tapAt(
+        deck.screenTap(
+          tester.getRect(find.byType(ParcelWorldView)).center,
+          pixel,
+        ),
+      );
+      await tester.pump();
+      expect(taps.single, (
+        const CellCoord(8, 4),
+        null,
+      ), reason: 'picking=$picking: the deck hit corrects the projection');
+    }
+  });
+
+  testWidgets('taps on a bridge ramp resolve to its bank cell', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final ramp = (await tester.runAsync(
+      () => loadArt(
+        'assets/sprites/bridges/ramp/tile_road_bridge_ramp_NW_normal.png',
+        'bridge.ramp.nw',
+        [(7, 4)],
+        tileFit: true,
+      ),
+    ))!;
+    final deck = (await tester.runAsync(
+      () => loadArt(
+        'assets/sprites/bridges/body/tile_road_bridge_body_SE_normal.png',
+        'bridge.body.se',
+        [(8, 4)],
+        tileFit: true,
+      ),
+    ))!;
+    // An elevated ramp pixel — its ground projection lands off the
+    // bank cell — that the deck in front does not cover.
+    (int, int)? pixel;
+    for (var y = 0; y < ramp.height && pixel == null; y++) {
+      for (var x = 0; x < ramp.width && pixel == null; x++) {
+        if (!ramp.opaque(x, y)) continue;
+        final world = ramp.worldPoint((x, y));
+        final projected = nearestCellOf(world);
+        if (CellCoord(projected.$1, projected.$2) == const CellCoord(7, 4)) {
+          continue;
+        }
+        final deckPixel = deck.pixelAt(world);
+        if (deckPixel != null && deck.opaque(deckPixel.$1, deckPixel.$2)) {
+          continue;
+        }
+        pixel = (x, y);
+      }
+    }
+    expect(pixel, isNotNull, reason: 'the ramp has exposed elevated art');
+
+    final taps = <(CellCoord, String?)>[];
+    await pumpView(
+      tester,
+      worldWithBridge(),
+      onTap: (cell, structureId, subtileX, subtileY) =>
+          taps.add((cell, structureId)),
+      structurePicking: false,
+    );
+    await pumpUntilArtLoads(tester);
+    await tester.tapAt(
+      ramp.screenTap(
+        tester.getRect(find.byType(ParcelWorldView)).center,
+        pixel!,
+      ),
+    );
+    await tester.pump();
+    expect(taps.single, (
+      const CellCoord(7, 4),
+      null,
+    ), reason: 'the ramp hit reports its bank cell');
+  });
+
+  testWidgets('props on a bridge deck stand on the deck surface', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // The same lamp at the front subtile of a grass cell (5,5) and a
+    // deck cell (10,4). The two anchors differ by the pure cell
+    // delta — x: 192, y: 64 — minus the deck's surface lift, so the
+    // lamp's diff bounding boxes must sit 58 px apart vertically.
+    final (width, height, raw) = (await tester.runAsync(() async {
+      final data = await rootBundle.load(
+        'assets/sprites/props/streetside/prop_lightpole_a.png',
+      );
+      final codec = await ui.instantiateImageCodec(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+      );
+      final frame = await codec.getNextFrame();
+      final bytes = await frame.image.toByteData(
+        format: ui.ImageByteFormat.rawStraightRgba,
+      );
+      final size = (frame.image.width, frame.image.height);
+      frame.image.dispose();
+      codec.dispose();
+      return (size.$1, size.$2, bytes);
+    }))!;
+    final sprite = content.sprite('lightpole-a')!;
+    final grassLamp = Art.forProp(
+      width,
+      height,
+      raw!,
+      sprite,
+      cell: (5, 5),
+      subtileX: 7,
+      subtileY: 7,
+    );
+    final deckLamp = Art.forProp(
+      width,
+      height,
+      raw,
+      sprite,
+      cell: (10, 4),
+      subtileX: 7,
+      subtileY: 7,
+    );
+
+    final boundaryKey = GlobalKey();
+    Future<(ui.Image, ByteData)> render(
+      List<List<String>> props,
+      CellCoord? selectedCell,
+      String? selectedPropId,
+    ) async {
+      await pumpView(
+        tester,
+        worldWithBridge(props: props),
+        onTap: (cell, structureId, subtileX, subtileY) {},
+        boundaryKey: boundaryKey,
+        selectedCell: selectedCell,
+        selectedPropId: selectedPropId,
+      );
+      await pumpUntilArtLoads(tester);
+      return captureBytes(tester, boundaryKey);
+    }
+
+    // Both lamps render selected: the selection wash guarantees a
+    // strong colour shift on every sprite pixel (the raw lamp greys
+    // sit too close to the deck art to diff reliably), and a
+    // selected prop holds still, so sway cannot shift the boxes.
+    final reference = await render(const [], null, null);
+    final onGrass = await render(
+      const [
+        ['5', '5', '7', '7', 'street-lamp', 'lightpole-a', ''],
+      ],
+      const CellCoord(5, 5),
+      'prop:5,5:7.7',
+    );
+    final onDeck = await render(
+      const [
+        ['10', '4', '7', '7', 'street-lamp', 'lightpole-a', ''],
+      ],
+      const CellCoord(10, 4),
+      'prop:10,4:7.7',
+    );
+
+    final center = tester.getRect(find.byType(ParcelWorldView)).center;
+    Rect screenWindow(Art art) => Rect.fromLTRB(
+      center.dx + art.worldRect.left - 4,
+      center.dy + art.worldRect.top - 4 - 128,
+      center.dx + art.worldRect.right + 4,
+      center.dy + art.worldRect.bottom + 4 - 128,
+    );
+    Rect diffBBox(
+      (ui.Image, ByteData) scene,
+      (ui.Image, ByteData) ref,
+      Rect window,
+    ) {
+      final (image, _) = scene;
+      var left = window.right, right = window.left;
+      var top = window.bottom, bottom = window.top;
+      for (var y = window.top.floor(); y <= window.bottom.ceil(); y++) {
+        for (var x = window.left.floor(); x <= window.right.ceil(); x++) {
+          final px = x.clamp(0, image.width - 1).toDouble();
+          final py = y.clamp(0, image.height - 1).toDouble();
+          if (channelGap(
+                pixelAt(scene, Offset(px, py)),
+                pixelAt(ref, Offset(px, py)),
+              ) >
+              6) {
+            if (px < left) left = px;
+            if (px > right) right = px;
+            if (py < top) top = py;
+            if (py > bottom) bottom = py;
+          }
+        }
+      }
+      expect(
+        right,
+        greaterThan(left),
+        reason: 'the lamp appears inside its window',
+      );
+      return Rect.fromLTRB(left, top, right, bottom);
+    }
+
+    final grassBox = diffBBox(onGrass, reference, screenWindow(grassLamp));
+    final deckBox = diffBBox(onDeck, reference, screenWindow(deckLamp));
+    expect(
+      deckBox.left - grassBox.left,
+      closeTo(192, 1),
+      reason: 'the pure cell delta on x',
+    );
+    expect(
+      deckBox.top - grassBox.top,
+      closeTo(58, 2),
+      reason:
+          'cell delta 64 minus the 6px deck surface lift — the lamp '
+          'head rises above the selected cell\'s outline, so the box '
+          'top is the sprite\'s own',
+    );
+  });
+
+  testWidgets('an invalid placement spot previews red', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // The same street-lamp selection at a valid grass cell and an
+    // invalid water cell: the ghost's subtile marker flips from the
+    // selection green to the line preview's invalid red.
+    final boundaryKey = GlobalKey();
+    Future<(ui.Image, ByteData)> render(CellCoord cell) async {
+      await pumpView(
+        tester,
+        worldWithBridge(),
+        onTap: (cell, structureId, subtileX, subtileY) {},
+        boundaryKey: boundaryKey,
+        selectedCatalogueId: 'street-lamp',
+        selectedCell: cell,
+        selectedSubtileX: 3,
+        selectedSubtileY: 3,
+      );
+      await pumpUntilArtLoads(tester);
+      return captureBytes(tester, boundaryKey);
+    }
+
+    final valid = await render(const CellCoord(5, 5));
+    final invalid = await render(const CellCoord(10, 5));
+
+    final center = tester.getRect(find.byType(ParcelWorldView)).center;
+    Offset markerOf(CellCoord cell) {
+      final fx = (3 + 0.5) / propSubtilesPerAxis - 0.5;
+      final fy = (3 + 0.5) / propSubtilesPerAxis - 0.5;
+      return center +
+          Offset(
+            (cell.column - cell.row) * 32.0 + (fx - fy) * 32,
+            (cell.column + cell.row) * 16.0 + (fx + fy) * 16,
+          ) -
+          const Offset(0, 128);
+    }
+
+    final validPx = pixelAt(valid, markerOf(const CellCoord(5, 5)));
+    final invalidPx = pixelAt(invalid, markerOf(const CellCoord(10, 5)));
+    expect(
+      ((validPx >> 16) & 0xFF) - ((validPx >> 24) & 0xFF),
+      greaterThan(25),
+      reason: 'a valid spot previews green',
+    );
+    expect(
+      ((invalidPx >> 24) & 0xFF) - ((invalidPx >> 16) & 0xFF),
+      greaterThan(25),
+      reason: 'an invalid spot previews red',
+    );
+  });
+
   testWidgets('selecting a prop washes its sprite in place', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(800, 600);
@@ -1056,6 +1420,41 @@ class Art {
          bytes.offsetInBytes,
          bytes.lengthInBytes,
        );
+
+  /// The renderer's tile-fit anchor for bridge decks and ramps:
+  /// width stretched to the tile, height at the art's aspect, hanging
+  /// below the diamond by the sprite's baseOffsetY.
+  Art.forTileFit(
+    this.width,
+    this.height,
+    ByteData bytes,
+    this.sprite,
+    (int, int) cell,
+  ) : worldRect = _tileFitRect(sprite, width, height, cell),
+      alpha = bytes.buffer.asUint8List(
+        bytes.offsetInBytes,
+        bytes.lengthInBytes,
+      );
+
+  static Rect _tileFitRect(
+    SpriteDefinition sprite,
+    int width,
+    int height,
+    (int, int) cell,
+  ) {
+    final centerX = (cell.$1 - cell.$2) * 32.0;
+    final centerY = (cell.$1 + cell.$2) * 16.0;
+    final unit = 64.0 / width;
+    final drawnWidth = width * unit;
+    final drawnHeight = height * unit;
+    final southVertexY = centerY + 16 + sprite.baseOffsetY * unit;
+    return Rect.fromLTWH(
+      centerX - drawnWidth / 2,
+      southVertexY - drawnHeight,
+      drawnWidth,
+      drawnHeight,
+    );
+  }
 
   static Rect _propAnchorRect(
     SpriteDefinition sprite,
