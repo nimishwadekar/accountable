@@ -2283,7 +2283,12 @@ class _ParcelWorldPainter extends CustomPainter {
   /// colour — the same wash structures get — so the crossing itself
   /// reads as picked, not just the tiles beneath it. The same roles
   /// and rects the actor pass draws, repainted through a colour
-  /// filter.
+  /// filter — and in the actor pass's own depth order (base-cell
+  /// column + row), so the wash stays a pure recolour: this pass
+  /// runs above the actors, and painting the ramps after the bodies
+  /// put whichever ramp is visually far on top of the deck tile
+  /// that occludes it — the far end of the bridge drew over the
+  /// bridge.
   void _tintBridgeSprite(Canvas canvas, Size size, CompletedBridge bridge) {
     const wash = ColorFilter.mode(Color(0x664BC69B), BlendMode.srcATop);
     void tinted(String role, CellCoord cell) {
@@ -2302,17 +2307,27 @@ class _ParcelWorldPainter extends CustomPainter {
     }
 
     final bodyRole = bridgeBodyRole(bridge.nearBank, bridge.farBank);
-    for (final cell in bridge.waterCells) {
-      tinted(bodyRole, cell);
+    final pieces = <(double, void Function())>[
+      for (final cell in bridge.waterCells)
+        ((cell.column + cell.row).toDouble(), () => tinted(bodyRole, cell)),
+      (
+        (bridge.nearBank.column + bridge.nearBank.row).toDouble(),
+        () => tinted(
+          bridgeRampRole(bridge.nearBank, bridge.waterCells.first),
+          bridge.nearBank,
+        ),
+      ),
+      (
+        (bridge.farBank.column + bridge.farBank.row).toDouble(),
+        () => tinted(
+          bridgeRampRole(bridge.farBank, bridge.waterCells.last),
+          bridge.farBank,
+        ),
+      ),
+    ]..sort((a, b) => a.$1.compareTo(b.$1));
+    for (final piece in pieces) {
+      piece.$2();
     }
-    tinted(
-      bridgeRampRole(bridge.nearBank, bridge.waterCells.first),
-      bridge.nearBank,
-    );
-    tinted(
-      bridgeRampRole(bridge.farBank, bridge.waterCells.last),
-      bridge.farBank,
-    );
   }
 
   /// The selected parcel in parcel mode: a light fill on owned land
