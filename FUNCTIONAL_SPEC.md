@@ -453,6 +453,7 @@ The global analysis and daily-table start date is the earliest `Transactions.dat
 - An account is open when `opening_date <= date` and either `closing_date` is empty or `date <= closing_date`.
 - Write the first value for each currency/account/net-worth series, then write a row only when its value differs from that series' latest prior value. Exchange rates compare `rate_to_usd`; account rows compare native `balance`; net-worth rows compare USD `amount`.
 - Rebuilds apply the same change-point rule and replace stale rows for closed accounts or unused currencies. The processed-through checkpoint is updated only after all three tables are successfully written.
+- Catch-up and reconciliation refuse to run when history lacks a required baseline (empty or late net worth, a missing initial exchange rate, or a missing initial account balance) and report which one is missing. During startup this surfaces a dialog offering the explicit rebuild; confirming it rebuilds the daily tables and resumes loading the refreshed snapshot.
 
 ### Missing daily data
 

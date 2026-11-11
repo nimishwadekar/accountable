@@ -19,6 +19,19 @@ class TransactionSavedHistoryRepairException implements Exception {
       'Transaction saved, but daily history repair could not be confirmed: $cause';
 }
 
+/// Daily history is missing a baseline required to append or reconcile rows.
+/// The caller should offer the explicit daily-tables rebuild action.
+class DailyHistoryRebuildRequiredException implements Exception {
+  const DailyHistoryRebuildRequiredException(this.reason);
+
+  final String reason;
+
+  @override
+  String toString() =>
+      'Daily history does not cover the current source data. $reason '
+      'Use “Rebuild daily tables” to repair it.';
+}
+
 class DailyMaintenanceService {
   DailyMaintenanceService({
     required this.client,
@@ -71,11 +84,9 @@ class DailyMaintenanceService {
     final endDate = _dateOnly(yesterday);
     final processedThrough = _requireProcessedThrough();
     if (!endDate.isAfter(processedThrough)) return;
-    if (_requiresManualRebuild) {
-      throw StateError(
-        'Daily history does not cover the current source data. '
-        'Run the explicit “Rebuild daily tables” action before catch-up.',
-      );
+    final rebuildReason = _rebuildRequiredReason;
+    if (rebuildReason != null) {
+      throw DailyHistoryRebuildRequiredException(rebuildReason);
     }
 
     final nextDate = processedThrough.add(const Duration(days: 1));
@@ -221,11 +232,9 @@ class DailyMaintenanceService {
     if (startDate == null || startDate.isAfter(endDate)) {
       return false;
     }
-    if (_requiresManualRebuild) {
-      throw StateError(
-        'Daily history does not cover the current source data. '
-        'Run the explicit “Rebuild daily tables” action to initialize or repair it.',
-      );
+    final rebuildReason = _rebuildRequiredReason;
+    if (rebuildReason != null) {
+      throw DailyHistoryRebuildRequiredException(rebuildReason);
     }
 
     final rates = await _ratesForReconciliation(
@@ -820,15 +829,23 @@ class DailyMaintenanceService {
     );
   }
 
-  bool get _requiresManualRebuild {
+  String? get _rebuildRequiredReason {
     final earliestSource = _earliestSourceDate;
-    if (earliestSource == null) return false;
+    if (earliestSource == null) return null;
     final through = _processedThrough;
-    if (data.dailyNetWorth.isEmpty || through == null) return true;
+    if (through == null) {
+      return 'Metadata is missing $dailyProcessedThroughMetadataKey.';
+    }
+    if (data.dailyNetWorth.isEmpty) {
+      return 'DailyNetWorth has no rows.';
+    }
     final firstNetWorth = data.dailyNetWorth
         .map((value) => _dateOnly(value.date))
         .reduce((a, b) => a.isBefore(b) ? a : b);
-    if (firstNetWorth.isAfter(earliestSource)) return true;
+    if (firstNetWorth.isAfter(earliestSource)) {
+      return 'DailyNetWorth starts on ${_dateString(firstNetWorth)}, after '
+          'the earliest transaction on ${_dateString(earliestSource)}.';
+    }
 
     final latestRates = _LatestExchangeRateIndex(data.exchangeRates);
     final throughDate = _dateOnly(through);
@@ -855,7 +872,8 @@ class DailyMaintenanceService {
         try {
           latestRates.rateFor(currency.id, firstUse);
         } on StateError {
-          return true;
+          return 'No ${currency.id} exchange rate exists on or before '
+              '${_dateString(firstUse)}.';
         }
       }
     }
@@ -874,9 +892,12 @@ class DailyMaintenanceService {
             balance.accountId == account.id &&
             !_dateOnly(balance.date).isAfter(throughDate),
       );
-      if (!hasBaseline) return true;
+      if (!hasBaseline) {
+        return 'No daily balance exists for ${account.id} on or before '
+            '${_dateString(throughDate)}.';
+      }
     }
-    return false;
+    return null;
   }
 
   DateTime? get _earliestSourceDate => data.earliestTransactionDate;

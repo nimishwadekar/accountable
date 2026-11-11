@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../config/accountable_config.dart';
 import '../data/data.dart';
 import 'app_shell.dart';
+import 'daily_history_rebuild_dialog.dart';
 import 'pages/app_pages.dart';
 import 'google_sign_in_button.dart';
 import 'theme/design_tokens.dart';
@@ -44,6 +45,8 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
   Completer<AccountableGoogleAccount?>? _silentSignInCompleter;
   String? _error;
   String? _outboxError;
+  String? _historyRepairError;
+  bool _historyRepairDialogOpen = false;
   DataValidationFailure? _dataFailure;
   _GateState _state = _GateState.restoringSignIn;
   AccountableGoogleAccount? _account;
@@ -527,6 +530,9 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
       }
       if (!_isCurrentConnection(generation)) return;
       if (!transitionedOnline) setState(() => _state = _GateState.ready);
+      if (_historyRepairError != null) {
+        unawaited(_promptDailyHistoryRebuild(generation: generation));
+      }
       _logTiming('app startup finished');
     } on SheetsAuthorizationRequiredException {
       if (!_isCurrentConnection(generation)) return;
@@ -607,6 +613,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     required int generation,
     bool allowUncertainRetry = false,
   }) async {
+    _historyRepairError = null;
     while (_isCurrentConnection(generation) && !_transactionFormActive) {
       await _flushPendingTransactions(
         repository,
@@ -616,9 +623,17 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         return false;
       }
       final reconcile = _reconcileDailyTables;
-      final data = reconcile == null
-          ? await repository.reload()
-          : await reconcile();
+      final AppDataSnapshot data;
+      if (reconcile == null) {
+        data = await repository.reload();
+      } else {
+        try {
+          data = await reconcile();
+        } on DailyHistoryRebuildRequiredException catch (error) {
+          _historyRepairError = error.toString();
+          return false;
+        }
+      }
       if (!_isCurrentConnection(generation) || _transactionFormActive) {
         return false;
       }
@@ -670,6 +685,9 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         _resumeRequestedOnlineTransition();
       }
     }
+    if (_isCurrentConnection(generation) && _historyRepairError != null) {
+      await _promptDailyHistoryRebuild(generation: generation);
+    }
   }
 
   Future<void> _retryOutbox() async {
@@ -695,6 +713,32 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
         _resumeRequestedOnlineTransition();
       }
     }
+    if (_isCurrentConnection(generation) && _historyRepairError != null) {
+      await _promptDailyHistoryRebuild(generation: generation);
+    }
+  }
+
+  /// Offers the explicit daily-tables rebuild when reconciliation reports that
+  /// stored history lacks a baseline, then resumes the online transition so the
+  /// app reloads the rebuilt tables.
+  Future<void> _promptDailyHistoryRebuild({required int generation}) async {
+    if (_historyRepairDialogOpen || !mounted) return;
+    final rebuild = _rebuildDailyTables;
+    final message = _historyRepairError;
+    if (rebuild == null || message == null) return;
+    _historyRepairDialogOpen = true;
+    try {
+      final rebuilt = await showDailyHistoryRebuildDialog(
+        context: context,
+        message: message,
+        onRebuild: rebuild,
+      );
+      if (!rebuilt || !_isCurrentConnection(generation)) return;
+      if (mounted) setState(() => _historyRepairError = null);
+      await _completeOnlineTransition();
+    } finally {
+      _historyRepairDialogOpen = false;
+    }
   }
 
   Future<void> _switchAccount() async {
@@ -705,6 +749,7 @@ class _GoogleSheetsGateState extends State<GoogleSheetsGate> {
     _rebuildNetWorth = null;
     _reconcileDailyTables = null;
     _refreshFormSnapshot = null;
+    _historyRepairError = null;
     await _authService.signOut();
     if (!mounted) return;
     setState(() {

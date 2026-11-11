@@ -358,10 +358,10 @@ void main() {
           data: missingHistory,
         ).reconcile(yesterday: DateTime.utc(2026, 10, 12)),
         throwsA(
-          isA<StateError>().having(
-            (error) => error.message,
-            'message',
-            contains('explicit “Rebuild daily tables”'),
+          isA<DailyHistoryRebuildRequiredException>().having(
+            (error) => error.reason,
+            'reason',
+            contains('DailyNetWorth has no rows'),
           ),
         ),
       );
@@ -999,10 +999,10 @@ void main() {
           ),
         ).catchUp(yesterday: DateTime.utc(2026, 10, 13)),
         throwsA(
-          isA<StateError>().having(
-            (error) => error.message,
-            'message',
-            contains('explicit “Rebuild daily tables”'),
+          isA<DailyHistoryRebuildRequiredException>().having(
+            (error) => error.reason,
+            'reason',
+            contains('DailyNetWorth starts on 2026-10-11'),
           ),
         ),
       );
