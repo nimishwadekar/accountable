@@ -256,7 +256,7 @@ ParcelWorldState startStructureConstruction(
       ).adjacentRoadSides(quote.footprint);
       facing = facingForRoadSides(sides);
       if (preferredFacing != null &&
-          sides.map(facingHalf).toSet().length > 1 &&
+          sides.map(facingArtKey).toSet().length > 1 &&
           sides.contains(preferredFacing)) {
         facing = preferredFacing;
       }
@@ -540,13 +540,13 @@ ParcelWorldState swapStructureFacing(
     state,
     terrainProvider,
   ).adjacentRoadSides(project.footprint);
-  if (sides.map(facingHalf).toSet().length < 2) {
+  if (sides.map(facingArtKey).toSet().length < 2) {
     throw const WorldRuleViolation(
       'The road touches only one side, so the door side is fixed.',
     );
   }
   // A null facing (saves predating the snapshot) reads as the planning
-  // default half, so the flip still lands on a real side.
+  // default variant, so the flip still lands on a real side.
   final flipped = flipFacing(project.facing ?? 'east', sides);
   final swapped = _copyConstruction(project, facing: flipped);
   return state.copyWith(

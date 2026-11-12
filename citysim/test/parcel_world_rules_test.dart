@@ -490,7 +490,7 @@ void main() {
       );
     });
 
-    test('facings swap only while roads border both screen halves', () {
+    test('facings swap only while roads border both art variants', () {
       var world = grantWorldDebugCoins(newWorld(), 30);
       // A single-side plan is fixed: the road east of (3,4) is its only
       // frontage.
@@ -519,9 +519,10 @@ void main() {
       );
 
       // Grow a crossroads so (6,5) and (5,6) each see roads on both
-      // screen halves: (6,5) has its north (6,4) and west (5,5); (5,6)
-      // has its north (5,5) and west (4,6). Each stretch is planned and
-      // fully funded before the next claims the builder again.
+      // art variants: (6,5) has its north (6,4) — the left variant —
+      // and west (5,5) — the right; (5,6) has its north (5,5) and
+      // west (4,6). Each stretch is planned and fully funded before
+      // the next claims the builder again.
       world = planAndFundRoad(
         world,
         cells: const [CellCoord(4, 5), CellCoord(5, 5)],
@@ -538,7 +539,7 @@ void main() {
         origin: const CellCoord(6, 5),
       );
       final project = world.constructions.single;
-      expect(project.facing, 'north', reason: 'right half wins by default');
+      expect(project.facing, 'north', reason: 'the left-variant side wins');
 
       world = swapStructureFacing(
         world,
@@ -554,7 +555,7 @@ void main() {
         amount: project.totalCostCoins,
       );
 
-      // The player's pre-placement choice is honoured on both halves.
+      // The player's pre-placement choice is honoured on both variants.
       world = startStructureConstruction(
         world,
         content,

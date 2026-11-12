@@ -4,22 +4,24 @@ import 'package:citysim/world/world_queries.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('facingHalf', () {
-    test('north/east map to the right art variant, south/west to left', () {
-      expect(facingHalf('north'), 'right');
-      expect(facingHalf('east'), 'right');
-      expect(facingHalf('south'), 'left');
-      expect(facingHalf('west'), 'left');
+  group('facingArtKey', () {
+    test('north/south roads draw the left variant, east/west the right', () {
+      expect(facingArtKey('north'), 'left');
+      expect(facingArtKey('south'), 'left');
+      expect(facingArtKey('east'), 'right');
+      expect(facingArtKey('west'), 'right');
     });
   });
 
   group('facingForRoadSides', () {
-    test('visible facade sides beat around-the-corner ones', () {
+    test('door-on-road sides beat around-the-corner ones', () {
       expect(facingForRoadSides({'east', 'north'}), 'east');
       expect(facingForRoadSides({'north'}), 'north');
       expect(facingForRoadSides({'south', 'west'}), 'south');
       expect(facingForRoadSides({'west'}), 'west');
-      expect(facingForRoadSides({'east', 'south', 'west'}), 'east');
+      expect(facingForRoadSides({'east', 'south', 'west'}), 'south');
+      expect(facingForRoadSides({'north', 'south'}), 'south');
+      expect(facingForRoadSides({'east', 'west'}), 'east');
     });
 
     test('no frontage falls back to the south default', () {
@@ -28,12 +30,21 @@ void main() {
   });
 
   group('flipFacing', () {
-    test('flips to the best side of the other screen half', () {
+    test('flips to the best side of the other art variant', () {
       expect(flipFacing('east', {'east', 'south'}), 'south');
-      expect(flipFacing('north', {'north', 'south', 'west'}), 'south');
-      expect(flipFacing('east', {'east', 'north', 'west'}), 'west');
+      expect(flipFacing('north', {'north', 'south', 'west'}), 'west');
+      expect(flipFacing('east', {'east', 'north', 'west'}), 'north');
       expect(flipFacing('south', {'east', 'south'}), 'east');
       expect(flipFacing('west', {'west', 'north'}), 'north');
+    });
+
+    test('same-variant sides are never swap targets', () {
+      // South and north share the left variant, east and west the
+      // right: nothing to flip to, so the fallback arm keeps the flip
+      // total. Callers never offer the swap without both variants
+      // present, so these arms only fire through direct calls.
+      expect(flipFacing('south', {'south', 'north'}), 'east');
+      expect(flipFacing('east', {'east', 'west'}), 'south');
     });
   });
 

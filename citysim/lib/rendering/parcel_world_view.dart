@@ -2669,7 +2669,7 @@ class _ParcelWorldPainter extends CustomPainter {
               canvas,
               size,
               footprint,
-              sides.map(facingHalf).toSet().length > 1 &&
+              sides.map(facingArtKey).toSet().length > 1 &&
                       sides.contains(facingOverride)
                   ? facingOverride!
                   : facingForRoadSides(sides),

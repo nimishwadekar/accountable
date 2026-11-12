@@ -4,26 +4,27 @@ import 'world_state.dart';
 
 import '../content/content_bundle.dart';
 
-/// The road side a building faces by default. Visible-facade sides win
-/// over around-the-corner ones and the screen-right half wins over the
-/// left — the door-half rule this generalises — so the order is east,
-/// north, south, west. Falls back to south, the left-half default, when
-/// no road borders the footprint yet (a placement preview before the
-/// roads exist).
+/// The road side a building faces by default: door-on-road sides win
+/// over around-the-corner ones, and the camera-facing street facade
+/// wins first — so the order is south, east, north, west. Falls back
+/// to south, the left-variant default, when no road borders the
+/// footprint yet (a placement preview before the roads exist).
 String facingForRoadSides(Set<String> sides) {
-  for (final side in const ['east', 'north', 'south', 'west']) {
+  for (final side in const ['south', 'east', 'north', 'west']) {
     if (sides.contains(side)) return side;
   }
   return 'south';
 }
 
-/// The road side a door swap moves to: the best side of the half the
-/// door does not currently face. Callers only offer the swap once roads
-/// border both halves, so the fallback arm just keeps the flip total.
+/// The road side a door swap moves to: the best side that draws with
+/// the other art variant, so every flip visibly turns the building —
+/// sides sharing the current variant (south/north or east/west) are
+/// never offered. Callers only offer the swap once roads border both
+/// variants, so the fallback arm just keeps the flip total.
 String flipFacing(String facing, Set<String> roadSides) {
-  final goingLeft = facingHalf(facing) == 'right';
+  final goingLeft = facingArtKey(facing) == 'right';
   for (final side
-      in goingLeft ? const ['south', 'west'] : const ['east', 'north']) {
+      in goingLeft ? const ['south', 'north'] : const ['east', 'west']) {
     if (roadSides.contains(side)) return side;
   }
   return goingLeft ? 'south' : 'east';

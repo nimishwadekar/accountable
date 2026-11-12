@@ -152,12 +152,15 @@ class StructureDefinition {
 // Sprites
 // ---------------------------------------------------------------------------
 
-/// Which art variant a facing side draws with: north/east doors sit on
-/// the screen-right facade, south/west ones on the screen-left. Maps the
-/// compass facings saved with a structure to the left/right keys of a
-/// sprite's `facings` art map.
-String facingHalf(String facing) =>
-    facing == 'north' || facing == 'east' ? 'right' : 'left';
+/// Which art variant a facing side draws with: the street face follows
+/// the road's axis. A road on the north or south side runs east-west,
+/// so the door belongs on the south (screen-left) facade — the `left`
+/// variant. A road on the east or west side runs north-south, so the
+/// door belongs on the east (screen-right) facade — the `right`
+/// variant. Maps the compass facings saved with a structure to the
+/// left/right keys of a sprite's `facings` art map.
+String facingArtKey(String facing) =>
+    facing == 'east' || facing == 'west' ? 'right' : 'left';
 
 class SpriteDefinition {
   const SpriteDefinition({
@@ -230,14 +233,14 @@ class SpriteDefinition {
   }
 
   /// Resolves the art file for a door side. Facings sprites keep one
-  /// variant per screen half — north/east draw the right-facing door,
-  /// south/west the left — so the compass facing maps to a half before
-  /// lookup, and a missing facing falls back to the left variant.
-  /// Single-facing sprites ignore [facing].
+  /// variant per street axis — north/south roads draw the left-facing
+  /// door, east/west ones the right — so the compass facing maps to a
+  /// variant before lookup, and a missing facing falls back to the left
+  /// variant. Single-facing sprites ignore [facing].
   String pathFor(String? facing) {
     final facings = facingPaths;
     if (facings == null) return assetPath!;
-    return facings[facingHalf(facing ?? 'south')] ?? facings['left']!;
+    return facings[facingArtKey(facing ?? 'south')] ?? facings['left']!;
   }
 
   SpriteDefinition copyWith({

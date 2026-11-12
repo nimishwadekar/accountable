@@ -437,7 +437,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         world,
         _terrain,
       ).adjacentRoadSides(job.footprint);
-      return sides.map(facingHalf).toSet().length >= 2
+      return sides.map(facingArtKey).toSet().length >= 2
           ? (job: job, facing: job.facing!, roadSides: sides)
           : null;
     }
@@ -455,7 +455,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     if (sprite == null || !sprite.hasFacings) return null;
     final footprint = structureFootprint(definition, cell);
     final sides = WorldQueries(world, _terrain).adjacentRoadSides(footprint);
-    if (sides.map(facingHalf).toSet().length < 2) return null;
+    if (sides.map(facingArtKey).toSet().length < 2) return null;
     return (
       job: null,
       facing: _facingOverride ?? facingForRoadSides(sides),

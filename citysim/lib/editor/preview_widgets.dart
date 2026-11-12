@@ -292,12 +292,13 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
   bool get _hasFacings =>
       spritePathEntries(_sprite).any((entry) => entry.$1.isNotEmpty);
 
-  /// The art file for a road side: facings sprites pick the variant for
-  /// the side's screen half (north/east right, south/west left);
-  /// single-facing sprites keep their only file.
+  /// The art file for a road side: facings sprites pick the variant
+  /// for the side's street axis — north/south roads draw the
+  /// left-facing door, east/west ones the right; single-facing
+  /// sprites keep their only file.
   String? _spritePath(String side) {
     final entries = spritePathEntries(_sprite);
-    final half = side == 'north' || side == 'east' ? 'right' : 'left';
+    final half = side == 'east' || side == 'west' ? 'right' : 'left';
     for (final entry in entries) {
       if (entry.$1 == half) return entry.$2;
     }
