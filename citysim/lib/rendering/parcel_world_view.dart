@@ -958,27 +958,6 @@ class _WorldHit {
   final String? structureId;
 }
 
-/// Strokes [source] as dashes — [dash] drawn, [gap] skipped, in the
-/// path's own coordinate units — so the result scales with whatever
-/// transform the source was built in.
-Path _dashPath(Path source, double dash, double gap) {
-  final dashed = Path();
-  for (final metric in source.computeMetrics()) {
-    var distance = 0.0;
-    var draw = true;
-    while (distance < metric.length) {
-      final length = draw ? dash : gap;
-      final next = math.min(distance + length, metric.length);
-      if (draw) {
-        dashed.addPath(metric.extractPath(distance, next), Offset.zero);
-      }
-      distance = next;
-      draw = !draw;
-    }
-  }
-  return dashed;
-}
-
 /// Every structure, prop, or bridge tile hit by a tap, in
 /// front-to-back painter order — each entry is one sprite with an
 /// opaque pixel under the tap point. With [bridgesOnly], used by the
@@ -1595,8 +1574,11 @@ class _ParcelWorldPainter extends CustomPainter {
   /// The settlement's usable area: a thick dashed white line along the
   /// boundary of the owned region — every owned-parcel edge that faces
   /// unowned land or open water. Edges between owned parcels draw
-  /// nothing, so the whole owned region reads as one shape. Visible in
-  /// every mode.
+  /// nothing, so the whole owned region reads as one shape. The
+  /// dashes are isometric parallelograms — long sides on the
+  /// boundary's own grid angle, ends cut on the crossing angle — one
+  /// period per tile edge, lattice-locked (see [_addIsoDashes]).
+  /// Visible in every mode.
   void _drawOwnedOutline(
     Canvas canvas,
     Size size,
@@ -1605,6 +1587,7 @@ class _ParcelWorldPainter extends CustomPainter {
   ) {
     var hasEdges = false;
     final path = Path();
+    final thickness = math.max(2.0, 3.0 * scale);
     for (final coord in _visibleChunkCoords(bounds, viewport)) {
       if (!queries.ownsParcel(coord)) continue;
       final corners = _parcelCorners(coord);
@@ -1623,20 +1606,60 @@ class _ParcelWorldPainter extends CustomPainter {
           offset,
         );
         hasEdges = true;
-        path
-          ..moveTo(a.dx, a.dy)
-          ..lineTo(b.dx, b.dy);
+        _addIsoDashes(path, a, b, thickness, state.parcelSize);
       }
     }
     if (!hasEdges) return;
     canvas.drawPath(
-      _dashPath(path, 10 * scale, 6 * scale),
+      path,
       Paint()
         ..color = const Color(0xF2FFFFFF)
-        ..strokeWidth = math.max(2.0, 3.0 * scale)
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round,
+        ..style = PaintingStyle.fill,
     );
+  }
+
+  /// Appends the outline's dashes along one boundary segment, a to b:
+  /// one lattice-locked parallelogram per tile edge. Every side of
+  /// every dash sits on an isometric axis — the long sides follow the
+  /// boundary's own angle, the ends are cut along the crossing angle
+  /// — and each tile edge owns exactly one dash period with the dash
+  /// centred on it, so the pattern divides the parcel side evenly
+  /// ([cells] dashes, at every zoom) and meets parcel corners in
+  /// phase, mid-gap on both edges that share a corner.
+  void _addIsoDashes(
+    Path path,
+    Offset a,
+    Offset b,
+    double thickness,
+    int cells,
+  ) {
+    final span = b - a;
+    final length = span.distance;
+    if (length <= 0 || cells <= 0) return;
+    final along = span / length;
+    // The crossing isometric direction: reflecting the edge direction
+    // across the horizontal maps each iso angle onto its partner
+    // (2:1 slope onto 1:2), so the dash ends follow the grid.
+    final cross = Offset(along.dx, -along.dy);
+    // The isometric angle pair encloses 53.13 degrees (cos 3/5,
+    // sin 4/5); the ribbon's perpendicular thickness is h * sin, so
+    // h compensates to keep the outline's visual weight.
+    final half = cross * (thickness / 0.8 / 2);
+    final dashLength = length / cells * 0.6;
+    for (var i = 0; i < cells; i++) {
+      final start = a + span * ((i + 0.2) / cells);
+      final end = start + along * dashLength;
+      final p0 = start - half;
+      final p1 = start + half;
+      final p2 = end + half;
+      final p3 = end - half;
+      path
+        ..moveTo(p0.dx, p0.dy)
+        ..lineTo(p1.dx, p1.dy)
+        ..lineTo(p2.dx, p2.dy)
+        ..lineTo(p3.dx, p3.dy)
+        ..close();
+    }
   }
 
   /// The four lattice corners of a parcel's diamond, in north, east,
