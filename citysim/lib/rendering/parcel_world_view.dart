@@ -2663,16 +2663,24 @@ class _ParcelWorldPainter extends CustomPainter {
                   definition.assetRoles.length];
           final sprite = content.sprite(role);
           if (sprite != null && sprite.hasFacings) {
-            final footprint = structureFootprint(definition, selectedCell!);
-            final sides = queries.adjacentRoadSides(footprint);
+            // The arrow previews the placement's own derivation:
+            // non-square lots probe the tapped cell and turn with
+            // the door side; squares probe their turn-invariant
+            // footprint.
+            final probe =
+                definition.footprintColumns != definition.footprintRows
+                ? [selectedCell!]
+                : structureFootprint(definition, selectedCell!);
+            final doorSide = facingForPlacement(queries, probe, facingOverride);
             _drawFacingArrow(
               canvas,
               size,
-              footprint,
-              sides.map(facingArtKey).toSet().length > 1 &&
-                      sides.contains(facingOverride)
-                  ? facingOverride!
-                  : facingForRoadSides(sides),
+              structureFootprint(
+                definition,
+                selectedCell!,
+                quarterTurns: footprintTurnsFor(definition, doorSide),
+              ),
+              doorSide,
             );
           }
         }

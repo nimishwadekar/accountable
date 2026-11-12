@@ -336,6 +336,45 @@
       "subcategory": "flowers",
       "sways": true
     },
+    "fog.wisp.a": {
+      "baseOffsetY": 0,
+      "category": "fog",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/fog/wisp_fog_a.png",
+      "renderScale": 0.5,
+      "subcategory": "wisp",
+      "sways": false
+    },
+    "fog.wisp.b": {
+      "baseOffsetY": 0,
+      "category": "fog",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/fog/wisp_fog_b.png",
+      "renderScale": 0.5,
+      "subcategory": "wisp",
+      "sways": false
+    },
+    "fog.wisp.c": {
+      "baseOffsetY": 0,
+      "category": "fog",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/fog/wisp_fog_c.png",
+      "renderScale": 0.5,
+      "subcategory": "wisp",
+      "sways": false
+    },
     "fruit-market": {
       "baseOffsetY": 0,
       "category": "buildings",
@@ -1552,6 +1591,19 @@
       "subcategory": "dirt",
       "sways": false
     },
+    "terrain.fog": {
+      "baseOffsetY": 0,
+      "category": "ground",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/ground/fog/tile_ground_fog.png",
+      "renderScale": 0.5,
+      "subcategory": "fog",
+      "sways": false
+    },
     "terrain.grass": {
       "baseOffsetY": 0,
       "category": "ground",
@@ -1576,58 +1628,6 @@
       "path": "sprites/ground/grass/tile_ground_grass_puddle_clean.png",
       "renderScale": 0.5,
       "subcategory": "grass",
-      "sways": false
-    },
-    "terrain.fog": {
-      "baseOffsetY": 0,
-      "category": "ground",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/ground/fog/tile_ground_fog.png",
-      "renderScale": 0.5,
-      "subcategory": "fog",
-      "sways": false
-    },
-    "fog.wisp.a": {
-      "baseOffsetY": 0,
-      "category": "fog",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/fog/wisp_fog_a.png",
-      "renderScale": 0.5,
-      "subcategory": "wisp",
-      "sways": false
-    },
-    "fog.wisp.b": {
-      "baseOffsetY": 0,
-      "category": "fog",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/fog/wisp_fog_b.png",
-      "renderScale": 0.5,
-      "subcategory": "wisp",
-      "sways": false
-    },
-    "fog.wisp.c": {
-      "baseOffsetY": 0,
-      "category": "fog",
-      "codeReferenced": true,
-      "groundAnchor": [
-        0.5,
-        1
-      ],
-      "path": "sprites/fog/wisp_fog_c.png",
-      "renderScale": 0.5,
-      "subcategory": "wisp",
       "sways": false
     },
     "terrain.water": {

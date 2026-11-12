@@ -203,6 +203,63 @@ void main() {
     expect(find.text('1×1 plot'), findsOneWidget);
   });
 
+  testWidgets('east/west road picks turn non-square plots', (tester) async {
+    final categories = {
+      'catalogue.json': {
+        'models': [
+          {
+            'id': 'community-clinic',
+            'assetRoles': ['clinic'],
+            'footprint': {'columns': 2, 'rows': 1},
+          },
+        ],
+      },
+      'sprites.json': {
+        'sprites': {
+          'clinic': {
+            'facings': {
+              'left': 'sprites/buildings/civic/missing-left.png',
+              'right': 'sprites/buildings/civic/missing-right.png',
+            },
+            'renderScale': 0.5,
+            'groundAnchor': [0.5, 1.0],
+            'category': 'buildings',
+            'subcategory': 'civic',
+          },
+          'road.straight.se': {'path': 'sprites/roads/straight/se-missing.png'},
+          'road.straight.sw': {'path': 'sprites/roads/straight/sw-missing.png'},
+        },
+      },
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SpritePlotPreview(categories: categories, role: 'clinic'),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+
+    // South — the default — shows the declared wide lot.
+    expect(find.text('2×1 plot'), findsOneWidget);
+
+    // East transposes it: the street edge turns to face the strip,
+    // the way the game orients the lot at placement.
+    final chips = find.byType(ChoiceChip);
+    await tester.tap(chips.at(1)); // east
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('1×2 plot · turned to the street'), findsOneWidget);
+
+    // South again: the declared lot.
+    await tester.tap(chips.at(2)); // south
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.text('2×1 plot'), findsOneWidget);
+  });
+
   testWidgets('prop sprites preview on the subtile lattice', (tester) async {
     final categories = {
       'sprites.json': {

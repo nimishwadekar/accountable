@@ -294,6 +294,7 @@ StructurePlacementQuote quoteStructurePlacement(
   required String catalogueId,
   required CellCoord origin,
   int quarterTurns = 0,
+  String? preferredFacing,
   int subtileX = propFrontSubtile,
   int subtileY = propFrontSubtile,
 }) {
@@ -326,11 +327,17 @@ StructurePlacementQuote quoteStructurePlacement(
       price: definition.costCoins,
     );
   }
-  final footprint = structureFootprint(
-    definition,
-    origin,
-    quarterTurns: quarterTurns,
-  );
+  // Non-square footprints turn with their door side: the road beside
+  // the tapped origin picks the side, and the footprint transposes so
+  // its street edge lands on that road. Square footprints keep the
+  // passed turn — every turn maps to the same cells.
+  final turns = definition.footprintColumns == definition.footprintRows
+      ? quarterTurns
+      : footprintTurnsFor(
+          definition,
+          facingForPlacement(queries, [origin], preferredFacing),
+        );
+  final footprint = structureFootprint(definition, origin, quarterTurns: turns);
   if (footprint.any((cell) => !queries.ownsCell(cell))) {
     throw const WorldRuleViolation('Every footprint cell needs owned land.');
   }
@@ -349,7 +356,7 @@ StructurePlacementQuote quoteStructurePlacement(
   return StructurePlacementQuote(
     catalogueId: catalogueId,
     origin: origin,
-    quarterTurns: quarterTurns % 4,
+    quarterTurns: turns % 4,
     footprint: footprint,
     price: definition.costCoins,
     builderSlot: builderSlot,

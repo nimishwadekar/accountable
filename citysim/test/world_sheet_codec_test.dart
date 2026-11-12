@@ -64,6 +64,47 @@ void main() {
     ],
   );
 
+  test('non-square structures rebuild turned by their saved facing', () {
+    // A clinic saved facing east turns its 2×1 lot a quarter: the
+    // cells run south from the origin, the street edge on the road —
+    // the same turn the placement that chose the facing made.
+    final world = sheetTablesToWorld(
+      SheetTables(
+        userData: {
+          'seed': '7',
+          'coins': '3',
+          'coins_earned': '4',
+          'coins_spent': '1',
+          'simulated_date': '2026-11-02',
+          'high_water_date': '2026-11-02',
+          'last_checkin_date': '2026-11-02',
+          'checkin_count': '1',
+          'construction_day': '5',
+        },
+        ownedParcels: [
+          ['0', '0'],
+        ],
+        tiles: [
+          [
+            '4',
+            '5',
+            'structure',
+            'complete',
+            'community-clinic',
+            'clinic',
+            'east',
+            '',
+          ],
+        ],
+      ),
+      content: content,
+      terrainProvider: terrain,
+    );
+    final clinic = world.structures.single;
+    expect(clinic.quarterTurns, 1);
+    expect(clinic.footprint, const [CellCoord(4, 5), CellCoord(4, 6)]);
+  });
+
   test('handwritten tables rebuild a valid world', () {
     final world = sheetTablesToWorld(
       handwrittenTables(),

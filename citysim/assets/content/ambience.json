@@ -10,21 +10,21 @@
     "spriteScale": 0.7,
     "walkFrameRate": 7
   },
+  "tileGrid": {
+    "alpha": 55,
+    "colorRgb": [
+      30,
+      101,
+      82
+    ],
+    "enabled": false
+  },
   "unownedLandWash": {
     "alpha": 79,
     "colorRgb": [
       181,
       220,
       207
-    ]
-  },
-  "tileGrid": {
-    "enabled": false,
-    "alpha": 55,
-    "colorRgb": [
-      30,
-      101,
-      82
     ]
   },
   "vegetationSway": {

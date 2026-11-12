@@ -205,8 +205,15 @@ ParcelWorldState sheetTablesToWorld(
         catalogueId: definition.id,
         kind: definition.kind,
         origin: origin,
-        quarterTurns: 0,
-        footprint: structureFootprint(definition, origin),
+        // A non-square lot turns with its door side, so the saved
+        // facing re-derives the same cells the placement chose;
+        // squares keep turn 0.
+        quarterTurns: footprintTurnsFor(definition, _parseFacing(row[6])),
+        footprint: structureFootprint(
+          definition,
+          origin,
+          quarterTurns: footprintTurnsFor(definition, _parseFacing(row[6])),
+        ),
         pricePaid: definition.costCoins,
         completedAtDay: 0,
         population: definition.population,
@@ -298,6 +305,9 @@ ParcelWorldState sheetTablesToWorld(
           throw FormatException('Unknown project model "${row[2]}".');
         }
         final tile = _plannedStructureTile(tileRows, origin);
+        // A non-square lot turns with its door side, exactly as the
+        // placement that planned it chose; squares keep turn 0.
+        final turns = footprintTurnsFor(definition, _parseFacing(tile[6]));
         constructions.add(
           WorldConstruction(
             id: 'construction-$number',
@@ -305,8 +315,12 @@ ParcelWorldState sheetTablesToWorld(
             catalogueId: definition.id,
             structureKind: definition.kind,
             origin: origin,
-            quarterTurns: 0,
-            footprint: structureFootprint(definition, origin),
+            quarterTurns: turns,
+            footprint: structureFootprint(
+              definition,
+              origin,
+              quarterTurns: turns,
+            ),
             totalCostCoins: definition.costCoins,
             coinsFunded: funded,
             builderSlot: slot,

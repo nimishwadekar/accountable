@@ -219,8 +219,11 @@ class _CataloguePageState extends State<CataloguePage> {
                     value: asInt(footprint['columns'], 1),
                     min: 1,
                     help:
-                        'Footprint width in grid cells. Every footprint '
-                        'cell needs owned, vacant, road-adjacent land.',
+                        'Footprint width in grid cells, counted along the '
+                        'street. Non-square lots turn with their door side, '
+                        'so this edge is the one that faces the road. Every '
+                        'footprint cell needs owned, vacant, road-adjacent '
+                        'land.',
                     onChanged: (v) => _editModel(
                       id,
                       (model) => (model['footprint'] as Map)['columns'] = v,
@@ -234,9 +237,10 @@ class _CataloguePageState extends State<CataloguePage> {
                     value: asInt(footprint['rows'], 1),
                     min: 1,
                     help:
-                        'Ground footprint depth in grid cells. Vertical art '
-                        'height is not part of the footprint — it comes '
-                        'from the sprite art and its scale.',
+                        'Ground footprint depth in grid cells, running away '
+                        'from the street. Vertical art height is not part of '
+                        'the footprint — it comes from the sprite art and '
+                        'its scale.',
                     onChanged: (v) => _editModel(
                       id,
                       (model) => (model['footprint'] as Map)['rows'] = v,

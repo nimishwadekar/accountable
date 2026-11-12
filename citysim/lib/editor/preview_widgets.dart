@@ -214,11 +214,13 @@ Rect _previewPropRect(
 /// sprite sits in the world. Sprites with door facings get a four-way
 /// road-side picker: it moves the strip, swaps to that side's art
 /// variant, and applies the facing offset toward it, so one number can
-/// be tuned against every direction it can meet. Tile-category sprites
-/// (ground, roads, shores, bridges) render tile-style instead: width
-/// fitted to the tile, height kept. Props render on their subtile: one
-/// tile's 8×8 lattice with a slot picker, the art anchored exactly
-/// where the game anchors placed props.
+/// be tuned against every direction it can meet. East/west picks also
+/// turn the plot: a non-square footprint transposes so its street edge
+/// faces the strip, the way the game orients it at placement.
+/// Tile-category sprites (ground, roads, shores, bridges) render
+/// tile-style instead: width fitted to the tile, height kept. Props
+/// render on their subtile: one tile's 8×8 lattice with a slot picker,
+/// the art anchored exactly where the game anchors placed props.
 class SpritePlotPreview extends StatefulWidget {
   const SpritePlotPreview({
     required this.categories,
@@ -378,10 +380,19 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
     }.contains(category);
     final propStyle = category == 'props';
     final (columns, rows) = footprintForRole(widget.categories, widget.role);
+    // East/west road picks show the turned lot: a non-square footprint
+    // transposes so its street edge faces the strip, the way the game
+    // orients it at placement. Square footprints and props ignore the
+    // turn — every orientation maps to the same cells.
+    final turned =
+        !tileStyle &&
+        !propStyle &&
+        columns != rows &&
+        (_roadSide == 'east' || _roadSide == 'west');
     // Props live on one tile's subtile lattice, whatever their model's
     // footprint says — placement is per-tile.
-    final plotColumns = propStyle ? 1 : columns;
-    final plotRows = propStyle ? 1 : rows;
+    final plotColumns = propStyle ? 1 : (turned ? rows : columns);
+    final plotRows = propStyle ? 1 : (turned ? columns : rows);
     // Only facings sprites can lean — their structures are the ones
     // that save a facing to pull toward.
     final pull = _hasFacings
@@ -409,7 +420,11 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
       }
     }
     if (!tileStyle && !propStyle) {
-      for (final center in _roadStripCenters(columns, rows, _roadSide)) {
+      for (final center in _roadStripCenters(
+        plotColumns,
+        plotRows,
+        _roadSide,
+      )) {
         bounds = bounds.expandToInclude(
           Rect.fromCenter(
             center: center,
@@ -443,8 +458,8 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
               renderScale: renderScale,
               anchorX: anchorX,
               anchorY: anchorY,
-              columns: columns,
-              rows: rows,
+              columns: plotColumns,
+              rows: plotRows,
             ).shift(pull);
       bounds = bounds.expandToInclude(spriteRect);
     }
@@ -522,7 +537,9 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
               ? '8×8 lattice · subtile '
                     '(${_propSubtileChoices[_propSubtileIndex].$2},'
                     '${_propSubtileChoices[_propSubtileIndex].$3})'
-              : '$columns×$rows plot${tileStyle ? ' · drawn tile-fit' : ''}',
+              : '$plotColumns×$plotRows plot'
+                    '${tileStyle ? ' · drawn tile-fit' : ''}'
+                    '${turned ? ' · turned to the street' : ''}',
           style: const TextStyle(
             fontSize: 9,
             color: Colors.black45,

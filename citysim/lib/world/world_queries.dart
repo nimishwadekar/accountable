@@ -30,6 +30,27 @@ String flipFacing(String facing, Set<String> roadSides) {
   return goingLeft ? 'south' : 'east';
 }
 
+/// The door side a placement will snapshot: roads around the probed
+/// cells pick the side by the default priority, and the player's
+/// preferred side wins while both art variants are available there.
+/// Non-square footprints probe their origin cell — the road the tap
+/// landed beside — because their full footprint is not known until
+/// the door side has turned it.
+String facingForPlacement(
+  WorldQueries queries,
+  Iterable<CellCoord> probe,
+  String? preferredFacing,
+) {
+  final sides = queries.adjacentRoadSides(probe);
+  var facing = facingForRoadSides(sides);
+  if (preferredFacing != null &&
+      sides.map(facingArtKey).toSet().length > 1 &&
+      sides.contains(preferredFacing)) {
+    facing = preferredFacing;
+  }
+  return facing;
+}
+
 class WorldQueries {
   WorldQueries(this.state, this.terrainProvider)
     : ownedParcels = state.parcelsByCoord,

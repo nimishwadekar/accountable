@@ -1,5 +1,6 @@
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/rendering/parcel_world_view.dart';
+import 'package:citysim/world/world_content.dart';
 import 'package:citysim/world/world_queries.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -45,6 +46,16 @@ void main() {
       // present, so these arms only fire through direct calls.
       expect(flipFacing('south', {'south', 'north'}), 'east');
       expect(flipFacing('east', {'east', 'west'}), 'south');
+    });
+  });
+
+  group('facingQuarterTurns', () {
+    test('east/west door sides turn the lot, north/south keep it', () {
+      expect(facingQuarterTurns('east'), 1);
+      expect(facingQuarterTurns('west'), 1);
+      expect(facingQuarterTurns('north'), 0);
+      expect(facingQuarterTurns('south'), 0);
+      expect(facingQuarterTurns(null), 0);
     });
   });
 

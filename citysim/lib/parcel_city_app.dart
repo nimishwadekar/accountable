@@ -453,8 +453,12 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             definition.assetRoles.length];
     final sprite = content.sprite(role);
     if (sprite == null || !sprite.hasFacings) return null;
-    final footprint = structureFootprint(definition, cell);
-    final sides = WorldQueries(world, _terrain).adjacentRoadSides(footprint);
+    // Non-square lots probe the tapped cell — their footprint is not
+    // known until the door side turns it.
+    final probe = definition.footprintColumns != definition.footprintRows
+        ? [cell]
+        : structureFootprint(definition, cell);
+    final sides = WorldQueries(world, _terrain).adjacentRoadSides(probe);
     if (sides.map(facingArtKey).toSet().length < 2) return null;
     return (
       job: null,
@@ -583,6 +587,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         _terrain,
         catalogueId: catalogueId,
         origin: cell,
+        preferredFacing: _facingOverride,
         subtileX: _selectedSubtileX,
         subtileY: _selectedSubtileY,
       );
@@ -1231,6 +1236,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           _terrain,
           catalogueId: catalogueId,
           origin: cell,
+          preferredFacing: _facingOverride,
           subtileX: _selectedSubtileX,
           subtileY: _selectedSubtileY,
         );

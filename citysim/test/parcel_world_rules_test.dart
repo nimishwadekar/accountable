@@ -1099,6 +1099,141 @@ void main() {
     expect(bridge.farBank, const CellCoord(5, 5));
     validateParcelWorldState(decoded, content, terrain);
   });
+
+  test('non-square lots turn with their door side', () {
+    // The clinic's footprint is 2×1 — wide along the street. Beside
+    // an east-west road it stays as declared; beside a north-south
+    // road it turns a quarter so its street edge faces the road.
+    // (The clinic is population-gated; grant the unlock a grown city
+    // would already have.)
+    var world = grantWorldDebugCoins(newWorld(), 30);
+    world = world.copyWith(
+      unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'community-clinic'},
+    );
+
+    // An east-west street along row 4 (the starter road plus one).
+    world = planAndFundRoad(world, cells: const [CellCoord(5, 4)]);
+    world = startStructureConstruction(
+      world,
+      content,
+      terrain,
+      catalogueId: 'community-clinic',
+      origin: const CellCoord(4, 5),
+    );
+    var clinic = world.constructions.single;
+    expect(clinic.facing, 'north');
+    expect(clinic.footprint, const [CellCoord(4, 5), CellCoord(5, 5)]);
+    world = fundStructureProject(
+      world,
+      content,
+      projectId: clinic.id,
+      amount: clinic.totalCostCoins,
+    );
+
+    // A north-south street down column 6.
+    world = planAndFundRoad(
+      world,
+      cells: const [CellCoord(6, 5), CellCoord(6, 6), CellCoord(6, 7)],
+    );
+    world = startStructureConstruction(
+      world,
+      content,
+      terrain,
+      catalogueId: 'community-clinic',
+      origin: const CellCoord(5, 6),
+    );
+    clinic = world.constructions.single;
+    expect(clinic.facing, 'east');
+    expect(clinic.footprint, const [CellCoord(5, 6), CellCoord(5, 7)]);
+    world = fundStructureProject(
+      world,
+      content,
+      projectId: clinic.id,
+      amount: clinic.totalCostCoins,
+    );
+
+    expect(
+      () => validateParcelWorldState(world, content, terrain),
+      returnsNormally,
+    );
+  });
+
+  test('door swaps turn non-square lots, and need the room', () {
+    var world = grantWorldDebugCoins(newWorld(), 40);
+    world = world.copyWith(
+      unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'community-clinic'},
+    );
+
+    // A corner-fronted clinic at (4,5): the row-4 street to its north
+    // and a north-south road to its west. Swapping to the western
+    // road turns the lot a quarter — the footprint transposes to run
+    // south from the origin.
+    world = planAndFundRoad(world, cells: const [CellCoord(5, 4)]);
+    world = planAndFundRoad(world, cells: const [CellCoord(3, 5)]);
+    world = startStructureConstruction(
+      world,
+      content,
+      terrain,
+      catalogueId: 'community-clinic',
+      origin: const CellCoord(4, 5),
+    );
+    var clinic = world.constructions.single;
+    expect(clinic.facing, 'north');
+    expect(clinic.footprint, const [CellCoord(4, 5), CellCoord(5, 5)]);
+
+    world = swapStructureFacing(world, content, terrain, projectId: clinic.id);
+    clinic = world.constructions.single;
+    expect(clinic.facing, 'west');
+    expect(clinic.footprint, const [CellCoord(4, 5), CellCoord(4, 6)]);
+    world = fundStructureProject(
+      world,
+      content,
+      projectId: clinic.id,
+      amount: clinic.totalCostCoins,
+    );
+    expect(
+      () => validateParcelWorldState(world, content, terrain),
+      returnsNormally,
+    );
+
+    // A clinic that cannot turn: its corner frontage offers the swap,
+    // but the cell the turned lot needs is taken by a cottage, so the
+    // swap refuses instead of clipping through it.
+    world = planAndFundRoad(world, cells: const [CellCoord(2, 5)]);
+    world = planAndFundRoad(world, cells: const [CellCoord(1, 6)]);
+    world = planAndFundRoad(world, cells: const [CellCoord(1, 7)]);
+    world = startStructureConstruction(
+      world,
+      content,
+      terrain,
+      catalogueId: 'small-home',
+      origin: const CellCoord(2, 7),
+    );
+    world = fundStructureProject(
+      world,
+      content,
+      projectId: world.constructions.single.id,
+      amount: world.constructions.single.totalCostCoins,
+    );
+    world = startStructureConstruction(
+      world,
+      content,
+      terrain,
+      catalogueId: 'community-clinic',
+      origin: const CellCoord(2, 6),
+    );
+    expect(world.constructions.single.facing, 'north');
+    expect(
+      () => swapStructureFacing(
+        world,
+        content,
+        terrain,
+        projectId: world.constructions.single.id,
+      ),
+      throwsA(isA<WorldRuleViolation>()),
+      reason: 'the turned lot would land on the cottage at (2,7)',
+    );
+  });
 }
 
 EconomyContent _economyWithProgression(

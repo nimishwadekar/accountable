@@ -538,7 +538,7 @@
       "description": "A civic building unlocked as the settlement grows.",
       "enabled": true,
       "footprint": {
-        "columns": 1,
+        "columns": 2,
         "rows": 1
       },
       "id": "community-clinic",

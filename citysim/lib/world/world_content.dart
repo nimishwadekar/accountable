@@ -27,6 +27,22 @@ CellCoord cellFromFootprintOrigin(
   };
 }
 
+/// The turn a non-square footprint takes for a door side: east/west
+/// roads run north-south, so the footprint transposes — its street
+/// edge (the declared columns) lands along the road. North/south
+/// roads keep the footprint as declared.
+int facingQuarterTurns(String? facing) =>
+    facing == 'east' || facing == 'west' ? 1 : 0;
+
+/// The turn a footprint takes for a door side. Non-square footprints
+/// transpose (see [facingQuarterTurns]); square footprints never turn
+/// — the game places them at turn 0, and a quarter turn would swing
+/// their cells around the origin corner instead of keeping them.
+int footprintTurnsFor(StructureDefinition definition, String? facing) =>
+    definition.footprintColumns == definition.footprintRows
+    ? 0
+    : facingQuarterTurns(facing);
+
 /// Decodes a JSON value that the codec stored as `Map<dynamic, dynamic>`
 /// back into a typed `Map<String, Object?>`.
 Map<String, Object?> worldJsonMap(Object? value) =>

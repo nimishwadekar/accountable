@@ -1,5 +1,6 @@
 import 'coordinates.dart';
 import 'terrain_provider.dart';
+import 'world_content.dart';
 import 'world_queries.dart';
 import 'world_rules.dart';
 import 'world_state.dart';
@@ -231,6 +232,7 @@ ParcelWorldState startStructureConstruction(
     catalogueId: catalogueId,
     origin: origin,
     quarterTurns: quarterTurns,
+    preferredFacing: preferredFacing,
     subtileX: subtileX,
     subtileY: subtileY,
   );
@@ -241,24 +243,32 @@ ParcelWorldState startStructureConstruction(
       definition.assetRoles[(state.seed + state.nextEntityNumber) %
           definition.assetRoles.length];
   // Door side: buildings face the adjacent road — the saved cardinal is
-  // one of the bordering road sides, and the art follows its screen
-  // half (north/east right, south/west left). The player's preview
-  // choice wins while roads border both halves. Decorations with
-  // facings roll deterministically like the variant itself, between
-  // the two visible facade sides.
+  // one of the bordering road sides, and the art follows its street
+  // axis (north/south roads the left variant, east/west the right).
+  // The player's preview choice wins while roads border both
+  // variants. Non-square footprints snapshot the same origin probe
+  // the quote turned them by, so door side and lot orientation stay
+  // one fact. Decorations with facings roll deterministically like
+  // the variant itself, between the two visible facade sides.
   final sprite = content.sprite(chosenRole);
   String? facing;
   if (sprite != null && sprite.hasFacings) {
     if (definition.kind == StructureKind.building) {
-      final sides = WorldQueries(
-        state,
-        terrainProvider,
-      ).adjacentRoadSides(quote.footprint);
-      facing = facingForRoadSides(sides);
-      if (preferredFacing != null &&
-          sides.map(facingArtKey).toSet().length > 1 &&
-          sides.contains(preferredFacing)) {
-        facing = preferredFacing;
+      if (definition.footprintColumns != definition.footprintRows) {
+        facing = facingForPlacement(WorldQueries(state, terrainProvider), [
+          origin,
+        ], preferredFacing);
+      } else {
+        final sides = WorldQueries(
+          state,
+          terrainProvider,
+        ).adjacentRoadSides(quote.footprint);
+        facing = facingForRoadSides(sides);
+        if (preferredFacing != null &&
+            sides.map(facingArtKey).toSet().length > 1 &&
+            sides.contains(preferredFacing)) {
+          facing = preferredFacing;
+        }
       }
     } else {
       facing = (state.seed + state.nextEntityNumber) % 2 == 0
@@ -548,7 +558,39 @@ ParcelWorldState swapStructureFacing(
   // A null facing (saves predating the snapshot) reads as the planning
   // default variant, so the flip still lands on a real side.
   final flipped = flipFacing(project.facing ?? 'east', sides);
-  final swapped = _copyConstruction(project, facing: flipped);
+  var swapped = _copyConstruction(project, facing: flipped);
+  if (definition.footprintColumns != definition.footprintRows) {
+    // A turned lot follows its door side, so the flip may transpose
+    // the footprint: re-derive the cells and re-check the room — the
+    // site keeps its own current cells, everything else must be free
+    // and roaded along a whole edge.
+    final turns = footprintTurnsFor(definition, flipped);
+    final footprint = structureFootprint(
+      definition,
+      project.origin!,
+      quarterTurns: turns,
+    );
+    final queries = WorldQueries(state, terrainProvider);
+    final ownCells = project.footprint.toSet();
+    if (footprint.any(
+          (cell) =>
+              !ownCells.contains(cell) &&
+              (!queries.ownsCell(cell) ||
+                  !queries.terrainAt(cell).isLand ||
+                  !queries.footprintIsVacant([cell])),
+        ) ||
+        !queries.buildingHasRoadAccess(footprint)) {
+      throw const WorldRuleViolation(
+        'There is no room to turn that building onto the other road.',
+      );
+    }
+    swapped = _copyConstruction(
+      project,
+      facing: flipped,
+      quarterTurns: turns,
+      footprint: footprint,
+    );
+  }
   return state.copyWith(
     constructions: state.constructions
         .map((job) => job.id == project.id ? swapped : job)
@@ -897,14 +939,16 @@ WorldConstruction _copyConstruction(
   WorldConstruction job, {
   int? coinsFunded,
   String? facing,
+  int? quarterTurns,
+  List<CellCoord>? footprint,
 }) => WorldConstruction(
   id: job.id,
   kind: job.kind,
   catalogueId: job.catalogueId,
   structureKind: job.structureKind,
   origin: job.origin,
-  quarterTurns: job.quarterTurns,
-  footprint: job.footprint,
+  quarterTurns: quarterTurns ?? job.quarterTurns,
+  footprint: footprint ?? job.footprint,
   roadStyle: job.roadStyle,
   roadCells: job.roadCells,
   waterCells: job.waterCells,
