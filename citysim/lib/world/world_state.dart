@@ -85,9 +85,11 @@ class PlacedStructure {
 /// and one tile's occupancy fits a 64-bit mask.
 const propSubtilesPerAxis = 8;
 
-/// The subtile where props sat before the lattice existed — the
-/// tile's own south vertex, so migrated and default placements
-/// render exactly where 1×1 structures did.
+/// The default subtile, and where props sat before the lattice
+/// existed: the tile's front corner. Props anchor at their subtile's
+/// centre, so this lands 2 px shy of the tile's old south-vertex
+/// structure spot — the price of every prop standing inside its
+/// slot rather than on its front tip.
 const propFrontSubtile = propSubtilesPerAxis - 1;
 
 /// A placed decoration: a point object on the subtile lattice, drawn
@@ -114,8 +116,7 @@ class PlacedProp {
   final CellCoord cell;
 
   /// Position on the tile's 8×8 subtile lattice (0..7). The sprite
-  /// anchors at the subtile's south vertex, so [propFrontSubtile] on
-  /// both axes is the tile's own south vertex.
+  /// anchors at the subtile's centre.
   final int subtileX;
   final int subtileY;
   final int pricePaid;

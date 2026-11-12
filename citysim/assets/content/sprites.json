@@ -57,7 +57,7 @@
         1
       ],
       "path": "sprites/props/clutter/prop_box_cardboard_closed.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "clutter",
       "sways": false
     },
@@ -70,7 +70,7 @@
         1
       ],
       "path": "sprites/props/clutter/prop_box_cardboard_open.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "clutter",
       "sways": false
     },
@@ -225,7 +225,7 @@
         1
       ],
       "path": "sprites/props/clutter/prop_dropbox_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "clutter",
       "sways": false
     },
@@ -238,7 +238,7 @@
         1
       ],
       "path": "sprites/props/clutter/prop_dropbox_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "clutter",
       "sways": false
     },
@@ -251,7 +251,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_fence_wire_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -264,7 +264,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_fence_wood_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -277,7 +277,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_fence_wood_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -306,7 +306,7 @@
         1
       ],
       "path": "sprites/props/flowers/prop_flowers_pink.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "flowers",
       "sways": true
     },
@@ -319,7 +319,7 @@
         1
       ],
       "path": "sprites/props/flowers/prop_flowers_red.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "flowers",
       "sways": true
     },
@@ -332,7 +332,7 @@
         0.95
       ],
       "path": "sprites/props/flowers/prop_flowers_yellow.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "flowers",
       "sways": true
     },
@@ -713,7 +713,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_lightpole_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -726,7 +726,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_lightpole_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -931,7 +931,7 @@
         1
       ],
       "path": "sprites/props/clutter/prop_papers_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "clutter",
       "sways": false
     },
@@ -944,7 +944,7 @@
         1
       ],
       "path": "sprites/props/clutter/prop_papers_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "clutter",
       "sways": false
     },
@@ -957,7 +957,7 @@
         1
       ],
       "path": "sprites/props/clutter/prop_papers_c.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "clutter",
       "sways": false
     },
@@ -1236,7 +1236,7 @@
         1
       ],
       "path": "sprites/props/rocks/prop_rocks_brown_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "rocks",
       "sways": false
     },
@@ -1249,7 +1249,7 @@
         1
       ],
       "path": "sprites/props/rocks/prop_rocks_brown_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "rocks",
       "sways": false
     },
@@ -1262,7 +1262,7 @@
         1
       ],
       "path": "sprites/props/rocks/prop_rocks_brown_c.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "rocks",
       "sways": false
     },
@@ -1275,7 +1275,7 @@
         1
       ],
       "path": "sprites/props/rocks/prop_rocks_gray_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "rocks",
       "sways": false
     },
@@ -1288,7 +1288,7 @@
         1
       ],
       "path": "sprites/props/rocks/prop_rocks_gray_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "rocks",
       "sways": false
     },
@@ -1301,7 +1301,7 @@
         1
       ],
       "path": "sprites/props/rocks/prop_rocks_gray_c.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "rocks",
       "sways": false
     },
@@ -1470,7 +1470,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_sign_caution_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1483,7 +1483,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_sign_caution_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1496,7 +1496,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_sign_stop_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1509,7 +1509,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_sign_stop_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1652,7 +1652,7 @@
         1
       ],
       "path": "sprites/props/clutter/prop_tire.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "clutter",
       "sways": false
     },
@@ -1665,7 +1665,7 @@
         1
       ],
       "path": "sprites/props/clutter/prop_tire_buried_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "clutter",
       "sways": false
     },
@@ -1678,7 +1678,7 @@
         1
       ],
       "path": "sprites/props/clutter/prop_tire_buried_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "clutter",
       "sways": false
     },
@@ -1691,7 +1691,7 @@
         1
       ],
       "path": "sprites/props/clutter/prop_tires.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "clutter",
       "sways": false
     },
@@ -1704,7 +1704,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_trafficlight_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1717,7 +1717,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_trafficlight_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1730,7 +1730,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_trafficlight_c.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1743,7 +1743,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_trashbag_black_large.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1756,7 +1756,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_trashbag_black_small.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1769,7 +1769,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_trashbag_white_large.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1782,7 +1782,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_trashbag_white_small.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1795,7 +1795,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_trashcan_blue_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1808,7 +1808,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_trashcan_blue_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1821,7 +1821,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_trashcan_green_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1834,7 +1834,7 @@
         1
       ],
       "path": "sprites/props/streetside/prop_trashcan_green_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "streetside",
       "sways": false
     },
@@ -1976,7 +1976,7 @@
         1
       ],
       "path": "sprites/props/flowers/prop_weed_large_a.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "flowers",
       "sways": true
     },
@@ -1989,7 +1989,7 @@
         1
       ],
       "path": "sprites/props/flowers/prop_weed_large_b.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "flowers",
       "sways": true
     },
@@ -2002,7 +2002,7 @@
         1
       ],
       "path": "sprites/props/flowers/prop_weed_medium.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "flowers",
       "sways": true
     },
@@ -2015,7 +2015,7 @@
         1
       ],
       "path": "sprites/props/flowers/prop_weed_small.png",
-      "renderScale": 1,
+      "renderScale": 0.5,
       "subcategory": "flowers",
       "sways": true
     }

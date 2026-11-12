@@ -3046,11 +3046,7 @@ Offset facingPullOffset(String facing, double offset) => Offset(
 );
 
 /// World rect for a prop: the sprite's ground anchor pinned to its
-/// subtile's south vertex — the sub-lattice version of how structures
-/// anchor at their footprint's south vertex. The front subtile
-/// ([propFrontSubtile] on both axes) is the tile's own south vertex,
-/// so a prop placed there renders exactly where the 1×1 structures of
-/// pre-lattice saves did.
+/// subtile's centre, leaning toward its saved road facing.
 Rect _propRect(
   ui.Image image,
   SpriteDefinition sprite,
@@ -3071,11 +3067,13 @@ Rect _propRect(
   return rect.shift(facingPullOffset(facing, sprite.facingOffset));
 }
 
-/// The sprite's ground anchor pinned to a subtile's south vertex —
-/// the sub-lattice version of how structures anchor at their
-/// footprint's south vertex. The front subtile
-/// ([propFrontSubtile] on both axes) is the tile's own south vertex,
-/// so props from before the lattice render pixel-identically.
+/// The sprite's ground anchor pinned to a subtile's centre — the
+/// same point the ghost marker diamonds, so a placed prop stands
+/// inside the slot it was given. (Props once anchored at the
+/// subtile's south vertex so pre-lattice [propFrontSubtile]
+/// placements rendered pixel-identically to the 1×1 structures they
+/// migrated from; point objects read better centred on their slot,
+/// so the legacy nudge is gone.)
 /// [surfaceLift] raises the anchor onto elevated ground — today, a
 /// bridge deck.
 Rect _propAnchorWorldRect(
@@ -3090,16 +3088,12 @@ Rect _propAnchorWorldRect(
   final fx = (subtileX + 0.5) / propSubtilesPerAxis - 0.5;
   final fy = (subtileY + 0.5) / propSubtilesPerAxis - 0.5;
   final anchorX = center.dx + (fx - fy) * _logicalTileWidth / 2;
-  final bottomY =
-      center.dy +
-      (fx + fy) * _logicalTileHeight / 2 +
-      _logicalTileHeight / (propSubtilesPerAxis * 2) -
-      surfaceLift;
+  final anchorY = center.dy + (fx + fy) * _logicalTileHeight / 2 - surfaceLift;
   final width = image.width * sprite.renderScale;
   final height = image.height * sprite.renderScale;
   return Rect.fromLTWH(
     anchorX - width * sprite.groundAnchorX,
-    bottomY - height * sprite.groundAnchorY,
+    anchorY - height * sprite.groundAnchorY,
     width,
     height,
   );

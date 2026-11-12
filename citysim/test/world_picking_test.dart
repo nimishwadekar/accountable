@@ -587,10 +587,12 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    // A street-lamp prop mid-tile at (6,2) — depth 8.5 — over a tall
-    // office behind at (4,0)–(5,1) — depth 6. The prop must paint
-    // over the office where their art overlaps. (The front office is
-    // left out of this world so nothing stands between them.)
+    // A street-lamp prop at (6,2)'s back subtile — depth 8.06 — over
+    // a tall office behind at (4,0)–(5,1) — depth 6. The prop must
+    // paint over the office where their art overlaps. (The front
+    // office is left out of this world so nothing stands between
+    // them. The back corner keeps the half-scale lamp's art reaching
+    // the office's walls.)
     final lampBytes = (await tester.runAsync(() async {
       final data = await rootBundle.load(
         'assets/sprites/props/streetside/prop_lightpole_a.png',
@@ -613,8 +615,8 @@ void main() {
       lampBytes.$3!,
       content.sprite('lightpole-a')!,
       cell: (6, 2),
-      subtileX: 4,
-      subtileY: 4,
+      subtileX: 0,
+      subtileY: 0,
     );
     final officeBehindCells = [(4, 0), (5, 0), (4, 1), (5, 1)];
     final office = (await tester.runAsync(
@@ -657,7 +659,7 @@ void main() {
                 ]
               : const [],
           props: const [
-            ['6', '2', '4', '4', 'street-lamp', 'lightpole-a', ''],
+            ['6', '2', '0', '0', 'street-lamp', 'lightpole-a', ''],
           ],
         ),
         onTap: (cell, structureId, subtileX, subtileY) {},
@@ -933,13 +935,15 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    // The same lamp at the front subtile of a grass cell (5,5) and a
+    // The same pine at the front subtile of a grass cell (5,5) and a
     // deck cell (10,4). The two anchors differ by the pure cell
-    // delta — x: 192, y: 64 — minus the deck's surface lift, so the
-    // lamp's diff bounding boxes must sit 58 px apart vertically.
+    // delta — x: 192, y: 64 — minus the deck's 6px surface lift, so
+    // the pines' diff bounding boxes must sit 58 px apart vertically.
+    // (The pine is tall enough that its crown, not the selected
+    // cell's outline, defines each box top.)
     final (width, height, raw) = (await tester.runAsync(() async {
       final data = await rootBundle.load(
-        'assets/sprites/props/streetside/prop_lightpole_a.png',
+        'assets/sprites/props/trees/prop_tree_pine_medium.png',
       );
       final codec = await ui.instantiateImageCodec(
         data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
@@ -953,8 +957,8 @@ void main() {
       codec.dispose();
       return (size.$1, size.$2, bytes);
     }))!;
-    final sprite = content.sprite('lightpole-a')!;
-    final grassLamp = Art.forProp(
+    final sprite = content.sprite('pine-medium')!;
+    final grassPine = Art.forProp(
       width,
       height,
       raw!,
@@ -963,7 +967,7 @@ void main() {
       subtileX: 7,
       subtileY: 7,
     );
-    final deckLamp = Art.forProp(
+    final deckPine = Art.forProp(
       width,
       height,
       raw,
@@ -971,6 +975,7 @@ void main() {
       cell: (10, 4),
       subtileX: 7,
       subtileY: 7,
+      surfaceLift: 6,
     );
 
     final boundaryKey = GlobalKey();
@@ -991,21 +996,21 @@ void main() {
       return captureBytes(tester, boundaryKey);
     }
 
-    // Both lamps render selected: the selection wash guarantees a
-    // strong colour shift on every sprite pixel (the raw lamp greys
+    // Both pines render selected: the selection wash guarantees a
+    // strong colour shift on every sprite pixel (the raw pine greens
     // sit too close to the deck art to diff reliably), and a
     // selected prop holds still, so sway cannot shift the boxes.
     final reference = await render(const [], null, null);
     final onGrass = await render(
       const [
-        ['5', '5', '7', '7', 'street-lamp', 'lightpole-a', ''],
+        ['5', '5', '7', '7', 'pine-tree', 'pine-medium', ''],
       ],
       const CellCoord(5, 5),
       'prop:5,5:7.7',
     );
     final onDeck = await render(
       const [
-        ['10', '4', '7', '7', 'street-lamp', 'lightpole-a', ''],
+        ['10', '4', '7', '7', 'pine-tree', 'pine-medium', ''],
       ],
       const CellCoord(10, 4),
       'prop:10,4:7.7',
@@ -1045,13 +1050,13 @@ void main() {
       expect(
         right,
         greaterThan(left),
-        reason: 'the lamp appears inside its window',
+        reason: 'the pine appears inside its window',
       );
       return Rect.fromLTRB(left, top, right, bottom);
     }
 
-    final grassBox = diffBBox(onGrass, reference, screenWindow(grassLamp));
-    final deckBox = diffBBox(onDeck, reference, screenWindow(deckLamp));
+    final grassBox = diffBBox(onGrass, reference, screenWindow(grassPine));
+    final deckBox = diffBBox(onDeck, reference, screenWindow(deckPine));
     expect(
       deckBox.left - grassBox.left,
       closeTo(192, 1),
@@ -1061,8 +1066,8 @@ void main() {
       deckBox.top - grassBox.top,
       closeTo(58, 2),
       reason:
-          'cell delta 64 minus the 6px deck surface lift — the lamp '
-          'head rises above the selected cell\'s outline, so the box '
+          'cell delta 64 minus the 6px deck surface lift — the pine '
+          'crown rises above the selected cell\'s outline, so the box '
           'top is the sprite\'s own',
     );
   });
@@ -1406,8 +1411,8 @@ class Art {
       );
 
   /// The renderer's prop anchor: the sprite's ground anchor pinned to
-  /// a subtile's south vertex — the sub-lattice version of the
-  /// footprint anchor above.
+  /// a subtile's centre — where the ghost marker draws its diamond.
+  /// [surfaceLift] mirrors the renderer's bridge-deck lift.
   Art.forProp(
     this.width,
     this.height,
@@ -1416,6 +1421,7 @@ class Art {
     required (int, int) cell,
     required int subtileX,
     required int subtileY,
+    double surfaceLift = 0,
   }) : worldRect = _propAnchorRect(
          sprite,
          width,
@@ -1423,6 +1429,7 @@ class Art {
          cell,
          subtileX,
          subtileY,
+         surfaceLift: surfaceLift,
        ),
        alpha = bytes.buffer.asUint8List(
          bytes.offsetInBytes,
@@ -1470,19 +1477,20 @@ class Art {
     int height,
     (int, int) cell,
     int subtileX,
-    int subtileY,
-  ) {
+    int subtileY, {
+    double surfaceLift = 0,
+  }) {
     final centerX = (cell.$1 - cell.$2) * 32.0;
     final centerY = (cell.$1 + cell.$2) * 16.0;
     final fx = (subtileX + 0.5) / propSubtilesPerAxis - 0.5;
     final fy = (subtileY + 0.5) / propSubtilesPerAxis - 0.5;
     final anchorX = centerX + (fx - fy) * 32.0;
-    final bottomY = centerY + (fx + fy) * 16.0 + 2.0;
+    final anchorY = centerY + (fx + fy) * 16.0 - surfaceLift;
     final drawnWidth = width * sprite.renderScale;
     final drawnHeight = height * sprite.renderScale;
     return Rect.fromLTWH(
       anchorX - drawnWidth * sprite.groundAnchorX,
-      bottomY - drawnHeight * sprite.groundAnchorY,
+      anchorY - drawnHeight * sprite.groundAnchorY,
       drawnWidth,
       drawnHeight,
     );

@@ -7,6 +7,8 @@ import 'package:flutter/scheduler.dart' show Ticker;
 import 'content_api.dart';
 import 'edit_fields.dart' show footprintForRole, spriteMap, spritePathEntries;
 
+import 'package:citysim/world/world_state.dart' show propSubtilesPerAxis;
+
 /// Live previews for the ambience editor. These mirror the game's ambient
 /// rendering in miniature: the same sine math, driven by a local ticker.
 
@@ -181,6 +183,30 @@ Rect _previewTileRect(ui.Image image, Offset center, {double baseOffsetY = 0}) {
   return Rect.fromLTWH(center.dx - width / 2, southY - height, width, height);
 }
 
+/// The sprite rect the game's prop path computes
+/// (`_propAnchorWorldRect` in the renderer): the ground anchor pinned
+/// to the centre of the tile's [propSubtilesPerAxis]² subtile lattice
+/// slot, art placed by its own render scale and ground anchor.
+Rect _previewPropRect(
+  ui.Image image, {
+  required double renderScale,
+  required double anchorX,
+  required double anchorY,
+  required int subtileX,
+  required int subtileY,
+}) {
+  final fx = (subtileX + 0.5) / propSubtilesPerAxis - 0.5;
+  final fy = (subtileY + 0.5) / propSubtilesPerAxis - 0.5;
+  final width = image.width * renderScale;
+  final height = image.height * renderScale;
+  return Rect.fromLTWH(
+    (fx - fy) * _previewTileWidth / 2 - width * anchorX,
+    (fx + fy) * _previewTileHeight / 2 - height * anchorY,
+    width,
+    height,
+  );
+}
+
 /// A sprite rendered the way the game renders it, standing on its plot:
 /// the footprint's tile diamonds outlined, a road strip along one edge
 /// for scale and frontage, and the art placed with its own render scale
@@ -190,7 +216,9 @@ Rect _previewTileRect(ui.Image image, Offset center, {double baseOffsetY = 0}) {
 /// variant, and applies the facing offset toward it, so one number can
 /// be tuned against every direction it can meet. Tile-category sprites
 /// (ground, roads, shores, bridges) render tile-style instead: width
-/// fitted to the tile, height kept.
+/// fitted to the tile, height kept. Props render on their subtile: one
+/// tile's 8×8 lattice with a slot picker, the art anchored exactly
+/// where the game anchors placed props.
 class SpritePlotPreview extends StatefulWidget {
   const SpritePlotPreview({
     required this.categories,
@@ -222,6 +250,15 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
   /// Road side the preview faces: where the strip runs, which art
   /// variant shows, and which way the facing offset pulls.
   String _roadSide = 'south';
+
+  /// Slots the prop preview can stand on: the tile's back corner,
+  /// centre, and front corner — the placements worth tuning against.
+  static const List<(String, int, int)> _propSubtileChoices = [
+    ('back', 0, 0),
+    ('centre', 3, 3),
+    ('front', 7, 7),
+  ];
+  int _propSubtileIndex = 1;
 
   Map<String, Object?> get _sprite {
     final raw = spriteMap(widget.categories)[widget.role];
@@ -338,7 +375,12 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
       'shores',
       'bridges',
     }.contains(category);
+    final propStyle = category == 'props';
     final (columns, rows) = footprintForRole(widget.categories, widget.role);
+    // Props live on one tile's subtile lattice, whatever their model's
+    // footprint says — placement is per-tile.
+    final plotColumns = propStyle ? 1 : columns;
+    final plotRows = propStyle ? 1 : rows;
     // Only facings sprites can lean — their structures are the ones
     // that save a facing to pull toward.
     final pull = _hasFacings
@@ -353,8 +395,8 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
       _previewTileWidth / 2,
       _previewTileHeight / 2,
     );
-    for (var row = 0; row < rows; row++) {
-      for (var column = 0; column < columns; column++) {
+    for (var row = 0; row < plotRows; row++) {
+      for (var column = 0; column < plotColumns; column++) {
         final center = _previewCellCenter(column, row);
         bounds = bounds.expandToInclude(
           Rect.fromCenter(
@@ -365,7 +407,7 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
         );
       }
     }
-    if (!tileStyle) {
+    if (!tileStyle && !propStyle) {
       for (final center in _roadStripCenters(columns, rows, _roadSide)) {
         bounds = bounds.expandToInclude(
           Rect.fromCenter(
@@ -377,13 +419,24 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
       }
     }
     final image = _image;
+    Rect? spriteRect;
     if (image != null) {
-      final rect = tileStyle
+      final choice = _propSubtileChoices[_propSubtileIndex];
+      spriteRect = tileStyle
           ? _previewTileRect(
               image,
               _previewCellCenter(0, 0),
               baseOffsetY: baseOffsetY,
             )
+          : propStyle
+          ? _previewPropRect(
+              image,
+              renderScale: renderScale,
+              anchorX: anchorX,
+              anchorY: anchorY,
+              subtileX: choice.$2,
+              subtileY: choice.$3,
+            ).shift(pull)
           : _previewStructureRect(
               image,
               renderScale: renderScale,
@@ -392,7 +445,7 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
               columns: columns,
               rows: rows,
             ).shift(pull);
-      bounds = bounds.expandToInclude(rect);
+      bounds = bounds.expandToInclude(spriteRect);
     }
     bounds = bounds.inflate(6);
 
@@ -424,26 +477,51 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
               ],
             ),
           ),
+        if (propStyle)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Row(
+              children: [
+                for (final (index, choice) in _propSubtileChoices.indexed)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: ChoiceChip(
+                      label: Text(choice.$1),
+                      tooltip: 'subtile (${choice.$2},${choice.$3})',
+                      selected: _propSubtileIndex == index,
+                      onSelected: (_) =>
+                          setState(() => _propSubtileIndex = index),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         CustomPaint(
           size: Size(widget.width, height),
           painter: _SpritePlotPainter(
             bounds: bounds,
-            columns: columns,
-            rows: rows,
+            columns: plotColumns,
+            rows: plotRows,
             tileStyle: tileStyle,
+            propStyle: propStyle,
+            subtileX: _propSubtileChoices[_propSubtileIndex].$2,
+            subtileY: _propSubtileChoices[_propSubtileIndex].$3,
             image: image,
+            spriteRect: spriteRect,
             roadColumnAxisImage: _roadColumnAxisImage,
             roadRowAxisImage: _roadRowAxisImage,
             roadSide: _roadSide,
-            renderScale: renderScale,
-            anchorX: anchorX,
-            anchorY: anchorY,
-            baseOffsetY: baseOffsetY,
-            pull: pull,
           ),
         ),
         Text(
-          '$columns×$rows plot${tileStyle ? ' · drawn tile-fit' : ''}',
+          propStyle
+              ? '8×8 lattice · subtile '
+                    '(${_propSubtileChoices[_propSubtileIndex].$2},'
+                    '${_propSubtileChoices[_propSubtileIndex].$3})'
+              : '$columns×$rows plot${tileStyle ? ' · drawn tile-fit' : ''}',
           style: const TextStyle(
             fontSize: 9,
             color: Colors.black45,
@@ -461,30 +539,31 @@ class _SpritePlotPainter extends CustomPainter {
     required this.columns,
     required this.rows,
     required this.tileStyle,
+    required this.propStyle,
+    required this.subtileX,
+    required this.subtileY,
     required this.image,
+    required this.spriteRect,
     required this.roadColumnAxisImage,
     required this.roadRowAxisImage,
     required this.roadSide,
-    required this.renderScale,
-    required this.anchorX,
-    required this.anchorY,
-    required this.baseOffsetY,
-    required this.pull,
   });
 
   final Rect bounds;
   final int columns;
   final int rows;
   final bool tileStyle;
+  final bool propStyle;
+  final int subtileX;
+  final int subtileY;
   final ui.Image? image;
+
+  /// The sprite's on-plot rect, computed by the preview exactly as
+  /// the game computes it for this sprite's category.
+  final Rect? spriteRect;
   final ui.Image? roadColumnAxisImage;
   final ui.Image? roadRowAxisImage;
   final String roadSide;
-  final double renderScale;
-  final double anchorX;
-  final double anchorY;
-  final double baseOffsetY;
-  final Offset pull;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -512,7 +591,7 @@ class _SpritePlotPainter extends CustomPainter {
     final road = roadSide == 'east' || roadSide == 'west'
         ? roadRowAxisImage
         : roadColumnAxisImage;
-    if (!tileStyle && road != null) {
+    if (!tileStyle && !propStyle && road != null) {
       for (final center in _roadStripCenters(columns, rows, roadSide)) {
         canvas.drawImageRect(
           road,
@@ -537,24 +616,55 @@ class _SpritePlotPainter extends CustomPainter {
       }
     }
 
-    // The sprite itself, placed exactly as the game places it, leaning
-    // toward the chosen road side by its facing offset.
+    if (propStyle) {
+      // The tile's 8×8 subtile lattice, faint, with the chosen slot
+      // highlighted the way the game's ghost marker diamonds it.
+      Offset latticePoint(double fx, double fy) => Offset(
+        (fx - fy) * _previewTileWidth / 2,
+        (fx + fy) * _previewTileHeight / 2,
+      );
+      final lattice = Paint()
+        ..strokeWidth = 1 / math.max(fit, 0.25)
+        ..color = const Color(0x59FFFFFF);
+      for (var k = 0; k <= propSubtilesPerAxis; k++) {
+        final c = -0.5 + k / propSubtilesPerAxis;
+        final extent = 0.5 - c.abs();
+        canvas.drawLine(
+          latticePoint(c, -extent),
+          latticePoint(c, extent),
+          lattice,
+        );
+        canvas.drawLine(
+          latticePoint(-extent, c),
+          latticePoint(extent, c),
+          lattice,
+        );
+      }
+      final fx = (subtileX + 0.5) / propSubtilesPerAxis - 0.5;
+      final fy = (subtileY + 0.5) / propSubtilesPerAxis - 0.5;
+      final centre = latticePoint(fx, fy);
+      final halfWidth = _previewTileWidth / propSubtilesPerAxis / 2;
+      final halfHeight = _previewTileHeight / propSubtilesPerAxis / 2;
+      final slot = Path()
+        ..moveTo(centre.dx, centre.dy - halfHeight)
+        ..lineTo(centre.dx + halfWidth, centre.dy)
+        ..lineTo(centre.dx, centre.dy + halfHeight)
+        ..lineTo(centre.dx - halfWidth, centre.dy)
+        ..close();
+      canvas.drawPath(slot, Paint()..color = const Color(0x804BC69B));
+      canvas.drawPath(
+        slot,
+        Paint()
+          ..color = const Color(0xFF1E6552)
+          ..strokeWidth = 1.5 / math.max(fit, 0.25)
+          ..style = PaintingStyle.stroke,
+      );
+    }
+
+    // The sprite itself, placed exactly as the game places it.
     final image = this.image;
-    if (image != null) {
-      final rect = tileStyle
-          ? _previewTileRect(
-              image,
-              _previewCellCenter(0, 0),
-              baseOffsetY: baseOffsetY,
-            )
-          : _previewStructureRect(
-              image,
-              renderScale: renderScale,
-              anchorX: anchorX,
-              anchorY: anchorY,
-              columns: columns,
-              rows: rows,
-            ).shift(pull);
+    final rect = spriteRect;
+    if (image != null && rect != null) {
       canvas.drawImageRect(
         image,
         Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
@@ -571,15 +681,14 @@ class _SpritePlotPainter extends CustomPainter {
       oldDelegate.columns != columns ||
       oldDelegate.rows != rows ||
       oldDelegate.tileStyle != tileStyle ||
+      oldDelegate.propStyle != propStyle ||
+      oldDelegate.subtileX != subtileX ||
+      oldDelegate.subtileY != subtileY ||
       oldDelegate.image != image ||
+      oldDelegate.spriteRect != spriteRect ||
       oldDelegate.roadColumnAxisImage != roadColumnAxisImage ||
       oldDelegate.roadRowAxisImage != roadRowAxisImage ||
-      oldDelegate.roadSide != roadSide ||
-      oldDelegate.renderScale != renderScale ||
-      oldDelegate.anchorX != anchorX ||
-      oldDelegate.anchorY != anchorY ||
-      oldDelegate.baseOffsetY != baseOffsetY ||
-      oldDelegate.pull != pull;
+      oldDelegate.roadSide != roadSide;
 }
 
 /// Cell centres of a road strip along one side of a plot, one tile past

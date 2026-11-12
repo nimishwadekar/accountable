@@ -170,9 +170,40 @@ void main() {
     expect(find.text('2×2 plot'), findsOneWidget);
   });
 
-  testWidgets('single-facing sprites keep the plain front-edge preview', (
+  testWidgets('single-facing building sprites keep the plain plot preview', (
     tester,
   ) async {
+    final categories = {
+      'sprites.json': {
+        'sprites': {
+          'warehouse-blue': {
+            'path': 'sprites/buildings/industrial/missing.png',
+            'renderScale': 0.5,
+            'groundAnchor': [0.5, 1.0],
+            'category': 'buildings',
+            'subcategory': 'industrial',
+          },
+        },
+      },
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SpritePlotPreview(
+            categories: categories,
+            role: 'warehouse-blue',
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.text('1×1 plot'), findsOneWidget);
+  });
+
+  testWidgets('prop sprites preview on the subtile lattice', (tester) async {
     final categories = {
       'sprites.json': {
         'sprites': {
@@ -195,8 +226,24 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
+
+    // Three slot chips — back, centre, front — with centre selected
+    // by default; the caption names the lattice and the slot.
+    final chips = find.byType(ChoiceChip);
+    expect(chips, findsNWidgets(3));
+    expect(
+      tester.widget<ChoiceChip>(chips.at(1)).selected,
+      isTrue,
+      reason: 'centre is the default slot',
+    );
+    expect(find.text('8×8 lattice · subtile (3,3)'), findsOneWidget);
+
+    // Switching slots re-renders the lattice preview without errors.
+    await tester.tap(chips.at(2)); // front
+    await tester.pump();
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.byType(ChoiceChip), findsNothing);
-    expect(find.text('1×1 plot'), findsOneWidget);
+    expect(tester.widget<ChoiceChip>(chips.at(2)).selected, isTrue);
+    expect(find.text('8×8 lattice · subtile (7,7)'), findsOneWidget);
   });
 }
