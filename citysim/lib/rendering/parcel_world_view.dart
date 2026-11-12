@@ -2899,14 +2899,18 @@ class _ParcelWorldPainter extends CustomPainter {
   /// and the strong green outline either way.
   void _drawParcelSelection(Canvas canvas, Size size, ParcelCoord parcel) {
     final path = _parcelScreenPath(parcel, size);
-    if (queries.ownsParcel(parcel)) {
-      canvas.drawPath(path, Paint()..color = const Color(0x264BC69B));
-    }
+    // A dark wash over the whole parcel makes the selection readable
+    // at a glance; the border carries the exact shape.
+    canvas.drawPath(path, Paint()..color = const Color(0x4025745C));
     canvas.drawPath(
       path,
       Paint()
         ..color = const Color(0xFF25745C)
-        ..strokeWidth = 2.5
+        // Thicker than the owned outline's white dashes (which draw
+        // under this line where a selected parcel meets owned land),
+        // so the border stays dominant on those sides too, and
+        // scaled so it keeps its weight at every zoom.
+        ..strokeWidth = math.max(2.5, 4.0 * scale)
         ..style = PaintingStyle.stroke,
     );
   }

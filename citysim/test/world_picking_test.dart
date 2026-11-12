@@ -348,7 +348,7 @@ void main() {
   });
 
   testWidgets(
-    'tapping inside the office box but on transparent art selects the ground',
+    'tapping inside the office box but on transparent art selects nothing',
     (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(800, 900);
@@ -388,8 +388,11 @@ void main() {
       );
       await tester.pump();
 
-      // The office must not be selected; the ground diamond wins. The
-      // tapped ground cell is the iso inverse of the world point.
+      // The office must not be selected — and under the
+      // objects-only inspect rule, neither is anything else: the
+      // transparent art lets the tap fall through to plain ground,
+      // which highlights nothing (the ground cell is still resolved
+      // for tools that need it, but inspect shows no panel).
       final gx = worldPoint.dx / 32;
       final gy = worldPoint.dy / 16;
       final column = ((gx + gy) / 2).round();
@@ -401,8 +404,13 @@ void main() {
       );
       expect(
         find.text('Tile $column,$row'),
-        findsOneWidget,
-        reason: 'the ground cell behind the office is selected',
+        findsNothing,
+        reason: 'plain terrain selects nothing in inspect mode',
+      );
+      expect(
+        find.textContaining('Tile '),
+        findsNothing,
+        reason: 'no ground panel at all',
       );
     },
   );

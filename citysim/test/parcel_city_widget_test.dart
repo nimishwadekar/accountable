@@ -152,7 +152,10 @@ void main() {
 
   testWidgets('parcel mode selects parcels, not cells', (tester) async {
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
+    // Wide enough that the unowned parcel south of the starter is
+    // tappable: the app caps the map view's width, so the phone
+    // width cannot reach a parcel a full tile left of centre.
+    tester.view.physicalSize = const Size(900, 900);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final store = _MemoryParcelStore();
@@ -169,15 +172,115 @@ void main() {
     await tester.tap(find.text('Parcels').first);
     await tester.pump();
     final mapRect = tester.getRect(find.byType(ParcelWorldView));
-    // A tap inside the starter parcel selects that whole parcel and
-    // nothing at cell granularity.
+    // The starter parcel is owned: tapping it highlights nothing.
     await tester.tapAt(mapRect.center + const Offset(16, 8));
     await tester.pump();
 
-    final view = tester.widget<ParcelWorldView>(find.byType(ParcelWorldView));
+    var view = tester.widget<ParcelWorldView>(find.byType(ParcelWorldView));
     expect(view.parcelMode, isTrue);
-    expect(view.selectedParcel, const ParcelCoord(0, 0));
+    expect(view.selectedParcel, isNull, reason: 'owned parcels select nothing');
     expect(view.selectedCell, isNull);
+
+    // The parcel south of the starter is charted and unowned: the
+    // tap selects that whole parcel, at parcel granularity only.
+    // Its centre cell (4, 12) sits one parcel down-left of the
+    // camera's start cell.
+    await tester.tapAt(mapRect.center + const Offset(-256, 128));
+    await tester.pump();
+
+    view = tester.widget<ParcelWorldView>(find.byType(ParcelWorldView));
+    expect(view.selectedParcel, const ParcelCoord(0, 1));
+    expect(view.selectedCell, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('inspect mode selects objects only, terrain clears', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = _MemoryParcelStore();
+
+    await tester.pumpWidget(ParcelCityApp(store: store, content: content));
+    for (var i = 0; i < 50; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+
+    // The default tool is inspect. The starter road runs through the
+    // camera's start cell (4, 4), at the map's centre: tapping it
+    // selects the road section.
+    final mapRect = tester.getRect(find.byType(ParcelWorldView));
+    await tester.tapAt(mapRect.center);
+    await tester.pump();
+    var view = tester.widget<ParcelWorldView>(find.byType(ParcelWorldView));
+    expect(view.selectedCell, const CellCoord(4, 4));
+    expect(view.highlightCells, isNotEmpty, reason: 'the road section');
+
+    // Plain grass next to the road (cell (2, 2), one tile up from
+    // the centre) highlights nothing — the tap just clears.
+    await tester.tapAt(mapRect.center + const Offset(0, -64));
+    await tester.pump();
+    view = tester.widget<ParcelWorldView>(find.byType(ParcelWorldView));
+    expect(view.selectedCell, isNull, reason: 'terrain selects nothing');
+    expect(view.highlightCells, isEmpty);
+    expect(view.selectedParcel, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('parcel mode ignores fog parcels', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = _MemoryParcelStore();
+    // A two-parcel map: the owned starter and one charted neighbour,
+    // fog beyond — every parcel-mode rule within a default camera.
+    final tinyContent = ContentBundle(
+      manifest: content.manifest,
+      catalogue: content.catalogue,
+      sprites: content.sprites,
+      economy: content.economy,
+      ambience: content.ambience,
+      terrain: TerrainContent(
+        generatorVersion: 1,
+        parcels: {
+          const ParcelCoord(0, 0): TerrainKind.grass,
+          const ParcelCoord(0, 1): TerrainKind.grass,
+        },
+      ),
+    );
+
+    await tester.pumpWidget(ParcelCityApp(store: store, content: tinyContent));
+    for (var i = 0; i < 50; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Parcels').first);
+    await tester.pump();
+    final mapRect = tester.getRect(find.byType(ParcelWorldView));
+    ParcelWorldView view() =>
+        tester.widget<ParcelWorldView>(find.byType(ParcelWorldView));
+
+    // The charted neighbour (centre cell (4, 12)) selects.
+    await tester.tapAt(mapRect.center + const Offset(-256, 128));
+    await tester.pump();
+    expect(view().selectedParcel, const ParcelCoord(0, 1));
+
+    // The fog parcel west of the starter (centre cell (-1, 11))
+    // selects nothing.
+    await tester.tapAt(mapRect.center + const Offset(-384, 32));
+    await tester.pump();
+    expect(view().selectedParcel, isNull, reason: 'fog parcels select nothing');
     expect(tester.takeException(), isNull);
   });
 

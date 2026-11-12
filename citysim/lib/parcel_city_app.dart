@@ -295,10 +295,38 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     }
     setState(() {
       if (_tool == _WorldTool.parcel) {
-        // Parcel mode selects at parcel granularity: no cell outline,
-        // no road-section highlights — just the parcel under the tap.
-        _selectedParcel = parcelForCell(cell);
+        // Parcel mode highlights buyable parcels only: owned
+        // parcels and fog select nothing — there is nothing to
+        // choose there, and the panel stays clear.
+        final parcel = parcelForCell(cell);
+        final kind = _terrain
+            .sample(parcel.origin(world.parcelSize), world.seed)
+            .kind;
+        final buyable =
+            kind != TerrainKind.fog &&
+            !WorldQueries(world, _terrain).ownsParcel(parcel);
+        _selectedParcel = buyable ? parcel : null;
         _selectedCell = null;
+        _selectedCatalogueId = null;
+        _bridgeStartCell = null;
+        _highlightCells = const {};
+        return;
+      }
+      final highlight = _highlightFor(world, cell, structureId);
+      if (_tool == _WorldTool.inspect &&
+          structureId == null &&
+          highlight.isEmpty &&
+          !world.bridges.any(
+            (bridge) =>
+                bridge.waterCells.contains(cell) ||
+                bridge.nearBank == cell ||
+                bridge.farBank == cell,
+          )) {
+        // Inspect selects objects only: structures, props, road
+        // sections, project spans, bridges. Plain terrain
+        // highlights nothing — the tap just clears.
+        _selectedCell = null;
+        _selectedParcel = null;
         _selectedCatalogueId = null;
         _bridgeStartCell = null;
         _highlightCells = const {};
@@ -323,7 +351,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         _selectedCatalogueId = null;
         _bridgeStartCell = null;
       }
-      _highlightCells = _highlightFor(world, cell, structureId);
+      _highlightCells = highlight;
       if (structureId != null && _tool == _WorldTool.inspect) {
         _selectedCatalogueId = null;
       }

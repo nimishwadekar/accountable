@@ -97,6 +97,7 @@ int _pixelAt((ui.Image, ByteData) capture, Offset point) {
 }
 
 int _red(int pixel) => (pixel >> 24) & 0xFF;
+int _green(int pixel) => (pixel >> 16) & 0xFF;
 int _blue(int pixel) => (pixel >> 8) & 0xFF;
 
 void main() {
@@ -155,6 +156,87 @@ void main() {
       _red(rim) - _blue(rim),
       lessThan(30),
       reason: 'no shore bank art over the fog deck',
+    );
+  });
+
+  testWidgets('the selected parcel shades dark with a thick border', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final boundaryKey = GlobalKey();
+    Future<(ui.Image, ByteData)> render(ParcelCoord? selected) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          debugShowCheckedModeBanner: false,
+          home: Scaffold(
+            body: RepaintBoundary(
+              key: boundaryKey,
+              child: ParcelWorldView(
+                state: _islandWorld(content),
+                content: content,
+                terrainProvider: _FogBeyondStarter(),
+                onCellTap: (cell, structureId, subtileX, subtileY) {},
+                selectedParcel: selected,
+              ),
+            ),
+          ),
+        ),
+      );
+      for (var i = 0; i < 50; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+      return _capture(tester, boundaryKey);
+    }
+
+    final plain = await render(null);
+    final selected = await render(const ParcelCoord(0, 0));
+
+    // The dark wash: plain grass inside the parcel (cell (2, 2))
+    // reads clearly darker once the parcel is selected.
+    final interior = _screenCenterOf(const CellCoord(2, 2));
+    final plainPx = _pixelAt(plain, interior);
+    final selectedPx = _pixelAt(selected, interior);
+    expect(
+      _red(plainPx) - _red(selectedPx),
+      greaterThan(15),
+      reason: 'the selection shades the whole parcel darker',
+    );
+
+    // The thick border: walk perpendicular across the parcel's south
+    // edge — every side of this island parcel is owned frontier, so
+    // the border draws over the white dashes everywhere. The edge
+    // runs from screen (400, 412) to (144, 284) (corners (8,8) and
+    // (0,8)); its midpoint and perpendicular come from that. Count
+    // clearly-green pixels along the crossing: at least 4 at scale 1
+    // (the old 2.5-px stroke managed about 2).
+    const edgeMidpoint = Offset(272, 348);
+    var greenCount = 0;
+    for (var t = -8; t <= 8; t++) {
+      final px = _pixelAt(
+        selected,
+        edgeMidpoint.translate(t * 0.447, -t * 0.894), // perpendicular
+      );
+      if ((_red(px) - 0x25).abs() +
+              (_green(px) - 0x74).abs() +
+              (_blue(px) - 0x5C).abs() <
+          70) {
+        greenCount++;
+      }
+    }
+    expect(
+      greenCount,
+      greaterThan(2),
+      reason:
+          'the selection border stays thick over the white dashes '
+          '(the old 2.5-px stroke covered about 2 pixels here)',
     );
   });
 }
