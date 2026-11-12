@@ -187,6 +187,11 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   int _hoverSubtileX = 0;
   int _hoverSubtileY = 0;
 
+  /// Cache backing [_cameraWorldBounds].
+  Rect? _cameraBounds;
+  ContentBundle? _cameraBoundsContent;
+  TerrainProvider? _cameraBoundsProvider;
+
   /// Whether the decor ghost is pinned to the last tapped spot: a
   /// tap locks the preview in place (so it stays put while the
   /// pointer travels to the confirm button), the next tap elsewhere
@@ -316,6 +321,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
               setState(() {
                 _scale = nextScale;
                 _offset = focal - size.center(Offset.zero) - anchor * nextScale;
+                _clampCamera();
               });
             },
             child: GestureDetector(
@@ -340,6 +346,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                       details.localFocalPoint -
                       size.center(Offset.zero) -
                       _worldAnchorAtGestureStart * nextScale;
+                  _clampCamera();
                 });
               },
               child: CustomPaint(
@@ -420,6 +427,55 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     );
     final world = _cellWorldCenter(start);
     _offset = Offset(-world.dx * _scale, -world.dy * _scale);
+    _clampCamera();
+  }
+
+  /// The camera's play area: the union of the charted parcels' diamond
+  /// bounding boxes, inflated by [cameraChartedMargin] of fog. Cached
+  /// on content and provider identity — terrain edits arrive as a new
+  /// bundle, which is also what grows the play area. Null when nothing
+  /// is charted (degenerate content); the camera stays free then.
+  Rect? _cameraWorldBounds() {
+    if (!identical(widget.content, _cameraBoundsContent) ||
+        !identical(widget.terrainProvider, _cameraBoundsProvider)) {
+      _cameraBoundsContent = widget.content;
+      _cameraBoundsProvider = widget.terrainProvider;
+      final parcelSize = widget.state.parcelSize;
+      final seed = widget.state.seed;
+      Rect? bounds;
+      for (final entry in widget.content.terrain.parcels.entries) {
+        // Authored fog parcels render as fog; they are not part of
+        // the valid map the camera is bounded to.
+        if (widget.terrainProvider
+                .sample(entry.key.origin(parcelSize), seed)
+                .kind ==
+            TerrainKind.fog) {
+          continue;
+        }
+        final rect = _parcelWorldRect(entry.key, parcelSize);
+        bounds = bounds == null ? rect : bounds.expandToInclude(rect);
+      }
+      _cameraBounds = bounds?.inflate(cameraChartedMargin);
+    }
+    return _cameraBounds;
+  }
+
+  /// Clamps the camera so its centre cannot leave the play area: the
+  /// world point under the viewport centre stays within the charted
+  /// map plus its fog margin, so the map can never be panned out of
+  /// view. Called after every camera mutation; mutates [_offset]
+  /// only, so it is safe inside a setState block.
+  void _clampCamera() {
+    final bounds = _cameraWorldBounds();
+    if (bounds == null) return;
+    final center = Offset(-_offset.dx / _scale, -_offset.dy / _scale);
+    final clamped = Offset(
+      center.dx.clamp(bounds.left, bounds.right),
+      center.dy.clamp(bounds.top, bounds.bottom),
+    );
+    if (clamped != center) {
+      _offset = Offset(-clamped.dx * _scale, -clamped.dy * _scale);
+    }
   }
 
   /// Click cycling: a repeated tap near the previous one (within a
@@ -492,6 +548,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     setState(() {
       _scale = nextScale;
       _offset = focalPoint - size.center(Offset.zero) - anchor * nextScale;
+      _clampCamera();
     });
   }
 
@@ -3054,15 +3111,20 @@ void _drawImageAtWorldCenter(Canvas canvas, ui.Image image, Offset center) {
 /// parcel seams) and anti-aliased edges survive rasterization.
 Rect _chunkWorldRect(ParcelCoord parcel, int parcelSize) {
   const margin = 4.0;
-  final halfWidth = _logicalTileWidth / 2;
-  final halfHeight = _logicalTileHeight / 2;
+  return _parcelWorldRect(parcel, parcelSize).inflate(margin);
+}
+
+/// The world-space diamond bounding box of one parcel — the parcel's
+/// ground diamond, axis-aligned. Shared by the chunk rects and the
+/// camera's play area.
+Rect _parcelWorldRect(ParcelCoord parcel, int parcelSize) {
   final firstColumn = parcel.x * parcelSize;
   final firstRow = parcel.y * parcelSize;
   return Rect.fromLTRB(
-    (firstColumn - firstRow - parcelSize) * halfWidth - margin,
-    (firstColumn + firstRow) * halfHeight - halfHeight - margin,
-    (firstColumn - firstRow + parcelSize) * halfWidth + margin,
-    (firstColumn + firstRow + 2 * parcelSize - 1) * halfHeight + margin,
+    (firstColumn - firstRow - parcelSize) * _logicalTileWidth / 2,
+    (firstColumn + firstRow) * _logicalTileHeight / 2 - _logicalTileHeight / 2,
+    (firstColumn - firstRow + parcelSize) * _logicalTileWidth / 2,
+    (firstColumn + firstRow + 2 * parcelSize - 1) * _logicalTileHeight / 2,
   );
 }
 
@@ -3329,8 +3391,10 @@ class _TerrainChunkCache {
   int generation = 0;
   int _stamp = 0;
 
-  /// Cap on cached chunks so roaming the open ocean cannot grow the
-  /// cache without bound; the least recently drawn are evicted.
+  /// Cap on cached chunks as a safety net. Panning is clamped to the
+  /// charted map plus its fog margin, so roaming cannot grow the
+  /// cache without bound on its own; the least recently drawn are
+  /// evicted when it somehow does.
   static const int _maxChunks = 400;
 
   int nextStamp() => ++_stamp;
