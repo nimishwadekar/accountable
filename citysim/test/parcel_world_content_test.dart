@@ -34,8 +34,8 @@ void main() {
     },
   );
 
-  test('sprite facing offsets validate within half a tile', () {
-    // The seeded sprites carry no out-of-range offsets.
+  test('sprite side shifts validate within half the sprite width', () {
+    // The seeded sprites carry no side shifts at all.
     final seeded = validateContentData(
       catalogue: content.catalogue,
       sprites: content.sprites,
@@ -44,16 +44,18 @@ void main() {
       terrain: content.terrain,
     );
     expect(
-      seeded.where((issue) => issue.message.contains('facingOffset')),
+      seeded.where((issue) => issue.message.contains('side shift')),
       isEmpty,
     );
 
-    // A sprite pushed past half a tile fails validation, and one inside
-    // the range passes.
+    // A sprite shifted past half its width fails validation, a
+    // non-compass side key fails too, and an in-range entry passes.
     final role = content.catalogue.first.assetRoles.first;
     final outOfRange = {
       ...content.sprites,
-      role: content.sprites[role]!.copyWith(facingOffset: 0.75),
+      role: content.sprites[role]!.copyWith(
+        sideShifts: const {'south': (0.75, 0)},
+      ),
     };
     expect(
       validateContentData(
@@ -64,13 +66,33 @@ void main() {
         terrain: content.terrain,
       ).any(
         (issue) =>
-            issue.severity == 'error' && issue.message.contains('facingOffset'),
+            issue.severity == 'error' && issue.message.contains('side shift'),
+      ),
+      isTrue,
+    );
+    final badSide = {
+      ...content.sprites,
+      role: content.sprites[role]!.copyWith(sideShifts: const {'up': (0.1, 0)}),
+    };
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: badSide,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: content.terrain,
+      ).any(
+        (issue) =>
+            issue.severity == 'error' &&
+            issue.message.contains('not a compass side'),
       ),
       isTrue,
     );
     final inRange = {
       ...content.sprites,
-      role: content.sprites[role]!.copyWith(facingOffset: -0.5),
+      role: content.sprites[role]!.copyWith(
+        sideShifts: const {'south': (0, -0.5)},
+      ),
     };
     expect(
       validateContentData(
@@ -79,7 +101,7 @@ void main() {
         economy: content.economy,
         ambience: content.ambience,
         terrain: content.terrain,
-      ).where((issue) => issue.message.contains('facingOffset')),
+      ).where((issue) => issue.message.contains('side shift')),
       isEmpty,
     );
   });

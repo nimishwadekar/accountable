@@ -13,6 +13,24 @@
         1
       ],
       "renderScale": 0.5,
+      "sideShifts": {
+        "east": [
+          0.04,
+          -0.02
+        ],
+        "north": [
+          -0.015,
+          -0.09
+        ],
+        "south": [
+          -0.02,
+          0.04
+        ],
+        "west": [
+          -0.08,
+          -0.02
+        ]
+      },
       "subcategory": "apartments",
       "sways": false
     },

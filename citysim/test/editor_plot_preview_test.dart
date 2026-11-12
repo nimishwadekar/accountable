@@ -106,7 +106,7 @@ void main() {
     expect(find.text('1×1 plot · drawn tile-fit'), findsOneWidget);
   });
 
-  testWidgets('facings sprites get a road-side picker that applies the pull', (
+  testWidgets('facings sprites get a road-side picker that swaps variants', (
     tester,
   ) async {
     final categories = {
@@ -128,7 +128,6 @@ void main() {
             },
             'renderScale': 0.5,
             'groundAnchor': [0.5, 1.0],
-            'facingOffset': 0.25,
             'category': 'buildings',
             'subcategory': 'offices',
           },

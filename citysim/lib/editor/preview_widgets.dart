@@ -213,10 +213,10 @@ Rect _previewPropRect(
 /// and ground anchor — so tuning either here shows exactly how the
 /// sprite sits in the world. Sprites with door facings get a four-way
 /// road-side picker: it moves the strip, swaps to that side's art
-/// variant, and applies the facing offset toward it, so one number can
-/// be tuned against every direction it can meet. East/west picks also
-/// turn the plot: a non-square footprint transposes so its street edge
-/// faces the strip, the way the game orients it at placement.
+/// variant, and applies that side's placement shift, so every number
+/// can be tuned against every direction it can meet. East/west picks
+/// also turn the plot: a non-square footprint transposes so its street
+/// edge faces the strip, the way the game orients it at placement.
 /// Tile-category sprites (ground, roads, shores, bridges) render
 /// tile-style instead: width fitted to the tile, height kept. Props
 /// render on their subtile: one tile's 8×8 lattice with a slot picker,
@@ -226,11 +226,22 @@ class SpritePlotPreview extends StatefulWidget {
     required this.categories,
     required this.role,
     this.width = 300,
+    this.roadSide,
+    this.onRoadSideChanged,
     super.key,
   });
 
   final Map<String, Object?> categories;
   final String role;
+
+  /// The selected road side when the picker is controlled — the page
+  /// hosting the preview keeps the state so its per-side fields can
+  /// edit the same side the plot shows. Null leaves the preview
+  /// managing its own selection.
+  final String? roadSide;
+
+  /// Notified on picker taps when [roadSide] is provided.
+  final void Function(String side)? onRoadSideChanged;
 
   /// Preview width in logical pixels; the height follows the content.
   final double width;
@@ -249,9 +260,14 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
   final List<ImageStream> _roadStreams = [];
   final List<ImageStreamListener> _roadListeners = [];
 
-  /// Road side the preview faces: where the strip runs, which art
-  /// variant shows, and which way the facing offset pulls.
-  String _roadSide = 'south';
+  /// Road side the preview faces when uncontrolled: where the strip
+  /// runs and which art variant shows. A controlled preview (through
+  /// [SpritePlotPreview.roadSide]) drives the same value from its
+  /// host, so the page's per-side fields edit the side the plot shows.
+  String _ownRoadSide = 'south';
+
+  /// The road side the plot currently shows.
+  String get _roadSide => widget.roadSide ?? _ownRoadSide;
 
   /// Slots the prop preview can stand on: the tile's back corner,
   /// centre, and front corner — the placements worth tuning against.
@@ -307,6 +323,19 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
     return entries.isEmpty ? null : entries.first.$2;
   }
 
+  /// The preview's copy of the renderer's side-shift math, over the
+  /// raw sprite map: col east-positive, row south-positive,
+  /// fractions of the drawn width.
+  Offset _sideShift(String side, double width) {
+    final shifts = _sprite['sideShifts'];
+    if (shifts is! Map) return Offset.zero;
+    final entry = shifts[side];
+    if (entry is! List || entry.length < 2) return Offset.zero;
+    final col = (entry[0] as num?)?.toDouble() ?? 0;
+    final row = (entry[1] as num?)?.toDouble() ?? 0;
+    return Offset((col - row) * width, (col + row) * width / 2);
+  }
+
   void _resolveSprite() {
     if (_spriteStream != null && _spriteListener != null) {
       _spriteStream!.removeListener(_spriteListener!);
@@ -357,8 +386,14 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
 
   void _setRoadSide(String side) {
     if (side == _roadSide) return;
-    setState(() => _roadSide = side);
-    // The facing's art variant changes with the side.
+    // A controlled preview reports the pick; an uncontrolled one keeps
+    // its own selection. Either way the art variant follows the side.
+    final callback = widget.onRoadSideChanged;
+    if (callback != null) {
+      callback(side);
+      return;
+    }
+    setState(() => _ownRoadSide = side);
     _resolveSprite();
   }
 
@@ -370,7 +405,6 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
     final anchorX = anchor.isNotEmpty ? (anchor[0] as num).toDouble() : 0.5;
     final anchorY = anchor.length > 1 ? (anchor[1] as num).toDouble() : 1.0;
     final baseOffsetY = (meta['baseOffsetY'] as num?)?.toDouble() ?? 0.0;
-    final facingOffset = (meta['facingOffset'] as num?)?.toDouble() ?? 0.0;
     final category = meta['category'] as String? ?? 'buildings';
     final tileStyle = const {
       'ground',
@@ -393,12 +427,6 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
     // footprint says — placement is per-tile.
     final plotColumns = propStyle ? 1 : (turned ? rows : columns);
     final plotRows = propStyle ? 1 : (turned ? columns : rows);
-    // Only facings sprites can lean — their structures are the ones
-    // that save a facing to pull toward.
-    final pull = _hasFacings
-        ? _previewPull(_roadSide, facingOffset)
-        : Offset.zero;
-
     // Logical-space bounds of everything drawn: plot diamonds, the road
     // strip, and the sprite's rect once its art has decoded.
     var bounds = Rect.fromLTRB(
@@ -438,6 +466,11 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
     Rect? spriteRect;
     if (image != null) {
       final choice = _propSubtileChoices[_propSubtileIndex];
+      // Only facings sprites shift per side — their structures are
+      // the ones that save a facing.
+      final shift = _hasFacings
+          ? _sideShift(_roadSide, image.width * renderScale)
+          : Offset.zero;
       spriteRect = tileStyle
           ? _previewTileRect(
               image,
@@ -452,7 +485,7 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
               anchorY: anchorY,
               subtileX: choice.$2,
               subtileY: choice.$3,
-            ).shift(pull)
+            ).shift(shift)
           : _previewStructureRect(
               image,
               renderScale: renderScale,
@@ -460,7 +493,7 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
               anchorY: anchorY,
               columns: plotColumns,
               rows: plotRows,
-            ).shift(pull);
+            ).shift(shift);
       bounds = bounds.expandToInclude(spriteRect);
     }
     bounds = bounds.inflate(6);
@@ -733,14 +766,3 @@ List<Offset> _roadStripCenters(int columns, int rows, String side) {
       ];
   }
 }
-
-/// The preview's copy of the renderer's facing pull: [offset] tiles
-/// along the road side's screen diagonal — north/east toward the
-/// plot's right corners, south/west toward its left.
-Offset _previewPull(String side, double offset) => Offset(
-  (side == 'north' || side == 'east' ? 1 : -1) * _previewTileWidth / 2 * offset,
-  (side == 'east' || side == 'south' ? 1 : -1) *
-      _previewTileHeight /
-      2 *
-      offset,
-);

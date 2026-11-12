@@ -1,6 +1,5 @@
 This is my note-taking for my own memory. AI shouldn't modify this file.
 
-- single facing offset doesn't work for asymmetric sprites. show 4 fields and also 4 previews.
 - terrain editing at smaller granularity, including puddles.
 - terrain elevation and slops and cliffs.
 - fade out stuff in front if selecting a tile behind them.

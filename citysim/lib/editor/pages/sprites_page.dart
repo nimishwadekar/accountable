@@ -247,8 +247,17 @@ class _SpritesPageState extends State<SpritesPage> {
                   const SizedBox(height: 8),
                   // The sprite on its plot, placed exactly as the game
                   // places it — tune scale and anchor here and watch it
-                  // settle live instead of hot-restarting the game.
-                  SpritePlotPreview(categories: widget.categories, role: role),
+                  // settle live instead of hot-restarting the game. The
+                  // road-side selection is controlled so the per-side
+                  // shift fields below always edit the side the plot
+                  // shows.
+                  SpritePlotPreview(
+                    categories: widget.categories,
+                    role: role,
+                    roadSide: _roadSides[role] ?? 'south',
+                    onRoadSideChanged: (side) =>
+                        setState(() => _roadSides[role] = side),
+                  ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 12,
@@ -349,28 +358,65 @@ class _SpritesPageState extends State<SpritesPage> {
                           }),
                         ),
                       ),
-                      // Only facings sprites can lean — their structures
-                      // are the ones that save a facing to pull toward.
-                      if (pathEntries.any((entry) => entry.$1.isNotEmpty))
+                      // Only facings sprites shift per road side —
+                      // their structures are the ones that save a
+                      // facing. The sliders edit the side the plot
+                      // preview above is showing.
+                      if (pathEntries.any((entry) => entry.$1.isNotEmpty)) ...[
                         SizedBox(
-                          width: 200,
+                          width: 210,
                           child: DoubleSliderField(
-                            label: 'Facing offset',
-                            value: asDouble(meta['facingOffset']),
+                            label:
+                                'Shift E–W · ${_roadSides[role] ?? 'south'} side',
+                            value: _sideShiftValue(
+                              meta,
+                              _roadSides[role] ?? 'south',
+                              0,
+                            ),
                             min: -0.5,
                             max: 0.5,
                             divisions: 100,
                             help:
-                                'Shifts the building toward the road its '
-                                'door faces, in tiles — negative pushes '
-                                'away. Tune it against the plot preview '
-                                'above, one road side at a time.',
-                            onChanged: (v) => _editRole(
+                                'Slides the art east (positive) or west '
+                                '(negative) for this road side, in '
+                                'fractions of the sprite width. Pick the '
+                                'road side on the plot preview above, then '
+                                'drag — the preview follows live.',
+                            onChanged: (v) => _editSideShift(
                               role,
-                              (sprite) => sprite['facingOffset'] = v,
+                              _roadSides[role] ?? 'south',
+                              0,
+                              v,
                             ),
                           ),
                         ),
+                        SizedBox(
+                          width: 210,
+                          child: DoubleSliderField(
+                            label:
+                                'Shift N–S · ${_roadSides[role] ?? 'south'} side',
+                            value: _sideShiftValue(
+                              meta,
+                              _roadSides[role] ?? 'south',
+                              1,
+                            ),
+                            min: -0.5,
+                            max: 0.5,
+                            divisions: 100,
+                            help:
+                                'Slides the art south (positive) or north '
+                                '(negative) for this road side — hug the '
+                                'road with the sign that matches it, in '
+                                'fractions of the sprite width.',
+                            onChanged: (v) => _editSideShift(
+                              role,
+                              _roadSides[role] ?? 'south',
+                              1,
+                              v,
+                            ),
+                          ),
+                        ),
+                      ],
                       // Only props sway in the wind; the option stays
                       // hidden for every other category.
                       if (category == 'props')
@@ -461,6 +507,37 @@ class _SpritesPageState extends State<SpritesPage> {
       final sprites = (categories['sprites.json'] as Map)['sprites'] as Map;
       final sprite = (sprites[role] as Map).cast<String, Object?>();
       edit(sprite);
+    });
+  }
+
+  /// The road side each role's plot preview is showing.
+  final Map<String, String> _roadSides = {};
+
+  /// One component of a side's shift entry, straight from the raw
+  /// sprite map; missing entries read as zero.
+  double _sideShiftValue(Map<String, Object?> meta, String side, int index) {
+    final shifts = meta['sideShifts'];
+    if (shifts is! Map) return 0;
+    final entry = shifts[side];
+    if (entry is! List || entry.length <= index) return 0;
+    return asDouble(entry[index]);
+  }
+
+  /// Writes one component of a side's shift entry, creating the side's
+  /// `[col, row]` list (and the sideShifts map) on first edit.
+  void _editSideShift(String role, String side, int index, double value) {
+    _editRole(role, (sprite) {
+      var map = sprite['sideShifts'];
+      if (map is! Map) {
+        map = <String, Object?>{};
+        sprite['sideShifts'] = map;
+      }
+      final entry = map[side];
+      final list = entry is List ? entry : (map[side] = [0.0, 0.0]);
+      while (list.length < 2) {
+        list.add(0.0);
+      }
+      list[index] = value;
     });
   }
 }

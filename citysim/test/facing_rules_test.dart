@@ -59,20 +59,57 @@ void main() {
     });
   });
 
-  group('facingPullOffset', () {
-    test('pulls along the road side screen diagonal, per tile', () {
-      // One tile toward a side runs half a tile across and a quarter
-      // tile down — the tile itself is 64×32 logical units.
-      expect(facingPullOffset('north', 1), const Offset(32, -16));
-      expect(facingPullOffset('east', 1), const Offset(32, 16));
-      expect(facingPullOffset('south', 1), const Offset(-32, 16));
-      expect(facingPullOffset('west', 1), const Offset(-32, -16));
+  group('sideShiftOffset', () {
+    test('col runs east (down-right), row south (down-left)', () {
+      // One axis at a time, at a drawn width of 64: a quarter of the
+      // width along the column axis is (16, 8); along the row axis it
+      // is (-16, 8).
+      expect(
+        sideShiftOffset(
+          const SpriteDefinition(sideShifts: {'south': (0.25, 0)}),
+          'south',
+          64,
+        ),
+        const Offset(16, 8),
+      );
+      expect(
+        sideShiftOffset(
+          const SpriteDefinition(sideShifts: {'north': (0, 0.25)}),
+          'north',
+          64,
+        ),
+        const Offset(-16, 8),
+        reason: 'the row axis runs along the screen down-left diagonal',
+      );
     });
 
-    test('offsets scale, zero stays put, negative pushes away', () {
-      expect(facingPullOffset('east', 0.25), const Offset(8, 4));
-      expect(facingPullOffset('south', 0), Offset.zero);
-      expect(facingPullOffset('east', -0.5), const Offset(-16, -8));
+    test('both axes together move straight down, negatives invert', () {
+      expect(
+        sideShiftOffset(
+          const SpriteDefinition(sideShifts: {'east': (0.25, 0.25)}),
+          'east',
+          64,
+        ),
+        const Offset(0, 16),
+        reason: 'equal col and row collapse to a straight screen drop',
+      );
+      expect(
+        sideShiftOffset(
+          const SpriteDefinition(sideShifts: {'west': (-0.25, 0)}),
+          'west',
+          64,
+        ),
+        const Offset(-16, -8),
+      );
+    });
+
+    test('no facing or no entry keeps the anchor placement', () {
+      expect(sideShiftOffset(const SpriteDefinition(), null, 64), Offset.zero);
+      expect(
+        sideShiftOffset(const SpriteDefinition(), 'south', 64),
+        Offset.zero,
+        reason: 'a side with no entry keeps the anchor placement',
+      );
     });
   });
 }

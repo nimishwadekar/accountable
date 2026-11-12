@@ -3031,27 +3031,25 @@ Rect _structureRect(
     width,
     height,
   );
-  // The facing offset leans the art toward the road the door faces;
-  // picking and tinting share this rect, so taps follow the lean.
+  // The per-side shift tunes the art against its road; picking and
+  // tinting share this rect, so taps follow the shift.
   final facing = structure.facing;
-  if (facing == null || sprite.facingOffset == 0) return rect;
-  return rect.shift(facingPullOffset(facing, sprite.facingOffset));
+  if (facing == null) return rect;
+  return rect.shift(
+    sideShiftOffset(sprite, facing, image.width * sprite.renderScale),
+  );
 }
 
-/// World-space shift for a structure pulled [offset] tiles toward its
-/// facing road side: north/east run along the screen-right diagonal,
-/// south/west along the left, each a half tile wide and a quarter tile
-/// tall per tile of offset.
-Offset facingPullOffset(String facing, double offset) => Offset(
-  (facing == 'north' || facing == 'east' ? 1 : -1) *
-      _logicalTileWidth /
-      2 *
-      offset,
-  (facing == 'east' || facing == 'south' ? 1 : -1) *
-      _logicalTileHeight /
-      2 *
-      offset,
-);
+/// World-space offset for a sprite's per-side shift: col runs along
+/// the column axis (screen down-right, east-positive), row along the
+/// row axis (screen down-left, south-positive), both as fractions of
+/// the drawn width. A side with no entry keeps the anchor placement.
+Offset sideShiftOffset(SpriteDefinition sprite, String? facing, double width) {
+  final shift = sprite.sideShiftFor(facing);
+  if (shift == null) return Offset.zero;
+  final (col, row) = shift;
+  return Offset((col - row) * width, (col + row) * width / 2);
+}
 
 /// World rect for a prop: the sprite's ground anchor pinned to its
 /// subtile's centre, leaning toward its saved road facing.
@@ -3069,10 +3067,12 @@ Rect _propRect(
     prop.subtileY,
     surfaceLift: surfaceLift,
   );
-  // The facing offset leans the art toward the road the door faces.
+  // The per-side shift tunes the art against its road.
   final facing = prop.facing;
-  if (facing == null || sprite.facingOffset == 0) return rect;
-  return rect.shift(facingPullOffset(facing, sprite.facingOffset));
+  if (facing == null) return rect;
+  return rect.shift(
+    sideShiftOffset(sprite, facing, image.width * sprite.renderScale),
+  );
 }
 
 /// The sprite's ground anchor pinned to a subtile's centre — the

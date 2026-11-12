@@ -170,7 +170,7 @@ class SpriteDefinition {
     this.groundAnchorX = 0.5,
     this.groundAnchorY = 1,
     this.baseOffsetY = 0,
-    this.facingOffset = 0,
+    this.sideShifts = const {},
     this.sways = false,
     this.category = 'buildings',
     this.subcategory = '',
@@ -200,12 +200,20 @@ class SpriteDefinition {
   /// ground anchor to suggest wind. Only props may sway.
   final bool sways;
 
-  /// Render-time shift toward the facing road side, in tiles: positive
-  /// pulls the art toward the road the door faces, negative pushes it
-  /// away. Zero keeps the anchor placement. Only sprites with door
-  /// facings can pull — their structures are the ones that save a
-  /// facing.
-  final double facingOffset;
+  /// Per-road-side placement shifts, keyed by compass side. Each entry
+  /// is `(col, row)` in fractions of the drawn sprite width: `col`
+  /// runs along the column axis (east-positive), `row` along the row
+  /// axis (south-positive). A side with no entry keeps the anchor
+  /// placement. Only sprites with door facings shift — their
+  /// structures are the ones that save a facing.
+  final Map<String, (double, double)> sideShifts;
+
+  /// The shift for a door side, or null when that side has no entry —
+  /// the anchor placement stands. Renderers turn the fractions into a
+  /// world offset: `col` toward the screen down-right, `row` toward
+  /// the down-left, half as tall as wide per the 2:1 iso.
+  (double, double)? sideShiftFor(String? facing) =>
+      facing == null ? null : sideShifts[facing];
 
   /// Dashboard grouping: ground, shores, roads, bridges, buildings, props.
   final String category;
@@ -250,7 +258,7 @@ class SpriteDefinition {
     double? groundAnchorX,
     double? groundAnchorY,
     double? baseOffsetY,
-    double? facingOffset,
+    Map<String, (double, double)>? sideShifts,
     bool? sways,
     String? category,
     String? subcategory,
@@ -262,7 +270,7 @@ class SpriteDefinition {
     groundAnchorX: groundAnchorX ?? this.groundAnchorX,
     groundAnchorY: groundAnchorY ?? this.groundAnchorY,
     baseOffsetY: baseOffsetY ?? this.baseOffsetY,
-    facingOffset: facingOffset ?? this.facingOffset,
+    sideShifts: sideShifts ?? this.sideShifts,
     sways: sways ?? this.sways,
     category: category ?? this.category,
     subcategory: subcategory ?? this.subcategory,
@@ -274,7 +282,11 @@ class SpriteDefinition {
     'renderScale': renderScale,
     'groundAnchor': [groundAnchorX, groundAnchorY],
     'baseOffsetY': baseOffsetY,
-    'facingOffset': facingOffset,
+    if (sideShifts.isNotEmpty)
+      'sideShifts': {
+        for (final entry in sideShifts.entries)
+          entry.key: [entry.value.$1, entry.value.$2],
+      },
     'sways': sways,
     'category': category,
     'subcategory': subcategory,
@@ -297,12 +309,24 @@ class SpriteDefinition {
       groundAnchorX: anchor.isNotEmpty ? anchor[0].toDouble() : 0.5,
       groundAnchorY: anchor.length > 1 ? anchor[1].toDouble() : 1,
       baseOffsetY: (json['baseOffsetY'] as num?)?.toDouble() ?? 0,
-      facingOffset: (json['facingOffset'] as num?)?.toDouble() ?? 0,
+      sideShifts: _parseSideShifts(json['sideShifts']),
       sways: json['sways'] as bool? ?? false,
       category: category,
       subcategory: json['subcategory'] as String? ?? category,
       codeReferenced: json['codeReferenced'] as bool? ?? false,
     );
+  }
+
+  static Map<String, (double, double)> _parseSideShifts(Object? raw) {
+    if (raw is! Map) return const {};
+    return {
+      for (final entry in raw.entries)
+        if (entry.value is List && (entry.value as List).length >= 2)
+          entry.key as String: (
+            ((entry.value as List)[0] as num?)?.toDouble() ?? 0,
+            ((entry.value as List)[1] as num?)?.toDouble() ?? 0,
+          ),
+    };
   }
 }
 
@@ -826,11 +850,23 @@ List<ContentIssue> validateContentData({
         'pixels of the ground anchor.',
       );
     }
-    if (sprite.facingOffset < -0.5 || sprite.facingOffset > 0.5) {
-      error(
-        'Sprite "${entry.key}": facingOffset must stay within ±0.5 '
-        'tiles — half a tile toward or away from the road.',
-      );
+    for (final shift in sprite.sideShifts.entries) {
+      if (!const ['north', 'east', 'south', 'west'].contains(shift.key)) {
+        error(
+          'Sprite "${entry.key}": side shift "${shift.key}" is not a '
+          'compass side.',
+        );
+        continue;
+      }
+      if (shift.value.$1 < -0.5 ||
+          shift.value.$1 > 0.5 ||
+          shift.value.$2 < -0.5 ||
+          shift.value.$2 > 0.5) {
+        error(
+          'Sprite "${entry.key}": side shifts must stay within ±0.5 of '
+          'the sprite width, per axis.',
+        );
+      }
     }
     if (sprite.sways && sprite.category != 'props') {
       warning('Sprite "${entry.key}": only props may sway in the wind.');
