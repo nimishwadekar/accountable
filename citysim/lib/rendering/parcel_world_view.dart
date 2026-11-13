@@ -863,9 +863,13 @@ List<ShoreBandLand> shoreBandLands(String pattern) {
 /// Each pixel takes the colour of the *nearest* land, so corners
 /// combine as the ramp of the distance to the nearest shore — never
 /// a double blend — and mixed materials meet along the midline
-/// between their edges. Pixels either art left unpainted (the pack's
-/// jagged diamond fringes) are skipped, so the waterline stays ragged
-/// at the art's own granularity and the chunk shows through.
+/// between their edges. Pixels either art left unpainted are skipped,
+/// so the chunk shows through.
+///
+/// The band never leaves its own cell's mathematical diamond: the
+/// overlay draws above the chunk layer, so anything past the diamond
+/// would paint over the south/east neighbours instead of under them —
+/// their foundations, roads, and props.
 ///
 /// The gradient is baked into the colours against the water tile's
 /// own pixels and the output alpha is binary — written pixels are
@@ -908,6 +912,11 @@ Uint8List composeShoreBandPixels(
     for (var x = 0; x < width; x++) {
       final px = x + 0.5;
       final py = y + 0.5;
+      // Stay inside this cell's own diamond — see the doc above.
+      final withinOwnCell =
+          (px - halfWidth).abs() / halfWidth +
+          (py - halfHeight).abs() / halfHeight;
+      if (withinOwnCell > 1) continue;
       var best = double.infinity;
       var bestLand = -1;
       for (var i = 0; i < diamonds.length; i++) {

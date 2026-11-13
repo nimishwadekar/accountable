@@ -205,6 +205,23 @@ void main() {
       );
     });
 
+    test("the band never leaves its own cell's diamond", () {
+      // Land to the south. The overlay draws above the whole chunk
+      // layer, so anything it paints past its own diamond lands on
+      // top of the south/east neighbours — their foundations, roads,
+      // props — instead of under them. The synthetic materials are
+      // opaque everywhere, so only the diamond rule keeps these
+      // spillover pixels empty.
+      final out = compose('....g...');
+      // Inside the diamond near the shared SW edge: the band is there.
+      expect(alphaAt(out, 34, 46), 255);
+      // Outside the diamond — the water tile's bottom-skirt zone,
+      // inside the south neighbour's territory and within reach of
+      // its land: the band must stay out.
+      expect(alphaAt(out, 30, 50), 0);
+      expect(alphaAt(out, 40, 58), 0);
+    });
+
     test("either art's unpainted fringe stays as the chunk drew it", () {
       final landPixels = _solidMaterial(width, height, 90, 180, 60);
       landPixels[(18 * width + 90) * 4 + 3] = 0; // Land hole near the shore.

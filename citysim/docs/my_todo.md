@@ -1,20 +1,16 @@
 This is my note-taking for my own memory. AI shouldn't modify this file.
 
-- Maybe only have skirts on the bottom 2 sides.
 - Smoothen out concave land corners like convex land corners against water.
 - more terrain sprite tiles.
 - improve terrain boundaries. author by hand if necessary.
-- terrain elevation and slops and cliffs.
-- a general way to model elevation gradients in tiles for stuff.
+- terrain elevation and slops and cliffs and a general way to model elevation gradients in tiles for stuff.
 - fade out stuff in front if selecting a tile behind them.
-- buildings get a concrete base below them.
 - decide how people move into the place.
 - Population based on buildings.
 - Pedestrians and cars based on population, building spawn points.
 - Overhaul of ecconomy: taxation income, expensive expansion.
 - Multi-tile roads as composites of single-tile roads.
 - composite sprite editor: create new sprite from existing sprites.
-- have similar fade masks to shores for all terrain meetings, so that there's no harsh boundary anywhere.
 - auto-growth of citizens.
 - region borders: parcel granularity. Parcels can group together under a "settlement", later could be states. Local economy and coin banks stay local to a settlement unless explicitly transferred.
 - Scatter lots of greenery around to make it an uninhabited lush jungle
