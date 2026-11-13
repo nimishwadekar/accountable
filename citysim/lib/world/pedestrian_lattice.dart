@@ -63,6 +63,21 @@ double bridgeSurfaceLift(String role, double fx, double fy, double deckLift) =>
       _ => role.startsWith('bridge.body') ? deckLift : 0,
     };
 
+/// The four corners of a bridge tile's surface — north, east, south,
+/// west — as grid fractions with their lifts. This is the plane
+/// pedestrians walk and the line the renderer splits the sprite
+/// along: flat at deck height for bodies, sheared from bank to deck
+/// for ramps.
+List<(double, double, double)> bridgeSurfaceCorners(
+  String role,
+  double deckLift,
+) => [
+  (0, -0.5, bridgeSurfaceLift(role, 0, -0.5, deckLift)),
+  (0.5, 0, bridgeSurfaceLift(role, 0.5, 0, deckLift)),
+  (0, 0.5, bridgeSurfaceLift(role, 0, 0.5, deckLift)),
+  (-0.5, 0, bridgeSurfaceLift(role, -0.5, 0, deckLift)),
+];
+
 /// A pedestrian's position on the walkable lattice: a road cell plus a
 /// subtile of its 8×8 grid. `x` indexes the column axis (0 = west
 /// edge) and `y` the row axis (0 = north edge), exactly like the prop
@@ -169,23 +184,18 @@ class PedestrianLattice {
   bool isBridgeCell(CellCoord cell) =>
       _roles[cell]?.startsWith('bridge.') ?? false;
 
-  /// Painter's depth for a walker at [spot]. Road tiles pre-draw in
-  /// the road pass, so ground walkers keep their plain ground depth
-  /// (cell depth plus the subtile offset). Bridge tiles draw as actors
-  /// at their cell's integer depth — a walker at ground depth would
-  /// sort behind their own tile on far-side lanes and clip under each
-  /// boundary before popping on arrival — so bridge spots bump into
-  /// (cell + 0.99, cell + 1.89): always after their own tile and the
-  /// next tile along the span, before the one beyond it. The known
-  /// cost: a walker high on a ramp can draw over a tall structure
-  /// flanking the very next cell; decks are water-flanked, so this
-  /// only bites beside ramps.
+  /// Painter's depth for a walker at [spot]. Ground spots keep their
+  /// plain ground depth. Bridge spots floor theirs just above their
+  /// tile's surface piece (which sorts at cell + 0.05): a walker on a
+  /// deck or ramp must never sink under the surface they stand on,
+  /// and the floor stays below the next cell's depth so buildings in
+  /// front still occlude them.
   double walkerSortDepth(LatticeSpot spot) {
     final cellDepth = spot.cell.column + spot.cell.row;
     // The ground-plane offset: fx + fy for the subtile centre.
-    final offset = (spot.x + spot.y + 1) / propSubtilesPerAxis - 1;
-    if (!isBridgeCell(spot.cell)) return cellDepth + offset;
-    return cellDepth + 0.99 + (offset + 0.875) / 1.75 * 0.9;
+    final ground = cellDepth + (spot.x + spot.y + 1) / propSubtilesPerAxis - 1;
+    if (!isBridgeCell(spot.cell)) return ground;
+    return math.max(ground, cellDepth + 0.1);
   }
 
   bool isWalkable(CellCoord cell, int x, int y) {

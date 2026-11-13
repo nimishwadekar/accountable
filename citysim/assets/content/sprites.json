@@ -1162,7 +1162,17 @@
       "path": "sprites/roads/corner/tile_road_corner_E_normal.png",
       "renderScale": 0.5,
       "subcategory": "corner",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        255,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        129
+      ]
     },
     "road.corner.n": {
       "baseOffsetY": 0,
@@ -1175,7 +1185,17 @@
       "path": "sprites/roads/corner/tile_road_corner_N_normal.png",
       "renderScale": 0.5,
       "subcategory": "corner",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        255,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        129
+      ]
     },
     "road.corner.s": {
       "baseOffsetY": 0,
@@ -1188,7 +1208,17 @@
       "path": "sprites/roads/corner/tile_road_corner_S_normal.png",
       "renderScale": 0.5,
       "subcategory": "corner",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        129,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        255
+      ]
     },
     "road.corner.w": {
       "baseOffsetY": 0,
@@ -1201,7 +1231,17 @@
       "path": "sprites/roads/corner/tile_road_corner_W_normal.png",
       "renderScale": 0.5,
       "subcategory": "corner",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        129,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        255
+      ]
     },
     "road.cross": {
       "baseOffsetY": 0,
@@ -1214,7 +1254,17 @@
       "path": "sprites/roads/cross/tile_road_xsing_normal.png",
       "renderScale": 0.5,
       "subcategory": "cross",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        129,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        129
+      ]
     },
     "road.end.ne": {
       "baseOffsetY": 0,
@@ -1227,7 +1277,17 @@
       "path": "sprites/roads/end/tile_road_end_NE_normal.png",
       "renderScale": 0.5,
       "subcategory": "end",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        255,
+        129,
+        129,
+        129,
+        129,
+        129,
+        129,
+        129
+      ]
     },
     "road.end.nw": {
       "baseOffsetY": 0,
@@ -1240,7 +1300,17 @@
       "path": "sprites/roads/end/tile_road_end_NW_normal.png",
       "renderScale": 0.5,
       "subcategory": "end",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        255,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        255
+      ]
     },
     "road.end.se": {
       "baseOffsetY": 0,
@@ -1253,7 +1323,17 @@
       "path": "sprites/roads/end/tile_road_end_SE_normal.png",
       "renderScale": 0.5,
       "subcategory": "end",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        255,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        255
+      ]
     },
     "road.end.sw": {
       "baseOffsetY": 0,
@@ -1266,7 +1346,17 @@
       "path": "sprites/roads/end/tile_road_end_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "end",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        129,
+        129,
+        129,
+        129,
+        129,
+        129,
+        129,
+        255
+      ]
     },
     "road.pelican.ne": {
       "baseOffsetY": 0,
@@ -1279,7 +1369,17 @@
       "path": "sprites/roads/pelican/tile_road_pelican_NE_normal.png",
       "renderScale": 0.5,
       "subcategory": "pelican",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        129,
+        255,
+        129,
+        129,
+        129,
+        129,
+        129,
+        129
+      ]
     },
     "road.pelican.nw": {
       "baseOffsetY": 0,
@@ -1292,7 +1392,17 @@
       "path": "sprites/roads/pelican/tile_road_pelican_NW_normal.png",
       "renderScale": 0.5,
       "subcategory": "pelican",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        255,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        255
+      ]
     },
     "road.pelican.se": {
       "baseOffsetY": 0,
@@ -1305,7 +1415,17 @@
       "path": "sprites/roads/pelican/tile_road_pelican_SE_normal.png",
       "renderScale": 0.5,
       "subcategory": "pelican",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        255,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        255
+      ]
     },
     "road.pelican.sw": {
       "baseOffsetY": 0,
@@ -1318,7 +1438,17 @@
       "path": "sprites/roads/pelican/tile_road_pelican_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "pelican",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        129,
+        129,
+        129,
+        129,
+        129,
+        129,
+        255,
+        129
+      ]
     },
     "road.straight.se": {
       "baseOffsetY": 0,
@@ -1354,7 +1484,17 @@
       "path": "sprites/roads/straight/tile_road_straight_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "straight",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        129,
+        129,
+        129,
+        129,
+        129,
+        129,
+        129,
+        129
+      ]
     },
     "road.t.ne": {
       "baseOffsetY": 0,
@@ -1367,7 +1507,17 @@
       "path": "sprites/roads/t/tile_road_intersection_NE_normal.png",
       "renderScale": 0.5,
       "subcategory": "t",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        129,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        255
+      ]
     },
     "road.t.nw": {
       "baseOffsetY": 0,
@@ -1380,7 +1530,17 @@
       "path": "sprites/roads/t/tile_road_intersection_NW_normal.png",
       "renderScale": 0.5,
       "subcategory": "t",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        129,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        129
+      ]
     },
     "road.t.se": {
       "baseOffsetY": 0,
@@ -1393,7 +1553,17 @@
       "path": "sprites/roads/t/tile_road_intersection_SE_normal.png",
       "renderScale": 0.5,
       "subcategory": "t",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        129,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        129
+      ]
     },
     "road.t.sw": {
       "baseOffsetY": 0,
@@ -1406,7 +1576,17 @@
       "path": "sprites/roads/t/tile_road_intersection_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "t",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        255,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        129
+      ]
     },
     "rocks-brown-a": {
       "baseOffsetY": 0,

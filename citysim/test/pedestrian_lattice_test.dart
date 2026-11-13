@@ -297,7 +297,50 @@ void main() {
     expect(lattice.liftAt(const LatticeSpot(CellCoord(0, 0), 3, 3)), 0);
   });
 
-  test('bridge walkers sort after their tile and the next one', () {
+  test('bridge surface corners trace the split plane', () {
+    const lift = 12.0;
+    // Deck tiles are flat at full lift on every corner.
+    expect(
+      bridgeSurfaceCorners('bridge.body.se', lift),
+      everyElement(
+        predicate<(double, double, double)>(
+          (corner) => corner.$3 == lift,
+          'a corner at deck height',
+        ),
+      ),
+    );
+    // ramp.nw climbs east: the west corner sits on the ground, the
+    // east corner at deck height, the north/south corners halfway.
+    expect(bridgeSurfaceCorners('bridge.ramp.nw', lift), [
+      (0, -0.5, 6.0),
+      (0.5, 0, 12.0),
+      (0, 0.5, 6.0),
+      (-0.5, 0, 0.0),
+    ]);
+    // ramp.se mirrors it, high at west.
+    expect(bridgeSurfaceCorners('bridge.ramp.se', lift), [
+      (0, -0.5, 6.0),
+      (0.5, 0, 0.0),
+      (0, 0.5, 6.0),
+      (-0.5, 0, 12.0),
+    ]);
+    // Row-axis ramps climb along the row axis instead: ramp.ne is
+    // low at its bank-facing north corner, high at south.
+    expect(bridgeSurfaceCorners('bridge.ramp.ne', lift), [
+      (0, -0.5, 0.0),
+      (0.5, 0, 6.0),
+      (0, 0.5, 12.0),
+      (-0.5, 0, 6.0),
+    ]);
+    expect(bridgeSurfaceCorners('bridge.ramp.sw', lift), [
+      (0, -0.5, 12.0),
+      (0.5, 0, 6.0),
+      (0, 0.5, 0.0),
+      (-0.5, 0, 6.0),
+    ]);
+  });
+
+  test('bridge walkers floor their depth above the surface piece', () {
     // The same east-going bridge: road, near ramp, deck, far ramp.
     final state = stateWith(
       roads: [
@@ -337,39 +380,28 @@ void main() {
     // Ground spots keep the plain ground depth: cell depth plus the
     // subtile offset (fx + fy).
     expect(
-      lattice.walkerSortDepth(const LatticeSpot(CellCoord(0, 0), 3, 3)),
-      closeTo(-0.125, 0.001),
-    );
-    expect(
       lattice.walkerSortDepth(const LatticeSpot(CellCoord(0, 0), 0, 0)),
       closeTo(-0.875, 0.001),
     );
 
-    // Bridge spots bump past their own tile (integer depth) — even at
-    // the tile's very back, where far-side lanes used to vanish
-    // behind the art — and past the next tile along the span once a
-    // subtile in, so boundary crossings never clip under the art.
-    final rampBack = lattice.walkerSortDepth(
-      const LatticeSpot(CellCoord(1, 0), 0, 0),
-    );
-    expect(rampBack, greaterThan(1));
-    expect(rampBack, lessThan(2));
+    // Bridge spots floor just above their tile's surface piece
+    // (cell + 0.05) — even at the tile's very back, where far-side
+    // lanes would otherwise sink under the art — and never cross the
+    // next cell's depth, so buildings in front still occlude them.
     expect(
-      lattice.walkerSortDepth(const LatticeSpot(CellCoord(1, 0), 1, 1)),
-      greaterThan(2),
-      reason: 'one subtile in, already past the next tile',
+      lattice.walkerSortDepth(const LatticeSpot(CellCoord(1, 0), 0, 0)),
+      closeTo(1.1, 0.001),
+      reason: 'the back of the ramp floors to just above the surface',
     );
-    // The far-side deck lane (y = 0) sits between the next tile and
-    // the one beyond it.
-    final farSide = lattice.walkerSortDepth(
-      const LatticeSpot(CellCoord(2, 0), 7, 0),
+    expect(
+      lattice.walkerSortDepth(const LatticeSpot(CellCoord(2, 0), 3, 3)),
+      closeTo(2.1, 0.001),
     );
-    expect(farSide, greaterThan(3));
-    expect(farSide, lessThan(4));
-    // And the front of a bridge tile never reaches two tiles ahead.
+    // The front of a bridge tile keeps its ground depth — still below
+    // the next cell.
     expect(
       lattice.walkerSortDepth(const LatticeSpot(CellCoord(2, 0), 7, 7)),
-      lessThan(4),
+      closeTo(2.875, 0.001),
     );
   });
 

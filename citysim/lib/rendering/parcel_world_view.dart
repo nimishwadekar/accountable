@@ -1364,6 +1364,156 @@ class _ParcelWorldPainter extends CustomPainter {
     _drawFogWisps(canvas, size, drawn);
   }
 
+  /// Every bridge tile the frame draws, with its sprite role: the
+  /// completed bridges' decks and ramps, plus the funded tiles of
+  /// bridges still building. The surface pass and the actor sort both
+  /// draw from this one list, so the split never drifts between them.
+  List<(String, CellCoord)> _bridgeTilesInBounds(_CellBounds bounds) {
+    final tiles = <(String, CellCoord)>[];
+    for (final bridge in queries.bridgesInBounds(
+      left: bounds.left - 5,
+      right: bounds.right + 5,
+      top: bounds.top - 5,
+      bottom: bounds.bottom + 5,
+    )) {
+      final body = bridgeBodyRole(bridge.nearBank, bridge.farBank);
+      for (final cell in bridge.waterCells) {
+        tiles.add((body, cell));
+      }
+      tiles.add((
+        bridgeRampRole(bridge.nearBank, bridge.waterCells.first),
+        bridge.nearBank,
+      ));
+      tiles.add((
+        bridgeRampRole(bridge.farBank, bridge.waterCells.last),
+        bridge.farBank,
+      ));
+    }
+    // Bridges still under construction: the near ramp rises with the
+    // near-bank road (the first coin), then each funded span tile of
+    // the deck appears in order, rising out of the dirt path. The far
+    // ramp only draws on the completed bridge — its bank road arrives
+    // with the final coin, and a ramp never stands on a non-road tile.
+    for (final job in state.constructions) {
+      if (job.kind != WorldConstructionKind.bridge) continue;
+      if (!boundsOverlapsCells(bounds, [
+        ...job.waterCells,
+        job.nearBank!,
+        job.farBank!,
+      ])) {
+        continue;
+      }
+      final fundedTiles = _bridgeFundedSpanCount(job);
+      final nearBankFunded =
+          job.coinsFunded >= content.economy.roadTileCostCoins;
+      if (!nearBankFunded && fundedTiles <= 0) continue;
+      if (fundedTiles > 0) {
+        final body = bridgeBodyRole(job.nearBank!, job.farBank!);
+        for (final cell in job.waterCells.take(fundedTiles)) {
+          tiles.add((body, cell));
+        }
+      }
+      if (nearBankFunded) {
+        tiles.add((
+          bridgeRampRole(job.nearBank!, job.waterCells.first),
+          job.nearBank!,
+        ));
+      }
+    }
+    return tiles;
+  }
+
+  /// One bridge tile, drawn split along its surface plane: the same
+  /// sprite, clipped twice. The [surface] piece keeps only the
+  /// walkable plane — flat at deck height for bodies, sheared along
+  /// the incline for ramps — and sorts just above the posts piece, so
+  /// people standing on the tile draw on top of it. The default posts
+  /// piece keeps everything else — supports, underside, anything
+  /// above the walking plane — and draws first, so the neighbouring
+  /// tile's art covers it exactly the way the whole sprite always
+  /// was.
+  void _drawBridgeTile(
+    Canvas canvas,
+    String role,
+    CellCoord cell,
+    Size size,
+    double scale,
+    Offset offset, {
+    bool surface = false,
+  }) {
+    final path = content.tryAssetPath(role);
+    final image = path == null ? null : images[path];
+    if (image == null) return;
+    ParcelWorldProbe.countActor();
+    final sprite = content.sprite(role)!;
+    final rect = _tileScreenRect(image, sprite, cell, size, scale, offset);
+    final Path clip;
+    if (surface) {
+      // Grown a hair past the plane so the seam between the two
+      // pieces stays fully opaque: the posts piece covers the overlap
+      // wherever it has pixels, and each piece's anti-aliased edge
+      // sits where the other already painted.
+      clip = _bridgeSurfaceQuad(role, cell, size, scale, offset, expand: 0.02);
+    } else {
+      clip = Path.combine(
+        PathOperation.difference,
+        Path()..addRect(rect.inflate(2)),
+        _bridgeSurfaceQuad(role, cell, size, scale, offset, expand: -0.02),
+      );
+    }
+    canvas
+      ..save()
+      ..clipPath(clip)
+      ..drawImageRect(
+        image,
+        Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+        rect,
+        Paint()
+          ..filterQuality = FilterQuality.medium
+          ..color = const Color(0xFFFFFFFF),
+      )
+      ..restore();
+  }
+
+  /// The screen-space quad of a bridge tile's walkable surface: the
+  /// cell diamond lifted onto the tile's plane — flat at deck height
+  /// for bodies, sheared along the incline for ramps. [expand] grows
+  /// or shrinks the quad from its centre (fraction of the half-tile):
+  /// the two clip pieces overlap along the plane's edge so their
+  /// anti-aliased boundaries never thin the sprite to a hairline.
+  Path _bridgeSurfaceQuad(
+    String role,
+    CellCoord cell,
+    Size size,
+    double scale,
+    Offset offset, {
+    double expand = 0,
+  }) {
+    final deckLift = content.sprite('bridge.body.se')?.surfaceLift ?? 0;
+    final centre = _cellWorldCenter(cell);
+    final path = Path();
+    var first = true;
+    for (final (fx, fy, _) in bridgeSurfaceCorners(role, deckLift)) {
+      final grownFx = fx * (1 + expand);
+      final grownFy = fy * (1 + expand);
+      final lift = bridgeSurfaceLift(role, grownFx, grownFy, deckLift);
+      final world =
+          centre +
+          Offset(
+            (grownFx - grownFy) * _logicalTileWidth / 2,
+            (grownFx + grownFy) * _logicalTileHeight / 2 - lift,
+          );
+      final screen = _worldToScreen(world, size, scale, offset);
+      if (first) {
+        path.moveTo(screen.dx, screen.dy);
+        first = false;
+      } else {
+        path.lineTo(screen.dx, screen.dy);
+      }
+    }
+    return path..close();
+  }
+
   /// The wisp role for a fog cell — one of three, picked from a
   /// different slice of the placement hash so all variants appear.
   String _fogWispRole(int hash) => switch ((hash >> 9) % 3) {
@@ -1987,79 +2137,35 @@ class _ParcelWorldPainter extends CustomPainter {
         () => _drawProp(canvas, size, prop, seconds),
       ));
     }
-    for (final bridge in queries.bridgesInBounds(
-      left: bounds.left - 5,
-      right: bounds.right + 5,
-      top: bounds.top - 5,
-      bottom: bounds.bottom + 5,
-    )) {
-      final bodyRole = bridgeBodyRole(bridge.nearBank, bridge.farBank);
-      for (final cell in bridge.waterCells) {
-        actors.add((
-          (cell.column + cell.row).toDouble(),
-          () => _drawTileRole(canvas, bodyRole, cell, size, scale, offset),
-        ));
-      }
-      final nearRamp = bridgeRampRole(bridge.nearBank, bridge.waterCells.first);
+    // Bridge tiles draw split along their surface plane, both pieces
+    // in the sort at fractional slots just above their cell: posts at
+    // +0.02, surface at +0.05. The slots keep the pieces after
+    // same-depth structures (the tie order the full sprites always
+    // had) while posts(X) still draw before surface(X+1), exactly the
+    // order the whole sprites stacked in — supports hang under the
+    // next tile's art and show through its transparent gaps, the way
+    // painter's order always painted them. Walkers on bridge tiles
+    // floor their depth just above the surface (+0.1), so they stand
+    // on decks and ramps without sinking under them, and never cross
+    // the next cell's depth — buildings in front still occlude them.
+    for (final (role, cell) in _bridgeTilesInBounds(bounds)) {
+      final depth = (cell.column + cell.row).toDouble();
       actors.add((
-        (bridge.nearBank.column + bridge.nearBank.row).toDouble(),
-        () => _drawTileRole(
+        depth + 0.02,
+        () => _drawBridgeTile(canvas, role, cell, size, scale, offset),
+      ));
+      actors.add((
+        depth + 0.05,
+        () => _drawBridgeTile(
           canvas,
-          nearRamp,
-          bridge.nearBank,
+          role,
+          cell,
           size,
           scale,
           offset,
+          surface: true,
         ),
       ));
-      final farRamp = bridgeRampRole(bridge.farBank, bridge.waterCells.last);
-      actors.add((
-        (bridge.farBank.column + bridge.farBank.row).toDouble(),
-        () =>
-            _drawTileRole(canvas, farRamp, bridge.farBank, size, scale, offset),
-      ));
-    }
-    // Bridges still under construction: the near ramp rises with the
-    // near-bank road (the first coin), then each funded span tile of
-    // the deck appears in order, rising out of the dirt path. The far
-    // ramp only draws on the completed bridge — its bank road arrives
-    // with the final coin, and a ramp never stands on a non-road tile.
-    for (final job in state.constructions) {
-      if (job.kind != WorldConstructionKind.bridge) continue;
-      if (!boundsOverlapsCells(bounds, [
-        ...job.waterCells,
-        job.nearBank!,
-        job.farBank!,
-      ])) {
-        continue;
-      }
-      final fundedTiles = _bridgeFundedSpanCount(job);
-      final nearBankFunded =
-          job.coinsFunded >= content.economy.roadTileCostCoins;
-      if (!nearBankFunded && fundedTiles <= 0) continue;
-      if (fundedTiles > 0) {
-        final bodyRole = bridgeBodyRole(job.nearBank!, job.farBank!);
-        for (final cell in job.waterCells.take(fundedTiles)) {
-          actors.add((
-            (cell.column + cell.row).toDouble(),
-            () => _drawTileRole(canvas, bodyRole, cell, size, scale, offset),
-          ));
-        }
-      }
-      if (nearBankFunded) {
-        final nearRamp = bridgeRampRole(job.nearBank!, job.waterCells.first);
-        actors.add((
-          (job.nearBank!.column + job.nearBank!.row).toDouble(),
-          () => _drawTileRole(
-            canvas,
-            nearRamp,
-            job.nearBank!,
-            size,
-            scale,
-            offset,
-          ),
-        ));
-      }
     }
     for (final pedestrian in pedestrians.list) {
       actors.add((
@@ -2297,29 +2403,6 @@ class _ParcelWorldPainter extends CustomPainter {
   /// sprites such as bridge decks and ramps keep their height instead of
   /// being squashed, with [SpriteDefinition.baseOffsetY] letting content
   /// such as support posts hang below the cell.
-  void _drawTileRole(
-    Canvas canvas,
-    String role,
-    CellCoord cell,
-    Size size,
-    double scale,
-    Offset offset,
-  ) {
-    final path = content.tryAssetPath(role);
-    final image = path == null ? null : images[path];
-    if (image == null) return;
-    ParcelWorldProbe.countActor();
-    final sprite = content.sprite(role)!;
-    canvas.drawImageRect(
-      image,
-      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-      _tileScreenRect(image, sprite, cell, size, scale, offset),
-      Paint()
-        ..filterQuality = FilterQuality.medium
-        ..color = const Color(0xFFFFFFFF),
-    );
-  }
-
   void _drawPendingConstructions(Canvas canvas, Size size) {
     for (final job in state.constructions) {
       final cells = switch (job.kind) {
@@ -3694,9 +3777,10 @@ class _Pedestrian {
         offset;
   }
 
-  /// Painter's depth, lerped between the spots' sort depths — bridge
-  /// spots carry the boundary-safe bump, ground spots the plain
-  /// ground depth, and mixed road↔ramp steps blend across the seam.
+  /// Painter's depth, lerped between the spots' sort depths. Bridge
+  /// spots floor theirs just above their tile's surface piece; ground
+  /// spots keep the plain ground depth; mixed road↔ramp steps blend
+  /// across the seam.
   double depth(PedestrianLattice lattice) {
     final a = lattice.walkerSortDepth(from);
     final b = lattice.walkerSortDepth(to);
