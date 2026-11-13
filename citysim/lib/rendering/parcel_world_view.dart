@@ -1444,7 +1444,11 @@ class _ParcelWorldPainter extends CustomPainter {
         final cell = CellCoord(column, row);
         final road = queries.roadsByCell[cell];
         if (road == null) continue;
-        final role = roadSpriteRole(roadNeighborMask(cell, roadCells));
+        final mask = roadNeighborMask(cell, roadCells);
+        // Approach tiles beside a junction paint their pelican
+        // crossing; every other road tile keeps its connector art.
+        final role =
+            roadCrossingRole(mask, cell, roadCells) ?? roadSpriteRole(mask);
         final path = content.tryAssetPath(role);
         final image = path == null ? null : images[path];
         final sprite = path == null ? null : content.sprite(role);

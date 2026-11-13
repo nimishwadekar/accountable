@@ -1206,6 +1206,58 @@
       "subcategory": "end",
       "sways": false
     },
+    "road.pelican.ne": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/pelican/tile_road_pelican_NE_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "pelican",
+      "sways": false
+    },
+    "road.pelican.nw": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/pelican/tile_road_pelican_NW_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "pelican",
+      "sways": false
+    },
+    "road.pelican.se": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/pelican/tile_road_pelican_SE_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "pelican",
+      "sways": false
+    },
+    "road.pelican.sw": {
+      "baseOffsetY": 0,
+      "category": "roads",
+      "codeReferenced": true,
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "path": "sprites/roads/pelican/tile_road_pelican_SW_normal.png",
+      "renderScale": 0.5,
+      "subcategory": "pelican",
+      "sways": false
+    },
     "road.straight.se": {
       "baseOffsetY": 0,
       "category": "roads",

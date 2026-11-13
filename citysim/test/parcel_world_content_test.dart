@@ -224,6 +224,127 @@ void main() {
     expect(roadSpriteRole(roadEast | roadWest), 'road.straight.se');
   });
 
+  group('roadCrossingRole', () {
+    // Lays out the given cells as roads and resolves the crossing for
+    // the target tile, exactly the way the renderer does.
+    String? crossingAt(List<(int, int)> cells, (int, int) target) {
+      final roadCells = {for (final cell in cells) CellCoord(cell.$1, cell.$2)};
+      final cell = CellCoord(target.$1, target.$2);
+      return roadCrossingRole(
+        roadNeighborMask(cell, roadCells),
+        cell,
+        roadCells,
+      );
+    }
+
+    test('approach tiles beside a junction face it, per compass side', () {
+      // A cross to the north; the approach below it crosses toward it.
+      expect(
+        crossingAt(
+          [(0, -2), (0, -1), (1, -1), (-1, -1), (0, 0), (0, 1), (0, 2)],
+          (0, 0),
+        ),
+        'road.pelican.ne',
+      );
+      // A T to the south (stem east).
+      expect(
+        crossingAt([(0, -2), (0, -1), (0, 0), (0, 1), (1, 1), (0, 2)], (0, 0)),
+        'road.pelican.sw',
+      );
+      // A cross to the west.
+      expect(
+        crossingAt(
+          [(-2, 0), (-1, 0), (-1, -1), (-1, 1), (0, 0), (1, 0), (2, 0)],
+          (0, 0),
+        ),
+        'road.pelican.nw',
+      );
+      // A T to the east (stem south).
+      expect(
+        crossingAt([(-2, 0), (-1, 0), (0, 0), (1, 0), (1, 1), (2, 0)], (0, 0)),
+        'road.pelican.se',
+      );
+    });
+
+    test('only junctions earn crossings, and only on approach tiles', () {
+      // A corner beside a straight is a bend, not a junction.
+      expect(
+        crossingAt([(0, -1), (1, -1), (0, 0), (0, 1), (0, 2)], (0, 0)),
+        isNull,
+      );
+      // A plain run of straights has no junction to cross toward.
+      expect(
+        crossingAt([(0, -2), (0, -1), (0, 0), (0, 1), (0, 2)], (0, 0)),
+        isNull,
+      );
+      // The junction tiles themselves are not approaches — the crossing
+      // belongs to the tile beside them.
+      expect(
+        crossingAt(
+          [(0, -2), (0, -1), (1, -1), (-1, -1), (0, 0), (0, 1), (0, 2)],
+          (0, -1),
+        ),
+        isNull,
+        reason: 'the cross tile is the junction, not an approach',
+      );
+      // End caps never cross — pelican art only exists for straights.
+      expect(
+        crossingAt([(0, 0), (0, 1), (1, 1), (-1, 1)], (0, 0)),
+        isNull,
+        reason: 'a dead-end stub beside a junction is an end cap',
+      );
+    });
+
+    test('a tile between two junctions faces the busier one', () {
+      // Cross north (four arms) against T south (three): the crossing
+      // faces the cross.
+      expect(
+        crossingAt(
+          [(0, -2), (1, -1), (-1, -1), (0, -1), (0, 0), (0, 1), (1, 1), (0, 2)],
+          (0, 0),
+        ),
+        'road.pelican.ne',
+      );
+      // Reversed: the cross sits to the south, the T to the north.
+      expect(
+        crossingAt(
+          [(0, -2), (1, -1), (0, -1), (0, 0), (0, 1), (1, 1), (-1, 1), (0, 2)],
+          (0, 0),
+        ),
+        'road.pelican.sw',
+      );
+    });
+
+    test('equally busy junctions tiebreak in compass order', () {
+      // Two Ts, north and south: north wins.
+      expect(
+        crossingAt(
+          [(0, -2), (1, -1), (0, -1), (0, 0), (0, 1), (1, 1), (0, 2)],
+          (0, 0),
+        ),
+        'road.pelican.ne',
+      );
+      // Two crosses, west and east: east wins.
+      expect(
+        crossingAt(
+          [
+            (-2, 0),
+            (-2, -1),
+            (-2, 1),
+            (-1, 0),
+            (0, 0),
+            (1, 0),
+            (1, -1),
+            (1, 1),
+            (2, 0),
+          ],
+          (0, 0),
+        ),
+        'road.pelican.se',
+      );
+    });
+  });
+
   test('ambient pedestrian walk-cycle frames bundle as assets', () async {
     for (final character in ['a', 'b', 'c']) {
       for (final direction in ['NE', 'NW', 'SE', 'SW']) {

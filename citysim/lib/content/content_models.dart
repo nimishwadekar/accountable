@@ -701,6 +701,8 @@ final requiredSpriteRoles = <String>[
   for (final dir in ['n', 'e', 's', 'w']) 'road.corner.$dir',
   for (final dir in ['ne', 'nw', 'se', 'sw']) 'road.t.$dir',
   'road.cross',
+  // Pelican crossings paint the approach tiles beside junctions.
+  for (final dir in ['ne', 'nw', 'se', 'sw']) 'road.pelican.$dir',
   'bridge.body.se',
   'bridge.body.sw',
   for (final dir in ['ne', 'nw', 'se', 'sw']) 'bridge.ramp.$dir',

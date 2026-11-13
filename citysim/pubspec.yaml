@@ -51,6 +51,7 @@ flutter:
     - assets/sprites/roads/corner/
     - assets/sprites/roads/cross/
     - assets/sprites/roads/end/
+    - assets/sprites/roads/pelican/
     - assets/sprites/roads/straight/
     - assets/sprites/roads/t/
     - assets/sprites/bridges/body/
