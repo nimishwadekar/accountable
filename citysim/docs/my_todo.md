@@ -1,7 +1,7 @@
 This is my note-taking for my own memory. AI shouldn't modify this file.
 
-- more terrain sprites.
-- terrain editing at smaller granularity, including puddles.
+- more terrain sprite tiles.
+- improve terrain boundaries. author by hand if necessary.
 - terrain elevation and slops and cliffs.
 - a general way to model elevation gradients in tiles for stuff.
 - fade out stuff in front if selecting a tile behind them.
