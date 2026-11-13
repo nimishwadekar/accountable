@@ -502,22 +502,117 @@ void main() {
     expect(content.terrain.parcels, hasLength(49));
   });
 
-  test('authored fog parcels parse and stay hidden', () {
+  test('tile overrides parse, round-trip, and resolve over the base', () {
+    // A tile map with an override inside a grass parcel and one
+    // inside a water parcel, plus a stray on uncharted space.
+    final terrain = TerrainContent.fromJson({
+      'generatorVersion': 1,
+      'parcels': {'0,0': 'grass', '1,0': 'water'},
+      'tiles': {'3,4': 'water', '12,2': 'grass', '40,40': 'water'},
+    });
+    // Round-trip keeps the sparse map and its keys.
+    final back = TerrainContent.fromJson(terrain.toJson());
+    expect(back.tiles, {
+      const CellCoord(3, 4): TerrainKind.water,
+      const CellCoord(12, 2): TerrainKind.grass,
+      const CellCoord(40, 40): TerrainKind.water,
+    });
+    // A map without overrides stays out of the JSON.
+    expect(
+      TerrainContent.fromJson({
+        'generatorVersion': 1,
+        'parcels': {'0,0': 'grass'},
+      }).toJson().containsKey('tiles'),
+      isFalse,
+    );
+
+    // Resolution: the override wins, absent keys fall back to the
+    // parcel base, uncharted space stays fog even under a stray.
+    final provider = ContentTerrainProvider(terrain);
+    expect(provider.sample(const CellCoord(3, 4), 7).kind, TerrainKind.water);
+    expect(provider.sample(const CellCoord(4, 4), 7).kind, TerrainKind.grass);
+    expect(provider.sample(const CellCoord(12, 2), 7).kind, TerrainKind.grass);
+    expect(provider.sample(const CellCoord(11, 2), 7).kind, TerrainKind.water);
+    expect(provider.sample(const CellCoord(40, 40), 7).kind, TerrainKind.fog);
+
+    // Validation: the stray tile outside authored parcels reports;
+    // fog tiles report; a clean pair of overrides passes.
+    final strayIssues = validateContentData(
+      catalogue: content.catalogue,
+      sprites: content.sprites,
+      economy: content.economy,
+      ambience: content.ambience,
+      terrain: terrain,
+    );
+    expect(
+      strayIssues.where((issue) => issue.message.contains('unauthored parcel')),
+      isNotEmpty,
+      reason: 'the stray tile at (40,40) is flagged',
+    );
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: TerrainContent.fromJson({
+          'generatorVersion': 1,
+          'parcels': {'0,0': 'grass'},
+          'tiles': {'3,4': 'water', '5,1': 'fog', '40,40': 'water'},
+        }),
+      ).where((issue) => issue.message.contains('cannot be fog')),
+      isNotEmpty,
+      reason: 'fog is not a tile-level kind',
+    );
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: TerrainContent.fromJson({
+          'generatorVersion': 1,
+          'parcels': {'0,0': 'grass', '1,0': 'water'},
+          'tiles': {'3,4': 'water', '12,2': 'grass'},
+        }),
+      ).where((issue) => issue.message.startsWith('Tile ')),
+      isEmpty,
+      reason: 'grass and water overrides inside authored parcels pass',
+    );
+  });
+
+  test('authored fog parcels are a validation error, not a terrain', () {
+    // Parsing stays lenient — old files still load — but authoring fog
+    // is a mistake worth reporting: fog is not a terrain type, only
+    // the look of uncharted space.
     final terrain = TerrainContent.fromJson(const {
       'generatorVersion': 1,
       'parcels': {'0,0': 'grass', '2,2': 'fog'},
     });
     final provider = ContentTerrainProvider(terrain);
-    expect(provider.sample(const CellCoord(4, 4), 7).kind, TerrainKind.grass);
     expect(
       provider.sample(const CellCoord(18, 18), 7).kind,
       TerrainKind.fog,
-      reason: 'an authored fog parcel is on the map but still fog',
+      reason: 'a legacy fog parcel still samples as fog',
     );
     expect(
       provider.sample(const CellCoord(40, 40), 7).kind,
       TerrainKind.fog,
       reason: 'unauthored parcels default to fog',
+    );
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: terrain,
+      ).any(
+        (issue) =>
+            issue.severity == 'error' &&
+            issue.message.contains('Parcel 2,2 cannot be fog'),
+      ),
+      isTrue,
     );
   });
 }

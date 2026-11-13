@@ -643,10 +643,22 @@ class AmbienceContent {
 /// fog is fully derived from the content. Cell-level detail layers
 /// will be added on top of this later.
 class TerrainContent {
-  const TerrainContent({required this.generatorVersion, required this.parcels});
+  const TerrainContent({
+    required this.generatorVersion,
+    required this.parcels,
+    this.tiles = const {},
+  });
 
   final int generatorVersion;
   final Map<ParcelCoord, TerrainKind> parcels;
+
+  /// Per-tile overrides inside authored parcels, keyed by absolute
+  /// cell. An absent key falls back to the parcel's base kind, and
+  /// painting a tile to its parcel's base is the same as erasing it —
+  /// the editor writes it that way to keep the file sparse. Only
+  /// grass and water are paintable: fog is a parcel-level kind, and
+  /// other terrain types join the palette later.
+  final Map<CellCoord, TerrainKind> tiles;
 
   /// Whether a parcel is authored on the map. Authored fog parcels
   /// are on the map but stay hidden — buying is gated by terrain
@@ -659,10 +671,16 @@ class TerrainContent {
       for (final entry in parcels.entries)
         '${entry.key.x},${entry.key.y}': entry.value.name,
     },
+    if (tiles.isNotEmpty)
+      'tiles': {
+        for (final entry in tiles.entries)
+          '${entry.key.column},${entry.key.row}': entry.value.name,
+      },
   };
 
   static TerrainContent fromJson(Map<String, Object?> json) {
     final raw = json['parcels']! as Map;
+    final rawTiles = json['tiles'];
     return TerrainContent(
       generatorVersion: json['generatorVersion']! as int,
       parcels: {
@@ -671,6 +689,14 @@ class TerrainContent {
             entry.value as String,
           ),
       },
+      tiles: rawTiles is Map
+          ? {
+              for (final entry in rawTiles.entries)
+                _cellCoord(entry.key as String): _terrainKind(
+                  entry.value as String,
+                ),
+            }
+          : const {},
     );
   }
 }
@@ -686,6 +712,19 @@ ParcelCoord _parcelCoord(String key) {
     throw FormatException('"$key" is not a valid parcel key.');
   }
   return ParcelCoord(x, y);
+}
+
+CellCoord _cellCoord(String key) {
+  final parts = key.split(',');
+  if (parts.length != 2) {
+    throw FormatException('"$key" is not a valid tile key.');
+  }
+  final column = int.tryParse(parts[0].trim());
+  final row = int.tryParse(parts[1].trim());
+  if (column == null || row == null) {
+    throw FormatException('"$key" is not a valid tile key.');
+  }
+  return CellCoord(column, row);
 }
 
 TerrainKind _terrainKind(String name) =>
@@ -786,6 +825,29 @@ List<ContentIssue> validateContentData({
   }
   if (terrain.parcels[const ParcelCoord(0, 0)] != TerrainKind.grass) {
     error('The starter parcel (0,0) must be authored on the map as grass.');
+  }
+  for (final entry in terrain.parcels.entries) {
+    if (entry.value == TerrainKind.fog) {
+      error(
+        'Parcel ${entry.key.x},${entry.key.y} cannot be fog — fog is not '
+        'a terrain type, only the look of uncharted space. Delete the '
+        'parcel to make it uncharted.',
+      );
+    }
+  }
+  for (final entry in terrain.tiles.entries) {
+    if (entry.value == TerrainKind.fog) {
+      error(
+        'Tile ${entry.key.key} cannot be fog — fog is not a terrain '
+        'type, only the look of uncharted space.',
+      );
+    }
+    if (!terrain.isOnMap(parcelForCell(entry.key))) {
+      error(
+        'Tile ${entry.key.key} sits on an unauthored parcel — author '
+        'the parcel before painting its tiles.',
+      );
+    }
   }
 
   if (catalogue.isEmpty) {
