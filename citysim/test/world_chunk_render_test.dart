@@ -151,14 +151,14 @@ void main() {
       }
       expect(settled, isTrue, reason: 'chunks should finish recording');
 
-      // The composed shore banks chain after the sprite loads, and
+      // The composed shore bands chain after the materials decode,
       // every engine round-trip (byte reads, image decoding) needs a
       // real-async window — wait until the bank actually renders
       // before freezing the captures.
-      var bankDrawn = false;
-      final bankPoint = _screenCenterOf(const CellCoord(8, 4))
+      var bandDrawn = false;
+      final bandPoint = _screenCenterOf(const CellCoord(8, 4))
           .translate(-16, -4);
-      for (var attempt = 0; attempt < 15 && !bankDrawn; attempt++) {
+      for (var attempt = 0; attempt < 15 && !bandDrawn; attempt++) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 200)),
         );
@@ -167,18 +167,18 @@ void main() {
         if (probe == null) continue;
         final probeBytes = await tester.runAsync(() => probe.toByteData());
         if (probeBytes != null) {
-          final x = bankPoint.dx.round().clamp(0, probe.width - 1);
-          final y = bankPoint.dy.round().clamp(0, probe.height - 1);
+          final x = bandPoint.dx.round().clamp(0, probe.width - 1);
+          final y = bandPoint.dy.round().clamp(0, probe.height - 1);
           final rgba = probeBytes.getUint32((y * probe.width + x) * 4);
           final g = (rgba >> 16) & 0xFF, b = (rgba >> 8) & 0xFF;
-          bankDrawn = g > 100 && g - b > 20;
+          bandDrawn = g > 100 && g - b > 20;
         }
         probe.dispose();
       }
       expect(
-        bankDrawn,
+        bandDrawn,
         isTrue,
-        reason: 'the composed shore bank should render before capture',
+        reason: 'the composed shore band should render before capture',
       );
 
       // Freeze the ambient clock so the two captures cannot differ
@@ -190,7 +190,7 @@ void main() {
         ),
       );
       await tester.pump(const Duration(milliseconds: 100));
-      // The composed shore banks chain after the sprite loads; give
+      // The composed shore bands chain after the materials decode; give
       // that async stage a real-async window to finish before the
       // captures freeze the frame.
       await tester.runAsync(
@@ -280,9 +280,10 @@ void main() {
 
       // The shore lives on the water side of the boundary: (8,4) is an
       // outermost water tile with grass land to its west, so its
-      // north-west half banks toward the land while the open half
-      // stays water, and the land tile (7,4) stays dry right up to the
-      // tile edge where the overflow water used to lap.
+      // north-west half carries the shore band toward the land while
+      // the open half stays water, and the land tile (7,4) stays dry
+      // right up to the tile edge where the overflow water used to
+      // lap.
       Offset screenHalf(CellCoord cell, int dx, int dy) => _screenCenterOf(cell)
           .translate(((dx - dy) * 16).toDouble(), ((dx + dy) * 8).toDouble());
       expect(
@@ -294,7 +295,7 @@ void main() {
           ),
         ),
         isTrue,
-        reason: 'the outermost water tile banks toward the land',
+        reason: 'the outermost water tile carries the shore band',
       );
       expect(
         isWater(pixel(imageA, bytesA, screenHalf(const CellCoord(8, 4), 1, 0))),

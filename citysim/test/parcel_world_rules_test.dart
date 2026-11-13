@@ -713,7 +713,19 @@ void main() {
         const ParcelCoord(-1, 0),
       );
       final queries = WorldQueries(world, terrain);
-      expect(queries.terrainAt(const CellCoord(-4, 2)).kind, TerrainKind.water);
+      // Sample a cell the live tile overrides have not painted — live
+      // content may carry any number of them.
+      CellCoord unoverriddenCell(ParcelCoord parcel) {
+        for (final cell in parcel.cells(newWorld().parcelSize)) {
+          if (!content.terrain.tiles.containsKey(cell)) return cell;
+        }
+        fail('every cell of $parcel carries a tile override');
+      }
+
+      expect(
+        queries.terrainAt(unoverriddenCell(const ParcelCoord(-1, 0))).kind,
+        TerrainKind.water,
+      );
       expect(
         queries.isLandReachable(const CellCoord(-6, 2)),
         isFalse,

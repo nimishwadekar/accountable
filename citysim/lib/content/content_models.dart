@@ -771,13 +771,9 @@ final requiredSpriteRoles = <String>[
   'terrain.asphalt',
   'terrain.concrete',
   'terrain.water',
-  // Shore banks are composed at load: the terrain material cut by a
-  // baked shape mask (one mask per shape, shared by grass and dirt).
-  for (final edge in ['n', 'e', 's', 'w']) ...[
-    'shore.edge.$edge',
-    'shore.corner.$edge',
-  ],
-  for (final dir in ['ne', 'se', 'sw', 'nw']) 'shore.quarter.$dir',
+  // Shores are not sprites: the water tile carries a band of the
+  // neighbouring land's material, composed at runtime from the
+  // ground tiles themselves (composeShoreBandPixels).
   for (final dir in ['ne', 'nw', 'se', 'sw']) 'road.end.$dir',
   'road.straight.se',
   'road.straight.sw',

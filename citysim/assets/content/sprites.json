@@ -1669,7 +1669,7 @@
     "shore.corner.e": {
       "baseOffsetY": 0,
       "category": "shores",
-      "codeReferenced": true,
+      "codeReferenced": false,
       "groundAnchor": [
         0.5,
         1
@@ -1682,7 +1682,7 @@
     "shore.corner.n": {
       "baseOffsetY": 0,
       "category": "shores",
-      "codeReferenced": true,
+      "codeReferenced": false,
       "groundAnchor": [
         0.5,
         1
@@ -1695,7 +1695,7 @@
     "shore.corner.s": {
       "baseOffsetY": 0,
       "category": "shores",
-      "codeReferenced": true,
+      "codeReferenced": false,
       "groundAnchor": [
         0.5,
         1
@@ -1708,7 +1708,7 @@
     "shore.corner.w": {
       "baseOffsetY": 0,
       "category": "shores",
-      "codeReferenced": true,
+      "codeReferenced": false,
       "groundAnchor": [
         0.5,
         1
@@ -1721,7 +1721,7 @@
     "shore.edge.e": {
       "baseOffsetY": 0,
       "category": "shores",
-      "codeReferenced": true,
+      "codeReferenced": false,
       "groundAnchor": [
         0.5,
         1
@@ -1734,7 +1734,7 @@
     "shore.edge.n": {
       "baseOffsetY": 0,
       "category": "shores",
-      "codeReferenced": true,
+      "codeReferenced": false,
       "groundAnchor": [
         0.5,
         1
@@ -1747,7 +1747,7 @@
     "shore.edge.s": {
       "baseOffsetY": 0,
       "category": "shores",
-      "codeReferenced": true,
+      "codeReferenced": false,
       "groundAnchor": [
         0.5,
         1
@@ -1760,7 +1760,7 @@
     "shore.edge.w": {
       "baseOffsetY": 0,
       "category": "shores",
-      "codeReferenced": true,
+      "codeReferenced": false,
       "groundAnchor": [
         0.5,
         1
@@ -1773,7 +1773,7 @@
     "shore.quarter.ne": {
       "baseOffsetY": 0,
       "category": "shores",
-      "codeReferenced": true,
+      "codeReferenced": false,
       "groundAnchor": [
         0.5,
         1
@@ -1786,7 +1786,7 @@
     "shore.quarter.nw": {
       "baseOffsetY": 0,
       "category": "shores",
-      "codeReferenced": true,
+      "codeReferenced": false,
       "groundAnchor": [
         0.5,
         1
@@ -1799,7 +1799,7 @@
     "shore.quarter.se": {
       "baseOffsetY": 0,
       "category": "shores",
-      "codeReferenced": true,
+      "codeReferenced": false,
       "groundAnchor": [
         0.5,
         1
@@ -1812,7 +1812,7 @@
     "shore.quarter.sw": {
       "baseOffsetY": 0,
       "category": "shores",
-      "codeReferenced": true,
+      "codeReferenced": false,
       "groundAnchor": [
         0.5,
         1

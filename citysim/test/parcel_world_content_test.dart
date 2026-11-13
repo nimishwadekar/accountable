@@ -486,13 +486,26 @@ void main() {
 
   test('terrain samples the authored parcel map with ocean beyond it', () {
     final provider = ContentTerrainProvider(content.terrain);
+    // Sample cells the live tile overrides have not painted — live
+    // content may carry any number of them (parcel size 8).
+    CellCoord baseCell(ParcelCoord parcel) {
+      for (final cell in parcel.cells(8)) {
+        if (!content.terrain.tiles.containsKey(cell)) return cell;
+      }
+      fail('every cell of $parcel carries a tile override');
+    }
+
     // Authored parcels return their base terrain, seed-independent.
-    expect(provider.sample(const CellCoord(4, 4), 145).kind, TerrainKind.grass);
-    expect(provider.sample(const CellCoord(4, 4), 999).kind, TerrainKind.grass);
+    final grass = baseCell(const ParcelCoord(0, 0));
+    expect(provider.sample(grass, 145).kind, TerrainKind.grass);
+    expect(provider.sample(grass, 999).kind, TerrainKind.grass);
     // The east and west authored water parcels.
-    expect(provider.sample(const CellCoord(8, 4), 145).kind, TerrainKind.water);
     expect(
-      provider.sample(const CellCoord(-4, 2), 145).kind,
+      provider.sample(baseCell(const ParcelCoord(1, 0)), 145).kind,
+      TerrainKind.water,
+    );
+    expect(
+      provider.sample(baseCell(const ParcelCoord(-1, 0)), 145).kind,
       TerrainKind.water,
     );
     // Beyond the authored map is fog — the uncharted default.

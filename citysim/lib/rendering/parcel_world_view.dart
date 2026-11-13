@@ -133,14 +133,22 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   /// path. Filled alongside [_images]; taps read them synchronously.
   final Map<String, SpriteMask> _masks = {};
 
-  /// Composed bank overlays — the ground material cut by its baked
-  /// shore mask — keyed by shore role ('shore.grass.quarter.sw').
-  /// Filled after the material and mask sprites load.
-  final Map<String, ui.Image> _bankImages = {};
+  /// Composed shore-band overlays, keyed by the water cell's
+  /// eight-neighbourhood pattern ('g.......'). Filled lazily as
+  /// chunks record band cells; each overlay blends the neighbouring
+  /// land's material over the water tile (see [composeShoreBandPixels]).
+  final Map<String, ui.Image> _bandImages = {};
 
-  /// Guards [_composeShoreBanks] against overlapping runs when
-  /// [_loadMissingImages] is re-triggered mid-composition.
-  bool _composingBanks = false;
+  /// Decoded ground materials for the shore band — straight-RGBA
+  /// bytes and canvas size, keyed by style ('grass', 'dirt'). Read
+  /// once the ground sprites load; no masks are involved.
+  final Map<String, (Uint8List, int, int)> _bandMaterials = {};
+
+  /// Guards [_scheduleBandComposition] against overlapping runs.
+  bool _composingBands = false;
+
+  /// Neighbourhood patterns recorded by chunks, not yet composed.
+  final Set<String> _pendingBandPatterns = {};
 
   /// How many cells a sprite's art can reach above its footprint — the
   /// candidate window for picking. Starts wide enough for the pack's
@@ -254,6 +262,9 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     _ambient.dispose();
     _terrainCache.dispose();
     for (final image in _images.values) {
+      image.dispose();
+    }
+    for (final image in _bandImages.values) {
       image.dispose();
     }
     super.dispose();
@@ -379,7 +390,8 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   ambient: _ambient,
                   terrainCache: _terrainCache,
                   pixelRatio: _pixelRatio,
-                  banks: _bankImages,
+                  bands: _bandImages,
+                  onBandPattern: _noteBandPattern,
                   parcelMode: widget.parcelMode,
                   showTileGrid: widget.showTileGrid,
                   pedestrians: _pedestrians,
@@ -610,87 +622,97 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
       pending.add(request);
     }
     await Future.wait(pending);
-    await _composeShoreBanks();
+    await _decodeBandMaterials();
   }
 
-  /// The twelve shore shapes; each has one baked mask shared by the
-  /// grass and dirt materials.
-  static const _shoreShapes = [
-    ('edge', 'n'),
-    ('edge', 'e'),
-    ('edge', 's'),
-    ('edge', 'w'),
-    ('corner', 'n'),
-    ('corner', 'e'),
-    ('corner', 's'),
-    ('corner', 'w'),
-    ('quarter', 'ne'),
-    ('quarter', 'nw'),
-    ('quarter', 'se'),
-    ('quarter', 'sw'),
-  ];
-
-  /// Composes every bank overlay the shoreline can draw: the terrain
-  /// material cut by its shape's baked mask — Factorio-style, the mask
-  /// shared by the grass and dirt materials. Each mask's pixels are
-  /// read once and cut by both materials; runs after sprite loads and
-  /// skips roles already composed.
-  Future<void> _composeShoreBanks() async {
-    if (_composingBanks) return;
-    _composingBanks = true;
-    try {
-      final content = widget.content;
-      final maskPixels = <String, Uint8List>{};
-      for (final (family, dir) in _shoreShapes) {
-        final maskPath = content.tryAssetPath('shore.$family.$dir');
-        final mask = maskPath == null ? null : _images[maskPath];
-        if (mask == null) continue;
-        final data = await mask.toByteData(
-          format: ui.ImageByteFormat.rawStraightRgba,
-        );
-        if (data == null) continue;
-        maskPixels['$family.$dir'] = data.buffer.asUint8List(
-          data.offsetInBytes,
-          data.lengthInBytes,
-        );
-      }
-      for (final style in const ['grass', 'dirt']) {
-        final materialPath = content.tryAssetPath('terrain.$style');
-        final material = materialPath == null ? null : _images[materialPath];
-        if (material == null) continue;
-        final matData = await material.toByteData(
-          format: ui.ImageByteFormat.rawStraightRgba,
-        );
-        if (matData == null) continue;
-        final matPixels = matData.buffer.asUint8List(
-          matData.offsetInBytes,
-          matData.lengthInBytes,
-        );
-        for (final (family, dir) in _shoreShapes) {
-          final role = 'shore.$style.$family.$dir';
-          if (_bankImages.containsKey(role)) continue;
-          final msk = maskPixels['$family.$dir'];
-          if (msk == null) continue;
-          final bank = await decodeRgbaImage(
-            composeShoreBankPixels(
-              matPixels,
-              msk,
-              material.width,
-              material.height,
-            ),
-            material.width,
-            material.height,
-          );
-          if (!mounted) {
-            bank?.dispose();
-            return;
-          }
-          if (bank != null) setState(() => _bankImages[role] = bank);
-        }
-      }
-    } finally {
-      _composingBanks = false;
+  /// Decodes the ground materials the shore band needs: the land
+  /// styles it blends ('grass', 'dirt') and the water tile it blends
+  /// them over. No masks and no pre-composed shapes: the band is the
+  /// material itself, fading out over the water (see
+  /// [composeShoreBandPixels]), and overlays compose per
+  /// neighbourhood pattern on demand.
+  Future<void> _decodeBandMaterials() async {
+    for (final style in const ['grass', 'dirt', 'water']) {
+      if (_bandMaterials.containsKey(style)) continue;
+      final path = widget.content.tryAssetPath('terrain.$style');
+      final image = path == null ? null : _images[path];
+      if (image == null) continue;
+      final data = await image.toByteData(
+        format: ui.ImageByteFormat.rawStraightRgba,
+      );
+      if (data == null) continue;
+      _bandMaterials[style] = (
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+        image.width,
+        image.height,
+      );
     }
+    _scheduleBandComposition();
+  }
+
+  /// Records a shore-band pattern discovered while a chunk records
+  /// and schedules its composition. Called from the painter during
+  /// paint, so it must not repaint synchronously; composition
+  /// completes in a later event and repaints through [setState].
+  void _noteBandPattern(String pattern) {
+    if (_bandImages.containsKey(pattern)) return;
+    _pendingBandPatterns.add(pattern);
+    _scheduleBandComposition();
+  }
+
+  /// Composes every pending band pattern into an overlay image. Runs
+  /// at most once at a time; patterns recorded while a run is in
+  /// flight are picked up by the tail re-schedule.
+  void _scheduleBandComposition() {
+    if (_composingBands || _pendingBandPatterns.isEmpty) return;
+    if (_bandMaterials.isEmpty) return; // Retried once materials decode.
+    _composingBands = true;
+    final pending = _pendingBandPatterns.toList();
+    _pendingBandPatterns.clear();
+    unawaited(
+      Future<void>.microtask(() async {
+        try {
+          for (final pattern in pending) {
+            if (_bandImages.containsKey(pattern)) continue;
+            if (!mounted) return;
+            final lands = shoreBandLands(pattern);
+            if (lands.isEmpty) continue;
+            final waterPixels = _bandMaterials['water']?.$1;
+            if (waterPixels == null) continue;
+            final styles = lands.map((land) => land.style).toSet();
+            final materials = <String, Uint8List>{
+              for (final style in styles)
+                if (_bandMaterials.containsKey(style))
+                  style: _bandMaterials[style]!.$1,
+            };
+            if (materials.length < styles.length) continue;
+            final (_, width, height) = _bandMaterials.values.first;
+            final image = await decodeRgbaImage(
+              composeShoreBandPixels(
+                materials,
+                waterPixels,
+                lands,
+                width,
+                height,
+              ),
+              width,
+              height,
+            );
+            if (image == null) continue;
+            if (!mounted) {
+              image.dispose();
+              return;
+            }
+            setState(() => _bandImages[pattern] = image);
+          }
+        } finally {
+          _composingBands = false;
+        }
+        if (mounted && _pendingBandPatterns.isNotEmpty) {
+          _scheduleBandComposition();
+        }
+      }),
+    );
   }
 
   /// Builds the per-pixel picking mask for a decoded sprite and widens
@@ -728,45 +750,15 @@ String? _spriteRoleForPath(String path, ContentBundle content) {
   return null;
 }
 
-/// Composes one bank overlay from decoded images: the ground material
-/// cut by the baked shore mask. See [composeShoreBankPixels].
-Future<ui.Image?> composeShoreBank(ui.Image material, ui.Image mask) async {
-  try {
-    if (material.width != mask.width || material.height != mask.height) {
-      return null;
-    }
-    final matData = await material.toByteData(
-      format: ui.ImageByteFormat.rawStraightRgba,
-    );
-    final maskData = await mask.toByteData(
-      format: ui.ImageByteFormat.rawStraightRgba,
-    );
-    if (matData == null || maskData == null) return null;
-    final matPixels = matData.buffer.asUint8List(
-      matData.offsetInBytes,
-      matData.lengthInBytes,
-    );
-    final maskPixels = maskData.buffer.asUint8List(
-      maskData.offsetInBytes,
-      maskData.lengthInBytes,
-    );
-    return await decodeRgbaImage(
-      composeShoreBankPixels(
-        matPixels,
-        maskPixels,
-        material.width,
-        material.height,
-      ),
-      material.width,
-      material.height,
-    );
-  } catch (_) {
-    return null;
-  }
-}
-
-/// Decodes premultiplied RGBA bytes into a [ui.Image] through the raw
-/// descriptor (the same path the old runtime bank mask used).
+/// Decodes RGBA bytes into a [ui.Image] through the raw descriptor.
+///
+/// The bytes' alpha must be binary — 0 or 255 only. The engines
+/// disagree on partial alpha here: Skia reads the bytes as
+/// premultiplied while CanvasKit reads them as straight, so a
+/// gradient encoded in alpha renders squared on the web (each
+/// partial pixel gets its alpha applied twice). Binary alpha means
+/// the same thing in both conventions; keep any gradient in the
+/// colour channels (see [composeShoreBandPixels]).
 Future<ui.Image?> decodeRgbaImage(
   Uint8List pixels,
   int width,
@@ -792,164 +784,190 @@ Future<ui.Image?> decodeRgbaImage(
   }
 }
 
-/// Composes bank pixels (premultiplied): the ground material cut by
-/// the baked shore mask (greyscale — the waterline gradient).
-///
-/// The material's transparent pixels are repaired first, but only
-/// where the mask has coverage — elsewhere the RGB is never sampled.
-/// The pack art carries a jagged transparent fringe along its diamond
-/// edges and small alpha holes near the waterline; the mask is opaque
-/// in places the material never painted, which would otherwise draw
-/// solid black edge pixels along the bank's borders. Colours dilate
-/// from the nearest painted neighbour; alpha stays 0 so the mask
-/// alone decides opacity. The input [matPixels] is not modified.
-Uint8List composeShoreBankPixels(
-  Uint8List matPixels,
-  Uint8List maskPixels,
-  int width,
-  int height,
-) {
-  final pixels = Uint8List.fromList(matPixels);
+/// How far the shore band reaches into a water tile, in ground-art
+/// pixels: half the tile's depth. The band is the only shore art —
+/// land tiles stay dry right up to the boundary, and each water tile
+/// carries a translucent margin of its neighbouring land's material
+/// fading out, like a shallow bank seen through the water.
+const double shoreBandReach = 29;
 
-  final needing = <int>[];
-  for (var i = 0; i < width * height; i++) {
-    if (maskPixels[i * 4] > 0 && pixels[i * 4 + 3] == 0) {
-      needing.add(i);
-    }
-  }
-  final repaired = Uint8List(width * height);
-  var remaining = needing.length;
-  while (remaining > 0) {
-    var progress = false;
-    for (final i in needing) {
-      if (repaired[i] == 1) continue;
-      final x = i % width;
-      final y = i ~/ width;
-      for (final delta in const [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
-        final nx = x + delta.$1;
-        final ny = y + delta.$2;
-        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
-        final j = ny * width + nx;
-        if (pixels[j * 4 + 3] == 0 && repaired[j] == 0) continue;
-        pixels[i * 4] = pixels[j * 4];
-        pixels[i * 4 + 1] = pixels[j * 4 + 1];
-        pixels[i * 4 + 2] = pixels[j * 4 + 2];
-        repaired[i] = 1;
-        remaining--;
-        progress = true;
-        break;
-      }
-    }
-    if (!progress) break; // Unfillable island: leave as-is.
-  }
+/// One land neighbour contributing to a water cell's shore band: the
+/// neighbour's cell offset from the water cell, and its ground
+/// material style ('grass' or 'dirt').
+class ShoreBandLand {
+  const ShoreBandLand(this.dc, this.dr, this.style);
 
-  // Cut the material through the mask; premultiplied output.
-  for (var i = 0; i < width * height; i++) {
-    final a = maskPixels[i * 4];
-    pixels[i * 4] = (pixels[i * 4] * a / 255).round();
-    pixels[i * 4 + 1] = (pixels[i * 4 + 1] * a / 255).round();
-    pixels[i * 4 + 2] = (pixels[i * 4 + 2] * a / 255).round();
-    pixels[i * 4 + 3] = a;
-  }
-  return pixels;
+  final int dc;
+  final int dr;
+  final String style;
 }
 
-/// Bank overlays for an outermost water tile: the land-coloured half
-/// of the shore pieces, drawn over the water so the shore runs half a
-/// tile into the lake instead of the water running half a tile into
-/// the land. Land tiles stay dry; their plain ground shows right up to
-/// the tile boundary.
-///
-/// The piece selection mirrors the pre-2026-11 land-side rule with the
-/// neighbour test flipped — land neighbours instead of water — which
-/// swaps the edge and corner families' roles: two adjacent land
-/// neighbours leave a single water wedge (a corner piece's "everything
-/// else" bank), and a diagonal-only land neighbour gets a bank wedge
-/// (an edge piece's vertex wedge). The pack's sprite families,
-/// verified from their pixels:
-/// - quarter (water_NE/SE/SW/NW): water along one edge plus the two
-///   adjacent vertex wedges — as a bank, the dry half facing one land
-///   neighbour;
-/// - edge (wateredge_N/E/S/W): water across a full half tile minus one
-///   vertex wedge — as a bank, a wedge of land reaching a diagonal
-///   neighbour;
-/// - corner (watercorner_N/E/S/W): a small water notch at one vertex —
-///   as a bank, everything except the wedge of water two adjacent land
-///   neighbours leave behind.
-List<String> waterBankRoles(
+/// The eight neighbours a shore band considers, in the order their
+/// characters appear in a pattern: N, NE, E, SE, S, SW, W, NW. The
+/// band reaches half a tile and the nearest land beyond this ring is
+/// a full tile away, so no further neighbour can contribute.
+const List<(int, int)> _shoreBandNeighborOrder = [
+  (0, -1), // N
+  (1, -1), // NE
+  (1, 0), // E
+  (1, 1), // SE
+  (0, 1), // S
+  (-1, 1), // SW
+  (-1, 0), // W
+  (-1, -1), // NW
+];
+
+/// The shore-band pattern of a water cell: one character per
+/// neighbour in [_shoreBandNeighborOrder] — '.' when the neighbour is
+/// not land, 'g' for land in grass (and for every ground style
+/// without its own band material), 'd' for dirt. Null when no
+/// neighbour is land: open water draws no band.
+String? shoreBandPattern(
   CellCoord cell,
   TerrainCell Function(CellCoord) terrainAt,
 ) {
-  // Each cardinal neighbour contributes its shore style when it is
-  // land; the style follows the land the bank belongs to, so future
-  // ground types pick their own shore family.
-  String? bankStyle(int dx, int dy) {
-    final terrain = terrainAt(cell.offset(dx, dy));
-    if (!terrain.isLand) return null;
-    return terrain.groundStyle == GroundStyle.dirt ? 'dirt' : 'grass';
+  final chars = List.filled(8, '.');
+  var anyLand = false;
+  for (var i = 0; i < _shoreBandNeighborOrder.length; i++) {
+    final (dc, dr) = _shoreBandNeighborOrder[i];
+    final terrain = terrainAt(cell.offset(dc, dr));
+    if (!terrain.isLand) continue;
+    chars[i] = terrain.groundStyle == GroundStyle.dirt ? 'd' : 'g';
+    anyLand = true;
   }
+  return anyLand ? chars.join() : null;
+}
 
-  final north = bankStyle(0, -1);
-  final east = bankStyle(1, 0);
-  final south = bankStyle(0, 1);
-  final west = bankStyle(-1, 0);
-  // A one-cell pond surrounded by land stays open water: the bank
-  // halves would blanket it entirely.
-  if (north != null && east != null && south != null && west != null) {
-    return const [];
+/// The lands a pattern's band blends over the water tile.
+List<ShoreBandLand> shoreBandLands(String pattern) {
+  final lands = <ShoreBandLand>[];
+  for (var i = 0; i < _shoreBandNeighborOrder.length; i++) {
+    if (i >= pattern.length) break;
+    final style = switch (pattern[i]) {
+      'g' => 'grass',
+      'd' => 'dirt',
+      _ => null,
+    };
+    if (style == null) continue;
+    final (dc, dr) = _shoreBandNeighborOrder[i];
+    lands.add(ShoreBandLand(dc, dr, style));
   }
+  return lands;
+}
 
-  final roles = <String>[];
-  var n = north;
-  var e = east;
-  var s = south;
-  var w = west;
-  // Two adjacent land neighbours meet at a vertex; the bank floods
-  // both their halves and leaves water only at the opposite vertex's
-  // wedge — the corner piece there. The pair's style comes from the
-  // first neighbour in north/east/south/west order.
-  if (n != null && e != null) {
-    roles.add('shore.$n.corner.w');
-    n = null;
-    e = null;
-  } else if (e != null && s != null) {
-    roles.add('shore.$e.corner.n');
-    e = null;
-    s = null;
-  } else if (s != null && w != null) {
-    roles.add('shore.$s.corner.e');
-    s = null;
-    w = null;
-  } else if (w != null && n != null) {
-    roles.add('shore.$n.corner.s');
-    w = null;
-    n = null;
+/// Composes one shore-band overlay: the neighbouring lands' materials
+/// blended over the water tile's own art with an alpha ramp that is
+/// solid at the tile boundary and fades to nothing [shoreBandReach]
+/// pixels in.
+///
+/// Each pixel takes the colour of the *nearest* land, so corners
+/// combine as the ramp of the distance to the nearest shore — never
+/// a double blend — and mixed materials meet along the midline
+/// between their edges. Pixels either art left unpainted (the pack's
+/// jagged diamond fringes) are skipped, so the waterline stays ragged
+/// at the art's own granularity and the chunk shows through.
+///
+/// The gradient is baked into the colours against the water tile's
+/// own pixels and the output alpha is binary — written pixels are
+/// fully opaque, skipped pixels fully transparent. Raw-image
+/// decoding disagrees about partial alpha between engines (Skia
+/// reads the bytes as premultiplied, CanvasKit as straight), which
+/// would square the ramp on the web; binary alpha means the same
+/// thing in both conventions. [width] and [height] are the ground
+/// family's shared tile canvas (128x64 today).
+Uint8List composeShoreBandPixels(
+  Map<String, Uint8List> materials,
+  Uint8List water,
+  List<ShoreBandLand> lands,
+  int width,
+  int height,
+) {
+  final out = Uint8List(width * height * 4);
+  if (lands.isEmpty || materials.isEmpty || width < 1 || height < 1) {
+    return out;
   }
-  // Single land neighbours bank the half of the tile facing them.
-  // (Opposite pairs — land north and south, or east and west — cover
-  // the tile between them; parcel-granular terrain cannot author the
-  // one-tile channels that would need it, and a half-bank each side
-  // reads as the shoreline pinching shut.)
-  if (n != null) roles.add('shore.$n.quarter.sw');
-  if (e != null) roles.add('shore.$e.quarter.nw');
-  if (s != null) roles.add('shore.$s.quarter.ne');
-  if (w != null) roles.add('shore.$w.quarter.se');
+  // Each land's diamond as four edges in canvas space: tile origins
+  // sit on the half-canvas pitch of the isometric lattice, and each
+  // diamond spans its tile's full canvas.
+  final diamonds = <List<(Offset, Offset)>>[];
+  final styles = <String>[];
+  final halfWidth = width / 2;
+  final halfHeight = height / 2;
+  for (final land in lands) {
+    if (!materials.containsKey(land.style)) continue;
+    final cx = (land.dc - land.dr) * halfWidth + halfWidth;
+    final cy = (land.dc + land.dr) * halfHeight + halfHeight;
+    final north = Offset(cx, cy - halfHeight);
+    final east = Offset(cx + halfWidth, cy);
+    final south = Offset(cx, cy + halfHeight);
+    final west = Offset(cx - halfWidth, cy);
+    diamonds.add([(north, east), (east, south), (south, west), (west, north)]);
+    styles.add(land.style);
+  }
+  for (var y = 0; y < height; y++) {
+    for (var x = 0; x < width; x++) {
+      final px = x + 0.5;
+      final py = y + 0.5;
+      var best = double.infinity;
+      var bestLand = -1;
+      for (var i = 0; i < diamonds.length; i++) {
+        var nearest = double.infinity;
+        for (final (a, b) in diamonds[i]) {
+          final d = _distanceToSegment(px, py, a.dx, a.dy, b.dx, b.dy);
+          if (d < nearest) nearest = d;
+        }
+        if (nearest < best) {
+          best = nearest;
+          bestLand = i;
+        }
+      }
+      if (bestLand < 0 || best >= shoreBandReach) continue;
+      final t = (1 - best / shoreBandReach).clamp(0.0, 1.0);
+      final ramp = t * t * (3 - 2 * t);
+      if (ramp <= 0) continue;
+      final land = materials[styles[bestLand]]!;
+      final i = (y * width + x) * 4;
+      // Either art's fringe stays exactly as the chunk drew it.
+      if (land[i + 3] == 0 || water[i + 3] == 0) continue;
+      // The blend, decomposed as the water pixel plus its shift
+      // toward the land. Shifts smaller than half a unit round back
+      // to the water itself — that is the band's visible edge, and
+      // those pixels stay transparent so the chunk shows through.
+      final dRed = (land[i] - water[i]) * ramp;
+      final dGreen = (land[i + 1] - water[i + 1]) * ramp;
+      final dBlue = (land[i + 2] - water[i + 2]) * ramp;
+      if (dRed.abs() < 0.5 && dGreen.abs() < 0.5 && dBlue.abs() < 0.5) {
+        continue;
+      }
+      out[i] = (water[i] + dRed).round();
+      out[i + 1] = (water[i + 1] + dGreen).round();
+      out[i + 2] = (water[i + 2] + dBlue).round();
+      out[i + 3] = 255;
+    }
+  }
+  return out;
+}
 
-  // Land touching only a diagonal corner fills the shared vertex with
-  // a bank wedge, unless a cardinal bank already covers it.
-  if (north == null && west == null && bankStyle(-1, -1) != null) {
-    roles.add('shore.${bankStyle(-1, -1)}.edge.s');
-  }
-  if (north == null && east == null && bankStyle(1, -1) != null) {
-    roles.add('shore.${bankStyle(1, -1)}.edge.w');
-  }
-  if (east == null && south == null && bankStyle(1, 1) != null) {
-    roles.add('shore.${bankStyle(1, 1)}.edge.n');
-  }
-  if (south == null && west == null && bankStyle(-1, 1) != null) {
-    roles.add('shore.${bankStyle(-1, 1)}.edge.e');
-  }
-  return roles;
+/// Plane distance from a point to a segment.
+double _distanceToSegment(
+  double px,
+  double py,
+  double ax,
+  double ay,
+  double bx,
+  double by,
+) {
+  final vx = bx - ax;
+  final vy = by - ay;
+  final wx = px - ax;
+  final wy = py - ay;
+  final lengthSquared = vx * vx + vy * vy;
+  var t = lengthSquared == 0 ? 0.0 : (wx * vx + wy * vy) / lengthSquared;
+  if (t < 0) t = 0;
+  if (t > 1) t = 1;
+  final dx = px - (ax + t * vx);
+  final dy = py - (ay + t * vy);
+  return math.sqrt(dx * dx + dy * dy);
 }
 
 class _WorldHit {
@@ -1149,7 +1167,8 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.ambient,
     required this.terrainCache,
     required this.pixelRatio,
-    required this.banks,
+    required this.bands,
+    required this.onBandPattern,
     required this.parcelMode,
     required this.showTileGrid,
     required this.pedestrians,
@@ -1198,9 +1217,14 @@ class _ParcelWorldPainter extends CustomPainter {
   final _TerrainChunkCache terrainCache;
   final double pixelRatio;
 
-  /// Composed bank overlays by shore role — the ground material cut
-  /// by the baked shape mask.
-  final Map<String, ui.Image> banks;
+  /// Composed shore-band overlays by neighbourhood pattern — the
+  /// neighbouring land's material fading out over the water tile.
+  final Map<String, ui.Image> bands;
+
+  /// Reports a newly recorded band pattern to the view state so its
+  /// overlay can compose; called during paint, never repainting
+  /// synchronously.
+  final void Function(String pattern) onBandPattern;
 
   /// Parcel-tool view mode: unowned shading and the strong parcel grid.
   final bool parcelMode;
@@ -1360,7 +1384,7 @@ class _ParcelWorldPainter extends CustomPainter {
       _blitChunk(canvas, size, chunk);
     }
     _drawRoads(canvas, size, bounds);
-    _drawShoreBanks(canvas, size, drawn);
+    _drawShoreBands(canvas, size, drawn);
     _drawFogWisps(canvas, size, drawn);
   }
 
@@ -1617,44 +1641,30 @@ class _ParcelWorldPainter extends CustomPainter {
     }
   }
 
-  /// Shore banks: each bank tile replays its composed overlay — the
-  /// ground material cut by the baked shape mask — through the camera
-  /// transform. The mask's water half is transparent, so the water
-  /// tile beneath stays visible while the bank reads as dry land in
-  /// the neighbouring style's material.
-  void _drawShoreBanks(Canvas canvas, Size size, List<_TerrainChunk> chunks) {
+  /// Shore bands: each banded water tile replays its composed
+  /// overlay — the neighbouring land's material fading out over the
+  /// water — through the camera transform. The overlay's canvas is
+  /// the ground family's tile canvas, so the water sprite's placement
+  /// metadata puts it exactly over its cell.
+  void _drawShoreBands(Canvas canvas, Size size, List<_TerrainChunk> chunks) {
+    final sprite = content.sprite('terrain.water');
+    if (sprite == null) return;
+    final paint = Paint()
+      ..filterQuality = FilterQuality.medium
+      ..color = const Color(0xFFFFFFFF);
     for (final chunk in chunks) {
-      for (final bank in chunk.banks) {
-        _drawBankRole(canvas, bank.$2, bank.$1, size, scale, offset);
+      for (final band in chunk.bands) {
+        final image = bands[band.$2];
+        if (image == null) continue;
+        ParcelWorldProbe.countActor();
+        canvas.drawImageRect(
+          image,
+          Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+          _tileScreenRect(image, sprite, band.$1, size, scale, offset),
+          paint,
+        );
       }
     }
-  }
-
-  /// Draws one composed bank tile. Bank roles carry the material
-  /// style ('shore.grass.quarter.sw'); the sprite metadata comes from
-  /// the shape's mask entry.
-  void _drawBankRole(
-    Canvas canvas,
-    String role,
-    CellCoord cell,
-    Size size,
-    double scale,
-    Offset offset,
-  ) {
-    final image = banks[role];
-    if (image == null) return;
-    final parts = role.split('.');
-    final sprite = content.sprite('shore.${parts[2]}.${parts[3]}');
-    if (sprite == null) return;
-    ParcelWorldProbe.countActor();
-    canvas.drawImageRect(
-      image,
-      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-      _tileScreenRect(image, sprite, cell, size, scale, offset),
-      Paint()
-        ..filterQuality = FilterQuality.medium
-        ..color = const Color(0xFFFFFFFF),
-    );
   }
 
   /// The parcel's diamond outline in screen space.
@@ -2021,12 +2031,15 @@ class _ParcelWorldPainter extends CustomPainter {
         _drawImageAtWorldCenter(canvas, image, center);
       }
       if (terrain.kind == TerrainKind.water) {
-        // Shore banks are recorded as per-frame draws rather than
-        // baked into the chunk picture. Fog cells never bank — the
-        // cloud deck is their whole look, and the boundary is
-        // deliberately plain.
-        for (final role in waterBankRoles(cell, queries.terrainAt)) {
-          chunk.banks.add((cell, role));
+        // Shore bands are recorded as per-frame draws rather than
+        // baked into the chunk picture: each neighbourhood's overlay
+        // composes asynchronously the first time it is seen. Fog
+        // cells never band — the cloud deck is their whole look, and
+        // the boundary is deliberately plain.
+        final pattern = shoreBandPattern(cell, queries.terrainAt);
+        if (pattern != null) {
+          chunk.bands.add((cell, pattern));
+          onBandPattern(pattern);
         }
       }
       if (terrain.kind == TerrainKind.fog) {
@@ -3464,10 +3477,12 @@ class _TerrainChunk {
   /// Whether [image] was rasterized at the cache's current factor.
   bool imageMatchesBucket = false;
 
-  /// Shore-bank draws for this chunk's outermost water tiles — one
-  /// (cell, role) per masked shore piece — replayed every frame
-  /// instead of baked into [picture].
-  final List<(CellCoord, String)> banks = [];
+  /// Shore-band draws for this chunk's banded water tiles — one
+  /// (cell, pattern) per water cell with land in its eight
+  /// neighbourhood — replayed every frame instead of baked into
+  /// [picture], because the pattern's overlay composes asynchronously
+  /// after the chunk records.
+  final List<(CellCoord, String)> bands = [];
 
   /// Fog-wisp draws for this chunk's fog cells — one (cell, role)
   /// per hash-scattered cloud sprite — replayed every frame above
