@@ -161,7 +161,7 @@ void main() {
       expect(gRamp, inInclusiveRange(0.2, 0.8), reason: 'mid-ramp');
     });
 
-    test('corners take the nearest shore, never a double blend', () {
+    test('corners reach at least as far as either shore alone', () {
       final north = compose('g.......');
       final east = compose('..g.....');
       final both = compose('g.g.....');
@@ -169,24 +169,50 @@ void main() {
         for (var x = 0; x < width; x += 3) {
           final a = alphaAt(north, x, y);
           final b = alphaAt(east, x, y);
-          // Reach: the band reaches wherever the nearest shore does.
-          expect(
-            alphaAt(both, x, y),
-            a == 255 || b == 255 ? 255 : 0,
-            reason: 'pixel ($x,$y)',
-          );
-          if (alphaAt(both, x, y) != 255) continue;
-          // Colour: exactly the nearest single shore's blend — never
-          // the two stacked.
-          final sameAsNorth = a == 255 && _sameColor(north, both, x, y, width);
-          final sameAsEast = b == 255 && _sameColor(east, both, x, y, width);
-          expect(
-            sameAsNorth || sameAsEast,
-            isTrue,
-            reason: 'pixel ($x,$y): the colour is one shore\'s blend',
-          );
+          if (a == 255 || b == 255) {
+            expect(
+              alphaAt(both, x, y),
+              255,
+              reason: 'pixel ($x,$y): smoothing may extend, never retract',
+            );
+          }
         }
       }
+    });
+
+    test('concave creases round like convex tips', () {
+      // Land north and east flank a wedge of water at the cell's east
+      // vertex; their distance fields meet in a crease along the
+      // horizontal midline (the configuration is symmetric about it).
+      // The smooth-minimum dips the field at the crease, so the blend
+      // reaches deeper than either shore alone and the water spike's
+      // tip rounds instead of ending in a sharp point.
+      final north = compose('g.......');
+      final both = compose('g.g.....');
+      var rounded = 0; // Crease pixels rendered more land-ward.
+      var extended = 0; // Crease pixels beyond either shore's reach.
+      for (var x = 8; x < 120; x++) {
+        const y = 32;
+        final i = (y * width + x) * 4;
+        final singleAlpha = north[i + 3];
+        final singleGreen = north[i + 1];
+        final bothAlpha = both[i + 3];
+        final bothGreen = both[i + 1];
+        if (singleAlpha == 255 &&
+            bothAlpha == 255 &&
+            bothGreen > singleGreen + 2) {
+          rounded++;
+        }
+        if (singleAlpha == 0 && bothAlpha == 255) {
+          extended++;
+        }
+      }
+      expect(rounded, greaterThan(5), reason: 'the crease blend deepens');
+      expect(
+        extended,
+        greaterThan(3),
+        reason: 'the spike tip rounds past the plain reach',
+      );
     });
 
     test("each pixel takes its nearest land's material", () {
@@ -246,12 +272,6 @@ void main() {
       expect(alphaAt(out2, 90, 18), 0);
     });
   });
-}
-
-/// Whether two overlays agree on a pixel's colour.
-bool _sameColor(Uint8List a, Uint8List b, int x, int y, int width) {
-  final i = (y * width + x) * 4;
-  return a[i] == b[i] && a[i + 1] == b[i + 1] && a[i + 2] == b[i + 2];
 }
 
 Uint8List _solidMaterial(int width, int height, int r, int g, int b) {

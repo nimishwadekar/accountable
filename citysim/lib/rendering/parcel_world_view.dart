@@ -791,6 +791,18 @@ Future<ui.Image?> decodeRgbaImage(
 /// fading out, like a shallow bank seen through the water.
 const double shoreBandReach = 29;
 
+/// How far apart two lands' distance fields may be before the shore
+/// band stops blending them (the smooth-minimum radius, in ground-art
+/// pixels). Where two shores flank a wedge of water — a concave land
+/// corner, a bay, a channel mouth — their distance fields meet in a
+/// crease, and the plain minimum ends the water in a sharp spike with
+/// two straight blend bands. Blending the fields within this radius
+/// rounds the crease the way a lone land tip is naturally rounded by
+/// its radial field. Fields within a single land stay plain, so
+/// peninsula caps are untouched. Set to the band's own reach so
+/// corners round on the same scale.
+const double shoreBandCornerBlend = 29;
+
 /// One land neighbour contributing to a water cell's shore band: the
 /// neighbour's cell offset from the water cell, and its ground
 /// material style ('grass' or 'dirt').
@@ -860,11 +872,15 @@ List<ShoreBandLand> shoreBandLands(String pattern) {
 /// solid at the tile boundary and fades to nothing [shoreBandReach]
 /// pixels in.
 ///
-/// Each pixel takes the colour of the *nearest* land, so corners
-/// combine as the ramp of the distance to the nearest shore — never
-/// a double blend — and mixed materials meet along the midline
-/// between their edges. Pixels either art left unpainted are skipped,
-/// so the chunk shows through.
+/// The ramp follows a smooth-minimum of the different lands'
+/// distance fields, so creases where two shores flank a wedge of
+/// water (concave corners, bays, channel mouths) round the way a
+/// lone land tip is naturally rounded by its radial field; each
+/// land's own field stays a plain minimum, leaving peninsula caps
+/// untouched. The colour takes the strictly nearest land's material
+/// — never a stacked double blend — and mixed materials meet along
+/// the midline between their edges. Pixels either art left
+/// unpainted are skipped, so the chunk shows through.
 ///
 /// The band never leaves its own cell's mathematical diamond: the
 /// overlay draws above the chunk layer, so anything past the diamond
@@ -917,7 +933,11 @@ Uint8List composeShoreBandPixels(
           (px - halfWidth).abs() / halfWidth +
           (py - halfHeight).abs() / halfHeight;
       if (withinOwnCell > 1) continue;
-      var best = double.infinity;
+      // The ramp reads a smooth-minimum across the different lands'
+      // distance fields (rounded concave corners); the material
+      // still follows the strictly nearest land.
+      var smooth = double.infinity;
+      var strict = double.infinity;
       var bestLand = -1;
       for (var i = 0; i < diamonds.length; i++) {
         var nearest = double.infinity;
@@ -925,13 +945,16 @@ Uint8List composeShoreBandPixels(
           final d = _distanceToSegment(px, py, a.dx, a.dy, b.dx, b.dy);
           if (d < nearest) nearest = d;
         }
-        if (nearest < best) {
-          best = nearest;
+        if (nearest < strict) {
+          strict = nearest;
           bestLand = i;
         }
+        smooth = smooth.isInfinite
+            ? nearest
+            : _smoothMin(smooth, nearest, shoreBandCornerBlend);
       }
-      if (bestLand < 0 || best >= shoreBandReach) continue;
-      final t = (1 - best / shoreBandReach).clamp(0.0, 1.0);
+      if (bestLand < 0 || smooth >= shoreBandReach) continue;
+      final t = (1 - smooth / shoreBandReach).clamp(0.0, 1.0);
       final ramp = t * t * (3 - 2 * t);
       if (ramp <= 0) continue;
       final land = materials[styles[bestLand]]!;
@@ -955,6 +978,15 @@ Uint8List composeShoreBandPixels(
     }
   }
   return out;
+}
+
+/// Polynomial smooth-minimum: like `min(a, b)` but blends the two
+/// within [k] of each other, dipping up to k/4 where they meet.
+/// Folding the lands' distance fields through this rounds the creases
+/// at concave shore corners; see [shoreBandCornerBlend].
+double _smoothMin(double a, double b, double k) {
+  final h = (0.5 + 0.5 * (b - a) / k).clamp(0.0, 1.0);
+  return b + (a - b) * h - k * h * (1 - h);
 }
 
 /// Plane distance from a point to a segment.
@@ -1361,32 +1393,29 @@ class _ParcelWorldPainter extends CustomPainter {
         _rasterizeChunk(chunk);
       }
     }
-    // Blit ocean parcels before land parcels: the water tiles'
-    // opaque skirts must never paint over neighbouring land at
-    // shores, and the bank overlay only reaches ~1 world px past
-    // the shared edge — not far enough to cover a 2 px skirt.
-    // Fog parcels blit after land: the cloud deck sits above every
-    // other ground, so its tiles cover the terrain edge where the
-    // known world ends. Authored terrain is uniform per parcel, so
-    // the origin cell's kind classifies the chunk.
-    final waterChunks = <_TerrainChunk>[];
-    final landChunks = <_TerrainChunk>[];
+    // Blit chunks in painter order — the same back-to-front order
+    // their cells already draw in (parcel rows top-to-bottom, west to
+    // east) — with only the fog deck held back on top so the cloud
+    // covers the terrain edge where the known world ends. The old
+    // rule grouped water parcels before land ones, which was safe
+    // while a parcel held a single kind; painted tiles broke it — a
+    // river on a grass-origin parcel (a "land" chunk) drew its water
+    // over the land of a water-origin parcel south of it, exposing
+    // the water tiles' bottom skirts on the island inside it. In
+    // painter order every seam follows the same rule as the cells:
+    // the south/east neighbour wins, and the tiles' straight top
+    // edges keep the north/west sides exact.
     final fogChunks = <_TerrainChunk>[];
+    final chartedChunks = <_TerrainChunk>[];
     for (final chunk in drawn) {
       final origin = chunk.coord.origin(state.parcelSize);
-      switch (queries.terrainAt(origin).kind) {
-        case TerrainKind.water:
-          waterChunks.add(chunk);
-        case TerrainKind.grass:
-          landChunks.add(chunk);
-        case TerrainKind.fog:
-          fogChunks.add(chunk);
+      if (queries.terrainAt(origin).kind == TerrainKind.fog) {
+        fogChunks.add(chunk);
+      } else {
+        chartedChunks.add(chunk);
       }
     }
-    for (final chunk in waterChunks) {
-      _blitChunk(canvas, size, chunk);
-    }
-    for (final chunk in landChunks) {
+    for (final chunk in chartedChunks) {
       _blitChunk(canvas, size, chunk);
     }
     for (final chunk in fogChunks) {

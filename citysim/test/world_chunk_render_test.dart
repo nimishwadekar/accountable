@@ -633,4 +633,103 @@ void main() {
     ownedHover.dispose();
     selected.dispose();
   }, timeout: const Timeout(Duration(minutes: 3)));
+  testWidgets('mixed parcels blit in painter order across chunk seams', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // An island painted into the east water parcel (a water-origin
+    // chunk) with river water painted just north of it in the grass
+    // parcel (a land-origin chunk). The old water-before-land chunk
+    // grouping blitted the island's chunk first, so the northern
+    // water tile's bottom skirt painted over the island — the exact
+    // bug seen on the river island at the map's corner.
+    final terrain = TerrainContent(
+      generatorVersion: content.terrain.generatorVersion,
+      parcels: content.terrain.parcels,
+      tiles: {
+        ...content.terrain.tiles,
+        const CellCoord(12, -1): TerrainKind.water,
+        const CellCoord(12, 0): TerrainKind.grass,
+      },
+    );
+    final modified = ContentBundle(
+      manifest: content.manifest,
+      catalogue: content.catalogue,
+      sprites: content.sprites,
+      economy: content.economy,
+      ambience: content.ambience,
+      terrain: terrain,
+    );
+    final world = _anchorWorld(modified);
+    ParcelWorldProbe.recording = true;
+    ParcelWorldProbe.reset();
+
+    final boundaryKey = GlobalKey();
+    Widget app() => MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: RepaintBoundary(
+          key: boundaryKey,
+          child: ParcelWorldView(
+            state: world,
+            content: modified,
+            terrainProvider: ContentTerrainProvider(modified.terrain),
+            onCellTap: (cell, structureId, subtileX, subtileY) {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(app());
+    var settled = false;
+    for (var attempt = 0; attempt < 10 && !settled; attempt++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      ParcelWorldProbe.reset();
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      settled =
+          ParcelWorldProbe.samples.isNotEmpty &&
+          ParcelWorldProbe.samples.every((s) => s.chunkRecords == 0);
+    }
+    expect(settled, isTrue, reason: 'chunks should finish recording');
+
+    final image = (await _capture(tester, boundaryKey))!;
+    final bytes = (await tester.runAsync(() => image.toByteData()))!;
+
+    bool isGrass(int rgba) {
+      final g = (rgba >> 16) & 0xFF, b = (rgba >> 8) & 0xFF;
+      return g > 100 && g - b > 20;
+    }
+
+    // The island renders as land, and the water tile north of it
+    // keeps its skirt under the island instead of painting over it.
+    // The northern tile's bottom skirt lands along the island's
+    // north-east edge (screen (784,348)→(816,364)); these samples
+    // walk that band a few pixels inside the island.
+    final island = _screenCenterOf(const CellCoord(12, 0));
+    expect(isGrass(_pixelAt(image, bytes, island)), isTrue);
+    for (final delta in const [
+      Offset(5, -13),
+      Offset(9, -11),
+      Offset(13, -9),
+      Offset(6, -12),
+      Offset(10, -10),
+      Offset(14, -8),
+    ]) {
+      expect(
+        isGrass(_pixelAt(image, bytes, island.translate(delta.dx, delta.dy))),
+        isTrue,
+        reason: 'the northern water tile must not skirt over the island',
+      );
+    }
+    image.dispose();
+  });
 }
