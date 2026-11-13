@@ -269,6 +269,11 @@ These are candidates, not promises or requirements for the current prototype:
 - Optional personal-life themes or financial milestones. These would require a
   separate product decision and must not turn spending or sensitive data into a
   requirement for ordinary settlement growth.
+- Staged building foundations, to be scoped with the construction and economy
+  overhaul below: a planned building pours its concrete slab immediately today
+  (the single decision point is `foundationGroundStyle` in
+  `lib/world/world_queries.dart`), but the agreed direction is dirt while the
+  project is unfunded and concrete once the first coin lands.
 
 ### Check-in economy and settlement growth (future work)
 

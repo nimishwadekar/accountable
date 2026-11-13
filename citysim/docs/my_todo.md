@@ -1,5 +1,7 @@
 This is my note-taking for my own memory. AI shouldn't modify this file.
 
+- Maybe only have skirts on the bottom 2 sides.
+- Smoothen out concave land corners like convex land corners against water.
 - more terrain sprite tiles.
 - improve terrain boundaries. author by hand if necessary.
 - terrain elevation and slops and cliffs.

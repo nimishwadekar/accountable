@@ -131,8 +131,42 @@ class WorldQueries {
     parcelForCell(coord, parcelSize: state.parcelSize),
   );
 
-  TerrainCell terrainAt(CellCoord coord) =>
-      terrainByCell[coord] ?? terrainProvider.sample(coord, state.seed);
+  /// Ground under a planned building: its concrete foundation,
+  /// poured the moment the project is planned. The construction and
+  /// economy overhaul may stage this by funding — dirt while the
+  /// project is unfunded, concrete once the first coin lands — which
+  /// is why the decision lives in this one place.
+  GroundStyle foundationGroundStyle(WorldConstruction job) =>
+      GroundStyle.concrete;
+
+  /// Cells carrying a building's concrete foundation: every placed
+  /// structure's footprint plus every planned structure
+  /// construction's footprint. The slab is permanent — it stays after
+  /// the building completes. Roads and bridges keep their dirt
+  /// grading; that is a renderer pass ([_drawPlannedGround]), not
+  /// ground state.
+  late final Map<CellCoord, GroundStyle> _foundationGroundByCell = {
+    for (final cell in structuresByCell.keys) cell: GroundStyle.concrete,
+    for (final job in state.constructions)
+      if (job.kind == WorldConstructionKind.structure)
+        for (final cell in job.footprint) cell: foundationGroundStyle(job),
+  };
+
+  TerrainCell terrainAt(CellCoord coord) {
+    final sampled =
+        terrainByCell[coord] ?? terrainProvider.sample(coord, state.seed);
+    final foundation = _foundationGroundByCell[coord];
+    if (foundation == null ||
+        !sampled.isLand ||
+        sampled.groundStyle == foundation) {
+      return sampled;
+    }
+    return TerrainCell(
+      coord: coord,
+      kind: sampled.kind,
+      groundStyle: foundation,
+    );
+  }
 
   Set<CellCoord> get reservedCells => _reservedCells;
 
