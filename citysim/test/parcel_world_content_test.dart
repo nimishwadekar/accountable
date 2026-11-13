@@ -106,6 +106,131 @@ void main() {
     );
   });
 
+  test('road walkable masks parse, round-trip, and validate', () {
+    // The live content is the user's working file — road roles may
+    // carry paint at any time — so this test never assumes blankness;
+    // it builds its own sprites and pins the mechanics.
+
+    // A mask-less sprite omits walkable from its JSON.
+    final fresh = SpriteDefinition.fromJson(const {
+      'path': 'sprites/roads/straight/some-tile.png',
+      'groundAnchor': [0.5, 1],
+    });
+    expect(fresh.walkable, isEmpty);
+    expect(fresh.toJson().containsKey('walkable'), isFalse);
+
+    // Eight row bytes round-trip, and bits read per subtile: bit x of
+    // row y, row 0 the north edge, bit 0 the west edge.
+    final painted = content
+        .sprite('road.straight.se')!
+        .copyWith(walkable: const [255, 0, 0, 0, 0, 0, 0, 128]);
+    expect(painted.walkableAt(0, 0), isTrue);
+    expect(painted.walkableAt(7, 0), isTrue);
+    expect(painted.walkableAt(7, 7), isTrue);
+    expect(painted.walkableAt(6, 7), isFalse);
+    expect(painted.walkableAt(0, 1), isFalse);
+    expect(SpriteDefinition.fromJson(painted.toJson()).walkable, const [
+      255,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      128,
+    ]);
+
+    // A road role validates clean with a well-formed mask...
+    final valid = {...content.sprites, 'road.straight.se': painted};
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: valid,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: content.terrain,
+      ).where((issue) => issue.message.contains('walkable')),
+      isEmpty,
+    );
+
+    // ...while a wrong length, an out-of-range byte, or paint on a
+    // non-road sprite each report their own issue.
+    final issues = validateContentData(
+      catalogue: content.catalogue,
+      sprites: {
+        ...content.sprites,
+        'road.straight.se': painted.copyWith(walkable: const [255, 0]),
+        'road.straight.sw': painted.copyWith(
+          walkable: const [0, 0, 0, 0, 0, 0, 0, 256],
+        ),
+        content.catalogue.first.assetRoles.first: content
+            .sprites[content.catalogue.first.assetRoles.first]!
+            .copyWith(walkable: const [1, 0, 0, 0, 0, 0, 0, 0]),
+      },
+      economy: content.economy,
+      ambience: content.ambience,
+      terrain: content.terrain,
+    );
+    expect(
+      issues.any(
+        (issue) =>
+            issue.severity == 'error' &&
+            issue.message.contains('exactly eight row bytes'),
+      ),
+      isTrue,
+    );
+    expect(
+      issues.any(
+        (issue) => issue.severity == 'error' && issue.message.contains('0–255'),
+      ),
+      isTrue,
+    );
+    expect(
+      issues.any(
+        (issue) =>
+            issue.severity == 'warning' &&
+            issue.message.contains('only road and bridge tiles'),
+      ),
+      isTrue,
+    );
+  });
+
+  test('bridge surface lift parses, round-trips, and validates', () {
+    // Both deck roles carry the measured lift: 12 world px is where
+    // the art draws the deck surface, and the ramps' incline derives
+    // from it — a silent change would sink people into the deck.
+    expect(content.sprite('bridge.body.se')!.surfaceLift, 12);
+    expect(content.sprite('bridge.body.sw')!.surfaceLift, 12);
+    expect(content.sprite('road.straight.se')!.surfaceLift, 0);
+
+    // Zero lift stays out of the JSON; authored values round-trip.
+    final fresh = SpriteDefinition.fromJson(const {
+      'path': 'sprites/bridges/body/some-tile.png',
+      'groundAnchor': [0.5, 1],
+    });
+    expect(fresh.toJson().containsKey('surfaceLift'), isFalse);
+    final lifted = fresh.copyWith(surfaceLift: 12);
+    expect(SpriteDefinition.fromJson(lifted.toJson()).surfaceLift, 12);
+
+    // Negative lift is an error.
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: {
+          ...content.sprites,
+          'bridge.body.se': lifted.copyWith(surfaceLift: -1),
+        },
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: content.terrain,
+      ).any(
+        (issue) =>
+            issue.severity == 'error' && issue.message.contains('surfaceLift'),
+      ),
+      isTrue,
+    );
+  });
+
   test('the tile grid validates its alpha and colour channels', () {
     final bad = AmbienceContent(
       ambientTimeScale: content.ambience.ambientTimeScale,
@@ -198,7 +323,8 @@ void main() {
     );
 
     expect(content.ambience.ambientTimeScale, 1.0);
-    expect(content.ambience.pedestrians.spriteScale, closeTo(0.7, 0.001));
+    // 0.6 draws a person at ~1.8 m on the 0.2 m/px scale ruler.
+    expect(content.ambience.pedestrians.spriteScale, closeTo(0.6, 0.001));
   });
 
   test('negative cell coordinates map to the correct neighboring parcels', () {

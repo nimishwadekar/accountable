@@ -1,13 +1,13 @@
 {
   "ambientTimeScale": 1,
   "pedestrians": {
-    "lateralWanderX": 10,
-    "lateralWanderY": 6,
+    "lateralWanderX": 3,
+    "lateralWanderY": 2,
     "maxCount": 10,
     "roadCellsPerPerson": 6,
     "speedMin": 0.55,
     "speedRange": 0.35,
-    "spriteScale": 0.7,
+    "spriteScale": 0.6,
     "walkFrameRate": 7
   },
   "tileGrid": {

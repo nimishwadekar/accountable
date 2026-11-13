@@ -250,13 +250,25 @@ class _SpritesPageState extends State<SpritesPage> {
                   // settle live instead of hot-restarting the game. The
                   // road-side selection is controlled so the per-side
                   // shift fields below always edit the side the plot
-                  // shows.
+                  // shows. Road and bridge tiles paint their walkable
+                  // lattice right on the tile — ramps and decks ride
+                  // their incline — so tap subtiles to mark where
+                  // pedestrians may walk.
                   SpritePlotPreview(
                     categories: widget.categories,
                     role: role,
                     roadSide: _roadSides[role] ?? 'south',
                     onRoadSideChanged: (side) =>
                         setState(() => _roadSides[role] = side),
+                    walkableRows: _paintsWalkable(category)
+                        ? (meta['walkable'] as List?)?.cast<int>()
+                        : null,
+                    onToggleWalkable: _paintsWalkable(category)
+                        ? (x, y) => _editRole(
+                            role,
+                            (sprite) => _toggleWalkableBit(sprite, x, y),
+                          )
+                        : null,
                   ),
                   const SizedBox(height: 8),
                   Wrap(
@@ -539,5 +551,23 @@ class _SpritesPageState extends State<SpritesPage> {
       }
       list[index] = value;
     });
+  }
+
+  /// Walkable subtiles are painted on road and bridge tiles — the two
+  /// surfaces pedestrians read masks from.
+  bool _paintsWalkable(String category) =>
+      category == 'roads' || category == 'bridges';
+
+  /// Flips one walkable subtile bit, creating the eight row bytes on
+  /// first paint. Bit `x` of row `y`: row index runs along the row
+  /// axis (north edge first), bit index along the column axis.
+  void _toggleWalkableBit(Map<String, Object?> sprite, int x, int y) {
+    var rows = sprite['walkable'];
+    if (rows is! List || rows.length != 8) {
+      rows = <int>[for (var i = 0; i < 8; i++) 0];
+      sprite['walkable'] = rows;
+    }
+    final current = rows[y] is num ? (rows[y] as num).toInt() : 0;
+    rows[y] = current ^ (1 << x);
   }
 }

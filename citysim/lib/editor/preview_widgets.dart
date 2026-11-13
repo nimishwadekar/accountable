@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart' show Ticker;
 import 'content_api.dart';
 import 'edit_fields.dart' show footprintForRole, spriteMap, spritePathEntries;
 
+import 'package:citysim/world/pedestrian_lattice.dart' show bridgeSurfaceLift;
 import 'package:citysim/world/world_state.dart' show propSubtilesPerAxis;
 
 /// Live previews for the ambience editor. These mirror the game's ambient
@@ -220,7 +221,9 @@ Rect _previewPropRect(
 /// Tile-category sprites (ground, roads, shores, bridges) render
 /// tile-style instead: width fitted to the tile, height kept. Props
 /// render on their subtile: one tile's 8×8 lattice with a slot picker,
-/// the art anchored exactly where the game anchors placed props.
+/// the art anchored exactly where the game anchors placed props. Road
+/// tiles can also show their walkable lattice — the same 8×8 grid,
+/// green where pedestrians may walk — with taps toggling subtiles.
 class SpritePlotPreview extends StatefulWidget {
   const SpritePlotPreview({
     required this.categories,
@@ -228,6 +231,8 @@ class SpritePlotPreview extends StatefulWidget {
     this.width = 300,
     this.roadSide,
     this.onRoadSideChanged,
+    this.walkableRows,
+    this.onToggleWalkable,
     super.key,
   });
 
@@ -242,6 +247,13 @@ class SpritePlotPreview extends StatefulWidget {
 
   /// Notified on picker taps when [roadSide] is provided.
   final void Function(String side)? onRoadSideChanged;
+
+  /// The road tile's walkable lattice — eight row bytes from the raw
+  /// sprite map — and the tap callback that paints it. Provided
+  /// together, the preview draws the 8×8 sidewalk lattice over the
+  /// tile and taps toggle subtiles; the page commits the edit.
+  final List<int>? walkableRows;
+  final void Function(int x, int y)? onToggleWalkable;
 
   /// Preview width in logical pixels; the height follows the content.
   final double width;
@@ -334,6 +346,68 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
     final col = (entry[0] as num?)?.toDouble() ?? 0;
     final row = (entry[1] as num?)?.toDouble() ?? 0;
     return Offset((col - row) * width, (col + row) * width / 2);
+  }
+
+  /// Corner lifts for the walkable overlay: null keeps the lattice on
+  /// the ground plane (road tiles); bridge roles lift it onto the
+  /// rendered surface — ramps along their incline, decks to their full
+  /// height — so painted subtiles sit where the art is.
+  double Function(double fx, double fy)? _walkableOverlayLift(
+    Map<String, Object?> meta,
+  ) {
+    final category = meta['category'] as String? ?? 'buildings';
+    if (category != 'bridges') return null;
+    final body = spriteMap(widget.categories)['bridge.body.se'];
+    final deckLift = body is Map
+        ? (body['surfaceLift'] as num?)?.toDouble() ?? 0
+        : 0.0;
+    return (fx, fy) => bridgeSurfaceLift(widget.role, fx, fy, deckLift);
+  }
+
+  /// Whether a logical-space point lands inside subtile (x, y)'s quad
+  /// — the lattice diamond, lifted at each corner exactly as the
+  /// painter draws it. The sheared grid still tiles the plane, so at
+  /// most one quad contains any point.
+  bool _subtileQuadContains(
+    int x,
+    int y,
+    Offset point,
+    double Function(double fx, double fy)? lift,
+  ) {
+    Offset corner(double fx, double fy) => Offset(
+      (fx - fy) * _previewTileWidth / 2,
+      (fx + fy) * _previewTileHeight / 2 - (lift?.call(fx, fy) ?? 0),
+    );
+    final quad = [
+      corner(x / propSubtilesPerAxis - 0.5, y / propSubtilesPerAxis - 0.5),
+      corner(
+        (x + 1) / propSubtilesPerAxis - 0.5,
+        y / propSubtilesPerAxis - 0.5,
+      ),
+      corner(
+        (x + 1) / propSubtilesPerAxis - 0.5,
+        (y + 1) / propSubtilesPerAxis - 0.5,
+      ),
+      corner(
+        x / propSubtilesPerAxis - 0.5,
+        (y + 1) / propSubtilesPerAxis - 0.5,
+      ),
+    ];
+    var sign = 0;
+    for (var i = 0; i < quad.length; i++) {
+      final a = quad[i];
+      final b = quad[(i + 1) % quad.length];
+      final cross =
+          (b.dx - a.dx) * (point.dy - a.dy) - (b.dy - a.dy) * (point.dx - a.dx);
+      if (cross == 0) continue;
+      final next = cross > 0 ? 1 : -1;
+      if (sign == 0) {
+        sign = next;
+      } else if (next != sign) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _resolveSprite() {
@@ -502,6 +576,37 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
       70.0,
       240.0,
     );
+    // The painter's fit transform, mirrored for tap hit-testing.
+    final editingWalkable = widget.onToggleWalkable != null;
+    final fit = math.min(widget.width / bounds.width, height / bounds.height);
+    // Bridge tiles paint their lattice on the elevated surface, so
+    // the overlay — and the taps that paint it — ride the same lift
+    // the game gives people standing there.
+    final overlayLift = editingWalkable ? _walkableOverlayLift(meta) : null;
+    void toggleAt(Offset local) {
+      final callback = widget.onToggleWalkable;
+      if (callback == null) return;
+      final translate = Offset(
+        (widget.width - bounds.width * fit) / 2 - bounds.left * fit,
+        (height - bounds.height * fit) / 2 - bounds.top * fit,
+      );
+      final point = Offset(
+        (local.dx - translate.dx) / fit,
+        (local.dy - translate.dy) / fit,
+      );
+      // The sheared lattice still tiles the plane, so exactly one
+      // subtile quad contains the tap; the corner lifts the overlay
+      // uses are the same ones hit-testing walks.
+      for (var y = 0; y < propSubtilesPerAxis; y++) {
+        for (var x = 0; x < propSubtilesPerAxis; x++) {
+          if (_subtileQuadContains(x, y, point, overlayLift)) {
+            callback(x, y);
+            return;
+          }
+        }
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -548,21 +653,31 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
               ],
             ),
           ),
-        CustomPaint(
-          size: Size(widget.width, height),
-          painter: _SpritePlotPainter(
-            bounds: bounds,
-            columns: plotColumns,
-            rows: plotRows,
-            tileStyle: tileStyle,
-            propStyle: propStyle,
-            subtileX: _propSubtileChoices[_propSubtileIndex].$2,
-            subtileY: _propSubtileChoices[_propSubtileIndex].$3,
-            image: image,
-            spriteRect: spriteRect,
-            roadColumnAxisImage: _roadColumnAxisImage,
-            roadRowAxisImage: _roadRowAxisImage,
-            roadSide: _roadSide,
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: editingWalkable
+              ? (details) => toggleAt(details.localPosition)
+              : null,
+          child: CustomPaint(
+            size: Size(widget.width, height),
+            painter: _SpritePlotPainter(
+              bounds: bounds,
+              columns: plotColumns,
+              rows: plotRows,
+              tileStyle: tileStyle,
+              propStyle: propStyle,
+              subtileX: _propSubtileChoices[_propSubtileIndex].$2,
+              subtileY: _propSubtileChoices[_propSubtileIndex].$3,
+              image: image,
+              spriteRect: spriteRect,
+              roadColumnAxisImage: _roadColumnAxisImage,
+              roadRowAxisImage: _roadRowAxisImage,
+              roadSide: _roadSide,
+              walkableRows: editingWalkable
+                  ? widget.walkableRows ?? const []
+                  : null,
+              overlayLift: overlayLift,
+            ),
           ),
         ),
         Text(
@@ -570,6 +685,10 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
               ? '8×8 lattice · subtile '
                     '(${_propSubtileChoices[_propSubtileIndex].$2},'
                     '${_propSubtileChoices[_propSubtileIndex].$3})'
+              : editingWalkable
+              ? 'sidewalk lattice · '
+                    '${_walkableCount(widget.walkableRows)}/64 walkable · '
+                    'tap to paint'
               : '$plotColumns×$plotRows plot'
                     '${tileStyle ? ' · drawn tile-fit' : ''}'
                     '${turned ? ' · turned to the street' : ''}',
@@ -598,6 +717,8 @@ class _SpritePlotPainter extends CustomPainter {
     required this.roadColumnAxisImage,
     required this.roadRowAxisImage,
     required this.roadSide,
+    this.walkableRows,
+    this.overlayLift,
   });
 
   final Rect bounds;
@@ -615,6 +736,14 @@ class _SpritePlotPainter extends CustomPainter {
   final ui.Image? roadColumnAxisImage;
   final ui.Image? roadRowAxisImage;
   final String roadSide;
+
+  /// The road tile's walkable row bytes; non-null draws the paintable
+  /// sidewalk lattice over the centre tile.
+  final List<int>? walkableRows;
+
+  /// Corner lifts for the walkable overlay on elevated tiles (bridge
+  /// ramps and decks); null keeps the lattice flat on the ground.
+  final double Function(double fx, double fy)? overlayLift;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -723,6 +852,57 @@ class _SpritePlotPainter extends CustomPainter {
         Paint()..filterQuality = FilterQuality.medium,
       );
     }
+
+    // The road tile's paintable sidewalk lattice, over the art so the
+    // green cells read as painted-on walkability. The centre tile is
+    // the tile-style plot; the grid is the props' 8×8 geometry.
+    final walkRows = walkableRows;
+    if (walkRows != null) {
+      // Subtile quads with corner lifts: flat road tiles draw the
+      // usual diamonds; bridge ramps and decks shear the grid onto
+      // the elevated surface so paint lands where the art is.
+      Offset latticePoint(double fx, double fy) => Offset(
+        (fx - fy) * _previewTileWidth / 2,
+        (fx + fy) * _previewTileHeight / 2 - (overlayLift?.call(fx, fy) ?? 0),
+      );
+      final fill = Paint()..color = const Color(0x804BC69B);
+      final edge = Paint()
+        ..color = const Color(0xFF1E6552)
+        ..strokeWidth = 1 / math.max(fit, 0.25)
+        ..style = PaintingStyle.stroke;
+      final faint = Paint()
+        ..color = const Color(0x40FFFFFF)
+        ..strokeWidth = 1 / math.max(fit, 0.25)
+        ..style = PaintingStyle.stroke;
+      for (var y = 0; y < propSubtilesPerAxis; y++) {
+        for (var x = 0; x < propSubtilesPerAxis; x++) {
+          final west = x / propSubtilesPerAxis - 0.5;
+          final east = (x + 1) / propSubtilesPerAxis - 0.5;
+          final north = y / propSubtilesPerAxis - 0.5;
+          final south = (y + 1) / propSubtilesPerAxis - 0.5;
+          final corners = [
+            latticePoint(west, north),
+            latticePoint(east, north),
+            latticePoint(east, south),
+            latticePoint(west, south),
+          ];
+          final cell = Path()
+            ..moveTo(corners[0].dx, corners[0].dy)
+            ..lineTo(corners[1].dx, corners[1].dy)
+            ..lineTo(corners[2].dx, corners[2].dy)
+            ..lineTo(corners[3].dx, corners[3].dy)
+            ..close();
+          final walkable =
+              y < walkRows.length && (walkRows[y].clamp(0, 255) >> x & 1) == 1;
+          if (walkable) {
+            canvas.drawPath(cell, fill);
+            canvas.drawPath(cell, edge);
+          } else {
+            canvas.drawPath(cell, faint);
+          }
+        }
+      }
+    }
     canvas.restore();
   }
 
@@ -739,7 +919,21 @@ class _SpritePlotPainter extends CustomPainter {
       oldDelegate.spriteRect != spriteRect ||
       oldDelegate.roadColumnAxisImage != roadColumnAxisImage ||
       oldDelegate.roadRowAxisImage != roadRowAxisImage ||
-      oldDelegate.roadSide != roadSide;
+      oldDelegate.roadSide != roadSide ||
+      oldDelegate.walkableRows != walkableRows ||
+      oldDelegate.overlayLift != overlayLift;
+}
+
+/// Walkable subtile count of a road tile's row bytes, for the paint
+/// caption.
+int _walkableCount(List<int>? rows) {
+  var count = 0;
+  for (final row in rows ?? const <int>[]) {
+    for (var bits = row.clamp(0, 255); bits != 0; bits &= bits - 1) {
+      count++;
+    }
+  }
+  return count;
 }
 
 /// Cell centres of a road strip along one side of a plot, one tile past

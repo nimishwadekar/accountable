@@ -175,6 +175,8 @@ class SpriteDefinition {
     this.category = 'buildings',
     this.subcategory = '',
     this.codeReferenced = false,
+    this.walkable = const [],
+    this.surfaceLift = 0,
   });
 
   /// Path relative to the assets root for single-facing sprites (e.g.
@@ -199,6 +201,32 @@ class SpriteDefinition {
   /// Whether the ambient renderer gently rocks this sprite around its
   /// ground anchor to suggest wind. Only props may sway.
   final bool sways;
+
+  /// Pedestrian walkability for road tiles: the tile's 8×8 subtile
+  /// lattice as eight row bytes. Row index runs along the row axis
+  /// (0 = north edge), bit index along the column axis (bit 0 = west
+  /// edge), so `rows[y] & (1 << x)` marks subtile (x, y) walkable.
+  /// People may only stand on painted subtiles — the mask is the
+  /// sidewalk and crossing network. Empty = the tile is unwalkable;
+  /// road roles ship blank and are painted in the editor.
+  final List<int> walkable;
+
+  /// Subtile (x, y) walkability, mirroring the prop lattice indexing.
+  /// Row bytes are clamped so a malformed mask can never read as more
+  /// walkable than authored.
+  bool walkableAt(int x, int y) =>
+      x >= 0 &&
+      x < 8 &&
+      y >= 0 &&
+      y < walkable.length &&
+      (walkable[y].clamp(0, 255) >> x & 1) == 1;
+
+  /// How far the sprite's surface sits above the cell's ground plane,
+  /// in world px. Bridge decks render elevated — measured at 12 world
+  /// px for the current art — and everything standing on them
+  /// (pedestrians, props) rises by this much. Ramp roles derive their
+  /// incline from the deck roles' value.
+  final double surfaceLift;
 
   /// Per-road-side placement shifts, keyed by compass side. Each entry
   /// is `(col, row)` in fractions of the drawn sprite width: `col`
@@ -263,6 +291,8 @@ class SpriteDefinition {
     String? category,
     String? subcategory,
     bool? codeReferenced,
+    List<int>? walkable,
+    double? surfaceLift,
   }) => SpriteDefinition(
     assetPath: assetPath ?? this.assetPath,
     facingPaths: facingPaths ?? this.facingPaths,
@@ -275,6 +305,8 @@ class SpriteDefinition {
     category: category ?? this.category,
     subcategory: subcategory ?? this.subcategory,
     codeReferenced: codeReferenced ?? this.codeReferenced,
+    walkable: walkable ?? this.walkable,
+    surfaceLift: surfaceLift ?? this.surfaceLift,
   );
 
   Map<String, Object?> toJson() => {
@@ -291,6 +323,8 @@ class SpriteDefinition {
     'category': category,
     'subcategory': subcategory,
     'codeReferenced': codeReferenced,
+    if (walkable.isNotEmpty) 'walkable': walkable,
+    if (surfaceLift != 0) 'surfaceLift': surfaceLift,
   };
 
   static SpriteDefinition fromJson(Map<String, Object?> json) {
@@ -314,6 +348,8 @@ class SpriteDefinition {
       category: category,
       subcategory: json['subcategory'] as String? ?? category,
       codeReferenced: json['codeReferenced'] as bool? ?? false,
+      walkable: _parseWalkable(json['walkable']),
+      surfaceLift: (json['surfaceLift'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -327,6 +363,14 @@ class SpriteDefinition {
             ((entry.value as List)[1] as num?)?.toDouble() ?? 0,
           ),
     };
+  }
+
+  /// Eight row bytes, kept exactly as authored (malformed rows become
+  /// −1) so [validateContentData] can report them; the walkable
+  /// lattice ignores any mask that is not eight bytes in 0–255.
+  static List<int> _parseWalkable(Object? raw) {
+    if (raw is! List) return const [];
+    return [for (final row in raw) row is num ? row.toInt() : -1];
   }
 }
 
@@ -872,6 +916,31 @@ List<ContentIssue> validateContentData({
     }
     if (sprite.sways && sprite.category != 'props') {
       warning('Sprite "${entry.key}": only props may sway in the wind.');
+    }
+    if (sprite.walkable.isNotEmpty) {
+      if (sprite.category != 'roads' && sprite.category != 'bridges') {
+        warning(
+          'Sprite "${entry.key}": only road and bridge tiles carry '
+          'walkable subtiles — pedestrians read them from those roles.',
+        );
+      }
+      if (sprite.walkable.length != 8) {
+        error(
+          'Sprite "${entry.key}": walkable must be exactly eight row '
+          'bytes, one per lattice row.',
+        );
+      } else if (sprite.walkable.any((row) => row < 0 || row > 255)) {
+        error(
+          'Sprite "${entry.key}": walkable row bytes must stay within '
+          '0–255.',
+        );
+      }
+    }
+    if (sprite.surfaceLift < 0) {
+      error(
+        'Sprite "${entry.key}": surfaceLift cannot be negative — '
+        'lowered surfaces are not a thing yet.',
+      );
     }
   }
   for (final role in requiredSpriteRoles) {

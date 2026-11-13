@@ -14,6 +14,7 @@ import 'package:citysim/rendering/sprite_picking.dart';
 
 import '../content/content_bundle.dart';
 import '../world/coordinates.dart';
+import '../world/pedestrian_lattice.dart';
 import '../world/road_sprite_resolver.dart';
 import '../world/terrain_provider.dart';
 import '../world/world_content.dart';
@@ -1956,7 +1957,13 @@ class _ParcelWorldPainter extends CustomPainter {
     _CellBounds bounds,
     double seconds,
   ) {
-    pedestrians.update(seconds, state, queries, content.ambience.pedestrians);
+    pedestrians.update(
+      seconds,
+      state,
+      content.ambience.pedestrians,
+      (role) => content.sprite(role)?.walkable ?? const [],
+      deckLift: content.sprite('bridge.body.se')?.surfaceLift ?? 0,
+    );
     final actors = <(double, void Function())>[];
     for (final structure in queries.structuresInBounds(
       left: bounds.left - 5,
@@ -2056,7 +2063,7 @@ class _ParcelWorldPainter extends CustomPainter {
     }
     for (final pedestrian in pedestrians.list) {
       actors.add((
-        pedestrian.depth,
+        pedestrian.depth(pedestrians.lattice),
         () => _drawPedestrian(canvas, size, pedestrian, seconds),
       ));
     }
@@ -2220,7 +2227,7 @@ class _ParcelWorldPainter extends CustomPainter {
     _Pedestrian pedestrian,
     double seconds,
   ) {
-    final world = pedestrian.worldPosition();
+    final world = pedestrian.worldPosition(pedestrians.lattice);
     final screen = _worldToScreen(world, size, scale, offset);
     if (screen.dx < -40 ||
         screen.dx > size.width + 40 ||
@@ -3263,25 +3270,19 @@ Rect _tileScreenRect(
   );
 }
 
-/// The body sprite's art width — the tile-fit unit for bridge deck
-/// rects is [_logicalTileWidth] divided by this.
-const _bridgeBodyArtWidth = 128.0;
-
 /// World-px lift for things standing on a cell. Bridge decks are the
-/// one elevated surface today: the body sprite hangs its bottom
-/// |baseOffsetY| art px above the cell's south vertex, and props
-/// stand on that deck — a lift of 6 world px for the current art.
-/// Ground cells lift nothing. This is the seed of the future
-/// terrain-elevation lookup (see the prop plan's future notes).
+/// one elevated surface today: the body sprite's [SpriteDefinition
+/// .surfaceLift] says how far its deck sits above the ground plane —
+/// measured at 12 world px for the current art. Ground cells lift
+/// nothing. This is the seed of the future terrain-elevation lookup
+/// (see the prop plan's future notes).
 double _surfaceLift(
   CellCoord cell,
   WorldQueries queries,
   ContentBundle content,
 ) {
   if (!queries.bridgeDeckCells.contains(cell)) return 0;
-  final sprite = content.sprite('bridge.body.se');
-  if (sprite == null) return 0;
-  return -sprite.baseOffsetY * (_logicalTileWidth / _bridgeBodyArtWidth);
+  return content.sprite('bridge.body.se')?.surfaceLift ?? 0;
 }
 
 /// The subtile of [world] within its own nearest cell — where on the
@@ -3480,28 +3481,48 @@ class _TerrainChunkCache {
   }
 }
 
-/// Render-only pedestrians that wander along connected roads. They are
-/// deliberately excluded from world state and saves: ambience never
-/// affects gameplay, and a reload simply repopulates the streets.
+/// Render-only pedestrians that wander the painted walkable lattice —
+/// sidewalks and crossings authored per road role in the editor. They
+/// are deliberately excluded from world state and saves: ambience
+/// never affects gameplay, and a reload simply repopulates the
+/// streets.
 class _PedestrianSim {
   final List<_Pedestrian> list = [];
   int _roadCount = -1;
+  int _bridgeCount = -1;
   double _lastSeconds = 0;
+
+  /// The walkable surface, rebuilt whenever the road or bridge count
+  /// changes, together with the population reconcile. Blank content
+  /// (the shipping state) yields an empty lattice: nobody walks until
+  /// the road roles are painted.
+  PedestrianLattice lattice = PedestrianLattice(
+    roadCells: const {},
+    connectionCells: const {},
+    maskFor: _blankMask,
+  );
+
+  static List<int> _blankMask(String role) => const [];
 
   void update(
     double seconds,
     ParcelWorldState state,
-    WorldQueries queries,
     PedestrianContent pedestrians,
-  ) {
-    // Pedestrians wander every completed ground road — connectivity to
-    // the starter road no longer exists as a rule. Bridge decks are
-    // elevated, so they stay off them.
+    List<int> Function(String role) maskFor, {
+    double deckLift = 0,
+  }) {
+    // Pedestrians wander every completed ground road's painted
+    // subtiles plus the painted bridge surfaces. Bridge decks are
+    // elevated, so people on them render lifted, not sunk.
     final roadCells = <CellCoord>{for (final road in state.roads) road.cell};
-    if (roadCells.length != _roadCount) {
+    // Bridge completion changes the walkable surface without touching
+    // the road count — banks were already roads — so it triggers too.
+    if (roadCells.length != _roadCount ||
+        state.bridges.length != _bridgeCount) {
       _roadCount = roadCells.length;
+      _bridgeCount = state.bridges.length;
       _lastSeconds = seconds;
-      _reconcile(roadCells, state.seed, pedestrians);
+      _reconcile(roadCells, state, pedestrians, maskFor, deckLift);
       return;
     }
     final dt = (seconds - _lastSeconds).clamp(0.0, 0.25);
@@ -3509,32 +3530,55 @@ class _PedestrianSim {
     if (dt <= 0) return;
     final random = math.Random();
     for (final pedestrian in list) {
-      pedestrian.advance(dt, roadCells, random);
+      pedestrian.advance(dt, lattice, random);
     }
   }
 
   void _reconcile(
     Set<CellCoord> roadCells,
-    int seed,
+    ParcelWorldState state,
     PedestrianContent pedestrians,
+    List<int> Function(String role) maskFor,
+    double deckLift,
   ) {
-    if (roadCells.length < 2) {
-      list.clear();
-      return;
-    }
-    final target = (roadCells.length / pedestrians.roadCellsPerPerson)
-        .floor()
-        .clamp(0, pedestrians.maxCount);
-    final random = math.Random(seed + roadCells.length);
-    final cells = roadCells.toList()..shuffle(random);
+    // Banks are road tiles with ramp art over them; they join the
+    // lattice as ramps instead, so painted straight masks never put
+    // people under them. The connection set keeps every road (and
+    // bridge water cell) so the remaining tiles still resolve their
+    // true roles.
+    lattice = PedestrianLattice(
+      roadCells: pedestrianRoadCells(state),
+      connectionCells: {
+        ...roadCells,
+        for (final bridge in state.bridges) ...bridge.waterCells,
+      },
+      maskFor: maskFor,
+      bridgeRoles: pedestrianBridgeRoles(state),
+      deckLift: deckLift,
+    );
+    // Walkers caught on retired paint — or removed roads — go away.
+    list.removeWhere(
+      (pedestrian) =>
+          !lattice.containsSpot(pedestrian.from) ||
+          !lattice.containsSpot(pedestrian.to),
+    );
+    // The population formula stays road-cell based, capped by the
+    // paint that actually exists: an unpainted world is empty.
+    final target = math.min(
+      (roadCells.length / pedestrians.roadCellsPerPerson).floor().clamp(
+        0,
+        pedestrians.maxCount,
+      ),
+      lattice.walkableCount,
+    );
     while (list.length > target) {
       list.removeLast();
     }
-    var cursor = 0;
-    while (list.length < target && cells.isNotEmpty) {
-      final from = cells[cursor % cells.length];
-      cursor++;
-      final next = _pickNext(from, null, roadCells, random);
+    final random = math.Random(state.seed + roadCells.length);
+    while (list.length < target) {
+      final from = lattice.randomSpawn(random);
+      if (from == null) break;
+      final next = _pickNext(from, null, lattice, random);
       if (next == null) continue;
       list.add(
         _Pedestrian(
@@ -3555,17 +3599,20 @@ class _PedestrianSim {
   }
 }
 
-CellCoord? _pickNext(
-  CellCoord cell,
-  CellCoord? previous,
-  Set<CellCoord> roadCells,
+LatticeSpot? _pickNext(
+  LatticeSpot spot,
+  LatticeSpot? previous,
+  PedestrianLattice lattice,
   math.Random random,
 ) {
-  var options = cell.neighbors
-      .where((next) => roadCells.contains(next) && next != previous)
-      .toList();
+  final neighbors = lattice.neighborsOf(spot);
+  var options = [
+    for (final next in neighbors)
+      if (next != previous) next,
+  ];
   if (options.isEmpty) {
-    options = cell.neighbors.where(roadCells.contains).toList();
+    // A painted dead end turns the walker around.
+    options = neighbors;
   }
   if (options.isEmpty) return null;
   return options[random.nextInt(options.length)];
@@ -3582,19 +3629,22 @@ class _Pedestrian {
   });
 
   final String character;
-  CellCoord from;
-  CellCoord to;
+  LatticeSpot from;
+  LatticeSpot to;
+
+  /// Cells per second; one cell is [propSubtilesPerAxis] subtiles, so
+  /// progress advances through subtiles at eight times this rate.
   final double speed;
   final double phase;
   final Offset offset;
   double progress = 0;
 
-  void advance(double dt, Set<CellCoord> roadCells, math.Random random) {
-    progress += speed * dt;
+  void advance(double dt, PedestrianLattice lattice, math.Random random) {
+    progress += speed * propSubtilesPerAxis * dt;
     while (progress >= 1) {
       final previous = from;
       from = to;
-      final next = _pickNext(from, previous, roadCells, random);
+      final next = _pickNext(from, previous, lattice, random);
       if (next == null) {
         progress = 0;
         return;
@@ -3606,13 +3656,19 @@ class _Pedestrian {
 
   /// Pack walk-cycle frames are named for the isometric compass, which maps
   /// onto grid directions: north (row −1) is screen NE, east (col +1) is
-  /// SE, south (row +1) is SW, and west (col −1) is NW.
+  /// SE, south (row +1) is SW, and west (col −1) is NW. Steps across a
+  /// cell border fold into the same compass (seven subtiles plus a border
+  /// is one more subtile east, not a whole cell).
   String get _direction {
-    final dx = to.column - from.column;
-    final dy = to.row - from.row;
-    if (dy < 0) return 'NE';
-    if (dx > 0) return 'SE';
-    if (dy > 0) return 'SW';
+    final columnSteps =
+        (to.cell.column - from.cell.column) * propSubtilesPerAxis +
+        to.x -
+        from.x;
+    final rowSteps =
+        (to.cell.row - from.cell.row) * propSubtilesPerAxis + to.y - from.y;
+    if (rowSteps < 0) return 'NE';
+    if (columnSteps > 0) return 'SE';
+    if (rowSteps > 0) return 'SW';
     return 'NW';
   }
 
@@ -3622,18 +3678,41 @@ class _Pedestrian {
         'char_${character}_walk_${_direction}_f0$frame.png';
   }
 
-  Offset worldPosition() {
-    final a = _cellWorldCenter(from);
-    final b = _cellWorldCenter(to);
+  /// Where the walker stands in world space, lifted onto elevated
+  /// surfaces: a person crossing a bank tile climbs the ramp's
+  /// incline and stands at deck height over the water.
+  Offset worldPosition(PedestrianLattice lattice) {
+    final a = _spotWorldCenter(from);
+    final b = _spotWorldCenter(to);
+    final lift =
+        lattice.liftAt(from) +
+        (lattice.liftAt(to) - lattice.liftAt(from)) * progress;
     return Offset(
           a.dx + (b.dx - a.dx) * progress,
-          a.dy + (b.dy - a.dy) * progress,
+          a.dy + (b.dy - a.dy) * progress - lift,
         ) +
         offset;
   }
 
-  double get depth =>
-      from.column +
-      from.row +
-      ((to.column - from.column) + (to.row - from.row)) * progress;
+  /// Painter's depth, lerped between the spots' sort depths — bridge
+  /// spots carry the boundary-safe bump, ground spots the plain
+  /// ground depth, and mixed road↔ramp steps blend across the seam.
+  double depth(PedestrianLattice lattice) {
+    final a = lattice.walkerSortDepth(from);
+    final b = lattice.walkerSortDepth(to);
+    return a + (b - a) * progress;
+  }
+}
+
+/// Where a lattice spot's subtile centre sits in world space — the
+/// same placement the props renderer uses, so people and street
+/// furniture share one subtile geometry.
+Offset _spotWorldCenter(LatticeSpot spot) {
+  final fx = (spot.x + 0.5) / propSubtilesPerAxis - 0.5;
+  final fy = (spot.y + 0.5) / propSubtilesPerAxis - 0.5;
+  return _cellWorldCenter(spot.cell) +
+      Offset(
+        (fx - fy) * _logicalTileWidth / 2,
+        (fx + fy) * _logicalTileHeight / 2,
+      );
 }

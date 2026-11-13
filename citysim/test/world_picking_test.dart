@@ -937,8 +937,8 @@ void main() {
 
     // The same pine at the front subtile of a grass cell (5,5) and a
     // deck cell (10,4). The two anchors differ by the pure cell
-    // delta — x: 192, y: 64 — minus the deck's 6px surface lift, so
-    // the pines' diff bounding boxes must sit 58 px apart vertically.
+    // delta — x: 192, y: 64 — minus the deck's 12px surface lift, so
+    // the pines' diff bounding boxes must sit 52 px apart vertically.
     // (The pine is tall enough that its crown, not the selected
     // cell's outline, defines each box top.)
     final (width, height, raw) = (await tester.runAsync(() async {
@@ -975,7 +975,7 @@ void main() {
       cell: (10, 4),
       subtileX: 7,
       subtileY: 7,
-      surfaceLift: 6,
+      surfaceLift: 12,
     );
 
     final boundaryKey = GlobalKey();
@@ -1064,9 +1064,9 @@ void main() {
     );
     expect(
       deckBox.top - grassBox.top,
-      closeTo(58, 2),
+      closeTo(52, 2),
       reason:
-          'cell delta 64 minus the 6px deck surface lift — the pine '
+          'cell delta 64 minus the 12px deck surface lift — the pine '
           'crown rises above the selected cell\'s outline, so the box '
           'top is the sprite\'s own',
     );

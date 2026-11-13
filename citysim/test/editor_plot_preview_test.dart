@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:citysim/editor/edit_fields.dart';
 import 'package:citysim/editor/preview_widgets.dart';
 import 'package:flutter/material.dart';
@@ -301,5 +303,150 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(tester.widget<ChoiceChip>(chips.at(2)).selected, isTrue);
     expect(find.text('8×8 lattice · subtile (7,7)'), findsOneWidget);
+  });
+
+  testWidgets('road walkable lattice toggles the tapped subtile', (
+    tester,
+  ) async {
+    final categories = {
+      'sprites.json': {
+        'sprites': {
+          'road.straight.se': {
+            'path': 'sprites/roads/straight/missing-in-test.png',
+            'category': 'roads',
+          },
+        },
+      },
+    };
+    final toggles = <(int, int)>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SpritePlotPreview(
+            categories: categories,
+            role: 'road.straight.se',
+            walkableRows: const [255, 0, 0, 0, 0, 0, 0, 0],
+            onToggleWalkable: (x, y) => toggles.add((x, y)),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(
+      find.text('sidewalk lattice · 8/64 walkable · tap to paint'),
+      findsOneWidget,
+    );
+
+    // The preview's fit transform, mirrored to aim taps at subtile
+    // centres: a 1×1 tile plot (diamond 64×32) inflated by 6 on every
+    // side, laid out to the preview's fixed width of 300.
+    const width = 300.0;
+    final bounds = const Rect.fromLTRB(-38, -22, 38, 22);
+    final height = (width * bounds.height / bounds.width).clamp(70.0, 240.0);
+    final fit = math.min(width / bounds.width, height / bounds.height);
+    final translate = Offset(
+      (width - bounds.width * fit) / 2 - bounds.left * fit,
+      (height - bounds.height * fit) / 2 - bounds.top * fit,
+    );
+    final box = tester.renderObject<RenderBox>(
+      find.descendant(
+        of: find.byType(SpritePlotPreview),
+        matching: find.byType(CustomPaint),
+      ),
+    );
+    Offset subtileCentre(int x, int y) {
+      final fx = (x + 0.5) / 8 - 0.5;
+      final fy = (y + 0.5) / 8 - 0.5;
+      final logical = Offset((fx - fy) * 32, (fx + fy) * 16);
+      return box.localToGlobal(translate + logical * fit);
+    }
+
+    // Opposite corners of the lattice: the north-west ring subtile and
+    // the south-east one.
+    await tester.tapAt(subtileCentre(0, 0));
+    await tester.tapAt(subtileCentre(7, 7));
+    expect(toggles, [(0, 0), (7, 7)]);
+
+    // A tap outside the tile diamond paints nothing.
+    await tester.tapAt(box.localToGlobal(const Offset(4, 4)));
+    expect(toggles, [(0, 0), (7, 7)]);
+  });
+
+  testWidgets('bridge ramp lattices ride their incline for taps', (
+    tester,
+  ) async {
+    final categories = {
+      'sprites.json': {
+        'sprites': {
+          'bridge.ramp.nw': {
+            'path': 'sprites/bridges/ramp/missing-in-test.png',
+            'category': 'bridges',
+          },
+          'bridge.body.se': {
+            'path': 'sprites/bridges/body/missing-in-test.png',
+            'category': 'bridges',
+            'surfaceLift': 12,
+          },
+        },
+      },
+    };
+    final toggles = <(int, int)>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SpritePlotPreview(
+            categories: categories,
+            role: 'bridge.ramp.nw',
+            walkableRows: const [255, 0, 0, 0, 0, 0, 0, 0],
+            onToggleWalkable: (x, y) => toggles.add((x, y)),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    // The preview's fit transform for the missing-art 1×1 tile plot.
+    const width = 300.0;
+    final bounds = const Rect.fromLTRB(-38, -22, 38, 22);
+    final height = (width * bounds.height / bounds.width).clamp(70.0, 240.0);
+    final fit = math.min(width / bounds.width, height / bounds.height);
+    final translate = Offset(
+      (width - bounds.width * fit) / 2 - bounds.left * fit,
+      (height - bounds.height * fit) / 2 - bounds.top * fit,
+    );
+    final box = tester.renderObject<RenderBox>(
+      find.descendant(
+        of: find.byType(SpritePlotPreview),
+        matching: find.byType(CustomPaint),
+      ),
+    );
+
+    // The centre of subtile (x, y), lifted onto the ramp's incline the
+    // way the overlay draws it: ramp.nw climbs east, deck lift 12.
+    Offset subtileCentre(int x, int y) {
+      final fx = (x + 0.5) / 8 - 0.5;
+      final fy = (y + 0.5) / 8 - 0.5;
+      final lift = 12 * (fx + 0.5);
+      return box.localToGlobal(
+        translate + Offset((fx - fy) * 32, (fx + fy) * 16 - lift) * fit,
+      );
+    }
+
+    // Tapping the visible (lifted) diamond paints the right subtile:
+    // the top of the incline and the bottom of it.
+    await tester.tapAt(subtileCentre(7, 0));
+    await tester.tapAt(subtileCentre(0, 0));
+    expect(toggles, [(7, 0), (0, 0)]);
+
+    // A flat-grid tap where the unlifted (7, 0) centre would sit —
+    // 11.25 logical px below the lifted one — falls off the sheared
+    // tile entirely, proving the hit-test rides the same incline.
+    final flatTap = box.localToGlobal(translate + const Offset(28, 0) * fit);
+    await tester.tapAt(flatTap);
+    expect(toggles, [(7, 0), (0, 0)]);
   });
 }

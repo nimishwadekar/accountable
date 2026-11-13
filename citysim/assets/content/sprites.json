@@ -103,7 +103,18 @@
       "path": "sprites/bridges/body/tile_road_bridge_body_SE_normal.png",
       "renderScale": 0.5,
       "subcategory": "body",
-      "sways": false
+      "surfaceLift": 12,
+      "sways": false,
+      "walkable": [
+        255,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        255
+      ]
     },
     "bridge.body.sw": {
       "baseOffsetY": -12,
@@ -116,7 +127,18 @@
       "path": "sprites/bridges/body/tile_road_bridge_body_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "body",
-      "sways": false
+      "surfaceLift": 12,
+      "sways": false,
+      "walkable": [
+        129,
+        129,
+        129,
+        129,
+        129,
+        129,
+        129,
+        129
+      ]
     },
     "bridge.ramp.ne": {
       "baseOffsetY": 0,
@@ -129,7 +151,17 @@
       "path": "sprites/bridges/ramp/tile_road_bridge_ramp_NE_normal.png",
       "renderScale": 0.5,
       "subcategory": "ramp",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        129,
+        129,
+        129,
+        129,
+        129,
+        129,
+        129,
+        129
+      ]
     },
     "bridge.ramp.nw": {
       "baseOffsetY": 0,
@@ -142,7 +174,17 @@
       "path": "sprites/bridges/ramp/tile_road_bridge_ramp_NW_normal.png",
       "renderScale": 0.5,
       "subcategory": "ramp",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        255,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        255
+      ]
     },
     "bridge.ramp.se": {
       "baseOffsetY": 0,
@@ -155,7 +197,17 @@
       "path": "sprites/bridges/ramp/tile_road_bridge_ramp_SE_normal.png",
       "renderScale": 0.5,
       "subcategory": "ramp",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        255,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        255
+      ]
     },
     "bridge.ramp.sw": {
       "baseOffsetY": 0,
@@ -168,7 +220,17 @@
       "path": "sprites/bridges/ramp/tile_road_bridge_ramp_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "ramp",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        129,
+        129,
+        129,
+        129,
+        129,
+        129,
+        129,
+        129
+      ]
     },
     "cafe": {
       "baseOffsetY": 0,
@@ -1269,7 +1331,17 @@
       "path": "sprites/roads/straight/tile_road_straight_SE_normal.png",
       "renderScale": 0.5,
       "subcategory": "straight",
-      "sways": false
+      "sways": false,
+      "walkable": [
+        255,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        255
+      ]
     },
     "road.straight.sw": {
       "baseOffsetY": 0,
