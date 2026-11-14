@@ -18,5 +18,8 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 
 # Improvements
 
+- better editor.
+- make money amounts realistic order of magnitude.
+- Tune money amounts.
 - more terrain sprite tiles.
 - Terrain boundaries. author by hand if necessary.

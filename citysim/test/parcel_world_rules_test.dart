@@ -720,7 +720,7 @@ void main() {
       validateParcelWorldState(world, content, terrain);
     });
 
-    test('unemployment gates migration — homes wait without jobs', () {
+    test('tolerance admits one jobless family, then gates migration', () {
       var world = newWorld();
       world = _buildCottage(
         world,
@@ -730,9 +730,13 @@ void main() {
         nextDay,
       );
       expect(world.population, 1);
+      expect(world.waitingHouseholds, 1,
+          reason: 'tolerance floors at one, so the list refills '
+              'behind the first jobless family');
 
-      // A second cottage completes, but the first family is
-      // unemployed and the waiting list is empty: nobody comes.
+      // The second family exhausts the list; the third home finds
+      // nobody waiting — unemployment is now above tolerance and
+      // migration pauses until jobs exist.
       world = _buildCottage(
         world,
         content,
@@ -747,11 +751,12 @@ void main() {
         const CellCoord(4, 3),
         nextDay,
       );
-      expect(world.population, 1, reason: 'no jobs, no list, no arrivals');
+      expect(world.population, 2);
       expect(world.waitingHouseholds, 0);
+      expect(world.unemployment, 2);
       final ledger = townLedger(world, content);
-      expect(ledger.residentialVacancy, 2);
-      expect(ledger.employmentDemand, 1);
+      expect(ledger.residentialVacancy, 1);
+      expect(ledger.employmentDemand, 2);
     });
 
     test('vacant buildings pay no tax but full upkeep', () {

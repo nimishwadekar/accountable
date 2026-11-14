@@ -488,17 +488,28 @@ distribution of occupancy across buildings, which the final design
   employed. A population above capacity grandfathers (content
   edits shrink capacity; arrivals simply pause).
 - **Residential demand is the waiting list.** Each check-in, while
-  the town is full (no vacant residential capacity) and fully
-  employed, the list refills by up to `migrationPercentPerCheckIn`
-  (2%) of population, minimum 1 — the same rate arrivals drain it.
-  Population zero satisfies both conditions vacuously, so a fresh
-  town's list grows from day one; this replaces the frontier-appeal
-  constant. Growth stops while unemployment exists. Cap:
-  `waitingHouseholdsCapPercent` (10%) of population, minimum 1 —
-  the bar's scale.
-- **Arrivals scale with the town:** up to 2% of population
-  (minimum 1) households move in per check-in while the list is
-  non-empty and vacant homes exist — regardless of unemployment.
+  unemployment sits within `unemploymentTolerancePercent` (10%) of
+  population (minimum 1 household — frontier towns tolerate some
+  joblessness), the list refills by the migration budget.
+  Population zero is within tolerance vacuously, so a fresh town's
+  list grows from day one; this replaces the frontier-appeal
+  constant. Vacant homes no longer freeze the list — arrivals
+  drain it into them, so demand reads as a lower bar instead of a
+  stuck one (relaxed 2026-11-14 after surveying SimCity 4, both
+  Cities: Skylines, and Caesar/Pharaoh: nobody gates arrival on
+  full employment or full housing; both are dampeners, not walls).
+  Cap: `waitingHouseholdsCapPercent` (10%) of population, minimum
+  1 — the bar's scale, and the bound on every burst.
+- **Arrivals scale with the town, pulled by jobs:** up to 2% of
+  population (minimum 1) households move in per check-in while the
+  list is non-empty and vacant homes exist — regardless of
+  unemployment — plus a job-pull bonus:
+  `jobPullPercentPerCheckIn` (10%) of an arrival per surplus job,
+  so commerce built ahead visibly accelerates migration (SimCity
+  4's "jobs pull residents"). The three gradients oppose each
+  other and the system self-balances: job surplus pulls migration,
+  arrivals raise unemployment, unemployment past tolerance pauses
+  the list, staffing catches up.
 - **Employment demand** (renamed from commercial demand) **is the
   unemployed count**: population − employed. Bar scale:
   population. While citizens are unemployed and positions vacant,
@@ -529,7 +540,9 @@ distribution of occupancy across buildings, which the final design
   unemployed households' lost tax).
 - **Content fields:** economy gains `migrationPercentPerCheckIn`
   (2), `employmentPercentPerCheckIn` (5),
-  `waitingHouseholdsCapPercent` (10);
+  `waitingHouseholdsCapPercent` (10),
+  `unemploymentTolerancePercent` (10),
+  `jobPullPercentPerCheckIn` (10);
   `frontierAppealHouseholds` and `householdsPerCheckIn` retire.
   The walled-shop corner is unchanged (grant-button escape until
   demolition lands).

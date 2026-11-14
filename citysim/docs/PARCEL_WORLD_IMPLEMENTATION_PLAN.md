@@ -599,14 +599,17 @@ plan. Aggregate state replaces per-structure occupancy:
   pairings are deleted.
 - **Content.** Economy gains `migrationPercentPerCheckIn` (2),
   `employmentPercentPerCheckIn` (5), `waitingHouseholdsCapPercent`
-  (10); `frontierAppealHouseholds` and `householdsPerCheckIn`
-  retire. Editor fields follow.
+  (10), `unemploymentTolerancePercent` (10),
+  `jobPullPercentPerCheckIn` (10); `frontierAppealHouseholds` and
+  `householdsPerCheckIn` retire. Editor fields follow.
 - **Reducer.** The check-in's arrivals, staffing, and list-growth
   phases are counter increments with percentage budgets (of
   population, floored at one): arrivals drain the list into vacant
   residential capacity; staffing raises employed while unemployment
-  and job vacancies exist; the list refills last, only when the end
-  state is full and fully employed.
+  and job vacancies exist; the list refills last, while
+  unemployment is within tolerance — the fullness condition was
+  dropped (it stranded over-built homes permanently) and the
+  migration budget gains a job-pull bonus from surplus positions.
 - **Ledger.** `townLedger` reads the counters: home taxes scale by
   employed ÷ residential capacity, commerce taxes by employed ÷
   job capacity, contentment multiplies the total;

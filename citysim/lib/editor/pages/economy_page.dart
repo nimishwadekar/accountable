@@ -148,6 +148,37 @@ class _EconomyPageState extends State<EconomyPage> {
                     _edit((e) => e['waitingHouseholdsCapPercent'] = v),
               ),
             ),
+            SizedBox(
+              width: 180,
+              child: IntField(
+                label: 'Unemployment tolerance %',
+                value: asInt(economy['unemploymentTolerancePercent'], 10),
+                min: 0,
+                help:
+                    'Unemployment up to this percentage of population '
+                    '(floored at one household) does not stop the '
+                    'waiting list from refilling — frontier towns '
+                    'tolerate some joblessness. Above it, migration '
+                    'pauses until staffing catches up.',
+                onChanged: (v) =>
+                    _edit((e) => e['unemploymentTolerancePercent'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 170,
+              child: IntField(
+                label: 'Job pull % / job',
+                value: asInt(economy['jobPullPercentPerCheckIn'], 10),
+                min: 0,
+                help:
+                    'Job-pull: each surplus job beyond the employed '
+                    'population adds this percentage of an arrival to '
+                    'the migration budget — commerce built ahead '
+                    'visibly accelerates migration. Zero disables it.',
+                onChanged: (v) =>
+                    _edit((e) => e['jobPullPercentPerCheckIn'] = v),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),

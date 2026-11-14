@@ -332,6 +332,8 @@ void main() {
     expect(content.economy.migrationPercentPerCheckIn, 2);
     expect(content.economy.employmentPercentPerCheckIn, 5);
     expect(content.economy.waitingHouseholdsCapPercent, 10);
+    expect(content.economy.unemploymentTolerancePercent, 10);
+    expect(content.economy.jobPullPercentPerCheckIn, 10);
     expect(content.economy.contentmentFloorPercent, 30);
     expect(content.economy.serviceRequirementPopulation, 10);
     expect(content.economy.requiredServiceCategories, [

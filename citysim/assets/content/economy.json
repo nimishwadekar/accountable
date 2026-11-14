@@ -20,6 +20,7 @@
   ],
   "contentmentFloorPercent": 30,
   "employmentPercentPerCheckIn": 5,
+  "jobPullPercentPerCheckIn": 10,
   "migrationPercentPerCheckIn": 2,
   "parcelBaseCoins": 32,
   "parcelPerPopulationCoins": 2,
@@ -34,5 +35,6 @@
   "serviceRequirementPopulation": 10,
   "startingBuilderCapacity": 1,
   "startingTreasuryCoins": 20,
+  "unemploymentTolerancePercent": 10,
   "waitingHouseholdsCapPercent": 10
 }

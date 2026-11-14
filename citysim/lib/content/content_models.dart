@@ -494,6 +494,8 @@ class EconomyContent {
     this.migrationPercentPerCheckIn = 2,
     this.employmentPercentPerCheckIn = 5,
     this.waitingHouseholdsCapPercent = 10,
+    this.unemploymentTolerancePercent = 10,
+    this.jobPullPercentPerCheckIn = 10,
     this.contentmentFloorPercent = 0,
     this.serviceRequirementPopulation = 0,
     this.requiredServiceCategories = const [],
@@ -536,6 +538,18 @@ class EconomyContent {
   /// The waiting list's cap, as a percentage of population (floored
   /// at one) — the residential demand bar's scale.
   final int waitingHouseholdsCapPercent;
+
+  /// Unemployment up to this percentage of population (floored at
+  /// one household) does not stop the waiting list from refilling —
+  /// frontier towns tolerate some joblessness. Above it, migration
+  /// pauses until staffing catches up.
+  final int unemploymentTolerancePercent;
+
+  /// Job-pull: each surplus job beyond the employed population adds
+  /// this percentage of an arrival to the migration budget —
+  /// commerce built ahead visibly accelerates migration. Zero
+  /// disables the pull.
+  final int jobPullPercentPerCheckIn;
 
   /// Contentment never drops below this percentage — the
   /// no-dead-ends guarantee: unhappy citizens still pay something, so
@@ -586,6 +600,8 @@ class EconomyContent {
     'migrationPercentPerCheckIn': migrationPercentPerCheckIn,
     'employmentPercentPerCheckIn': employmentPercentPerCheckIn,
     'waitingHouseholdsCapPercent': waitingHouseholdsCapPercent,
+    'unemploymentTolerancePercent': unemploymentTolerancePercent,
+    'jobPullPercentPerCheckIn': jobPullPercentPerCheckIn,
     'contentmentFloorPercent': contentmentFloorPercent,
     'serviceRequirementPopulation': serviceRequirementPopulation,
     'requiredServiceCategories': requiredServiceCategories,
@@ -603,6 +619,8 @@ class EconomyContent {
     int? migrationPercentPerCheckIn,
     int? employmentPercentPerCheckIn,
     int? waitingHouseholdsCapPercent,
+    int? unemploymentTolerancePercent,
+    int? jobPullPercentPerCheckIn,
     int? contentmentFloorPercent,
     int? serviceRequirementPopulation,
     List<String>? requiredServiceCategories,
@@ -621,6 +639,10 @@ class EconomyContent {
         employmentPercentPerCheckIn ?? this.employmentPercentPerCheckIn,
     waitingHouseholdsCapPercent:
         waitingHouseholdsCapPercent ?? this.waitingHouseholdsCapPercent,
+    unemploymentTolerancePercent:
+        unemploymentTolerancePercent ?? this.unemploymentTolerancePercent,
+    jobPullPercentPerCheckIn:
+        jobPullPercentPerCheckIn ?? this.jobPullPercentPerCheckIn,
     contentmentFloorPercent:
         contentmentFloorPercent ?? this.contentmentFloorPercent,
     serviceRequirementPopulation:
@@ -649,6 +671,9 @@ class EconomyContent {
           json['employmentPercentPerCheckIn'] as int? ?? 5,
       waitingHouseholdsCapPercent:
           json['waitingHouseholdsCapPercent'] as int? ?? 10,
+      unemploymentTolerancePercent:
+          json['unemploymentTolerancePercent'] as int? ?? 10,
+      jobPullPercentPerCheckIn: json['jobPullPercentPerCheckIn'] as int? ?? 10,
       contentmentFloorPercent: json['contentmentFloorPercent'] as int? ?? 0,
       serviceRequirementPopulation:
           json['serviceRequirementPopulation'] as int? ?? 0,
@@ -1263,7 +1288,9 @@ List<ContentIssue> validateContentData({
   }
   if (economy.migrationPercentPerCheckIn < 0 ||
       economy.employmentPercentPerCheckIn < 0 ||
-      economy.waitingHouseholdsCapPercent < 0) {
+      economy.waitingHouseholdsCapPercent < 0 ||
+      economy.unemploymentTolerancePercent < 0 ||
+      economy.jobPullPercentPerCheckIn < 0) {
     error('Demand percentages must not be negative.');
   }
   if (economy.contentmentFloorPercent < 0 ||

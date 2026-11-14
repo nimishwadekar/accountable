@@ -244,9 +244,17 @@ ParcelWorldState checkInWorldForToday(
     return (population * percent / 100).floor().clamp(1, 1 << 30);
   }
 
+  // Surplus jobs pull: each open position beyond the employed
+  // population adds pull jobs to the migration budget — commerce
+  // built ahead visibly accelerates migration. The pull only feeds
+  // the budget; the waiting list's cap still bounds every burst.
+  final surplusJobs = (jobCapacity - employed).clamp(0, 1 << 30);
+  final pullJobs = (surplusJobs * economy.jobPullPercentPerCheckIn / 100)
+      .floor();
+  final migrationBudget = budget(economy.migrationPercentPerCheckIn) + pullJobs;
+
   // Households move in while the waiting list and vacant homes both
   // exist — regardless of unemployment.
-  final migrationBudget = budget(economy.migrationPercentPerCheckIn);
   final vacantHomes = residentialCapacity - population;
   final householdsArrived =
       (waiting < migrationBudget ? waiting : migrationBudget).clamp(
@@ -267,15 +275,18 @@ ParcelWorldState checkInWorldForToday(
       );
   employed += positionsStaffed;
 
-  // The list refills only when the end state is full and fully
-  // employed — a prosperous town attracts. Population zero
-  // satisfies both vacuously, kickstarting a fresh town.
-  final full = residentialCapacity - population <= 0;
-  final fullyEmployed = population == employed;
-  if (full && fullyEmployed) {
+  // The list refills while unemployment sits within tolerance —
+  // a prosperous town attracts, and some joblessness is tolerated
+  // the way real frontier towns tolerated it. Vacant homes no
+  // longer freeze the list: they drain it, and demand reads as a
+  // lower bar instead of a stuck one. Population zero is within
+  // tolerance vacuously, kickstarting a fresh town.
+  final tolerated = (population * economy.unemploymentTolerancePercent / 100)
+      .floor()
+      .clamp(1, 1 << 30);
+  if (population - employed <= tolerated) {
     final cap = budget(economy.waitingHouseholdsCapPercent);
-    final refill = budget(economy.migrationPercentPerCheckIn);
-    waiting = (waiting + refill).clamp(0, cap);
+    waiting = (waiting + migrationBudget).clamp(0, cap);
   }
 
   final report = _event(
