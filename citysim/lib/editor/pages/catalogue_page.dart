@@ -149,6 +149,27 @@ class _CataloguePageState extends State<CataloguePage> {
                           color: Colors.black54,
                         ),
                       ),
+                      if (!isDecoration)
+                        Text(
+                          () {
+                            final net =
+                                asInt(model['taxCoins']) -
+                                asInt(model['upkeepCoins']);
+                            final stages = asInt(
+                              model['constructionStages'],
+                              1,
+                            );
+                            return 'net ${net >= 0 ? '+' : ''}$net per report · '
+                                '$stages stage${stages == 1 ? '' : 's'}';
+                          }(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: netColor(
+                              asInt(model['taxCoins']) -
+                                  asInt(model['upkeepCoins']),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -171,13 +192,14 @@ class _CataloguePageState extends State<CataloguePage> {
                 SizedBox(
                   width: 110,
                   child: IntField(
-                    label: 'Cost',
+                    label: 'Planning fee',
                     value: asInt(model['costCoins']),
                     min: 0,
                     help:
-                        'Coins to fully fund this model. Building plans are '
-                        'free and funded coin by coin; decorations are paid '
-                        'once at placement.',
+                        'Upfront coins charged when this model is planned '
+                        '(buildings) or placed (decorations). Stage-1 '
+                        'content keeps every fee at zero — planning is '
+                        'free.',
                     onChanged: (v) =>
                         _editModel(id, (model) => model['costCoins'] = v),
                   ),
@@ -194,6 +216,49 @@ class _CataloguePageState extends State<CataloguePage> {
                         'model unlocks and builder-capacity grants.',
                     onChanged: (v) =>
                         _editModel(id, (model) => model['population'] = v),
+                  ),
+                ),
+                SizedBox(
+                  width: 90,
+                  child: IntField(
+                    label: 'Tax',
+                    value: asInt(model['taxCoins']),
+                    min: 0,
+                    help:
+                        'Coins this completed building pays into the '
+                        'treasury at each check-in. Sites under '
+                        'construction pay nothing.',
+                    onChanged: (v) =>
+                        _editModel(id, (model) => model['taxCoins'] = v),
+                  ),
+                ),
+                SizedBox(
+                  width: 100,
+                  child: IntField(
+                    label: 'Upkeep',
+                    value: asInt(model['upkeepCoins']),
+                    min: 0,
+                    help:
+                        'Coins this completed building charges the '
+                        'treasury at each check-in.',
+                    onChanged: (v) =>
+                        _editModel(id, (model) => model['upkeepCoins'] = v),
+                  ),
+                ),
+                SizedBox(
+                  width: 100,
+                  child: IntField(
+                    label: 'Stages',
+                    value: asInt(model['constructionStages'], 1),
+                    min: 1,
+                    help:
+                        'Construction stages between planning and '
+                        'completion; each check-in advances one stage. '
+                        'Buildings only — decorations place instantly.',
+                    onChanged: (v) => _editModel(
+                      id,
+                      (model) => model['constructionStages'] = v,
+                    ),
                   ),
                 ),
                 SizedBox(
@@ -485,6 +550,12 @@ class _CataloguePageState extends State<CataloguePage> {
           child: const Icon(Icons.add_rounded, color: Colors.green),
         ),
       );
+
+  /// Net treasury effect per report, coloured for a quick read of
+  /// the palette's balance.
+  static Color netColor(int net) => net > 0
+      ? const Color(0xFF1E6552)
+      : (net < 0 ? const Color(0xFF9A5B2B) : Colors.black54);
 
   void _editModel(String id, void Function(Map<String, Object?> model) edit) {
     widget.onChanged((categories) {

@@ -102,9 +102,14 @@ void main() {
       expect(planned, isNotEmpty);
       for (final job in planned) {
         expect(
-          job.coinsFunded,
+          job.stagesDone,
           greaterThan(0),
-          reason: 'the café is half-funded',
+          reason: 'the café is part-way built',
+        );
+        expect(
+          job.stagesDone,
+          lessThan(content.structure('cafe')!.constructionStages),
+          reason: '...but not complete',
         );
         for (final cell in job.footprint) {
           expect(

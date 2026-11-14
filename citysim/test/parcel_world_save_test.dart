@@ -44,6 +44,10 @@ void main() {
     today: DateTime.utc(2026, 11, 2),
   );
 
+  /// The heartbeat: a day passes and the town report runs.
+  ParcelWorldState nextDay(ParcelWorldState world) =>
+      checkInWorldForToday(advanceWorldDays(world, 1), content);
+
   test('the store round-trips a played world through its documents', () async {
     final api = _FakeDocumentsApi();
     final store = ServerSheetParcelWorldStore(
@@ -52,9 +56,12 @@ void main() {
       api: api,
     );
 
-    // Play: check in, expand, build a partially funded road, then save
-    // and reload mid-project.
-    var world = grantWorldDebugCoins(checkInWorldForToday(newWorld()), 100);
+    // Play: check in, expand, buy a partly delivered road plan, then
+    // save and reload mid-project.
+    var world = grantWorldDebugCoins(
+      checkInWorldForToday(newWorld(), content),
+      300,
+    );
     world = purchaseAdjacentParcel(
       world,
       content,
@@ -73,28 +80,32 @@ void main() {
       terrain,
       cells: [for (var column = 5; column <= 6; column++) CellCoord(column, 4)],
     );
-    final roadProject = world.constructions.single;
-    world = fundRoadProject(world, content, terrain, projectId: roadProject.id);
+    world = nextDay(world);
 
     final reloaded = await store.load();
     expect(reloaded, isNull, reason: 'no documents yet');
     await store.save(world);
     final midProject = (await store.load())!;
     expect(midProject.constructions.single.roadCells, hasLength(2));
-    expect(midProject.constructions.single.coinsFunded, 1);
+    expect(
+      midProject.roads.where(
+        (road) => road.projectId == midProject.constructions.single.id,
+      ),
+      hasLength(1),
+      reason: 'one tile delivered, one still creeping',
+    );
     expect(midProject.coins, world.coins);
-    expect(midProject.checkInCount, 1);
-    expect(midProject.lastCheckInDate, DateTime.utc(2026, 11, 2));
+    expect(
+      midProject.checkInCount,
+      2,
+      reason: 'founding check-in plus the day',
+    );
+    expect(midProject.lastCheckInDate, DateTime.utc(2026, 11, 3));
 
     // Continue playing on the reloaded world: finish the road, build a
     // cottage, bridge the east channel, and start a café.
     var played = midProject;
-    played = fundRoadProject(
-      played,
-      content,
-      terrain,
-      projectId: played.constructions.single.id,
-    );
+    played = nextDay(played);
     played = startStructureConstruction(
       played,
       content,
@@ -102,12 +113,8 @@ void main() {
       catalogueId: 'small-home',
       origin: const CellCoord(3, 4),
     );
-    played = fundStructureProject(
-      played,
-      content,
-      projectId: played.constructions.single.id,
-      amount: played.constructions.single.totalCostCoins,
-    );
+    played = nextDay(played);
+    played = nextDay(played);
     // The bridge spans the east channel from vacant banks: the road
     // stops at (7,4) so both bridge banks are free land.
     played = startBridgeConstruction(
@@ -117,12 +124,11 @@ void main() {
       nearBank: const CellCoord(7, 4),
       farBank: const CellCoord(16, 4),
     );
-    played = fundBridgeProject(
-      played,
-      content,
-      projectId: played.constructions.single.id,
-      amount: played.constructions.single.totalCostCoins,
-    );
+    while (played.constructions.any(
+      (job) => job.kind == WorldConstructionKind.bridge,
+    )) {
+      played = nextDay(played);
+    }
     played = startStructureConstruction(
       played,
       content,
@@ -182,7 +188,10 @@ void main() {
     );
 
     // Finish a road stretch east of the starter road.
-    var world = grantWorldDebugCoins(checkInWorldForToday(newWorld()), 100);
+    var world = grantWorldDebugCoins(
+      checkInWorldForToday(newWorld(), content),
+      100,
+    );
     world = purchaseAdjacentParcel(
       world,
       content,
@@ -197,7 +206,7 @@ void main() {
     );
     final finishedId = world.constructions.single.id;
     for (var column = 5; column <= 7; column++) {
-      world = fundRoadProject(world, content, terrain, projectId: finishedId);
+      world = nextDay(world);
     }
     expect(world.constructions, isEmpty);
     expect(
@@ -232,17 +241,22 @@ void main() {
       cells: [const CellCoord(4, 5), const CellCoord(4, 6)],
     );
     expect(played.constructions.single.id, finishedId);
-    played = fundRoadProject(
-      played,
-      content,
-      terrain,
-      projectId: played.constructions.single.id,
-    );
+    played = nextDay(played);
 
     await store.save(played);
     final second = (await store.load())!;
     expect(second.constructions.single.roadCells, hasLength(2));
-    expect(second.constructions.single.coinsFunded, 1);
-    expect(second.roads, hasLength(5), reason: 'starter + 3 + 1 funded tile');
+    expect(
+      second.roads.where(
+        (road) => road.projectId == second.constructions.single.id,
+      ),
+      hasLength(1),
+      reason: 'one tile delivered, one still creeping',
+    );
+    expect(
+      second.roads,
+      hasLength(5),
+      reason: 'starter + 3 + 1 delivered tile',
+    );
   });
 }

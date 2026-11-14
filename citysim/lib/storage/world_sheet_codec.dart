@@ -291,10 +291,14 @@ ParcelWorldState sheetTablesToWorld(
       ).compareTo(_parseInt(b[0], 'project id')),
     );
   final constructions = <WorldConstruction>[];
-  for (var slot = 0; slot < projectRows.length; slot++) {
-    final row = projectRows[slot];
+  // Builder slots belong to structure jobs only — road and bridge
+  // creep consumes no builder — so slots count structures in order.
+  var structureSlot = 0;
+  for (final row in projectRows) {
     final number = _parseInt(row[0], 'project id');
     final kind = row[1];
+    // Stage progress: stages done for structures, delivered cells
+    // for bridges; roads keep their delivery in the tile rows.
     final funded = (row[4]).isEmpty ? 0 : _parseInt(row[4], 'funded');
     switch (kind) {
       case 'structure':
@@ -321,9 +325,8 @@ ParcelWorldState sheetTablesToWorld(
               origin,
               quarterTurns: turns,
             ),
-            totalCostCoins: definition.costCoins,
-            coinsFunded: funded,
-            builderSlot: slot,
+            stagesDone: funded,
+            builderSlot: structureSlot++,
             startedAtDay: 0,
             population: definition.population,
             assetRole: _orNull(tile[5]),
@@ -332,7 +335,7 @@ ParcelWorldState sheetTablesToWorld(
         );
       case 'road':
         constructions.add(
-          _roadConstruction(row, number, slot, tileRows, roadsByCell, content),
+          _roadConstruction(row, number, tileRows, roadsByCell),
         );
       case 'bridge':
         final target = _parseTarget(row[3]);
@@ -346,11 +349,7 @@ ParcelWorldState sheetTablesToWorld(
             nearBank: nearBank,
             farBank: farBank,
             waterCells: waterCells,
-            totalCostCoins:
-                waterCells.length * content.economy.bridgeTileCostCoins +
-                2 * content.economy.roadTileCostCoins,
-            coinsFunded: funded,
-            builderSlot: slot,
+            stagesDone: funded,
             startedAtDay: 0,
           ),
         );
@@ -491,28 +490,24 @@ List<List<String>> _plannedTilesFor(
 List<String> _projectRowFor(WorldConstruction job) {
   final number = job.id.replaceFirst('construction-', '');
   return switch (job.kind) {
+    // The funded column stores stage progress: construction stages
+    // done for structures, delivered cells for bridges. Roads derive
+    // their delivery from their completed tile rows instead.
     WorldConstructionKind.structure => [
       number,
       'structure',
       job.catalogueId!,
       '${job.origin!.column}:${job.origin!.row}',
-      '${job.coinsFunded}',
+      '${job.stagesDone}',
     ],
-    WorldConstructionKind.road => [
-      number,
-      'road',
-      job.roadStyle!.name,
-      '',
-      // Road funding is per tile; the amount derives from the tiles.
-      '',
-    ],
+    WorldConstructionKind.road => [number, 'road', job.roadStyle!.name, '', ''],
     WorldConstructionKind.bridge => [
       number,
       'bridge',
       '',
       '${job.nearBank!.column}:${job.nearBank!.row}:'
           '${job.farBank!.column}:${job.farBank!.row}',
-      '${job.coinsFunded}',
+      '${job.stagesDone}',
     ],
   };
 }
@@ -638,10 +633,8 @@ List<String> _plannedStructureTile(
 WorldConstruction _roadConstruction(
   List<String> row,
   int number,
-  int slot,
   List<List<String>> tileRows,
   Map<CellCoord, RoadSegment> roadsByCell,
-  ContentBundle content,
 ) {
   final style = _parseStyle(row[2]);
   final projectId = 'construction-$number';
@@ -659,19 +652,14 @@ WorldConstruction _roadConstruction(
       .map((entry) => entry.key)
       .toSet();
   final ordered = _orderPath(cells, outside.toSet(), fundedCells);
-  // Road funding is per tile: the funded amount is the count of this
-  // project's completed road tiles.
-  final fundedTiles = roadsByCell.values
-      .where((road) => road.projectId == projectId)
-      .length;
+  // Delivery is per tile: the roads the project laid are exactly the
+  // first delivered tiles of the plan, so the count of this
+  // project's completed road tiles is its delivered prefix.
   return WorldConstruction(
     id: projectId,
     kind: WorldConstructionKind.road,
     roadStyle: style,
     roadCells: ordered,
-    totalCostCoins: ordered.length,
-    coinsFunded: fundedTiles,
-    builderSlot: slot,
     startedAtDay: 0,
   );
 }

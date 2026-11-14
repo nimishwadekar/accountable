@@ -7,23 +7,253 @@ import 'world_state.dart';
 
 import '../content/content_bundle.dart';
 
-ParcelWorldState checkInWorldForToday(ParcelWorldState state) {
+/// The check-in is the town report and the only heartbeat, in a
+/// fixed order: taxes are collected, upkeep is netted (the treasury
+/// floors at zero — the shortfall is reported but never blocks
+/// anything), and then every in-flight project advances one stage.
+/// Nothing progresses in real time or on simulated days.
+ParcelWorldState checkInWorldForToday(
+  ParcelWorldState state,
+  ContentBundle content,
+) {
   if (!canCheckInWorldToday(state)) return state;
+
+  // The town ledger — taxes then upkeep, from [townLedger]: completed
+  // buildings plus per-tile infrastructure (seeded at zero — paving
+  // never mints coins). Sites under construction pay nothing; tax
+  // starts on completion. Upkeep is paid down to the floor; money
+  // gates expansion, never growth: an unpaid shortfall pauses
+  // saving, not building.
+  final ledger = townLedger(state, content);
+  final taxes = ledger.taxes;
+  final upkeep = ledger.upkeep;
+  final available = state.coins + taxes;
+  final paid = upkeep > available ? available : upkeep;
+  final shortfall = upkeep - paid;
+
+  // Every in-flight project advances one stage — structures gain a
+  // stage, roads lay their next planned tile, bridges deliver their
+  // next cell (near bank, span, far bank).
+  var structures = [...state.structures];
+  var roads = [...state.roads];
+  var bridges = [...state.bridges];
+  var constructions = <WorldConstruction>[];
+  var unlocked = {...state.unlockedCatalogueIds};
+  var capacity = state.builderCapacity;
+  var nextEntity = state.nextEntityNumber;
+  final completions = <String>[];
+  final events = <WorldEvent>[];
+  var nextEvent = state.nextEventNumber + 1;
+  var advanced = 0;
+  for (final job in state.constructions) {
+    switch (job.kind) {
+      case WorldConstructionKind.structure:
+        final definition = content.structure(job.catalogueId!)!;
+        final done = job.stagesDone + 1;
+        advanced++;
+        if (done < definition.constructionStages) {
+          constructions.add(_copyConstruction(job, stagesDone: done));
+          break;
+        }
+        structures.add(
+          PlacedStructure(
+            id: 'structure:${job.id}',
+            catalogueId: definition.id,
+            kind: definition.kind,
+            origin: job.origin!,
+            quarterTurns: job.quarterTurns,
+            footprint: job.footprint,
+            pricePaid: 0,
+            completedAtDay: state.constructionDay,
+            population: job.population,
+            assetRole: job.assetRole,
+            facing: job.facing,
+          ),
+        );
+        nextEntity++;
+        completions.add(definition.name);
+        events.add(
+          _event(
+            state,
+            kind: 'construction-complete',
+            description: '${definition.name} is complete',
+            payload: {
+              'projectId': job.id,
+              'catalogueId': definition.id,
+              'populationAdded': job.population,
+            },
+            eventNumber: nextEvent,
+          ),
+        );
+        nextEvent++;
+        // Population gates: unlock models whose threshold the
+        // settlement now reaches, then reconcile builder capacity
+        // with the progression table.
+        final population = structures.fold<int>(
+          0,
+          (sum, structure) => sum + structure.population,
+        );
+        for (final candidate in content.purchaseableModels) {
+          if (population >= candidate.unlockAtPopulation &&
+              unlocked.add(candidate.id)) {
+            events.add(
+              _event(
+                state,
+                kind: 'model-unlocked',
+                description: '${candidate.name} model unlocked',
+                payload: {
+                  'catalogueId': candidate.id,
+                  'population': population,
+                },
+                eventNumber: nextEvent,
+              ),
+            );
+            nextEvent++;
+          }
+        }
+        final expectedCapacity = content.economy.builderCapacityForPopulation(
+          population,
+        );
+        if (expectedCapacity > capacity) {
+          capacity = expectedCapacity;
+          events.add(
+            _event(
+              state,
+              kind: 'builder-granted',
+              description: 'Builder capacity grew to $capacity',
+              payload: {'capacity': capacity, 'population': population},
+              eventNumber: nextEvent,
+            ),
+          );
+          nextEvent++;
+        }
+      case WorldConstructionKind.road:
+        // Delivery is the road rows themselves: the next planned
+        // tile without a row is the one this check-in lays.
+        final delivered = roads
+            .where((road) => road.projectId == job.id)
+            .length;
+        advanced++;
+        if (delivered >= job.roadCells.length) {
+          constructions.add(job);
+          break;
+        }
+        final cell = job.roadCells[delivered];
+        roads.add(
+          RoadSegment(
+            id: 'road-${job.id}-${cell.key}',
+            cell: cell,
+            style: RoadStyle.asphalt,
+            pricePaid: content.economy.roadTileCostCoins,
+            completedAtDay: state.constructionDay,
+            projectId: job.id,
+          ),
+        );
+        if (delivered + 1 == job.roadCells.length) {
+          roads = [
+            for (final road in roads)
+              road.projectId == job.id ? _detachProject(road) : road,
+          ];
+          completions.add('a ${job.roadCells.length}-tile road stretch');
+          events.add(
+            _event(
+              state,
+              kind: 'road-project-complete',
+              description: 'Road stretch completed',
+              payload: {'projectId': job.id, 'cells': job.roadCells.length},
+              eventNumber: nextEvent,
+            ),
+          );
+          nextEvent++;
+        } else {
+          // Unfinished: the plan stays in flight — its delivery is
+          // the road rows, so the job itself carries over unchanged.
+          constructions.add(job);
+        }
+      case WorldConstructionKind.bridge:
+        final cells = job.bridgeDeliveryCells;
+        final done = job.stagesDone + 1;
+        advanced++;
+        // Banks land as road tiles as they deliver; the far bank
+        // arrives with the completion itself.
+        final cell = cells[job.stagesDone];
+        if (cell == job.nearBank || cell == job.farBank) {
+          roads.add(
+            RoadSegment(
+              id: 'bridge-approach:${job.id}-${cell.key}',
+              cell: cell,
+              style: RoadStyle.asphalt,
+              pricePaid: content.economy.roadTileCostCoins,
+              completedAtDay: state.constructionDay,
+              projectId: job.id,
+            ),
+          );
+        }
+        if (done >= cells.length) {
+          bridges.add(
+            CompletedBridge(
+              id: 'bridge:${job.id}',
+              waterCells: job.waterCells,
+              nearBank: job.nearBank!,
+              farBank: job.farBank!,
+              pricePaid:
+                  job.waterCells.length * content.economy.bridgeTileCostCoins +
+                  2 * content.economy.roadTileCostCoins,
+              completedAtDay: state.constructionDay,
+            ),
+          );
+          roads = [
+            for (final road in roads)
+              road.projectId == job.id ? _detachProject(road) : road,
+          ];
+          nextEntity++;
+          completions.add('a bridge');
+          events.add(
+            _event(
+              state,
+              kind: 'construction-complete',
+              description: 'Bridge is open',
+              payload: {'projectId': job.id},
+              eventNumber: nextEvent,
+            ),
+          );
+          nextEvent++;
+        } else {
+          constructions.add(_copyConstruction(job, stagesDone: done));
+        }
+    }
+  }
+
+  final report = _event(
+    state,
+    kind: 'check-in',
+    description: 'Daily check-in · town report',
+    payload: {
+      'creditedDate': state.dateKey,
+      'taxes': taxes,
+      'upkeep': upkeep,
+      'upkeepPaid': paid,
+      'upkeepShortfall': shortfall,
+      'net': taxes - paid,
+      'stagesAdvanced': advanced,
+      'completions': completions,
+    },
+  );
   return state.copyWith(
-    coins: state.coins + 1,
-    totalCoinsEarned: state.totalCoinsEarned + 1,
+    coins: available - paid,
+    totalCoinsEarned: state.totalCoinsEarned + taxes,
+    totalCoinsSpent: state.totalCoinsSpent + paid,
     lastCheckInDate: state.simulatedDate,
     checkInCount: state.checkInCount + 1,
-    events: [
-      ...state.events,
-      _event(
-        state,
-        kind: 'check-in',
-        description: 'Daily check-in · +1 coin',
-        payload: {'creditedDate': state.dateKey, 'coins': 1},
-      ),
-    ],
-    nextEventNumber: state.nextEventNumber + 1,
+    nextEntityNumber: nextEntity,
+    unlockedCatalogueIds: unlocked,
+    builderCapacity: capacity,
+    structures: structures,
+    roads: roads,
+    bridges: bridges,
+    constructions: constructions,
+    events: [...state.events, report, ...events],
+    nextEventNumber: nextEvent,
   );
 }
 
@@ -47,6 +277,7 @@ ParcelWorldState setWorldCalendarDate(ParcelWorldState state, DateTime date) {
   );
 }
 
+/// Buys a neighboring parcel from the town treasury.
 ParcelWorldState purchaseAdjacentParcel(
   ParcelWorldState state,
   ContentBundle content,
@@ -82,6 +313,9 @@ ParcelWorldState purchaseAdjacentParcel(
   );
 }
 
+/// Buys a road stretch plan: the whole price is paid upfront from
+/// the treasury, then the tiles creep in one per check-in. No
+/// builder is assigned — road creep is automatic.
 ParcelWorldState planRoadStretch(
   ParcelWorldState state,
   ContentBundle content,
@@ -89,17 +323,17 @@ ParcelWorldState planRoadStretch(
   required List<CellCoord> cells,
 }) {
   final quote = quoteRoadStretch(state, content, terrainProvider, cells: cells);
+  _requireWallet(state, quote.price);
   final job = WorldConstruction(
     id: 'construction-${state.nextEntityNumber}',
     kind: WorldConstructionKind.road,
-    totalCostCoins: quote.totalCost,
-    coinsFunded: 0,
-    builderSlot: quote.builderSlot,
     startedAtDay: state.constructionDay,
     roadStyle: RoadStyle.asphalt,
     roadCells: quote.cells,
   );
   return state.copyWith(
+    coins: state.coins - quote.price,
+    totalCoinsSpent: state.totalCoinsSpent + quote.price,
     nextEntityNumber: state.nextEntityNumber + 1,
     constructions: [...state.constructions, job],
     events: [
@@ -108,97 +342,15 @@ ParcelWorldState planRoadStretch(
         state,
         kind: 'road-project-planned',
         description:
-            '${cells.length}-tile road planned · '
-            '${quote.totalCost} coins to fund',
+            '${cells.length}-tile road plan bought · −${quote.price} coins',
         payload: {
           'projectId': job.id,
           'cells': cells.map((cell) => cell.toJson()).toList(),
-          'totalCostCoins': quote.totalCost,
-          'builderSlot': quote.builderSlot,
+          'pricePaid': quote.price,
         },
       ),
     ],
     nextEventNumber: state.nextEventNumber + 1,
-  );
-}
-
-/// Funds a road project by one tile: the next planned tile in order
-/// from the start becomes a completed road. Funding the last tile
-/// completes and settles the project.
-ParcelWorldState fundRoadProject(
-  ParcelWorldState state,
-  ContentBundle content,
-  TerrainProvider terrainProvider, {
-  required String projectId,
-}) {
-  final quote = quoteRoadProjectFunding(state, content, projectId: projectId);
-  _requireWallet(state, quote.price);
-  final project = _roadProject(state, projectId);
-  final cell = quote.cell;
-  final road = RoadSegment(
-    id: 'road-${project.id}-${cell.key}',
-    cell: cell,
-    style: RoadStyle.asphalt,
-    pricePaid: quote.price,
-    completedAtDay: state.constructionDay,
-    projectId: project.id,
-  );
-  final roads = [...state.roads, road];
-  final funded = project.coinsFunded + quote.price;
-  final completed = funded >= project.totalCostCoins;
-  // The save's project column references live projects only. Project
-  // numbers restart once no project is active, so a finished stretch
-  // must stop naming its project — otherwise its tiles would be
-  // mistaken for a later project that reuses the number.
-  final settledRoads = completed
-      ? [
-          for (final entry in roads)
-            entry.projectId == project.id ? _detachProject(entry) : entry,
-        ]
-      : roads;
-  final events = [
-    ...state.events,
-    _event(
-      state,
-      kind: 'road-tile-funded',
-      description:
-          'Road tile ${cell.key} completed · $funded/${project.totalCostCoins} coins',
-      payload: {
-        'projectId': project.id,
-        'cell': cell.toJson(),
-        'pricePaid': quote.price,
-        'fundedCoins': funded,
-        'totalCostCoins': project.totalCostCoins,
-      },
-    ),
-  ];
-  var nextEvent = state.nextEventNumber + 1;
-  if (completed) {
-    events.add(
-      _event(
-        state,
-        kind: 'road-project-complete',
-        description: 'Road stretch completed',
-        payload: {'projectId': project.id, 'cells': project.roadCells.length},
-        eventNumber: nextEvent,
-      ),
-    );
-    nextEvent++;
-  }
-  return state.copyWith(
-    coins: state.coins - quote.price,
-    totalCoinsSpent: state.totalCoinsSpent + quote.price,
-    roads: settledRoads,
-    constructions: completed
-        ? state.constructions.where((job) => job.id != project.id).toList()
-        : state.constructions
-              .map(
-                (job) =>
-                    job.id == project.id ? _withFundedCoins(job, funded) : job,
-              )
-              .toList(),
-    events: events,
-    nextEventNumber: nextEvent,
   );
 }
 
@@ -322,8 +474,7 @@ ParcelWorldState startStructureConstruction(
     origin: origin,
     quarterTurns: quote.quarterTurns,
     footprint: quote.footprint,
-    totalCostCoins: quote.price,
-    coinsFunded: 0,
+    stagesDone: 0,
     builderSlot: builderSlot,
     startedAtDay: state.constructionDay,
     population: definition.population,
@@ -331,6 +482,8 @@ ParcelWorldState startStructureConstruction(
     facing: facing,
   );
   return state.copyWith(
+    coins: state.coins - quote.price,
+    totalCoinsSpent: state.totalCoinsSpent + quote.price,
     nextEntityNumber: state.nextEntityNumber + 1,
     constructions: [...state.constructions, job],
     events: [
@@ -339,13 +492,15 @@ ParcelWorldState startStructureConstruction(
         state,
         kind: 'structure-project-planned',
         description:
-            '${definition.name} site planned · ${quote.price} coins to fund',
+            '${definition.name} site planned · '
+            '${definition.constructionStages} stages of work',
         payload: {
           'projectId': job.id,
           'catalogueId': catalogueId,
           'origin': origin.toJson(),
           'footprint': quote.footprint.map((cell) => cell.toJson()).toList(),
-          'totalCostCoins': quote.price,
+          'planningFeeCoins': quote.price,
+          'stages': definition.constructionStages,
           'builderSlot': builderSlot,
           'facing': facing,
         },
@@ -394,135 +549,6 @@ ParcelWorldState pickUpProp(
       ),
     ],
     nextEventNumber: state.nextEventNumber + 1,
-  );
-}
-
-ParcelWorldState fundStructureProject(
-  ParcelWorldState state,
-  ContentBundle content, {
-  required String projectId,
-  required int amount,
-}) {
-  final quote = quoteStructureFunding(
-    state,
-    projectId: projectId,
-    amount: amount,
-  );
-  amount = quote.amount;
-  _requireWallet(state, amount);
-  final project = _structureProject(state, projectId);
-  final newFunded = project.coinsFunded + amount;
-  final complete = newFunded == project.totalCostCoins;
-  final events = [
-    ...state.events,
-    _event(
-      state,
-      kind: 'structure-funded',
-      description:
-          '${content.structure(project.catalogueId!)!.name} funded · '
-          '$newFunded/${project.totalCostCoins} coins',
-      payload: {
-        'projectId': project.id,
-        'catalogueId': project.catalogueId!,
-        'contribution': amount,
-        'fundedCoins': newFunded,
-        'totalCostCoins': project.totalCostCoins,
-      },
-    ),
-  ];
-  var nextEvent = state.nextEventNumber + 1;
-  var structures = [...state.structures];
-  var unlocked = {...state.unlockedCatalogueIds};
-  var nextEntity = state.nextEntityNumber;
-  var capacity = state.builderCapacity;
-  if (complete) {
-    final definition = content.structure(project.catalogueId!)!;
-    structures.add(
-      PlacedStructure(
-        id: 'structure:${project.id}',
-        catalogueId: definition.id,
-        kind: definition.kind,
-        origin: project.origin!,
-        quarterTurns: project.quarterTurns,
-        footprint: project.footprint,
-        pricePaid: project.totalCostCoins,
-        completedAtDay: state.constructionDay,
-        population: project.population,
-        assetRole: project.assetRole,
-        facing: project.facing,
-      ),
-    );
-    nextEntity++;
-    events.add(
-      _event(
-        state,
-        kind: 'construction-complete',
-        description: '${definition.name} is complete',
-        payload: {
-          'projectId': project.id,
-          'catalogueId': definition.id,
-          'populationAdded': project.population,
-        },
-        eventNumber: nextEvent,
-      ),
-    );
-    nextEvent++;
-    // Population gates: unlock models whose threshold the settlement now
-    // reaches, then reconcile builder capacity with the progression table.
-    final population = structures.fold<int>(
-      0,
-      (sum, structure) => sum + structure.population,
-    );
-    for (final candidate in content.purchaseableModels) {
-      if (population >= candidate.unlockAtPopulation &&
-          unlocked.add(candidate.id)) {
-        events.add(
-          _event(
-            state,
-            kind: 'model-unlocked',
-            description: '${candidate.name} model unlocked',
-            payload: {'catalogueId': candidate.id, 'population': population},
-            eventNumber: nextEvent,
-          ),
-        );
-        nextEvent++;
-      }
-    }
-    final expectedCapacity = content.economy.builderCapacityForPopulation(
-      population,
-    );
-    if (expectedCapacity > capacity) {
-      capacity = expectedCapacity;
-      events.add(
-        _event(
-          state,
-          kind: 'builder-granted',
-          description: 'Builder capacity grew to $capacity',
-          payload: {'capacity': capacity, 'population': population},
-          eventNumber: nextEvent,
-        ),
-      );
-      nextEvent++;
-    }
-  }
-  return state.copyWith(
-    coins: state.coins - amount,
-    totalCoinsSpent: state.totalCoinsSpent + amount,
-    nextEntityNumber: nextEntity,
-    unlockedCatalogueIds: unlocked,
-    builderCapacity: capacity,
-    structures: structures,
-    constructions: complete
-        ? state.constructions.where((job) => job.id != project.id).toList()
-        : state.constructions
-              .map(
-                (job) => job.id == project.id
-                    ? _withFundedCoins(job, newFunded)
-                    : job,
-              )
-              .toList(),
-    events: events,
-    nextEventNumber: nextEvent,
   );
 }
 
@@ -670,11 +696,11 @@ ParcelWorldState reconcileWorldProgression(
   );
 }
 
-/// Buys the quoted bridge corridor immediately, then assigns a builder to the
-/// bridge project. Bridge coins themselves are contributed explicitly later.
-/// Plans a bridge: a free builder assignment like roads. The span may
-/// cross water and land alike; everything under it must already be
-/// owned — bridges acquire nothing.
+/// Buys a bridge plan: the whole crossing is paid upfront from the
+/// treasury, then the deck creeps one tile per check-in — near bank,
+/// span tiles, far bank. The span may cross water and land alike;
+/// everything under it must already be owned — bridges acquire
+/// nothing. No builder is assigned.
 ParcelWorldState startBridgeConstruction(
   ParcelWorldState state,
   ContentBundle content,
@@ -689,18 +715,18 @@ ParcelWorldState startBridgeConstruction(
     nearBank: nearBank,
     farBank: farBank,
   );
+  _requireWallet(state, quote.bridgeCost);
   final job = WorldConstruction(
     id: 'construction-${state.nextEntityNumber}',
     kind: WorldConstructionKind.bridge,
     nearBank: nearBank,
     farBank: farBank,
     waterCells: quote.spanCells,
-    totalCostCoins: quote.bridgeCost,
-    coinsFunded: 0,
-    builderSlot: quote.builderSlot,
     startedAtDay: state.constructionDay,
   );
   return state.copyWith(
+    coins: state.coins - quote.bridgeCost,
+    totalCoinsSpent: state.totalCoinsSpent + quote.bridgeCost,
     nextEntityNumber: state.nextEntityNumber + 1,
     constructions: [...state.constructions, job],
     events: [
@@ -708,147 +734,19 @@ ParcelWorldState startBridgeConstruction(
       _event(
         state,
         kind: 'bridge-project-planned',
-        description: 'Bridge planned · ${quote.bridgeCost} coins to fund',
+        description:
+            'Bridge plan bought · −${quote.bridgeCost} coins · '
+            'the deck builds one tile per check-in',
         payload: {
           'projectId': job.id,
           'nearBank': nearBank.toJson(),
           'farBank': farBank.toJson(),
           'spanCells': quote.spanCells.map((cell) => cell.toJson()).toList(),
-          'bridgeCostCoins': quote.bridgeCost,
-          'builderSlot': quote.builderSlot,
+          'pricePaid': quote.bridgeCost,
         },
       ),
     ],
     nextEventNumber: state.nextEventNumber + 1,
-  );
-}
-
-/// Funds a bridge project coin by coin. Cells complete in order —
-/// near bank, span tiles, far bank — each when its cumulative cost is
-/// reached: banks turn into road tiles as they complete, span tiles
-/// render from the project's funded count, and the final coin opens
-/// the bridge.
-ParcelWorldState fundBridgeProject(
-  ParcelWorldState state,
-  ContentBundle content, {
-  required String projectId,
-  required int amount,
-}) {
-  final project = _bridgeProject(state, projectId);
-  if (amount <= 0 || amount > state.coins || amount > project.coinsRemaining) {
-    throw const WorldRuleViolation(
-      'Choose a positive contribution no larger than your wallet or remaining bridge cost.',
-    );
-  }
-  final newFunded = project.coinsFunded + amount;
-  final complete = newFunded >= project.totalCostCoins;
-
-  // Per-cell funding order and price: near bank, span, far bank.
-  final roadTileCost = content.economy.roadTileCostCoins;
-  final bridgeTileCost = content.economy.bridgeTileCostCoins;
-  final cellCosts = <(CellCoord, int)>[
-    (project.nearBank!, roadTileCost),
-    for (final cell in project.waterCells) (cell, bridgeTileCost),
-    (project.farBank!, roadTileCost),
-  ];
-
-  // Which cells are complete at a given funded amount: cells whose
-  // cumulative cost fits inside the funding.
-  List<CellCoord> completedCells(int funded) {
-    var remaining = funded;
-    final completed = <CellCoord>[];
-    for (final (cell, cost) in cellCosts) {
-      if (remaining < cost) break;
-      remaining -= cost;
-      completed.add(cell);
-    }
-    return completed;
-  }
-
-  // Banks that complete with this contribution become road tiles.
-  final newlyCompleted = completedCells(newFunded).where((cell) {
-    final already = completedCells(project.coinsFunded).contains(cell);
-    return !already && (cell == project.nearBank || cell == project.farBank);
-  }).toList();
-  final roads = [...state.roads];
-  for (final cell in newlyCompleted) {
-    roads.add(
-      RoadSegment(
-        id: 'bridge-approach:${project.id}-${cell.key}',
-        cell: cell,
-        style: RoadStyle.asphalt,
-        pricePaid: 0,
-        completedAtDay: state.constructionDay,
-        projectId: project.id,
-      ),
-    );
-  }
-
-  final events = [
-    ...state.events,
-    _event(
-      state,
-      kind: 'bridge-funded',
-      description: 'Bridge funded · $newFunded/${project.totalCostCoins} coins',
-      payload: {
-        'projectId': project.id,
-        'contribution': amount,
-        'fundedCoins': newFunded,
-        'totalCostCoins': project.totalCostCoins,
-      },
-    ),
-  ];
-  var nextEvent = state.nextEventNumber + 1;
-  var bridges = [...state.bridges];
-  var nextEntity = state.nextEntityNumber;
-  // The bank roads the project created stop naming it once it
-  // finishes, matching road completion: project numbers restart, so a
-  // dead reference would be mistaken for a later project.
-  var settledRoads = roads;
-  if (complete) {
-    bridges.add(
-      CompletedBridge(
-        id: 'bridge:${project.id}',
-        waterCells: project.waterCells,
-        nearBank: project.nearBank!,
-        farBank: project.farBank!,
-        pricePaid: project.totalCostCoins,
-        completedAtDay: state.constructionDay,
-      ),
-    );
-    settledRoads = [
-      for (final road in roads)
-        road.projectId == project.id ? _detachProject(road) : road,
-    ];
-    nextEntity++;
-    events.add(
-      _event(
-        state,
-        kind: 'construction-complete',
-        description: 'Bridge is open',
-        payload: {'projectId': project.id},
-        eventNumber: nextEvent,
-      ),
-    );
-    nextEvent++;
-  }
-  return state.copyWith(
-    coins: state.coins - amount,
-    totalCoinsSpent: state.totalCoinsSpent + amount,
-    nextEntityNumber: nextEntity,
-    bridges: bridges,
-    roads: settledRoads,
-    constructions: complete
-        ? state.constructions.where((job) => job.id != project.id).toList()
-        : state.constructions
-              .map(
-                (job) => job.id == project.id
-                    ? _withFundedCoins(job, newFunded)
-                    : job,
-              )
-              .toList(),
-    events: events,
-    nextEventNumber: nextEvent,
   );
 }
 
@@ -908,14 +806,6 @@ WorldConstruction _project(ParcelWorldState state, String id) {
   );
 }
 
-WorldConstruction _roadProject(ParcelWorldState state, String id) {
-  final job = _project(state, id);
-  if (job.kind != WorldConstructionKind.road) {
-    throw const WorldRuleViolation('That is not a road project.');
-  }
-  return job;
-}
-
 WorldConstruction _structureProject(ParcelWorldState state, String id) {
   final job = _project(state, id);
   if (job.kind != WorldConstructionKind.structure) {
@@ -924,20 +814,9 @@ WorldConstruction _structureProject(ParcelWorldState state, String id) {
   return job;
 }
 
-WorldConstruction _bridgeProject(ParcelWorldState state, String id) {
-  final job = _project(state, id);
-  if (job.kind != WorldConstructionKind.bridge) {
-    throw const WorldRuleViolation('That is not a bridge project.');
-  }
-  return job;
-}
-
-WorldConstruction _withFundedCoins(WorldConstruction job, int amount) =>
-    _copyConstruction(job, coinsFunded: amount);
-
 WorldConstruction _copyConstruction(
   WorldConstruction job, {
-  int? coinsFunded,
+  int? stagesDone,
   String? facing,
   int? quarterTurns,
   List<CellCoord>? footprint,
@@ -954,8 +833,7 @@ WorldConstruction _copyConstruction(
   waterCells: job.waterCells,
   nearBank: job.nearBank,
   farBank: job.farBank,
-  totalCostCoins: job.totalCostCoins,
-  coinsFunded: coinsFunded ?? job.coinsFunded,
+  stagesDone: stagesDone ?? job.stagesDone,
   builderSlot: job.builderSlot,
   startedAtDay: job.startedAtDay,
   population: job.population,

@@ -13,6 +13,7 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 - Rewarding unlocks for connecting two towns via roads, since that's a big milestone.
 - select roads properly.
 - Could have rail later too.
+- Demolition.
 
 # Improvements
 

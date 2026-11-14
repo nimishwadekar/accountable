@@ -269,17 +269,21 @@ These are candidates, not promises or requirements for the current prototype:
 - Optional personal-life themes or financial milestones. These would require a
   separate product decision and must not turn spending or sensitive data into a
   requirement for ordinary settlement growth.
-- Staged building foundations, to be scoped with the construction and economy
-  overhaul below: a planned building pours its concrete slab immediately today
-  (the single decision point is `foundationGroundStyle` in
-  `lib/world/world_queries.dart`), but the agreed direction is dirt while the
-  project is unfunded and concrete once the first coin lands.
+- Staged building foundations, re-scoped to the check-in economy below:
+  a planned building pours its concrete slab immediately (the single
+  decision point is `foundationGroundStyle` in
+  `lib/world/world_queries.dart`), which stays the stage-1 behavior
+  under the single-site-look decision; dirt in a project's early
+  stages and concrete as it progresses remains a future per-stage
+  option.
 
 ### Check-in economy and settlement growth (future work)
 
-Decided direction from the 2026-11-06 design discussion; none of it is
-implemented yet and the first implementation stage is deliberately
-undecided — scope it when work starts.
+Decided direction from the 2026-11-06 design discussion; the first
+implementation stage — the simplified economy — was scoped on
+2026-11-13 and implemented on 2026-11-14 (decisions and seed values
+below). Settlement growth — household arrival, occupancy, growth
+rules — remains future work.
 
 **Where population comes from (lore frame).** The mainland exists
 off-map; the starter road is the last stretch of an old trail that
@@ -293,8 +297,8 @@ their own homes slowly, by their own labor. A cluster earns a town
 name at some size. Towns connect late — ferry first, bridge last,
 both player-built. As islands fill, new landmasses are colonized by
 boat: never grow an existing landmass, author a new one. The player is
-the founder-proprietor, and the role matures from pioneer (your
-check-in is the whole economy) to mayor-steward (the town funds itself
+the founder-proprietor, and the role matures from pioneer (the town
+runs on your starting stake) to mayor-steward (the town funds itself
 through you). Settlers never build roads or infrastructure. Residents
 never leave — no churn penalties, flavor lines at most.
 
@@ -312,14 +316,20 @@ collect taxes, net upkeep, advance every active construction one stage
   population-gated capacity is the throughput curve.
 - **Taxes build the infrastructure.** Tax is X coins per building and
   upkeep is Y coins per building — both content fields, editable in
-  the dashboard, netted each check-in. Infra and service buildings
-  cost more in upkeep than they pay in tax (roads: tax 0, positive
-  upkeep), so services are a real maintenance expense and the treasury
-  cannot compound exponentially; homes carry the tax base.
-- **Treasury purchases** are parcels, road stretch plans, bridges, and
-  civic services/landmarks. A road stretch plan is bought upfront and
-  then builds one tile per check-in — creeping construction replaces
-  per-tile coin funding.
+  the dashboard, netted each check-in. Civic services and
+  infrastructure cost more in upkeep than they pay in tax (roads:
+  tax 0, positive upkeep), so they are a real maintenance expense;
+  homes and commerce carry the tax base (decided 2026-11-13: shops
+  and offices net positive). The anti-compounding guard rests on
+  civic upkeep, infrastructure upkeep, and crew capacity, with a
+  future growth rule — commerce needs nearby homes — as the backstop
+  against shop farming.
+- **Treasury purchases** are parcels, road stretch plans, and bridges
+  — in stage 1 all buildings, civic ones included, plan free and are
+  built by labor (a per-model planning fee for landmarks can be
+  revisited later). Road stretch plans and bridges are bought upfront
+  and then build one tile per check-in — creeping construction
+  replaces per-tile coin funding.
 - **No coin-rush.** Growth costs check-ins, not money; a
   pay-to-finish-a-stage knob can be reconsidered later if the waiting
   ever feels dead.
@@ -335,16 +345,81 @@ save so rule edits grandfather what is already placed. Start with a
 tiny vocabulary (junction props, per-model tax and upkeep) and grow it
 one rule at a time — settler claims, town founding, splintering.
 
-**Open questions.** The occupancy model (homes fill
-household-by-household vs. full on completion); whether planning a
-home costs a small treasury fee or is a free settler claim; what
-happens when the treasury cannot pay upkeep (must never harshly
-penalize); the tax-base shape (per household vs. per building, shops
-vs. homes); bridge pricing under the new economy; whether splinter
-settlers ask permission or build unilaterally; whether settler
-construction renders as process (scaffolding) or arrives between
-sessions; save migration (coins-funded becomes stages-done
-proportionally, wallet becomes the treasury's opening balance).
+**Stage 1 — the simplified economy (decided 2026-11-13).** The first
+implementation stage drops household arrival and occupancy entirely:
+every building keeps its flat population number, and tax is collected
+per completed building. The decisions:
+
+- **Flat values, all content.** Per-model `taxCoins`, `upkeepCoins`,
+  and stage count in the catalogue; per-tile road and bridge tax and
+  upkeep in `economy.json`. Road and bridge tax seed at 0 — paving
+  must never mint coins. Small integers; with a daily heartbeat
+  every coin is felt.
+- **Money buys permission, check-ins are the labor.** Planning a
+  building is free; construction costs no coins and advances one
+  stage per check-in. The treasury's purchases are parcels, road
+  stretch plans, and bridges, paid upfront.
+- **Insolvency never blocks labor.** Each check-in nets taxes minus
+  upkeep; the treasury floors at 0, the shortfall is reported in the
+  town report, and every stage still advances. Money gates expansion,
+  never growth — and with free building planning a broke town always
+  recovers by rebuilding its tax base.
+- **The daily coin is retired.** No 1-coin-per-check-in grant; the
+  treasury starts at 20 coins (a placeholder — a more natural start
+  is an open question below).
+- **Builders are concurrent slots.** Capacity caps how many projects
+  are in flight — planning holds a slot until completion — and every
+  in-flight project advances one stage per check-in. The planning day
+  itself advances nothing. Progression thresholds become
+  load-bearing: seed 10→2, 25→3, 50→4 (the live list is empty,
+  capacity 1 forever).
+- **Costs start on completion.** Construction sites pay no tax and no
+  upkeep; road and bridge upkeep counts per tile as it appears.
+- **Bridges creep too.** Paid upfront, then the deck extends one tile
+  per check-in — the existing incremental bridge rendering, driven by
+  a delivered-tiles counter instead of coins funded (near ramp with
+  the first tile, far ramp with the last). Road creep is automatic
+  and consumes no builder.
+- **One look while building.** Foundation slab plus construction-site
+  appearance from planning to completion; per-stage art stays future
+  work.
+- **The check-in is a town report.** Itemized: taxes collected, upkeep
+  paid and any shortfall, constructions advanced.
+- **Migration is one line.** The live save holds zero in-flight
+  constructions, so the wallet simply becomes the treasury's opening
+  balance and the completed town starts paying tax and upkeep. The
+  fallback, if a funded project ever exists at the switch: the funded
+  fraction becomes stages done, rounded down.
+- **Occupancy is deferred, not dropped.** When households arrive in a
+  later stage, occupancy slots in as a multiplier on the flat tax
+  field — nothing decided here conflicts with that.
+
+**Stage 1 seed values (first pass; everything is dashboard-tunable
+afterward).** The old prices were sized for a +1-coin-per-day income,
+so upfront prices scale up alongside home taxes. Economy: starting
+treasury 20; road and bridge tax/upkeep 0/1 per tile;
+`parcelBaseCoins` 32, `roadTileCostCoins` 4, `bridgeTileCostCoins` 12
+(a lighter 24/3/8 alternative if the richer late game feels right);
+builder progression 10→2, 25→3, 50→4. Homes (tax/upkeep/stages):
+small 3/0/2, medium 5/0/3, large 6/0/3, mobile 2/0/2, apartments
+8/1/4. Commerce nets +2 to +4 (tax/upkeep/stages): cafe 4/2/2,
+ice-cream-shop 4/2/2, fruit-market 3/1/2, pizza-shop 5/3/3, autoshop
+5/3/3, gas-station 6/4/3, warehouse 5/3/3, small-office 6/3/2,
+tall-office 9/5/4, city-office 9/6/4. Civic drains (tax/upkeep/
+stages): clinic, fire-station, and police-station 0/4/3, church
+0/3/4, water-tower 0/2/2, hospital 0/6/5, construction-site 0/0/1.
+Props stay free, instant, and unstaged. Calibration against the live
+town (51 homes, 12 commerce, 6 civic, 109 road tiles + 17 bridge
+tiles): roughly +85 per check-in; an early five-home town roughly +3.
+
+**Open questions.** A more natural starting treasury than a flat 20;
+the stage-2 occupancy model (household-by-household vs. full on
+completion, riding the flat tax as a multiplier); a commerce-needs-
+homes growth rule as the backstop against shop farming; whether
+splinter settlers ask permission or build unilaterally; whether
+settler construction renders as process (scaffolding) or arrives
+between sessions; model-unlock thresholds and catalogue tiers under
+the new pacing.
 
 Before committing to additional mechanics, decide:
 

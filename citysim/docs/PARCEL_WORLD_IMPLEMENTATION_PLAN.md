@@ -505,43 +505,58 @@ cell; single and stacked), codec round-trip plus old-save migration,
 mirror and variant round-trips, mirror-aware mask picking, and a
 render smoke test with props standing on a bridge deck.
 
-### Check-in economy and settlement growth (future work)
+### Check-in economy and settlement growth
 
-Decided direction, not yet scheduled — the first implementation stage
-is deliberately undecided. Full design and lore frame: section 8 of
-the mechanics plan. The engineering shape when it lands:
+Stage 1 — the simplified economy — was scoped on 2026-11-13 and
+implemented on 2026-11-14; household arrival, occupancy, and growth
+rules stay future work. Full design, decisions, and seed values:
+section 8 of the mechanics plan. The engineering shape as built:
 
-- **Content fields.** Per-model `taxCoins` and `upkeepCoins` (roads:
-  tax 0, positive upkeep), per-model stage counts for staged
-  construction, and a growth-rules category. Growth rules are
-  deterministic content; outcomes are stored in the save so rule edits
-  grandfather existing placements, and every rule type ships with
-  content validation.
-- **Reducer.** The check-in action becomes multi-effect: collect
-  taxes, net upkeep, then advance every active construction one stage.
-  Constructions move from coin funding to stage progress; the wallet
-  becomes the single town treasury. Nothing ever evaluates on
+- **Content fields.** Per-model `taxCoins`, `upkeepCoins`, and stage
+  count in the catalogue; `economy.json` gains `startingTreasuryCoins`
+  and per-tile road and bridge tax and upkeep. Purchase prices scale
+  up with the new income (parcel base 32, road tile 4, bridge tile 12)
+  and `builderProgression` gets seeded thresholds. Editor support: a
+  net-per-report column in the structures palette; validation keeps
+  tax and upkeep non-negative and infra tax at 0. Growth rules remain
+  a future category — deterministic content, outcomes stored in the
+  save so rule edits grandfather existing placements, every rule type
+  shipping with content validation.
+- **Reducer.** The check-in action becomes multi-effect in a fixed
+  order: collect taxes, net upkeep (the treasury floors at 0 and the
+  shortfall is reported — it never blocks), then advance every
+  in-flight construction one stage. Constructions move from coin
+  funding to stage progress under the concurrent-slot builder model:
+  capacity caps in-flight projects, planning holds a slot until
+  completion, and the planning day advances nothing. The 1-coin
+  check-in grant is removed; the wallet becomes the single town
+  treasury. Tax and upkeep start on completion; road and bridge
+  upkeep counts per tile as it appears. Nothing ever evaluates on
   simulated-day advancement or real time — the causality rule is that
   the world reacts instantly to player actions but only acts on its
   own during check-ins.
-- **Roads.** A stretch plan is a treasury purchase upfront; tiles then
-  complete one per check-in, replacing per-tile coin funding.
-  Bridges' pricing model under the new economy is an open question.
-- **Validation.** Stage rules replace the building coin-cost checks;
-  tax and upkeep are non-negative content fields; growth-rule
-  evaluation must be deterministic and save-validatable.
-- **Migration.** Existing partially funded buildings convert
-  proportionally (coins funded becomes stages done); the wallet
-  carries over as the treasury's opening balance; the earned-minus-
-  spent ledger stays historical.
+- **Roads and bridges.** Both are upfront treasury purchases that
+  then deliver one tile per check-in — no builder slot, no per-tile
+  funding. Bridges reuse the existing incremental bridge rendering
+  with a delivered-tiles prefix instead of coins funded (near ramp
+  with the first tile, far ramp with the last).
+- **Town report.** The check-in surfaces an itemized report — taxes
+  collected, upkeep paid and any shortfall, constructions advanced —
+  and the HUD carries a next-report projection.
+- **Migration.** The live save holds zero in-flight constructions
+  (the Projects sheet is empty), so the wallet becomes the treasury's
+  opening balance and completed tiles start paying tax and upkeep
+  immediately; the earned-minus-spent ledger stays historical. The
+  fallback, if a funded project ever exists at the switch: the funded
+  fraction becomes stages done, rounded down.
 - **Auto-placed props** (traffic lights at junctions and similar) ride
-  the growth-rules category and reuse the road junction masks the
-  renderer already computes; they interact with the free-prop-placement
-  sheet described above.
+  the future growth-rules category and reuse the road junction masks
+  the renderer already computes; they interact with the
+  free-prop-placement sheet described above.
 
 ### Regression checks
 
-Maintain pure rule/reducer coverage, persistence tests, and responsive widget checks. Keep scenario/pacing tools synthetic and separate from the production finance app.
+Maintain pure rule/reducer coverage, persistence tests, and responsive widget checks — for the check-in economy, pin the fixed order (taxes, upkeep, stages), the zero floor with stages advancing anyway, concurrent-slot capacity, per-tile creep, and completion-start of tax and upkeep. Keep scenario/pacing tools synthetic and separate from the production finance app.
 
 ## 10. Required verification
 

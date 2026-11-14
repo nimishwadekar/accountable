@@ -136,7 +136,7 @@ void main() {
     ]);
 
     // Structures rebuild with their content-derived footprint, variant,
-    // and door side; the café is still a half-funded project.
+    // and door side; the café is still a mid-construction project.
     final cottage = world.structures.single;
     expect(cottage.catalogueId, 'small-home');
     expect(cottage.assetRole, 'home-small-yellow');
@@ -147,8 +147,13 @@ void main() {
     final project = world.constructions.single;
     expect(project.catalogueId, 'cafe');
     expect(project.origin, const CellCoord(6, 5));
-    expect(project.coinsFunded, 1);
-    expect(project.totalCostCoins, 3);
+    expect(project.stagesDone, 1);
+    expect(project.builderSlot, 0);
+    expect(
+      project.stagesDone,
+      lessThan(content.structure('cafe')!.constructionStages),
+      reason: 'the funded column stores stages done',
+    );
 
     // Unlocks and builder capacity derive from population.
     expect(world.population, 1);

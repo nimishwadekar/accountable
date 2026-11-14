@@ -183,9 +183,9 @@ void main() {
         WorldConstruction(
           id: 'building',
           kind: WorldConstructionKind.bridge,
-          totalCostCoins: 6,
-          coinsFunded: 3,
-          builderSlot: 0,
+          // Near bank and span delivered; the far bank is still to
+          // come — the deck is walkable, the crossing is not open.
+          stagesDone: 2,
           startedAtDay: 0,
           waterCells: const [CellCoord(11, 0)],
           nearBank: const CellCoord(10, 0),

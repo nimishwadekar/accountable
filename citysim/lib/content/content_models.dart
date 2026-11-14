@@ -39,6 +39,9 @@ class StructureDefinition {
     required this.population,
     required this.unlockAtPopulation,
     required this.enabled,
+    this.taxCoins = 0,
+    this.upkeepCoins = 0,
+    this.constructionStages = 1,
   });
 
   final String id;
@@ -70,6 +73,23 @@ class StructureDefinition {
   /// from the start.
   final int unlockAtPopulation;
 
+  /// Tax this building pays into the treasury at each check-in once
+  /// complete. Construction sites pay nothing — tax starts on
+  /// completion.
+  final int taxCoins;
+
+  /// Upkeep this building charges the treasury at each check-in once
+  /// complete.
+  final int upkeepCoins;
+
+  /// Construction stages between planning and completion; each
+  /// check-in advances one stage. Buildings only — decorations place
+  /// instantly and are never staged.
+  final int constructionStages;
+
+  /// Net treasury effect of one completed building per check-in.
+  int get netCoinsPerCheckIn => taxCoins - upkeepCoins;
+
   /// Disabled models stay loadable for existing saves but are hidden from
   /// new purchases and unlock grants.
   final bool enabled;
@@ -96,6 +116,9 @@ class StructureDefinition {
     int? population,
     int? unlockAtPopulation,
     bool? enabled,
+    int? taxCoins,
+    int? upkeepCoins,
+    int? constructionStages,
   }) => StructureDefinition(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -109,6 +132,9 @@ class StructureDefinition {
     population: population ?? this.population,
     unlockAtPopulation: unlockAtPopulation ?? this.unlockAtPopulation,
     enabled: enabled ?? this.enabled,
+    taxCoins: taxCoins ?? this.taxCoins,
+    upkeepCoins: upkeepCoins ?? this.upkeepCoins,
+    constructionStages: constructionStages ?? this.constructionStages,
   );
 
   Map<String, Object?> toJson() => {
@@ -123,6 +149,9 @@ class StructureDefinition {
     'population': population,
     'unlockAtPopulation': unlockAtPopulation,
     'enabled': enabled,
+    'taxCoins': taxCoins,
+    'upkeepCoins': upkeepCoins,
+    'constructionStages': constructionStages,
   };
 
   static StructureDefinition fromJson(Map<String, Object?> json) =>
@@ -145,6 +174,9 @@ class StructureDefinition {
         population: json['population'] as int? ?? 0,
         unlockAtPopulation: json['unlockAtPopulation'] as int? ?? 0,
         enabled: json['enabled'] as bool? ?? true,
+        taxCoins: json['taxCoins'] as int? ?? 0,
+        upkeepCoins: json['upkeepCoins'] as int? ?? 0,
+        constructionStages: json['constructionStages'] as int? ?? 1,
       );
 }
 
@@ -401,26 +433,44 @@ class BuilderProgressionStep {
 
 class EconomyContent {
   const EconomyContent({
-    required this.startingWalletCoins,
+    required this.startingTreasuryCoins,
     required this.startingBuilderCapacity,
     required this.roadTileCostCoins,
     required this.bridgeTileCostCoins,
     required this.parcelBaseCoins,
     required this.builderProgression,
+    this.roadTaxCoinsPerTile = 0,
+    this.roadUpkeepCoinsPerTile = 0,
+    this.bridgeTaxCoinsPerTile = 0,
+    this.bridgeUpkeepCoinsPerTile = 0,
   });
 
-  final int startingWalletCoins;
+  /// The single town treasury's opening balance for a brand-new
+  /// world. Existing saves carry their wallet over as the treasury.
+  final int startingTreasuryCoins;
 
   /// Fixed at 1 by product rule; shown read-only in the dashboard.
   final int startingBuilderCapacity;
+
+  /// Upfront price of one road tile in a stretch plan — the whole
+  /// stretch is paid at planning, then creeps one tile per check-in.
   final int roadTileCostCoins;
 
-  /// Flat price of one bridge span tile; banks cost the road tile
-  /// price.
+  /// Upfront price of one bridge span tile; banks cost the road tile
+  /// price. The bridge is paid at planning, then the deck creeps one
+  /// tile per check-in.
   final int bridgeTileCostCoins;
 
   /// Flat parcel price: every parcel on the map costs the same.
   final int parcelBaseCoins;
+
+  /// Per-tile tax and upkeep of infrastructure, collected at each
+  /// check-in. Tax seeds at zero — paving must never mint coins — but
+  /// the fields exist so infra stays uniform with buildings.
+  final int roadTaxCoinsPerTile;
+  final int roadUpkeepCoinsPerTile;
+  final int bridgeTaxCoinsPerTile;
+  final int bridgeUpkeepCoinsPerTile;
   final List<BuilderProgressionStep> builderProgression;
 
   /// Builder capacity granted for a population (monotonic; the highest
@@ -436,10 +486,14 @@ class EconomyContent {
   }
 
   Map<String, Object?> toJson() => {
-    'startingWalletCoins': startingWalletCoins,
+    'startingTreasuryCoins': startingTreasuryCoins,
     'startingBuilderCapacity': startingBuilderCapacity,
     'roadTileCostCoins': roadTileCostCoins,
     'bridgeCost': {'bridgeTileCostCoins': bridgeTileCostCoins},
+    'roadTaxCoinsPerTile': roadTaxCoinsPerTile,
+    'roadUpkeepCoinsPerTile': roadUpkeepCoinsPerTile,
+    'bridgeTaxCoinsPerTile': bridgeTaxCoinsPerTile,
+    'bridgeUpkeepCoinsPerTile': bridgeUpkeepCoinsPerTile,
     'parcelBaseCoins': parcelBaseCoins,
     'builderProgression': builderProgression
         .map((step) => step.toJson())
@@ -449,10 +503,14 @@ class EconomyContent {
   static EconomyContent fromJson(Map<String, Object?> json) {
     final bridge = json['bridgeCost'] as Map<String, Object?>;
     return EconomyContent(
-      startingWalletCoins: json['startingWalletCoins']! as int,
+      startingTreasuryCoins: json['startingTreasuryCoins']! as int,
       startingBuilderCapacity: json['startingBuilderCapacity']! as int,
       roadTileCostCoins: json['roadTileCostCoins']! as int,
       bridgeTileCostCoins: bridge['bridgeTileCostCoins']! as int,
+      roadTaxCoinsPerTile: json['roadTaxCoinsPerTile'] as int? ?? 0,
+      roadUpkeepCoinsPerTile: json['roadUpkeepCoinsPerTile'] as int? ?? 0,
+      bridgeTaxCoinsPerTile: json['bridgeTaxCoinsPerTile'] as int? ?? 0,
+      bridgeUpkeepCoinsPerTile: json['bridgeUpkeepCoinsPerTile'] as int? ?? 0,
       parcelBaseCoins: json['parcelBaseCoins']! as int,
       builderProgression: [
         for (final step in json['builderProgression']! as List)
@@ -859,6 +917,15 @@ List<ContentIssue> validateContentData({
     if (model.population < 0) {
       error('${model.id}: population must not be negative.');
     }
+    if (model.taxCoins < 0) {
+      error('${model.id}: tax must not be negative.');
+    }
+    if (model.upkeepCoins < 0) {
+      error('${model.id}: upkeep must not be negative.');
+    }
+    if (model.constructionStages < 1) {
+      error('${model.id}: construction needs at least one stage.');
+    }
     if (model.unlockAtPopulation < 0) {
       error('${model.id}: unlock threshold must not be negative.');
     }
@@ -1007,8 +1074,8 @@ List<ContentIssue> validateContentData({
     }
   }
 
-  if (economy.startingWalletCoins < 0) {
-    error('Starting wallet must not be negative.');
+  if (economy.startingTreasuryCoins < 0) {
+    error('Starting treasury must not be negative.');
   }
   if (economy.startingBuilderCapacity < 1) {
     error('Starting builder capacity must be at least 1.');
@@ -1021,6 +1088,19 @@ List<ContentIssue> validateContentData({
   }
   if (economy.parcelBaseCoins < 0) {
     error('The parcel price must not be negative.');
+  }
+  if (economy.roadUpkeepCoinsPerTile < 0 ||
+      economy.bridgeUpkeepCoinsPerTile < 0) {
+    error('Infrastructure upkeep must not be negative.');
+  }
+  if (economy.roadTaxCoinsPerTile < 0 || economy.bridgeTaxCoinsPerTile < 0) {
+    error('Infrastructure tax must not be negative.');
+  }
+  if (economy.roadTaxCoinsPerTile > 0 || economy.bridgeTaxCoinsPerTile > 0) {
+    warning(
+      'Infrastructure tax mints coins from paving — keep road and '
+      'bridge tax at zero.',
+    );
   }
   var lastPopulation = -1;
   var lastCapacity = economy.startingBuilderCapacity;

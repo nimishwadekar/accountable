@@ -29,7 +29,10 @@ class _EconomyPageState extends State<EconomyPage> {
     return ListView(
       padding: const EdgeInsets.all(10),
       children: [
-        Text('Costs', style: Theme.of(context).textTheme.titleSmall),
+        Text(
+          'Treasury and purchases',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
         const SizedBox(height: 6),
         Wrap(
           spacing: 8,
@@ -38,49 +41,41 @@ class _EconomyPageState extends State<EconomyPage> {
             SizedBox(
               width: 170,
               child: IntField(
-                label: 'Starting wallet',
-                value: asInt(economy['startingWalletCoins']),
+                label: 'Starting treasury',
+                value: asInt(economy['startingTreasuryCoins']),
                 min: 0,
-                help: 'Coins a brand-new world begins with.',
-                onChanged: (v) => _edit((e) => e['startingWalletCoins'] = v),
+                help:
+                    'Coins a brand-new world treasury begins with. '
+                    'Existing saves carry their balance over.',
+                onChanged: (v) => _edit((e) => e['startingTreasuryCoins'] = v),
               ),
             ),
             SizedBox(
               width: 150,
               child: IntField(
-                label: 'Road tile cost',
+                label: 'Road tile (upfront)',
                 value: asInt(economy['roadTileCostCoins']),
                 min: 0,
                 help:
-                    'Coins to fund one road tile. Tiles are funded one at '
-                    'a time, working outward from the connected road.',
+                    'Upfront coins per tile of a road stretch plan. The '
+                    'whole stretch is paid at planning, then creeps one '
+                    'tile per check-in.',
                 onChanged: (v) => _edit((e) => e['roadTileCostCoins'] = v),
               ),
             ),
             SizedBox(
               width: 150,
               child: IntField(
-                label: 'Bridge base cost',
-                value: asInt(bridge['baseCoins']),
+                label: 'Bridge tile (upfront)',
+                value: asInt(bridge['bridgeTileCostCoins']),
                 min: 0,
                 help:
-                    'Fixed coins for any bridge, before the per-water-tile '
-                    'cost.',
-                onChanged: (v) =>
-                    _edit((e) => (e['bridgeCost'] as Map)['baseCoins'] = v),
-              ),
-            ),
-            SizedBox(
-              width: 170,
-              child: IntField(
-                label: 'Bridge per water tile',
-                value: asInt(bridge['perWaterTileCoins']),
-                min: 0,
-                help:
-                    'Extra coins per water cell the bridge spans. Total '
-                    'cost = base + this × span length.',
+                    'Upfront coins per span tile of a bridge; banks cost '
+                    'the road tile price. The crossing is paid at '
+                    'planning, then the deck creeps one tile per '
+                    'check-in.',
                 onChanged: (v) => _edit(
-                  (e) => (e['bridgeCost'] as Map)['perWaterTileCoins'] = v,
+                  (e) => (e['bridgeCost'] as Map)['bridgeTileCostCoins'] = v,
                 ),
               ),
             ),
@@ -98,10 +93,72 @@ class _EconomyPageState extends State<EconomyPage> {
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        Text(
+          'Per-tile infrastructure ledger',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            SizedBox(
+              width: 150,
+              child: IntField(
+                label: 'Road tax / tile',
+                value: asInt(economy['roadTaxCoinsPerTile']),
+                min: 0,
+                help:
+                    'Tax each road tile pays into the treasury per '
+                    'check-in. Keep at zero — paving must never mint '
+                    'coins.',
+                onChanged: (v) => _edit((e) => e['roadTaxCoinsPerTile'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 150,
+              child: IntField(
+                label: 'Road upkeep / tile',
+                value: asInt(economy['roadUpkeepCoinsPerTile']),
+                min: 0,
+                help:
+                    'Upkeep each road tile charges the treasury per '
+                    'check-in, counted per tile as it appears.',
+                onChanged: (v) => _edit((e) => e['roadUpkeepCoinsPerTile'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 150,
+              child: IntField(
+                label: 'Bridge tax / tile',
+                value: asInt(economy['bridgeTaxCoinsPerTile']),
+                min: 0,
+                help:
+                    'Tax each bridge tile pays per check-in. Keep at '
+                    'zero — paving must never mint coins.',
+                onChanged: (v) => _edit((e) => e['bridgeTaxCoinsPerTile'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 150,
+              child: IntField(
+                label: 'Bridge upkeep / tile',
+                value: asInt(economy['bridgeUpkeepCoinsPerTile']),
+                min: 0,
+                help:
+                    'Upkeep each bridge tile charges per check-in, '
+                    'counted per tile as it appears.',
+                onChanged: (v) =>
+                    _edit((e) => e['bridgeUpkeepCoinsPerTile'] = v),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 6),
         Text(
-          'Derived: bridge span 1 = ${asInt(bridge['baseCoins']) + asInt(bridge['perWaterTileCoins'])} coins · '
-          'span 4 = ${asInt(bridge['baseCoins']) + 4 * asInt(bridge['perWaterTileCoins'])} coins · '
+          'Derived: a 4-tile road plan = ${4 * asInt(economy['roadTileCostCoins'])} coins upfront · '
+          'a 4-span bridge = ${asInt(bridge['bridgeTileCostCoins']) * 4 + 2 * asInt(economy['roadTileCostCoins'])} coins upfront · '
           'every parcel = ${asInt(economy['parcelBaseCoins'])} coins',
           style: const TextStyle(fontSize: 11, color: Colors.black54),
         ),
@@ -109,9 +166,11 @@ class _EconomyPageState extends State<EconomyPage> {
         Text('Builders', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 4),
         Text(
-          'Starting capacity is fixed at 1 (product rule). Capacity grows '
-          'when population crosses each threshold; grants reconcile upward '
-          'on load, never downward. An empty table keeps one builder forever.',
+          'Starting capacity is fixed at 1 (product rule). Builder slots '
+          'gate in-flight building projects — roads and bridges creep '
+          'without one. Capacity grows when population crosses each '
+          'threshold; grants reconcile upward on load, never downward. An '
+          'empty table keeps one builder forever.',
           style: const TextStyle(fontSize: 11, color: Colors.black54),
         ),
         const SizedBox(height: 6),

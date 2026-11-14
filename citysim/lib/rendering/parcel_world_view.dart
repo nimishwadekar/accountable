@@ -1484,10 +1484,11 @@ class _ParcelWorldPainter extends CustomPainter {
       ));
     }
     // Bridges still under construction: the near ramp rises with the
-    // near-bank road (the first coin), then each funded span tile of
-    // the deck appears in order, rising out of the dirt path. The far
-    // ramp only draws on the completed bridge — its bank road arrives
-    // with the final coin, and a ramp never stands on a non-road tile.
+    // first delivered cell (the near-bank road), then each delivered
+    // span tile of the deck appears in order, rising out of the dirt
+    // path. The far ramp only draws on the completed bridge — its
+    // bank road arrives with the final cell, and a ramp never stands
+    // on a non-road tile.
     for (final job in state.constructions) {
       if (job.kind != WorldConstructionKind.bridge) continue;
       if (!boundsOverlapsCells(bounds, [
@@ -1497,13 +1498,13 @@ class _ParcelWorldPainter extends CustomPainter {
       ])) {
         continue;
       }
-      final fundedTiles = _bridgeFundedSpanCount(job);
-      final nearBankFunded =
-          job.coinsFunded >= content.economy.roadTileCostCoins;
-      if (!nearBankFunded && fundedTiles <= 0) continue;
-      if (fundedTiles > 0) {
+      final delivered = job.stagesDone;
+      final spanTiles = (delivered - 1).clamp(0, job.waterCells.length);
+      final nearBankFunded = delivered >= 1;
+      if (!nearBankFunded && spanTiles <= 0) continue;
+      if (spanTiles > 0) {
         final body = bridgeBodyRole(job.nearBank!, job.farBank!);
-        for (final cell in job.waterCells.take(fundedTiles)) {
+        for (final cell in job.waterCells.take(spanTiles)) {
           tiles.add((body, cell));
         }
       }
@@ -2321,16 +2322,26 @@ class _ParcelWorldPainter extends CustomPainter {
     }
   }
 
-  /// How many span tiles of a bridge project are complete at its
-  /// funded coin count: the near bank completes first, then span
-  /// tiles, then the far bank.
-  int _bridgeFundedSpanCount(WorldConstruction job) {
-    final roadTileCost = content.economy.roadTileCostCoins;
-    final bridgeTileCost = content.economy.bridgeTileCostCoins;
-    var remaining = job.coinsFunded;
-    if (remaining < roadTileCost) return 0;
-    remaining -= roadTileCost;
-    return (remaining ~/ bridgeTileCost).clamp(0, job.waterCells.length);
+  /// Stage progress of an in-flight project: stages done over the
+  /// stage count for structures, delivered tiles over the plan for
+  /// roads, delivered cells over the crossing for bridges.
+  double _constructionProgress(WorldConstruction job) {
+    switch (job.kind) {
+      case WorldConstructionKind.structure:
+        final stages =
+            content.structure(job.catalogueId ?? '')?.constructionStages ?? 1;
+        return (job.stagesDone / stages).clamp(0.0, 1.0);
+      case WorldConstructionKind.road:
+        final delivered = state.roads
+            .where((road) => road.projectId == job.id)
+            .length;
+        return (delivered / job.roadCells.length).clamp(0.0, 1.0);
+      case WorldConstructionKind.bridge:
+        return (job.stagesDone / job.bridgeDeliveryCells.length).clamp(
+          0.0,
+          1.0,
+        );
+    }
   }
 
   bool boundsOverlapsCells(_CellBounds bounds, List<CellCoord> cells) {
@@ -2707,7 +2718,7 @@ class _ParcelWorldPainter extends CustomPainter {
         scale,
         offset,
       );
-      final progress = job.progress;
+      final progress = _constructionProgress(job);
       final barWidth = 34 * scale;
       final bar = Rect.fromLTWH(
         center.dx - barWidth / 2,

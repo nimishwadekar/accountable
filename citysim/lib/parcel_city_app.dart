@@ -240,32 +240,29 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         ? structureId
         : null;
     if (_tool == _WorldTool.road) {
+      // A tap on any creeping stretch's tiles selects that whole
+      // project. Road creep consumes no builder, so any number of
+      // stretches may creep at once and planning is always open.
       final roadProject = world.constructions
           .where((job) => job.kind == WorldConstructionKind.road)
+          .where(
+            (job) =>
+                job.roadCells.contains(cell) ||
+                world.roads.any(
+                  (road) => road.projectId == job.id && road.cell == cell,
+                ),
+          )
           .firstOrNull;
       if (roadProject != null) {
-        // A road project is active: any tap on its tiles selects the
-        // whole project for funding.
-        final onProject =
-            roadProject.roadCells.contains(cell) ||
-            world.roads.any(
-              (road) => road.projectId == roadProject.id && road.cell == cell,
-            );
         setState(() {
           _selectedCell = cell;
-          _highlightCells = onProject
-              ? {
-                  ...roadProject.roadCells,
-                  ...world.roads
-                      .where((road) => road.projectId == roadProject.id)
-                      .map((road) => road.cell),
-                }
-              : const {};
+          _highlightCells = {
+            ...roadProject.roadCells,
+            ...world.roads
+                .where((road) => road.projectId == roadProject.id)
+                .map((road) => road.cell),
+          };
         });
-        return;
-      }
-      if (world.constructions.length >= world.builderCapacity) {
-        _showMessage('Your builder is assigned to another project.');
         return;
       }
       if (_roadStartCell == null) {
@@ -602,9 +599,14 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           ),
           content: Text(
             definition.kind == StructureKind.decoration
-                ? '${quote.price} coins · placed immediately.'
-                : '${quote.price} coins to fully fund. No coins are spent now, '
-                      'but your builder is assigned until the site is fully funded.',
+                ? quote.price > 0
+                      ? '${quote.price} coins · placed immediately.'
+                      : 'Free · placed immediately.'
+                : 'Free to plan. Your builder raises it over '
+                      '${definition.constructionStages} stages — one per '
+                      'daily check-in. Once complete it pays '
+                      '+${definition.taxCoins} tax and costs '
+                      '−${definition.upkeepCoins} upkeep at each report.',
           ),
           actions: [
             TextButton(
@@ -616,7 +618,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
               child: Text(
                 definition.kind == StructureKind.decoration
                     ? 'Place decoration'
-                    : 'Plan and assign builder',
+                    : 'Plan construction',
               ),
             ),
           ],
@@ -746,41 +748,75 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     });
   }
 
-  void _fundRoadProject(WorldConstruction project) {
-    _runAction(
-      (state) => fundRoadProject(
-        state,
-        _requireContent,
-        _terrain,
-        projectId: project.id,
+  void _advanceDays(int days) =>
+      _runAction((state) => advanceWorldDays(state, days));
+
+  /// Runs the check-in and surfaces its town report — the day's
+  /// event, itemized.
+  void _checkIn() {
+    final world = _world;
+    if (world == null) return;
+    final next = checkInWorldForToday(world, _requireContent);
+    if (identical(next, world)) return;
+    _commit(next);
+    _showTownReport(next);
+  }
+
+  Future<void> _showTownReport(ParcelWorldState world) async {
+    WorldEvent? lastReport;
+    for (final event in world.events) {
+      if (event.kind == 'check-in') lastReport = event;
+    }
+    // A final binding, so the null promotion survives the dialog
+    // closure below.
+    final report = lastReport;
+    if (report == null) return;
+    final payload = report.payload;
+    int value(String key) => (payload[key] as num?)?.toInt() ?? 0;
+    final taxes = value('taxes');
+    final paid = value('upkeepPaid');
+    final shortfall = value('upkeepShortfall');
+    final net = value('net');
+    final advanced = value('stagesAdvanced');
+    final completions =
+        (payload['completions'] as List?)?.cast<String>() ?? const [];
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Town report · ${report.dateKey}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Taxes collected   +$taxes'),
+            Text('Upkeep paid        −$paid'),
+            if (shortfall > 0)
+              Text(
+                'Upkeep unpaid     $shortfall — the treasury is empty',
+                style: const TextStyle(color: Color(0xFF9A5B2B)),
+              ),
+            Text(
+              'Net                 ${net >= 0 ? '+' : ''}$net',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            if (advanced > 0) Text('$advanced construction stage(s) advanced'),
+            for (final name in completions)
+              Text(
+                '$name — complete',
+                style: const TextStyle(color: Color(0xFF1E6552)),
+              ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Continue'),
+          ),
+        ],
       ),
     );
   }
-
-  void _fundProject(WorldConstruction project, int amount) {
-    if (project.kind == WorldConstructionKind.structure) {
-      _runAction(
-        (state) => fundStructureProject(
-          state,
-          _requireContent,
-          projectId: project.id,
-          amount: amount,
-        ),
-      );
-    } else if (project.kind == WorldConstructionKind.bridge) {
-      _runAction(
-        (state) => fundBridgeProject(
-          state,
-          _requireContent,
-          projectId: project.id,
-          amount: amount,
-        ),
-      );
-    }
-  }
-
-  void _advanceDays(int days) =>
-      _runAction((state) => advanceWorldDays(state, days));
 
   @override
   Widget build(BuildContext context) {
@@ -813,8 +849,9 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
               _WorldHeader(
                 state: world,
                 saveError: _saveError,
+                nextReportNet: townLedger(world, _requireContent).net,
                 canCheckIn: canCheckInWorldToday(world),
-                onCheckIn: () => _runAction(checkInWorldForToday),
+                onCheckIn: _checkIn,
               ),
               const SizedBox(height: 12),
               Expanded(
@@ -992,7 +1029,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           _catalogue(world),
         for (final job in world.constructions)
           if (job.kind != WorldConstructionKind.road)
-            _projectFundingCard(world, job),
+            _projectProgressCard(world, job),
         const SizedBox(height: 12),
         _ClockControls(
           state: world,
@@ -1005,7 +1042,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           ),
           onDebugGrant: () =>
               _runAction((state) => grantWorldDebugCoins(state, 10)),
-          onCheckIn: () => _runAction(checkInWorldForToday),
+          onCheckIn: _checkIn,
           canCheckIn: canCheckInWorldToday(world),
         ),
         if (world.constructions.isNotEmpty) ...[
@@ -1028,20 +1065,13 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   );
 
   Widget _roadControls(ParcelWorldState world) {
-    final activeRoad = world.constructions
-        .where((job) => job.kind == WorldConstructionKind.road)
-        .firstOrNull;
-    if (activeRoad != null) return _roadFundingCard(world, activeRoad);
-
-    if (world.constructions.length >= world.builderCapacity) {
-      return _PanelCard(
-        title: 'Road plan',
-        child: Text(
-          'Your builder is assigned to ${_projectName(world.constructions.first)}. '
-          'Finish funding it before assigning another project.',
-        ),
-      );
-    }
+    // Creep cards for every in-flight stretch — roads consume no
+    // builder, so any number creep at once and planning stays open.
+    final creepCards = [
+      for (final job in world.constructions)
+        if (job.kind == WorldConstructionKind.road)
+          _roadProgressCard(world, job),
+    ];
 
     String? failure;
     RoadProjectQuote? quote;
@@ -1057,52 +1087,60 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         failure = error.message;
       }
     }
-    return _PanelCard(
-      title: 'Roads',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _roadStartCell == null
-                ? 'Click a start tile, then an end tile — the road projects '
-                      'onto the closer axis. Roads go anywhere on owned land.'
-                : _roadPlanCells.isEmpty
-                ? 'Start at ${_roadStartCell!.key}. Now click an end tile.'
-                : failure ??
-                      '${_roadPlanCells.length} road tiles · '
-                          '${quote!.totalCost} coins total. Plans are free; '
-                          'funding builds one tile at a time from the start.',
-          ),
-          if (quote != null && world.coins == 0)
-            const Text(
-              'Road tiles cost 1 coin each; check in or use a test grant to fund them.',
-            ),
-          if (_roadStartCell != null)
-            Wrap(
-              spacing: 6,
-              children: [
-                OutlinedButton(
-                  onPressed: () => setState(() {
-                    _roadPlanCells = const [];
-                    _roadStartCell = null;
-                    _selectedCell = null;
-                  }),
-                  child: const Text('Clear plan'),
+    return Column(
+      children: [
+        ...creepCards,
+        _PanelCard(
+          title: 'Roads',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _roadStartCell == null
+                    ? 'Click a start tile, then an end tile — the road projects '
+                          'onto the closer axis. Roads go anywhere on owned land.'
+                    : _roadPlanCells.isEmpty
+                    ? 'Start at ${_roadStartCell!.key}. Now click an end tile.'
+                    : failure ??
+                          '${_roadPlanCells.length} road tiles · '
+                              '${quote!.price} coins, paid upfront. The '
+                              'stretch then builds one tile per check-in.',
+              ),
+              if (quote != null && world.coins < quote.price)
+                Text(
+                  'Save ${quote.price - world.coins} more coin(s) for this '
+                  'road plan.',
                 ),
-                if (quote != null)
-                  FilledButton(
-                    onPressed: _startRoadProject,
-                    child: const Text('Assign builder · plan free'),
-                  ),
-              ],
-            ),
-        ],
-      ),
+              if (_roadStartCell != null)
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => setState(() {
+                        _roadPlanCells = const [];
+                        _roadStartCell = null;
+                        _selectedCell = null;
+                      }),
+                      child: const Text('Clear plan'),
+                    ),
+                    if (quote != null)
+                      FilledButton(
+                        onPressed: world.coins >= quote.price
+                            ? _startRoadProject
+                            : null,
+                        child: Text('Buy road plan · ${quote.price} coins'),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _roadFundingCard(ParcelWorldState world, WorldConstruction project) {
-    final completedTiles = world.roads
+  Widget _roadProgressCard(ParcelWorldState world, WorldConstruction project) {
+    final delivered = world.roads
         .where((road) => road.projectId == project.id)
         .length;
     return _PanelCard(
@@ -1111,79 +1149,54 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$completedTiles/${project.roadCells.length} tiles completed · '
-            '${project.coinsFunded}/${project.totalCostCoins} coins funded',
+            '$delivered/${project.roadCells.length} tiles laid · '
+            'one more per check-in',
           ),
-          LinearProgressIndicator(value: project.progress),
-          Text(
-            world.coins < 1
-                ? 'Earn a coin with an eligible check-in to lay the next tile.'
-                : 'Each coin lays the next tile, from the start of the plan.',
-          ),
-          FilledButton(
-            onPressed: world.coins >= 1
-                ? () => _fundRoadProject(project)
-                : null,
-            child: const Text('Fund road · 1 coin'),
+          LinearProgressIndicator(
+            value: project.roadCells.isEmpty
+                ? 0
+                : delivered / project.roadCells.length,
           ),
         ],
       ),
     );
   }
 
-  Widget _projectFundingCard(
+  Widget _projectProgressCard(
     ParcelWorldState world,
     WorldConstruction project,
   ) {
     final definition = _requireContent.structure(project.catalogueId ?? '');
     final isBridge = project.kind == WorldConstructionKind.bridge;
     final title = isBridge ? 'Bridge' : definition?.name ?? 'Building';
-    final available = world.coins < project.coinsRemaining
-        ? world.coins
-        : project.coinsRemaining;
-    final canFund = available > 0;
+    final String status;
+    final double progress;
+    if (isBridge) {
+      final total = project.bridgeDeliveryCells.length;
+      status = '${project.stagesDone}/$total cells raised · one per check-in';
+      progress = total == 0 ? 0 : project.stagesDone / total;
+    } else {
+      final stages = definition?.constructionStages ?? 1;
+      status =
+          'Stage ${project.stagesDone + 1} of $stages · '
+          'one stage per check-in';
+      progress = stages == 0 ? 0 : project.stagesDone / stages;
+    }
     return _PanelCard(
-      title: '$title · Builder ${project.builderSlot + 1}',
+      title: isBridge ? title : '$title · Builder ${project.builderSlot! + 1}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '${project.coinsFunded}/${project.totalCostCoins} coins funded · '
-            '${project.coinsRemaining} remaining',
-          ),
-          LinearProgressIndicator(value: project.progress),
-          if (!canFund)
-            const Text('Earn a coin with an eligible check-in to continue.'),
-          Wrap(
-            spacing: 6,
-            children: [
-              OutlinedButton(
-                onPressed: canFund ? () => _fundProject(project, 1) : null,
-                child: const Text('Contribute 1 coin'),
-              ),
-              if (available > 1)
-                FilledButton(
-                  onPressed: () => _fundProject(project, available),
-                  child: Text('Contribute $available coins'),
-                ),
-            ],
-          ),
-          const Text(
-            'This builder stays assigned until the project is fully funded.',
-            style: TextStyle(fontSize: 11, color: Color(0xFF617267)),
-          ),
+          Text(status),
+          LinearProgressIndicator(value: progress),
+          if (!isBridge)
+            const Text(
+              'This builder stays assigned until the work is complete.',
+              style: TextStyle(fontSize: 11, color: Color(0xFF617267)),
+            ),
         ],
       ),
     );
-  }
-
-  String _projectName(WorldConstruction project) {
-    if (project.kind == WorldConstructionKind.road) {
-      return 'a ${project.roadCells.length}-tile road stretch';
-    }
-    if (project.kind == WorldConstructionKind.bridge) return 'a bridge';
-    return _requireContent.structure(project.catalogueId ?? '')?.name ??
-        'a building';
   }
 
   Widget _parcelAction(ParcelWorldState world, ParcelCoord parcel) {
@@ -1204,10 +1217,11 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
               '${quote.landCellCount} land cells · ${quote.cells.length - quote.landCellCount} water cells',
             ),
             Text(
-              '${quote.price} coins · parcel only; roads and buildings cost extra.',
+              '${quote.price} coins · parcels, road plans, and bridges are '
+              "the treasury's purchases.",
             ),
             if (world.coins < quote.price)
-              Text('Check in for ${quote.price - world.coins} more coin(s).'),
+              Text('Save ${quote.price - world.coins} more coin(s).'),
             const SizedBox(height: 6),
             FilledButton(
               onPressed: world.coins >= quote.price
@@ -1253,8 +1267,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           const SizedBox(height: 4),
           Text(
             '${definition.footprintColumns}×${definition.footprintRows} footprint · '
-            '${definition.costLabel} · '
-            '${definition.kind == StructureKind.decoration ? 'placed instantly' : 'funded manually'}',
+            '${definition.kind == StructureKind.decoration ? 'free · placed instantly' : 'free to plan · ${definition.constructionStages} stages · ${definition.netCoinsPerCheckIn >= 0 ? '+' : ''}${definition.netCoinsPerCheckIn} coins per report'}',
           ),
           const SizedBox(height: 6),
           Text(
@@ -1262,9 +1275,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                 ? 'Select a placement tile.'
                 : failure ?? 'Selected origin ${cell.key}.',
           ),
-          if (quote != null && world.coins < quote.price)
-            if (definition.kind == StructureKind.decoration)
-              Text('Check in for ${quote.price - world.coins} more coin(s).'),
+          if (quote != null &&
+              definition.kind == StructureKind.decoration &&
+              world.coins < quote.price)
+            Text('Save ${quote.price - world.coins} more coin(s).'),
           if (quote != null)
             FilledButton(
               onPressed:
@@ -1275,7 +1289,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
               child: Text(
                 definition.kind == StructureKind.decoration
                     ? 'Place instantly'
-                    : 'Plan and assign builder',
+                    : 'Plan construction',
               ),
             ),
         ],
@@ -1315,7 +1329,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                 : failure ??
                       '${quote!.spanCells.length} span '
                           '${quote.spanCells.length == 1 ? 'tile' : 'tiles'} · '
-                          '${quote.bridgeCost} coins to fund. Spans may cross '
+                          '${quote.bridgeCost} coins, paid upfront. The deck '
+                          'builds one tile per check-in. Spans may cross '
                           'water and land; everything under the bridge must '
                           'be owned.',
           ),
@@ -1333,8 +1348,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                 ),
                 if (quote != null)
                   FilledButton(
-                    onPressed: _startBridgeProject,
-                    child: const Text('Assign builder · plan free'),
+                    onPressed: world.coins >= quote.bridgeCost
+                        ? _startBridgeProject
+                        : null,
+                    child: Text('Buy bridge plan · ${quote.bridgeCost} coins'),
                   ),
               ],
             ),
@@ -1466,10 +1483,17 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                   'Structure',
             ),
           if (job != null)
-            Text(
-              '${job.coinsFunded}/${job.totalCostCoins} coins funded · '
-              '${job.coinsRemaining} remaining',
-            ),
+            Text(switch (job.kind) {
+              WorldConstructionKind.structure =>
+                'Under construction · stage ${job.stagesDone + 1} of '
+                    '${_requireContent.structure(job.catalogueId ?? '')?.constructionStages ?? 1}',
+              WorldConstructionKind.road =>
+                'Road plan · ${world.roads.where((road) => road.projectId == job.id).length}/'
+                    '${job.roadCells.length} tiles laid',
+              WorldConstructionKind.bridge =>
+                'Bridge plan · ${job.stagesDone}/'
+                    '${job.bridgeDeliveryCells.length} cells raised',
+            }),
         ],
       ),
     );
@@ -1480,12 +1504,17 @@ class _WorldHeader extends StatelessWidget {
   const _WorldHeader({
     required this.state,
     required this.saveError,
+    required this.nextReportNet,
     required this.canCheckIn,
     required this.onCheckIn,
   });
 
   final ParcelWorldState state;
   final String? saveError;
+
+  /// Projected net of the next check-in's report: taxes minus
+  /// upkeep, before the zero floor.
+  final int nextReportNet;
   final bool canCheckIn;
   final VoidCallback onCheckIn;
 
@@ -1527,16 +1556,23 @@ class _WorldHeader extends StatelessWidget {
       spacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Chip(
-          avatar: const Icon(Icons.toll_rounded, color: Color(0xFFAC7C20)),
-          label: Text('${state.coins} coins'),
-          backgroundColor: const Color(0xFFFFF8DA),
+        Tooltip(
+          message:
+              'The town treasury. Each check-in collects taxes and '
+              'pays upkeep; purchases draw from it.',
+          child: Chip(
+            avatar: const Icon(Icons.toll_rounded, color: Color(0xFFAC7C20)),
+            label: Text('${state.coins} coins'),
+            backgroundColor: const Color(0xFFFFF8DA),
+          ),
         ),
         Chip(
           avatar: const Icon(Icons.groups_rounded, color: Color(0xFF35695A)),
           label: Text('${state.population} population'),
           backgroundColor: const Color(0xFFE3F2EA),
         ),
+        // The button's number is the next report's projected net —
+        // taxes minus upkeep, before the zero floor.
         FilledButton.icon(
           onPressed: canCheckIn ? onCheckIn : null,
           icon: Icon(checkedIn ? Icons.check_rounded : Icons.add_rounded),
@@ -1544,7 +1580,7 @@ class _WorldHeader extends StatelessWidget {
             checkedIn
                 ? 'Checked in'
                 : canCheckIn
-                ? 'Check in · +1'
+                ? 'Check in · ${nextReportNet >= 0 ? '+' : ''}$nextReportNet'
                 : 'Past day',
           ),
         ),
@@ -1721,13 +1757,35 @@ class _ConstructionList extends StatelessWidget {
                   '${job.roadCells.length}-tile road stretch',
                 WorldConstructionKind.bridge => 'Bridge',
               }),
-              subtitle: Text(
-                '${job.coinsFunded}/${job.totalCostCoins} coins funded · '
-                '${job.coinsRemaining} remaining',
-              ),
+              subtitle: Text(switch (job.kind) {
+                WorldConstructionKind.structure =>
+                  'Stage ${job.stagesDone + 1} of '
+                      '${content.structure(job.catalogueId ?? '')?.constructionStages ?? 1} · one per check-in',
+                WorldConstructionKind.road =>
+                  '${state.roads.where((road) => road.projectId == job.id).length}/'
+                      '${job.roadCells.length} tiles laid · one per check-in',
+                WorldConstructionKind.bridge =>
+                  '${job.stagesDone}/${job.bridgeDeliveryCells.length} cells raised · one per check-in',
+              }),
               trailing: SizedBox(
                 width: 64,
-                child: LinearProgressIndicator(value: job.progress),
+                child: LinearProgressIndicator(
+                  value: switch (job.kind) {
+                    WorldConstructionKind.structure =>
+                      job.stagesDone /
+                          (content
+                                  .structure(job.catalogueId ?? '')
+                                  ?.constructionStages ??
+                              1),
+                    WorldConstructionKind.road =>
+                      state.roads
+                              .where((road) => road.projectId == job.id)
+                              .length /
+                          job.roadCells.length,
+                    WorldConstructionKind.bridge =>
+                      job.stagesDone / job.bridgeDeliveryCells.length,
+                  },
+                ),
               ),
             ),
           ),

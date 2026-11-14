@@ -38,14 +38,15 @@ class RoadProjectQuote {
   const RoadProjectQuote({
     required this.cells,
     required this.style,
-    required this.totalCost,
-    required this.builderSlot,
+    required this.price,
   });
 
   final List<CellCoord> cells;
   final RoadStyle style;
-  final int totalCost;
-  final int builderSlot;
+
+  /// Upfront treasury price of the whole stretch, paid at planning;
+  /// the tiles then creep in one per check-in.
+  final int price;
 }
 
 class StructurePlacementQuote {
@@ -66,41 +67,12 @@ class StructurePlacementQuote {
   final int? builderSlot;
 }
 
-class StructureFundingQuote {
-  const StructureFundingQuote({
-    required this.jobId,
-    required this.amount,
-    required this.totalCost,
-    required this.coinsFunded,
-  });
-
-  final String jobId;
-  final int amount;
-  final int totalCost;
-  final int coinsFunded;
-}
-
-class RoadProjectFundingQuote {
-  const RoadProjectFundingQuote({
-    required this.jobId,
-    required this.cell,
-    required this.price,
-  });
-
-  final String jobId;
-  final CellCoord cell;
-  final int price;
-}
-
 class BridgeQuote {
   const BridgeQuote({
     required this.nearBank,
     required this.farBank,
     required this.spanCells,
     required this.bridgeCost,
-    required this.builderSlot,
-    required this.roadTileCost,
-    required this.bridgeTileCost,
   });
 
   final CellCoord nearBank;
@@ -108,19 +80,45 @@ class BridgeQuote {
 
   /// The cells between the banks — water or land alike.
   final List<CellCoord> spanCells;
-  final int bridgeCost;
-  final int builderSlot;
-  final int roadTileCost;
-  final int bridgeTileCost;
 
-  /// The funding order and per-cell price: near bank, span tiles, far
-  /// bank. A cell completes when the funded coins reach its cumulative
-  /// cost.
-  List<(CellCoord, int)> get cellCosts => [
-    (nearBank, roadTileCost),
-    for (final cell in spanCells) (cell, bridgeTileCost),
-    (farBank, roadTileCost),
-  ];
+  /// Upfront treasury price of the whole crossing, paid at planning.
+  final int bridgeCost;
+}
+
+/// The town's per-check-in ledger: taxes collected and upkeep owed
+/// from every completed building and every infrastructure tile that
+/// exists — delivered bridge spans included, since upkeep counts per
+/// tile as it appears. Pure projection; the check-in reducer and the
+/// HUD's next-report projection share it.
+class TownLedger {
+  const TownLedger({required this.taxes, required this.upkeep});
+
+  final int taxes;
+  final int upkeep;
+  int get net => taxes - upkeep;
+}
+
+TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
+  var taxes = 0;
+  var upkeep = 0;
+  for (final structure in state.structures) {
+    final definition = content.structure(structure.catalogueId);
+    taxes += definition?.taxCoins ?? 0;
+    upkeep += definition?.upkeepCoins ?? 0;
+  }
+  var bridgeTiles = 0;
+  for (final bridge in state.bridges) {
+    bridgeTiles += bridge.waterCells.length;
+  }
+  for (final job in state.constructions) {
+    if (job.kind != WorldConstructionKind.bridge) continue;
+    bridgeTiles += (job.stagesDone - 1).clamp(0, job.waterCells.length);
+  }
+  taxes += state.roads.length * content.economy.roadTaxCoinsPerTile;
+  upkeep += state.roads.length * content.economy.roadUpkeepCoinsPerTile;
+  taxes += bridgeTiles * content.economy.bridgeTaxCoinsPerTile;
+  upkeep += bridgeTiles * content.economy.bridgeUpkeepCoinsPerTile;
+  return TownLedger(taxes: taxes, upkeep: upkeep);
 }
 
 /// Projects a two-click road or bridge line onto the closer axis: the
@@ -194,7 +192,6 @@ RoadProjectQuote quoteRoadStretch(
   if (!_unique(cells.map((cell) => cell.key))) {
     throw const WorldRuleViolation('A road stretch cannot revisit a tile.');
   }
-  final builderSlot = _freeBuilderSlot(state);
   final queries = WorldQueries(state, terrainProvider);
   for (var index = 0; index < cells.length; index++) {
     final cell = cells[index];
@@ -216,45 +213,7 @@ RoadProjectQuote quoteRoadStretch(
   return RoadProjectQuote(
     cells: List.unmodifiable(cells),
     style: RoadStyle.asphalt,
-    totalCost: cells.length * content.roadTileCost(),
-    builderSlot: builderSlot,
-  );
-}
-
-RoadProjectFundingQuote quoteRoadProjectFunding(
-  ParcelWorldState state,
-  ContentBundle content, {
-  required String projectId,
-}) {
-  final project = _roadProject(state, projectId);
-  final price = content.economy.roadTileCostCoins;
-  final tileIndex = project.coinsFunded ~/ price;
-  if (tileIndex >= project.roadCells.length) {
-    throw const WorldRuleViolation('That road project is already complete.');
-  }
-  return RoadProjectFundingQuote(
-    jobId: projectId,
-    cell: project.roadCells[tileIndex],
-    price: price,
-  );
-}
-
-StructureFundingQuote quoteStructureFunding(
-  ParcelWorldState state, {
-  required String projectId,
-  required int amount,
-}) {
-  final job = _structureProject(state, projectId);
-  if (amount <= 0 || amount > state.coins || amount > job.coinsRemaining) {
-    throw const WorldRuleViolation(
-      'Choose a positive contribution no larger than your wallet or remaining cost.',
-    );
-  }
-  return StructureFundingQuote(
-    jobId: job.id,
-    amount: amount,
-    totalCost: job.totalCostCoins,
-    coinsFunded: job.coinsFunded,
+    price: cells.length * content.roadTileCost(),
   );
 }
 
@@ -372,7 +331,6 @@ BridgeQuote quoteBridge(
   WorldRules rules = const WorldRules(),
 }) {
   final queries = WorldQueries(state, terrainProvider);
-  final builderSlot = _freeBuilderSlot(state);
   if (nearBank.column.abs() > rules.maximumCoordinate ||
       nearBank.row.abs() > rules.maximumCoordinate ||
       farBank.column.abs() > rules.maximumCoordinate ||
@@ -432,40 +390,22 @@ BridgeQuote quoteBridge(
     farBank: farBank,
     spanCells: spanCells,
     bridgeCost: spanCells.length * bridgeTileCost + 2 * roadTileCost,
-    builderSlot: builderSlot,
-    roadTileCost: roadTileCost,
-    bridgeTileCost: bridgeTileCost,
   );
 }
 
+/// Building crews are the concurrency limit — road and bridge creep
+/// consumes no builder — so slots count structure jobs only.
 int _freeBuilderSlot(ParcelWorldState state) {
-  final occupied = state.constructions.map((job) => job.builderSlot).toSet();
+  final occupied = state.constructions
+      .where((job) => job.kind == WorldConstructionKind.structure)
+      .map((job) => job.builderSlot)
+      .toSet();
   for (var slot = 0; slot < state.builderCapacity; slot++) {
     if (!occupied.contains(slot)) return slot;
   }
   throw const WorldRuleViolation(
     'All builders are assigned. Finish a project before planning another.',
   );
-}
-
-WorldConstruction _roadProject(ParcelWorldState state, String projectId) {
-  for (final job in state.constructions) {
-    if (job.id == projectId && job.kind == WorldConstructionKind.road) {
-      return job;
-    }
-  }
-  throw const WorldRuleViolation('That road project is no longer active.');
-}
-
-WorldConstruction _structureProject(ParcelWorldState state, String projectId) {
-  for (final job in state.constructions) {
-    if (job.id == projectId &&
-        job.kind == WorldConstructionKind.structure &&
-        job.catalogueId != null) {
-      return job;
-    }
-  }
-  throw const WorldRuleViolation('That building project is no longer active.');
 }
 
 void validateParcelWorldState(
@@ -483,7 +423,10 @@ void validateParcelWorldState(
       // progression floor means the save was never reconciled.
       state.builderCapacity <
           content.economy.builderCapacityForPopulation(state.population) ||
-      state.constructions.length > state.builderCapacity ||
+      state.constructions
+              .where((job) => job.kind == WorldConstructionKind.structure)
+              .length >
+          state.builderCapacity ||
       state.constructionDay < 0 ||
       worldDateKey(state.checkInHighWaterDate).compareTo(state.dateKey) < 0 ||
       state.coins < 0 ||
@@ -529,7 +472,11 @@ void validateParcelWorldState(
       !_unique(state.structures.map((structure) => structure.id)) ||
       !_unique(state.bridges.map((bridge) => bridge.id)) ||
       !_unique(state.constructions.map((job) => job.id)) ||
-      !_unique(state.constructions.map((job) => '${job.builderSlot}')) ||
+      !_unique(
+        state.constructions
+            .where((job) => job.kind == WorldConstructionKind.structure)
+            .map((job) => '${job.builderSlot}'),
+      ) ||
       !_unique(state.events.map((event) => event.id))) {
     throw const FormatException('The parcel-world save has duplicate IDs.');
   }
@@ -669,11 +616,7 @@ void validateParcelWorldState(
     }
   }
   for (final job in state.constructions) {
-    if (job.totalCostCoins <= 0 ||
-        job.coinsFunded < 0 ||
-        job.coinsFunded >= job.totalCostCoins ||
-        job.builderSlot < 0 ||
-        job.builderSlot >= state.builderCapacity ||
+    if (job.stagesDone < 0 ||
         job.startedAtDay < 0 ||
         job.startedAtDay > state.constructionDay) {
       throw const FormatException(
@@ -687,8 +630,11 @@ void validateParcelWorldState(
           : content.structure(job.catalogueId!);
       if (definition == null ||
           definition.kind != StructureKind.building ||
-          job.totalCostCoins != definition.costCoins ||
           job.structureKind != definition.kind ||
+          job.stagesDone >= definition.constructionStages ||
+          job.builderSlot == null ||
+          job.builderSlot! < 0 ||
+          job.builderSlot! >= state.builderCapacity ||
           job.origin == null ||
           job.roadStyle != null ||
           job.roadCells.isNotEmpty ||
@@ -725,12 +671,14 @@ void validateParcelWorldState(
       final projectRoads = state.roads
           .where((road) => road.projectId == job.id)
           .toList();
-      // Funding completes tiles in order from the start: the funded
-      // roads are exactly the first coinsFunded tiles of the plan.
-      final fundedPrefix = job.roadCells.take(job.coinsFunded).toList();
+      // Delivery completes tiles in order from the start: the
+      // delivered roads are exactly the first delivered tiles of the
+      // plan, and the count itself comes from those rows.
+      final deliveredPrefix = job.roadCells.take(projectRoads.length).toList();
       if (job.catalogueId != null ||
           job.structureKind != null ||
           job.origin != null ||
+          job.builderSlot != null ||
           job.roadStyle == null ||
           job.footprint.isNotEmpty ||
           job.waterCells.isNotEmpty ||
@@ -738,9 +686,8 @@ void validateParcelWorldState(
           job.farBank != null ||
           job.roadCells.isEmpty ||
           !_unique(job.roadCells.map((cell) => cell.key)) ||
-          job.totalCostCoins != job.roadCells.length ||
-          projectRoads.length != fundedPrefix.length ||
-          !fundedPrefix.every(
+          projectRoads.length != deliveredPrefix.length ||
+          !deliveredPrefix.every(
             (cell) => projectRoads.any((road) => road.cell == cell),
           )) {
         throw const FormatException(
@@ -755,7 +702,8 @@ void validateParcelWorldState(
             !queries.terrainAt(cell).isLand ||
             (fundedRoad != null && !fundedByThisProject) ||
             (fundedByThisProject &&
-                (fundedRoad!.pricePaid != 1 || index >= job.coinsFunded)) ||
+                (fundedRoad!.pricePaid != content.economy.roadTileCostCoins ||
+                    index >= projectRoads.length)) ||
             (!fundedByThisProject && occupied.contains(cell)) ||
             !reserved.add(cell) ||
             (index > 0 && !job.roadCells[index - 1].neighbors.contains(cell))) {
@@ -765,26 +713,25 @@ void validateParcelWorldState(
         }
       }
     } else if (job.kind == WorldConstructionKind.bridge) {
-      final roadTileCost = content.economy.roadTileCostCoins;
-      final bridgeTileCost = content.economy.bridgeTileCostCoins;
       final nearBankRoad = queries.roadsByCell[job.nearBank!];
-      // The near bank completes as a road tile once its coins are
-      // funded; the far bank only completes with the project itself.
-      // The funded amount and the bank road must agree.
+      // Delivery order is near bank, span tiles, far bank: the near
+      // bank completes as a road tile once the first cell is
+      // delivered; the far bank only completes with the project
+      // itself. The delivered count and the bank road must agree.
       final nearBankFunded =
           nearBankRoad != null && nearBankRoad.projectId == job.id;
-      final nearBankDue = job.coinsFunded >= roadTileCost;
+      final nearBankDue = job.stagesDone >= 1;
       if (job.catalogueId != null ||
           job.structureKind != null ||
           job.origin != null ||
+          job.builderSlot != null ||
           job.quarterTurns != 0 ||
           job.footprint.isNotEmpty ||
           job.roadStyle != null ||
           job.roadCells.isNotEmpty ||
           job.nearBank == null ||
           job.farBank == null ||
-          job.totalCostCoins !=
-              job.waterCells.length * bridgeTileCost + 2 * roadTileCost ||
+          job.stagesDone >= job.waterCells.length + 2 ||
           !_validBridgeGeometry(
             job.nearBank!,
             job.farBank!,

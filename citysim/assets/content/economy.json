@@ -1,10 +1,27 @@
 {
   "bridgeCost": {
-    "bridgeTileCostCoins": 2
+    "bridgeTileCostCoins": 12
   },
-  "builderProgression": [],
-  "parcelBaseCoins": 8,
-  "roadTileCostCoins": 1,
+  "bridgeTaxCoinsPerTile": 0,
+  "bridgeUpkeepCoinsPerTile": 1,
+  "builderProgression": [
+    {
+      "atPopulation": 10,
+      "capacity": 2
+    },
+    {
+      "atPopulation": 25,
+      "capacity": 3
+    },
+    {
+      "atPopulation": 50,
+      "capacity": 4
+    }
+  ],
+  "parcelBaseCoins": 32,
+  "roadTaxCoinsPerTile": 0,
+  "roadTileCostCoins": 4,
+  "roadUpkeepCoinsPerTile": 1,
   "startingBuilderCapacity": 1,
-  "startingWalletCoins": 0
+  "startingTreasuryCoins": 20
 }

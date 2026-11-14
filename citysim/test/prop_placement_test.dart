@@ -90,8 +90,8 @@ void main() {
     expect(prop.cell, const CellCoord(5, 5));
     expect(prop.subtileX, 2);
     expect(prop.subtileY, 3);
-    expect(prop.pricePaid, 2);
-    expect(world.coins, 48);
+    expect(prop.pricePaid, 0, reason: 'props are free in the staged economy');
+    expect(world.coins, 50);
     expect(
       world.structures.every(
         (structure) => structure.kind == StructureKind.building,

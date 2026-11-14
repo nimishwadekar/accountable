@@ -29,16 +29,29 @@ void main() {
     today: DateTime.utc(2026, 11, 2),
   );
 
-  // Plans and fully funds a road stretch: one coin completes the
-  // next tile in order from the start.
-  ParcelWorldState planAndFundRoad(
+  /// The heartbeat: a simulated day passes and the town report runs
+  /// — taxes, upkeep, then every in-flight project one stage.
+  ParcelWorldState nextDay(ParcelWorldState world) =>
+      checkInWorldForToday(advanceWorldDays(world, 1), content);
+
+  /// Plans a road stretch and lets the check-ins lay it fully. Call
+  /// only when the stretch is the sole in-flight work: a check-in
+  /// advances every project, not one.
+  ParcelWorldState planAndSettleRoad(
     ParcelWorldState world, {
     required List<CellCoord> cells,
   }) {
     world = planRoadStretch(world, content, terrain, cells: cells);
-    final project = world.constructions.single;
     for (final _ in cells) {
-      world = fundRoadProject(world, content, terrain, projectId: project.id);
+      world = nextDay(world);
+    }
+    return world;
+  }
+
+  /// Check-ins until no construction remains.
+  ParcelWorldState settleAll(ParcelWorldState world) {
+    while (world.constructions.isNotEmpty) {
+      world = nextDay(world);
     }
     return world;
   }
@@ -49,7 +62,7 @@ void main() {
 
       expect(world.parcels.single.coord, const ParcelCoord(0, 0));
       expect(world.structures, isEmpty);
-      expect(world.coins, 0);
+      expect(world.coins, content.economy.startingTreasuryCoins);
       expect(world.population, 0);
       expect(world.roads.single.cell, const CellCoord(4, 4));
       expect(world.roads.single.style, RoadStyle.asphalt);
@@ -73,14 +86,24 @@ void main() {
       'check-in is explicit and idempotent; advancing days never funds work',
       () {
         var world = newWorld();
-        world = checkInWorldForToday(world);
-        expect(world.coins, 1);
-        expect(checkInWorldForToday(world), same(world));
+        world = checkInWorldForToday(world, content);
+        // An empty town still pays the starter road's upkeep: the
+        // report is the whole economy now, and no coin is granted.
+        expect(world.coins, content.economy.startingTreasuryCoins - 1);
+        final report = world.events.lastWhere((e) => e.kind == 'check-in');
+        expect(report.payload['taxes'], 0);
+        expect(report.payload['upkeep'], 1);
+        expect(report.payload['upkeepShortfall'], 0);
+        expect(checkInWorldForToday(world, content), same(world));
 
         world = advanceWorldDays(world, 1);
-        expect(world.coins, 1, reason: 'a day advance does not check in');
-        world = checkInWorldForToday(world);
-        expect(world.coins, 2);
+        expect(
+          world.coins,
+          content.economy.startingTreasuryCoins - 1,
+          reason: 'a day advance does not check in',
+        );
+        world = checkInWorldForToday(world, content);
+        expect(world.coins, content.economy.startingTreasuryCoins - 2);
 
         final constructionDay = world.constructionDay;
         world = setWorldCalendarDate(
@@ -89,80 +112,101 @@ void main() {
         );
         expect(world.constructionDay, constructionDay);
         expect(canCheckInWorldToday(world), isFalse);
-        expect(checkInWorldForToday(world), same(world));
-        expect(world.coins, 2);
+        expect(checkInWorldForToday(world, content), same(world));
+        expect(world.coins, content.economy.startingTreasuryCoins - 2);
       },
     );
 
     test('rewinding cannot backfill an uncredited earlier day', () {
       var world = newWorld();
       world = advanceWorldDays(world, 5);
-      world = checkInWorldForToday(world);
-      expect(world.coins, 1);
+      world = checkInWorldForToday(world, content);
+      final afterReport = world.coins;
       world = setWorldCalendarDate(
         world,
         world.simulatedDate.subtract(const Duration(days: 4)),
       );
 
       expect(canCheckInWorldToday(world), isFalse);
-      expect(checkInWorldForToday(world), same(world));
-      expect(world.coins, 1);
+      expect(checkInWorldForToday(world, content), same(world));
+      expect(world.coins, afterReport);
     });
   });
 
-  group('builder projects and manual funding', () {
-    test('road plan occupies one builder; funding builds tiles in order', () {
-      var world = grantWorldDebugCoins(newWorld(), 5);
-      world = planRoadStretch(
-        world,
-        content,
-        terrain,
-        cells: const [CellCoord(5, 4), CellCoord(6, 4)],
-      );
-      final project = world.constructions.single;
-      expect(project.kind, WorldConstructionKind.road);
-      expect(project.builderSlot, 0);
-      expect(project.coinsFunded, 0);
-      expect(world.coins, 5, reason: 'planning a road is free');
-      expect(world.roads, hasLength(1));
-      expect(
-        () => planRoadStretch(
+  group('builder projects and staged construction', () {
+    test(
+      'road plans are upfront purchases that creep one tile per check-in',
+      () {
+        var world = grantWorldDebugCoins(newWorld(), 5);
+        world = planRoadStretch(
+          world,
+          content,
+          terrain,
+          cells: const [CellCoord(5, 4), CellCoord(6, 4)],
+        );
+        final project = world.constructions.single;
+        expect(project.kind, WorldConstructionKind.road);
+        expect(
+          project.builderSlot,
+          isNull,
+          reason: 'road creep uses no builder',
+        );
+        expect(
+          world.coins,
+          5 +
+              content.economy.startingTreasuryCoins -
+              2 * content.economy.roadTileCostCoins,
+          reason: 'the whole stretch is paid upfront',
+        );
+        expect(world.roads, hasLength(1));
+        // A second stretch plans while the first creeps — roads never
+        // block each other.
+        world = planRoadStretch(
           world,
           content,
           terrain,
           cells: const [CellCoord(3, 4)],
-        ),
-        throwsA(isA<WorldRuleViolation>()),
-        reason: 'the assigned builder prevents a second planned place',
-      );
+        );
+        expect(world.constructions, hasLength(2));
 
-      world = fundRoadProject(world, content, terrain, projectId: project.id);
-      expect(world.coins, 4);
-      expect(world.roads, hasLength(2));
-      expect(world.constructions.single.coinsFunded, 1);
-      expect(
-        world.roads.any((road) => road.cell == const CellCoord(5, 4)),
-        isTrue,
-        reason: 'funding completes the first tile in plan order',
-      );
-      world = advanceWorldDays(world, 30);
-      expect(world.constructions, hasLength(1));
-      expect(world.roads, hasLength(2));
+        world = advanceWorldDays(world, 30);
+        expect(world.roads, hasLength(1), reason: 'days never build anything');
 
-      world = fundRoadProject(world, content, terrain, projectId: project.id);
-      expect(world.coins, 3);
-      expect(world.roads, hasLength(3));
-      expect(
-        world.constructions,
-        isEmpty,
-        reason: 'completion releases the builder',
-      );
-      expect(world.totalCoinsSpent, 2);
-      validateParcelWorldState(world, content, terrain);
-    });
+        // One check-in lays one tile of each creeping stretch, in plan
+        // order from the start.
+        world = nextDay(world);
+        expect(world.roads, hasLength(3));
+        expect(
+          world.roads.any((road) => road.cell == const CellCoord(5, 4)),
+          isTrue,
+          reason: 'the first planned tile lays first',
+        );
+        expect(
+          world.roads.any((road) => road.cell == const CellCoord(3, 4)),
+          isTrue,
+          reason: 'every creeping stretch advances together',
+        );
+        world = nextDay(world);
+        expect(world.roads, hasLength(4));
+        expect(
+          world.constructions.where(
+            (job) => job.roadCells.contains(const CellCoord(5, 4)),
+          ),
+          isEmpty,
+          reason: 'laying the last tile settles the stretch',
+        );
+        // The plans were paid upfront (pinned above); the ledger also
+        // carries each check-in's road upkeep now.
+        expect(
+          world.events.where((event) => event.kind == 'road-project-complete'),
+          isNotEmpty,
+        );
+        validateParcelWorldState(world, content, terrain);
+      },
+    );
 
     test(
-      'building sites are free plans and complete only when fully funded',
+      'building sites are free plans that advance one stage per check-in',
       () {
         var world = newWorld();
         world = startStructureConstruction(
@@ -174,9 +218,10 @@ void main() {
         );
         final project = world.constructions.single;
         expect(project.kind, WorldConstructionKind.structure);
-        expect(project.totalCostCoins, 3);
+        expect(project.builderSlot, 0);
+        expect(project.stagesDone, 0);
         expect(project.population, 1);
-        expect(world.coins, 0);
+        expect(world.coins, content.economy.startingTreasuryCoins);
         expect(world.structures, isEmpty);
         expect(world.population, 0);
         expect(
@@ -188,39 +233,31 @@ void main() {
             origin: const CellCoord(4, 3),
           ),
           throwsA(isA<WorldRuleViolation>()),
+          reason: 'one builder holds one building site',
         );
 
         world = advanceWorldDays(world, 14);
-        expect(world.constructions.single.coinsFunded, 0);
-        expect(world.structures, isEmpty);
-        world = grantWorldDebugCoins(world, 3);
-        world = fundStructureProject(
-          world,
-          content,
-          projectId: project.id,
-          amount: 1,
-        );
-        expect(world.coins, 2);
-        expect(world.constructions.single.progress, closeTo(1 / 3, 0.001));
-        world = advanceWorldDays(world, 7);
-        expect(world.structures, isEmpty);
-        world = fundStructureProject(
-          world,
-          content,
-          projectId: project.id,
-          amount: 2,
-        );
+        expect(world.constructions.single.stagesDone, 0);
+        expect(world.structures, isEmpty, reason: 'days never build anything');
 
-        expect(world.coins, 0);
+        world = nextDay(world);
+        expect(world.constructions.single.stagesDone, 1);
+        expect(world.structures, isEmpty);
+        world = nextDay(world);
+
         expect(world.structures.single.catalogueId, 'small-home');
         expect(world.structures.single.population, 1);
         expect(world.population, 1);
-        expect(world.constructions, isEmpty);
+        expect(
+          world.constructions,
+          isEmpty,
+          reason: 'completion frees the builder',
+        );
         validateParcelWorldState(world, content, terrain);
       },
     );
 
-    test('decorations buy instantly and do not occupy the builder', () {
+    test('decorations place instantly, free, and use no builder', () {
       var world = grantWorldDebugCoins(newWorld(), 2);
       world = startStructureConstruction(
         world,
@@ -230,7 +267,11 @@ void main() {
         origin: const CellCoord(2, 2),
       );
 
-      expect(world.coins, 1);
+      expect(
+        world.coins,
+        2 + content.economy.startingTreasuryCoins,
+        reason: 'props are free in the staged economy',
+      );
       expect(world.structures, isEmpty);
       expect(world.props.single.catalogueId, 'flower-garden');
       expect(
@@ -278,15 +319,9 @@ void main() {
           reason: 'the rolled variant must be one of the model\'s roles',
         );
       }
-      // No builder project for any of them; only the coin costs hit.
+      // No builder project for any of them, and none costs a coin.
       expect(world.constructions, isEmpty);
-      expect(
-        world.coins,
-        8 -
-            content.structure('street-lamp')!.costCoins -
-            content.structure('rocks')!.costCoins -
-            content.structure('common-tree')!.costCoins,
-      );
+      expect(world.coins, 8 + content.economy.startingTreasuryCoins);
       validateParcelWorldState(world, content, terrain);
     });
 
@@ -310,29 +345,12 @@ void main() {
           origin: origin,
         );
         rolled.add(world.constructions.single.assetRole);
-        final project = world.constructions.single;
-        world = fundStructureProject(
-          world,
-          content,
-          projectId: project.id,
-          amount: project.totalCostCoins,
-        );
+        world = settleAll(world);
       }
-      world = planRoadStretch(
+      world = planAndSettleRoad(
         world,
-        content,
-        terrain,
         cells: const [CellCoord(4, 5), CellCoord(4, 6)],
       );
-      final roadProject = world.constructions.single;
-      for (final _ in [const CellCoord(4, 5), const CellCoord(4, 6)]) {
-        world = fundRoadProject(
-          world,
-          content,
-          terrain,
-          projectId: roadProject.id,
-        );
-      }
       for (final origin in [
         const CellCoord(3, 5),
         const CellCoord(5, 5),
@@ -346,13 +364,7 @@ void main() {
           origin: origin,
         );
         rolled.add(world.constructions.single.assetRole);
-        final project = world.constructions.single;
-        world = fundStructureProject(
-          world,
-          content,
-          projectId: project.id,
-          amount: project.totalCostCoins,
-        );
+        world = settleAll(world);
       }
 
       // Six placements of a six-variant model should exercise more than
@@ -382,13 +394,7 @@ void main() {
           origin: origin,
         );
         replayRoles.add(replayed.constructions.single.assetRole);
-        final project = replayed.constructions.single;
-        replayed = fundStructureProject(
-          replayed,
-          content,
-          projectId: project.id,
-          amount: project.totalCostCoins,
-        );
+        replayed = settleAll(replayed);
       }
       expect(replayRoles, rolled.take(3), reason: 'same seed, same rolls');
 
@@ -428,7 +434,7 @@ void main() {
       );
 
       // Roads along the whole north side (5,2) and (6,2) satisfy it.
-      world = planAndFundRoad(
+      world = planAndSettleRoad(
         world,
         cells: const [
           CellCoord(4, 3),
@@ -470,12 +476,7 @@ void main() {
       );
       expect(world.constructions.single.facing, 'east');
 
-      world = fundStructureProject(
-        world,
-        content,
-        projectId: world.constructions.single.id,
-        amount: world.constructions.single.totalCostCoins,
-      );
+      world = settleAll(world);
       world = startStructureConstruction(
         world,
         content,
@@ -511,25 +512,20 @@ void main() {
         ),
         throwsA(isA<WorldRuleViolation>()),
       );
-      world = fundStructureProject(
-        world,
-        content,
-        projectId: fixedProject.id,
-        amount: fixedProject.totalCostCoins,
-      );
+      world = settleAll(world);
 
       // Grow a crossroads so (6,5) and (5,6) each see roads on both
       // art variants: (6,5) has its north (6,4) — the left variant —
       // and west (5,5) — the right; (5,6) has its north (5,5) and
-      // west (4,6). Each stretch is planned and fully funded before
-      // the next claims the builder again.
-      world = planAndFundRoad(
+      // west (4,6). Each stretch is planned and settled before the
+      // next is drawn.
+      world = planAndSettleRoad(
         world,
         cells: const [CellCoord(4, 5), CellCoord(5, 5)],
       );
-      world = planAndFundRoad(world, cells: const [CellCoord(5, 4)]);
-      world = planAndFundRoad(world, cells: const [CellCoord(6, 4)]);
-      world = planAndFundRoad(world, cells: const [CellCoord(4, 6)]);
+      world = planAndSettleRoad(world, cells: const [CellCoord(5, 4)]);
+      world = planAndSettleRoad(world, cells: const [CellCoord(6, 4)]);
+      world = planAndSettleRoad(world, cells: const [CellCoord(4, 6)]);
 
       world = startStructureConstruction(
         world,
@@ -548,12 +544,7 @@ void main() {
         projectId: project.id,
       );
       expect(world.constructions.single.facing, 'west');
-      world = fundStructureProject(
-        world,
-        content,
-        projectId: project.id,
-        amount: project.totalCostCoins,
-      );
+      world = settleAll(world);
 
       // The player's pre-placement choice is honoured on both variants.
       world = startStructureConstruction(
@@ -565,12 +556,7 @@ void main() {
         preferredFacing: 'west',
       );
       expect(world.constructions.single.facing, 'west');
-      world = fundStructureProject(
-        world,
-        content,
-        projectId: world.constructions.single.id,
-        amount: world.constructions.single.totalCostCoins,
-      );
+      world = settleAll(world);
 
       expect(
         () => validateParcelWorldState(world, content, terrain),
@@ -600,30 +586,19 @@ void main() {
         const CellCoord(5, 4),
         const CellCoord(4, 3),
       ]) {
-        world = _buildCottage(world, content, terrain, origin);
+        world = _buildCottage(world, content, terrain, origin, nextDay);
       }
       // Extend the road south so two more cottages fit beside it.
-      world = planRoadStretch(
+      world = planAndSettleRoad(
         world,
-        content,
-        terrain,
         cells: const [CellCoord(4, 5), CellCoord(4, 6)],
       );
-      final roadProject = world.constructions.single;
-      for (final _ in [const CellCoord(4, 5), const CellCoord(4, 6)]) {
-        world = fundRoadProject(
-          world,
-          content,
-          terrain,
-          projectId: roadProject.id,
-        );
-      }
       for (final origin in [
         const CellCoord(3, 5),
         const CellCoord(5, 5),
         const CellCoord(4, 7),
       ]) {
-        world = _buildCottage(world, content, terrain, origin);
+        world = _buildCottage(world, content, terrain, origin, nextDay);
       }
 
       expect(world.population, 6);
@@ -640,7 +615,7 @@ void main() {
         const CellCoord(5, 4),
         const CellCoord(4, 3),
       ]) {
-        world = _buildCottage(world, content, terrain, origin);
+        world = _buildCottage(world, content, terrain, origin, nextDay);
       }
       expect(world.population, 3);
 
@@ -676,9 +651,190 @@ void main() {
     });
   });
 
+  group('check-in economy', () {
+    test('the report collects taxes, pays upkeep, then advances stages', () {
+      var world = newWorld();
+      // A settled home beside the starter road: taxes 3, upkeep from
+      // the starter road tile only.
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(3, 4),
+        nextDay,
+      );
+      final before = world.coins;
+
+      world = nextDay(world);
+      final report = world.events.lastWhere(
+        (event) => event.kind == 'check-in',
+      );
+      final home = content.structure('small-home')!;
+      expect(report.payload['taxes'], home.taxCoins);
+      expect(
+        report.payload['upkeep'],
+        home.upkeepCoins + 1,
+        reason: 'home upkeep plus the starter road tile',
+      );
+      expect(report.payload['upkeepShortfall'], 0);
+      expect(report.payload['net'], home.taxCoins - home.upkeepCoins - 1);
+      expect(world.coins, before + home.taxCoins - home.upkeepCoins - 1);
+      expect(
+        world.totalCoinsEarned - world.totalCoinsSpent,
+        world.coins,
+        reason: 'the earned-minus-spent ledger still reconciles',
+      );
+    });
+
+    test('tax and upkeep start on completion, at the next report', () {
+      var world = newWorld();
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'small-home',
+        origin: const CellCoord(3, 4),
+      );
+      // Two stages: the completing report itself collects nothing,
+      // because taxes run before stages advance.
+      world = nextDay(world);
+      world = nextDay(world);
+      final completing = world.events.lastWhere(
+        (event) => event.kind == 'check-in',
+      );
+      expect(
+        completing.payload['taxes'],
+        0,
+        reason: 'taxes run before stages advance',
+      );
+      expect(world.structures, hasLength(1));
+
+      world = nextDay(world);
+      final report = world.events.lastWhere(
+        (event) => event.kind == 'check-in',
+      );
+      expect(
+        report.payload['taxes'],
+        content.structure('small-home')!.taxCoins,
+      );
+      expect(report.payload['upkeep'], 1, reason: 'the starter road tile');
+    });
+
+    test('an empty treasury floors at zero; work advances anyway', () {
+      var world = grantWorldDebugCoins(
+        newWorld(),
+        content.economy.parcelBaseCoins - content.economy.startingTreasuryCoins,
+      );
+      world = purchaseAdjacentParcel(
+        world,
+        content,
+        terrain,
+        const ParcelCoord(1, 0),
+      );
+      expect(world.coins, 0);
+
+      // A free home plan in a broke town: the starter road's upkeep
+      // goes unpaid, the shortfall is reported, and the stages still
+      // advance — money never blocks labor.
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'small-home',
+        origin: const CellCoord(5, 4),
+      );
+      world = nextDay(world);
+      final report = world.events.lastWhere(
+        (event) => event.kind == 'check-in',
+      );
+      expect(report.payload['upkeepPaid'], 0);
+      expect(
+        report.payload['upkeepShortfall'],
+        1,
+        reason: 'the starter road upkeep is unpaid',
+      );
+      expect(world.coins, 0);
+      expect(world.constructions.single.stagesDone, 1);
+
+      world = nextDay(world);
+      expect(
+        world.structures,
+        hasLength(1),
+        reason: 'the home completes with an empty treasury',
+      );
+
+      // Recovery: the completed home's tax refills the treasury over
+      // the following reports.
+      world = nextDay(world);
+      final home = content.structure('small-home')!;
+      expect(world.coins, home.taxCoins - home.upkeepCoins - 1);
+      validateParcelWorldState(world, content, terrain);
+    });
+
+    test('builders gate buildings only; creep rides alongside', () {
+      var world = grantWorldDebugCoins(newWorld(), 200);
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'small-home',
+        origin: const CellCoord(3, 4),
+      );
+      expect(
+        () => startStructureConstruction(
+          world,
+          content,
+          terrain,
+          catalogueId: 'cafe',
+          origin: const CellCoord(4, 3),
+        ),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: 'one builder holds one building site',
+      );
+
+      // Roads and bridges plan freely while the builder is busy.
+      world = planRoadStretch(
+        world,
+        content,
+        terrain,
+        cells: const [CellCoord(4, 5)],
+      );
+      world = startBridgeConstruction(
+        world,
+        content,
+        terrain,
+        nearBank: const CellCoord(5, 5),
+        farBank: const CellCoord(5, 7),
+      );
+      expect(world.constructions, hasLength(3));
+
+      // One check-in advances all three at once.
+      world = nextDay(world);
+      expect(
+        world.constructions
+            .singleWhere((job) => job.kind == WorldConstructionKind.structure)
+            .stagesDone,
+        1,
+      );
+      expect(
+        world.roads.any((road) => road.cell == const CellCoord(4, 5)),
+        isTrue,
+        reason: 'the road laid its first tile',
+      );
+      expect(
+        world.constructions
+            .singleWhere((job) => job.kind == WorldConstructionKind.bridge)
+            .stagesDone,
+        1,
+        reason: 'the near bank delivered',
+      );
+      validateParcelWorldState(world, content, terrain);
+    });
+  });
+
   group('parcel purchase and natural terrain', () {
     test('parcels are neighboring purchases and owning land is not access', () {
-      var world = grantWorldDebugCoins(newWorld(), 30);
+      var world = grantWorldDebugCoins(newWorld(), 100);
       // Authored water parcels are buyable like any other map parcel.
       world = purchaseAdjacentParcel(
         world,
@@ -763,8 +919,8 @@ void main() {
     // Disconnected from any road, spanning owned dry land only — the
     // store validates on save, so a fresh plan (zero coins funded)
     // must satisfy save validation as-is.
-    var world = grantWorldDebugCoins(newWorld(), 10);
-    world = planAndFundRoad(
+    var world = grantWorldDebugCoins(newWorld(), 50);
+    world = planAndSettleRoad(
       world,
       cells: const [CellCoord(2, 2), CellCoord(3, 2), CellCoord(4, 2)],
     );
@@ -777,24 +933,25 @@ void main() {
     );
     final job = world.constructions.single;
     expect(job.kind, WorldConstructionKind.bridge);
-    expect(job.coinsFunded, 0);
+    expect(job.stagesDone, 0);
     expect(job.waterCells, const [CellCoord(6, 2)]);
+    expect(job.builderSlot, isNull, reason: 'bridge creep uses no builder');
     validateParcelWorldState(world, content, terrain);
 
-    // Funding the first coin completes the near bank as a road tile
-    // and the state stays valid mid-construction.
-    world = fundBridgeProject(world, content, projectId: job.id, amount: 1);
+    // The first check-in delivers the near bank as a road tile and
+    // the state stays valid mid-construction.
+    world = nextDay(world);
     expect(
       world.roads.any((road) => road.cell == const CellCoord(5, 2)),
       isTrue,
     );
     validateParcelWorldState(world, content, terrain);
 
-    // Coin by coin to completion: the store validates on every save,
+    // Cell by cell to completion: the store validates on every save,
     // so the finished disconnected bridge must validate too — the
     // far bank opens as a road tile with it.
     while (world.constructions.isNotEmpty) {
-      world = fundBridgeProject(world, content, projectId: job.id, amount: 1);
+      world = nextDay(world);
       validateParcelWorldState(world, content, terrain);
     }
     final bridge = world.bridges.single;
@@ -806,14 +963,15 @@ void main() {
       reason: 'the far bank opens as a road with the bridge',
     );
     expect(
-      world.coins,
-      10 - 3 - bridge.pricePaid,
-      reason: 'road tiles + bridge',
+      bridge.pricePaid,
+      1 * content.economy.bridgeTileCostCoins +
+          2 * content.economy.roadTileCostCoins,
+      reason: 'one span tile plus two road-priced banks, paid upfront',
     );
   });
 
-  test('a bridge project funds tile by tile before opening the far bank', () {
-    var world = grantWorldDebugCoins(newWorld(), 100);
+  test('a bridge creeps tile by tile before opening the far bank', () {
+    var world = grantWorldDebugCoins(newWorld(), 200);
     // Everything under the bridge must be owned up front: the water
     // parcel and the far-bank parcel are bought before planning.
     world = purchaseAdjacentParcel(
@@ -829,21 +987,10 @@ void main() {
       const ParcelCoord(2, 0),
     );
     // Roads stop one tile short: both bridge banks need vacant land.
-    world = planRoadStretch(
+    world = planAndSettleRoad(
       world,
-      content,
-      terrain,
       cells: [for (var column = 5; column <= 6; column++) CellCoord(column, 4)],
     );
-    final roadProject = world.constructions.single;
-    for (var column = 5; column <= 6; column++) {
-      world = fundRoadProject(
-        world,
-        content,
-        terrain,
-        projectId: roadProject.id,
-      );
-    }
     // The east water parcel spans cells x 8..15: an eight-tile span
     // with vacant banks either side.
     final quote = quoteBridge(
@@ -856,8 +1003,13 @@ void main() {
     expect(quote.spanCells, [
       for (var column = 8; column <= 15; column++) CellCoord(column, 4),
     ]);
-    // Flat per-tile pricing: eight span tiles plus two road-priced banks.
-    expect(quote.bridgeCost, 8 * content.economy.bridgeTileCostCoins + 2);
+    // Flat per-tile pricing: eight span tiles plus two road-priced
+    // banks, all paid upfront.
+    expect(
+      quote.bridgeCost,
+      8 * content.economy.bridgeTileCostCoins +
+          2 * content.economy.roadTileCostCoins,
+    );
 
     world = startBridgeConstruction(
       world,
@@ -866,32 +1018,23 @@ void main() {
       nearBank: const CellCoord(7, 4),
       farBank: const CellCoord(16, 4),
     );
-    final bridgeProject = world.constructions.single;
     final coinsAfterPlanning = world.coins;
     expect(world.bridges, isEmpty);
     world = advanceWorldDays(world, 100);
     expect(world.bridges, isEmpty, reason: 'days never fund anything');
 
-    // The first coin completes the near bank as a road tile.
-    world = fundBridgeProject(
-      world,
-      content,
-      projectId: bridgeProject.id,
-      amount: 1,
-    );
+    // The first check-in delivers the near bank as a road tile.
+    world = nextDay(world);
     expect(
       world.roads.any((road) => road.cell == const CellCoord(7, 4)),
       isTrue,
-      reason: 'the near bank becomes a road with its first coins',
+      reason: 'the near bank becomes a road with the first delivery',
     );
     expect(world.bridges, isEmpty);
 
-    world = fundBridgeProject(
-      world,
-      content,
-      projectId: bridgeProject.id,
-      amount: world.constructions.single.coinsRemaining,
-    );
+    while (world.constructions.isNotEmpty) {
+      world = nextDay(world);
+    }
     final queries = WorldQueries(world, terrain);
     expect(world.bridges, hasLength(1));
     expect(
@@ -907,8 +1050,8 @@ void main() {
         catalogueId: 'small-home',
         origin: const CellCoord(17, 4),
       ).price,
-      3,
-      reason: 'buildings beside any road count as accessed',
+      0,
+      reason: 'building plans are free in the staged economy',
     );
     expect(queries.isLandReachable(const CellCoord(16, 4)), isTrue);
     expect(world.coins, lessThan(coinsAfterPlanning));
@@ -964,9 +1107,8 @@ void main() {
       terrain,
       cells: const [CellCoord(1, 1), CellCoord(2, 1)],
     );
-    final project = world.constructions.single;
-    world = fundRoadProject(world, content, terrain, projectId: project.id);
-    world = fundRoadProject(world, content, terrain, projectId: project.id);
+    world = nextDay(world);
+    world = nextDay(world);
     expect(world.roads, hasLength(3), reason: 'starter + the isolated pair');
     validateParcelWorldState(world, content, terrain);
   });
@@ -975,11 +1117,11 @@ void main() {
     var world = grantWorldDebugCoins(newWorld(), 20);
     // A T shape: a three-tile stem east of the starter road with a
     // two-tile branch south from its middle.
-    world = planAndFundRoad(
+    world = planAndSettleRoad(
       world,
       cells: const [CellCoord(5, 4), CellCoord(6, 4), CellCoord(7, 4)],
     );
-    world = planAndFundRoad(
+    world = planAndSettleRoad(
       world,
       cells: const [CellCoord(6, 5), CellCoord(6, 6)],
     );
@@ -1013,8 +1155,7 @@ void main() {
       terrain,
       cells: const [CellCoord(5, 4), CellCoord(6, 4)],
     );
-    final project = world.constructions.single;
-    world = fundRoadProject(world, content, terrain, projectId: project.id);
+    world = nextDay(world);
 
     final decoded = sheetTablesToWorld(
       worldToSheetTables(world),
@@ -1041,8 +1182,7 @@ void main() {
       terrain,
       cells: const [CellCoord(3, 7), CellCoord(2, 7), CellCoord(1, 7)],
     );
-    final project = world.constructions.single;
-    world = fundRoadProject(world, content, terrain, projectId: project.id);
+    world = nextDay(world);
     expect(
       world.roads.any((road) => road.cell == const CellCoord(3, 7)),
       isTrue,
@@ -1059,29 +1199,24 @@ void main() {
       const CellCoord(3, 7),
       reason: 'the funded end marks the plan start',
     );
-    final played = fundRoadProject(
-      decoded,
-      content,
-      terrain,
-      projectId: reloaded.id,
-    );
+    final played = checkInWorldForToday(advanceWorldDays(decoded, 1), content);
     expect(
       played.roads.any((road) => road.cell == const CellCoord(2, 7)),
       isTrue,
-      reason: 'funding continues from the funded end',
+      reason: 'creep continues from the delivered end',
     );
   });
 
   test('a vertical one-tile bridge round-trips through the save', () {
-    var world = grantWorldDebugCoins(newWorld(), 20);
+    var world = grantWorldDebugCoins(newWorld(), 60);
     // Two short roads north and south of the crossing; the banks
     // themselves stay vacant land so the span is a single vertical
     // tile between them.
-    world = planAndFundRoad(
+    world = planAndSettleRoad(
       world,
       cells: const [CellCoord(5, 1), CellCoord(5, 2)],
     );
-    world = planAndFundRoad(
+    world = planAndSettleRoad(
       world,
       cells: const [CellCoord(5, 6), CellCoord(5, 7)],
     );
@@ -1092,13 +1227,7 @@ void main() {
       nearBank: const CellCoord(5, 3),
       farBank: const CellCoord(5, 5),
     );
-    final job = world.constructions.single;
-    world = fundBridgeProject(
-      world,
-      content,
-      projectId: job.id,
-      amount: job.totalCostCoins,
-    );
+    world = settleAll(world);
 
     final decoded = sheetTablesToWorld(
       worldToSheetTables(world),
@@ -1124,7 +1253,7 @@ void main() {
     );
 
     // An east-west street along row 4 (the starter road plus one).
-    world = planAndFundRoad(world, cells: const [CellCoord(5, 4)]);
+    world = planAndSettleRoad(world, cells: const [CellCoord(5, 4)]);
     world = startStructureConstruction(
       world,
       content,
@@ -1135,15 +1264,10 @@ void main() {
     var clinic = world.constructions.single;
     expect(clinic.facing, 'north');
     expect(clinic.footprint, const [CellCoord(4, 5), CellCoord(5, 5)]);
-    world = fundStructureProject(
-      world,
-      content,
-      projectId: clinic.id,
-      amount: clinic.totalCostCoins,
-    );
+    world = settleAll(world);
 
     // A north-south street down column 6.
-    world = planAndFundRoad(
+    world = planAndSettleRoad(
       world,
       cells: const [CellCoord(6, 5), CellCoord(6, 6), CellCoord(6, 7)],
     );
@@ -1157,12 +1281,7 @@ void main() {
     clinic = world.constructions.single;
     expect(clinic.facing, 'east');
     expect(clinic.footprint, const [CellCoord(5, 6), CellCoord(5, 7)]);
-    world = fundStructureProject(
-      world,
-      content,
-      projectId: clinic.id,
-      amount: clinic.totalCostCoins,
-    );
+    world = settleAll(world);
 
     expect(
       () => validateParcelWorldState(world, content, terrain),
@@ -1180,8 +1299,8 @@ void main() {
     // and a north-south road to its west. Swapping to the western
     // road turns the lot a quarter — the footprint transposes to run
     // south from the origin.
-    world = planAndFundRoad(world, cells: const [CellCoord(5, 4)]);
-    world = planAndFundRoad(world, cells: const [CellCoord(3, 5)]);
+    world = planAndSettleRoad(world, cells: const [CellCoord(5, 4)]);
+    world = planAndSettleRoad(world, cells: const [CellCoord(3, 5)]);
     world = startStructureConstruction(
       world,
       content,
@@ -1197,12 +1316,7 @@ void main() {
     clinic = world.constructions.single;
     expect(clinic.facing, 'west');
     expect(clinic.footprint, const [CellCoord(4, 5), CellCoord(4, 6)]);
-    world = fundStructureProject(
-      world,
-      content,
-      projectId: clinic.id,
-      amount: clinic.totalCostCoins,
-    );
+    world = settleAll(world);
     expect(
       () => validateParcelWorldState(world, content, terrain),
       returnsNormally,
@@ -1211,9 +1325,9 @@ void main() {
     // A clinic that cannot turn: its corner frontage offers the swap,
     // but the cell the turned lot needs is taken by a cottage, so the
     // swap refuses instead of clipping through it.
-    world = planAndFundRoad(world, cells: const [CellCoord(2, 5)]);
-    world = planAndFundRoad(world, cells: const [CellCoord(1, 6)]);
-    world = planAndFundRoad(world, cells: const [CellCoord(1, 7)]);
+    world = planAndSettleRoad(world, cells: const [CellCoord(2, 5)]);
+    world = planAndSettleRoad(world, cells: const [CellCoord(1, 6)]);
+    world = planAndSettleRoad(world, cells: const [CellCoord(1, 7)]);
     world = startStructureConstruction(
       world,
       content,
@@ -1221,12 +1335,7 @@ void main() {
       catalogueId: 'small-home',
       origin: const CellCoord(2, 7),
     );
-    world = fundStructureProject(
-      world,
-      content,
-      projectId: world.constructions.single.id,
-      amount: world.constructions.single.totalCostCoins,
-    );
+    world = settleAll(world);
     world = startStructureConstruction(
       world,
       content,
@@ -1252,7 +1361,7 @@ EconomyContent _economyWithProgression(
   ContentBundle content,
   List<BuilderProgressionStep> progression,
 ) => EconomyContent(
-  startingWalletCoins: content.economy.startingWalletCoins,
+  startingTreasuryCoins: content.economy.startingTreasuryCoins,
   startingBuilderCapacity: content.economy.startingBuilderCapacity,
   roadTileCostCoins: content.economy.roadTileCostCoins,
   bridgeTileCostCoins: content.economy.bridgeTileCostCoins,
@@ -1260,11 +1369,13 @@ EconomyContent _economyWithProgression(
   builderProgression: progression,
 );
 
+/// Plans a small home and lets the check-ins raise it to completion.
 ParcelWorldState _buildCottage(
   ParcelWorldState world,
   ContentBundle content,
   TerrainProvider terrain,
   CellCoord origin,
+  ParcelWorldState Function(ParcelWorldState) nextDay,
 ) {
   world = startStructureConstruction(
     world,
@@ -1273,11 +1384,9 @@ ParcelWorldState _buildCottage(
     catalogueId: 'small-home',
     origin: origin,
   );
-  final project = world.constructions.single;
-  return fundStructureProject(
-    world,
-    content,
-    projectId: project.id,
-    amount: project.totalCostCoins,
-  );
+  final stages = content.structure('small-home')!.constructionStages;
+  for (final _ in List.filled(stages, 0)) {
+    world = nextDay(world);
+  }
+  return world;
 }

@@ -152,10 +152,9 @@ class WorldConstruction {
   WorldConstruction({
     required this.id,
     required this.kind,
-    required this.totalCostCoins,
-    required this.coinsFunded,
-    required this.builderSlot,
     required this.startedAtDay,
+    this.stagesDone = 0,
+    this.builderSlot,
     this.catalogueId,
     this.structureKind,
     this.origin,
@@ -185,9 +184,19 @@ class WorldConstruction {
   final List<CellCoord> waterCells;
   final CellCoord? nearBank;
   final CellCoord? farBank;
-  final int totalCostCoins;
-  final int coinsFunded;
-  final int builderSlot;
+
+  /// Stage progress. For structures: construction stages completed —
+  /// the stage count itself is content ([StructureDefinition.
+  /// constructionStages]). For bridges: span cells delivered so far,
+  /// in order — near bank, span tiles, far bank. Roads keep no
+  /// counter here: their delivered tiles are the road rows
+  /// themselves, so delivery always agrees with the map.
+  final int stagesDone;
+
+  /// Builder slot holding this project. Structures only — building
+  /// crews are the concurrency limit; road and bridge creep is
+  /// automatic and consumes no builder.
+  final int? builderSlot;
   final int startedAtDay;
 
   /// Population the finished building will contribute, snapshotted from
@@ -206,9 +215,13 @@ class WorldConstruction {
   /// unfinished.
   final String? facing;
 
-  int get coinsRemaining => totalCostCoins - coinsFunded;
-  double get progress =>
-      totalCostCoins <= 0 ? 1 : (coinsFunded / totalCostCoins).clamp(0.0, 1.0);
+  /// The cells a bridge delivers in order: near bank, span tiles,
+  /// far bank. Empty for non-bridge jobs.
+  List<CellCoord> get bridgeDeliveryCells => [
+    ?nearBank,
+    ...waterCells,
+    ?farBank,
+  ];
 }
 
 class WorldEvent {
@@ -408,8 +421,10 @@ ParcelWorldState newParcelWorldState({
     simulatedDate: DateTime.utc(date.year, date.month, date.day),
     checkInHighWaterDate: DateTime.utc(date.year, date.month, date.day),
     constructionDay: 0,
-    coins: content.economy.startingWalletCoins,
-    totalCoinsEarned: 0,
+    // The founding stake counts as earned, so the earned-minus-spent
+    // ledger reconciles from the first check-in.
+    coins: content.economy.startingTreasuryCoins,
+    totalCoinsEarned: content.economy.startingTreasuryCoins,
     totalCoinsSpent: 0,
     nextEntityNumber: 1,
     nextEventNumber: 1,

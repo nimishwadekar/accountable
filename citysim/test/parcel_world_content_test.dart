@@ -261,31 +261,37 @@ void main() {
     // editor is expected; editing them by accident in the JSON is not.
     expect(content.catalogue, hasLength(40));
     final byId = {for (final model in content.catalogue) model.id: model};
-    expect(byId['small-home']!.costCoins, 3);
+    expect(byId['small-home']!.costCoins, 0);
+    expect(byId['small-home']!.taxCoins, 3);
+    expect(byId['small-home']!.upkeepCoins, 0);
+    expect(byId['small-home']!.constructionStages, 2);
     expect(byId['small-home']!.population, 1);
     expect(byId['small-home']!.unlockAtPopulation, 0);
-    expect(byId['cafe']!.costCoins, 3);
-    expect(byId['flower-garden']!.costCoins, 1);
+    expect(byId['cafe']!.costCoins, 0);
+    expect(byId['cafe']!.netCoinsPerCheckIn, 2);
+    expect(byId['flower-garden']!.costCoins, 0);
     expect(byId['flower-garden']!.kind, StructureKind.decoration);
     expect(byId['flower-garden']!.population, 0);
-    expect(byId['pine-tree']!.costCoins, 2);
-    expect(byId['medium-home']!.costCoins, 4);
+    expect(byId['pine-tree']!.costCoins, 0);
+    expect(byId['medium-home']!.costCoins, 0);
     expect(byId['medium-home']!.unlockAtPopulation, 5);
-    expect(byId['fruit-market']!.costCoins, 5);
-    expect(byId['community-clinic']!.costCoins, 6);
+    expect(byId['fruit-market']!.costCoins, 0);
+    expect(byId['community-clinic']!.costCoins, 0);
+    expect(byId['community-clinic']!.upkeepCoins, 4);
     expect(byId['community-clinic']!.unlockAtPopulation, 10);
-    expect(byId['apartments']!.costCoins, 8);
+    expect(byId['apartments']!.costCoins, 0);
+    expect(byId['apartments']!.taxCoins, 8);
     expect(byId['apartments']!.footprintColumns, 2);
     expect(byId['apartments']!.footprintRows, 2);
     expect(byId['apartments']!.unlockAtPopulation, 20);
-    expect(byId['city-office']!.costCoins, 8);
+    expect(byId['city-office']!.costCoins, 0);
 
     // Promoted pack art: representative snapshot of the new models.
     expect(byId['small-home']!.assetRoles, hasLength(6));
     expect(byId['medium-home']!.assetRoles, hasLength(5));
     expect(byId['city-office']!.assetRoles, hasLength(5));
     expect(byId['ice-cream-shop']!.unlockAtPopulation, 0);
-    expect(byId['large-home']!.costCoins, 5);
+    expect(byId['large-home']!.costCoins, 0);
     expect(byId['large-home']!.assetRoles, hasLength(6));
     expect(byId['large-home']!.unlockAtPopulation, 10);
     expect(byId['warehouse']!.footprintColumns, 2);
@@ -296,30 +302,34 @@ void main() {
 
     // Promoted props: representative snapshot of the decoration batch.
     expect(byId['common-tree']!.kind, StructureKind.decoration);
-    expect(byId['common-tree']!.costCoins, 2);
+    expect(byId['common-tree']!.costCoins, 0);
     expect(byId['common-tree']!.assetRoles, hasLength(2));
-    expect(byId['street-lamp']!.costCoins, 3);
+    expect(byId['street-lamp']!.costCoins, 0);
     expect(byId['street-lamp']!.subcategory, 'streetside');
-    expect(byId['traffic-light']!.costCoins, 5);
+    expect(byId['traffic-light']!.costCoins, 0);
     expect(byId['rocks']!.assetRoles, hasLength(6));
     expect(byId['rocks']!.subcategory, 'rocks');
     expect(byId['tires']!.subcategory, 'clutter');
-    expect(byId['wild-grass']!.costCoins, 1);
+    expect(byId['wild-grass']!.costCoins, 0);
 
-    expect(content.economy.startingWalletCoins, 0);
+    expect(content.economy.startingTreasuryCoins, 20);
     expect(content.economy.startingBuilderCapacity, 1);
-    expect(content.economy.roadTileCostCoins, 1);
-    expect(content.economy.bridgeTileCostCoins, 2);
+    expect(content.economy.roadTileCostCoins, 4);
+    expect(content.economy.bridgeTileCostCoins, 12);
     expect(
       content.economy.parcelBaseCoins,
-      8,
+      32,
       reason: 'flat parcel price: every parcel on the map costs the same',
     );
-    expect(content.economy.builderProgression, isEmpty);
+    expect(content.economy.roadUpkeepCoinsPerTile, 1);
+    expect(content.economy.bridgeUpkeepCoinsPerTile, 1);
+    expect(content.economy.roadTaxCoinsPerTile, 0);
+    expect(content.economy.bridgeTaxCoinsPerTile, 0);
+    expect(content.economy.builderProgression, hasLength(3));
     expect(
       content.economy.builderCapacityForPopulation(1000),
-      1,
-      reason: 'an empty progression keeps one builder forever',
+      4,
+      reason: 'the seeded progression tops out at four builders',
     );
 
     expect(content.ambience.ambientTimeScale, 1.0);

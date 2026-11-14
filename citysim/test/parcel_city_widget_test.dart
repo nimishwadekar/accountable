@@ -51,16 +51,30 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 500)),
       );
       await tester.pump();
-      expect(find.text('Check in · +1'), findsOneWidget);
+      expect(
+        find.text('Check in · -1'),
+        findsOneWidget,
+        reason: 'the empty town nets the starter road upkeep',
+      );
       expect(find.text('1 parcel · 0 structures'), findsOneWidget);
       expect(find.text('Could not load the world artwork.'), findsNothing);
       expect(store.state?.roads.single.cell.column, 4);
       expect(store.state?.structures, isEmpty);
       expect(tester.takeException(), isNull);
 
-      await tester.tap(find.text('Check in · +1'));
+      // The check-in is the town report: an empty town still pays the
+      // starter road's upkeep, and the report itemizes it.
+      await tester.tap(find.text('Check in · -1'));
       await tester.pump();
-      expect(store.state?.coins, 1);
+      expect(find.textContaining('Town report'), findsOneWidget);
+      expect(find.textContaining('Upkeep paid'), findsOneWidget);
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+      expect(
+        store.state?.coins,
+        content.economy.startingTreasuryCoins - 1,
+        reason: 'no coin grant; the starter road upkeep is paid',
+      );
 
       await tester.tap(find.text('Roads').first);
       await tester.pump();
@@ -72,36 +86,49 @@ void main() {
       await tester.tapAt(mapRect.center + const Offset(64, 32));
       await tester.pump();
       expect(find.textContaining('2 road tiles'), findsOneWidget);
-      final planButton = find.text('Assign builder · plan free');
+      final planButton = find.textContaining('Buy road plan');
       await tester.ensureVisible(planButton);
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
       await tester.tap(planButton);
       await tester.pump();
-      expect(store.state?.coins, 1, reason: 'planning the road costs no coins');
+      expect(
+        store.state?.coins,
+        content.economy.startingTreasuryCoins -
+            1 -
+            2 * content.economy.roadTileCostCoins,
+        reason: 'the whole stretch is paid upfront',
+      );
       expect(store.state?.constructions.single.roadCells, [
         const CellCoord(5, 4),
         const CellCoord(6, 4),
       ]);
       expect(store.state?.roads, hasLength(1));
 
-      // Funding builds one tile at a time from the start of the plan.
-      final fundButton = find.text('Fund road · 1 coin');
+      // Creep: a day passes, the check-in lays the first tile.
+      final advanceButton = find.text('+1 day');
       await tester.scrollUntilVisible(
-        fundButton,
+        advanceButton,
         200,
         scrollable: find.byType(Scrollable).last,
       );
       await tester.pump();
-      await tester.tap(fundButton);
+      await tester.tap(advanceButton);
       await tester.pump();
-      expect(store.state?.coins, 0);
+      await tester.tap(find.text('Check in current day'));
+      await tester.pump();
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
       expect(
         store.state?.roads.any((road) => road.cell == const CellCoord(5, 4)),
         isTrue,
       );
-      expect(store.state?.constructions.single.coinsFunded, 1);
+      expect(
+        store.state?.roads.where((road) => road.projectId == 'construction-1'),
+        hasLength(1),
+        reason: 'one tile delivered, one still creeping',
+      );
 
       tester.view.physicalSize = const Size(320, 800);
       await tester.pump();
