@@ -133,11 +133,15 @@ class _AmbiencePageState extends State<AmbiencePage> {
               width: 240,
               child: DoubleSlider(
                 label: 'Min speed (cells/s)',
-                value: asDouble(pedestrians['speedMin'], 0.55),
+                value: asDouble(pedestrians['speedMin'], 0.2),
                 min: 0.1,
                 max: 2,
                 divisions: 19,
-                help: 'Slowest walking speed, in grid cells per second.',
+                help:
+                    'Slowest walking speed, in grid cells per second. '
+                    'The seed, 0.2, is gait-consistent: at 12 m tiles it '
+                    'reads as a 2.4 m/s jog — the pace the walk cycle\'s '
+                    'stride depicts, so feet land instead of sliding.',
                 onChanged: (v) =>
                     _edit((a) => (a['pedestrians'] as Map)['speedMin'] = v),
               ),
@@ -146,7 +150,7 @@ class _AmbiencePageState extends State<AmbiencePage> {
               width: 240,
               child: DoubleSlider(
                 label: 'Speed range',
-                value: asDouble(pedestrians['speedRange'], 0.35),
+                value: asDouble(pedestrians['speedRange'], 0.1),
                 min: 0,
                 max: 1.5,
                 divisions: 15,

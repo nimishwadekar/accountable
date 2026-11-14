@@ -730,9 +730,13 @@ void main() {
         nextDay,
       );
       expect(world.population, 1);
-      expect(world.waitingHouseholds, 1,
-          reason: 'tolerance floors at one, so the list refills '
-              'behind the first jobless family');
+      expect(
+        world.waitingHouseholds,
+        1,
+        reason:
+            'tolerance floors at one, so the list refills '
+            'behind the first jobless family',
+      );
 
       // The second family exhausts the list; the third home finds
       // nobody waiting — unemployment is now above tolerance and
@@ -795,6 +799,32 @@ void main() {
             'anti-shop-farming guard',
       );
       expect(world.coins, before - cafe.upkeepCoins - 4);
+    });
+
+    test('the town reports its physical footprint', () {
+      // A fresh world: one 8×8 parcel and the founding road tile.
+      var world = newWorld();
+      expect(world.ownedTileCount, 64);
+      expect(world.builtTileCount, 1, reason: 'the founding road');
+
+      // A cottage adds its one footprint tile to built-up land,
+      // never to the limits.
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(3, 4),
+        nextDay,
+      );
+      expect(world.ownedTileCount, 64);
+      expect(world.builtTileCount, 2);
+
+      // Road tiles count as built-up land too.
+      world = planAndSettleRoad(
+        world,
+        cells: const [CellCoord(4, 3), CellCoord(4, 2)],
+      );
+      expect(world.builtTileCount, 4);
     });
 
     test('service coverage scales contentment, floored at 30 percent', () {

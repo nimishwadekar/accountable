@@ -4,8 +4,8 @@
     "lateralWanderX": 3,
     "lateralWanderY": 2,
     "populationPercent": 20,
-    "speedMin": 0.55,
-    "speedRange": 0.35,
+    "speedMin": 0.2,
+    "speedRange": 0.1,
     "spriteScale": 0.6,
     "walkFrameRate": 7
   },

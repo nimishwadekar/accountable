@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/storage/sheet_tables.dart';
 import 'package:citysim/storage/world_sheet_codec.dart';
+import 'package:citysim/world/coordinates.dart';
 import 'package:citysim/world/terrain_provider.dart';
 import 'package:citysim/world/world_rules.dart';
 
@@ -22,9 +23,11 @@ Future<void> main() async {
     ambience: await readCategory('ambience.json'),
     terrain: await readCategory('terrain.json'),
   );
-  stdout.writeln('content parses; treasury start '
-      '${content.economy.startingTreasuryCoins}, parcel '
-      '${content.economy.parcelBaseCoins}');
+  stdout.writeln(
+    'content parses; treasury start '
+    '${content.economy.startingTreasuryCoins}, parcel '
+    '${content.economy.parcelBaseCoins}',
+  );
 
   String sheets(String name) =>
       File('assets/test_sheets/$name.csv').readAsStringSync();
@@ -42,27 +45,46 @@ Future<void> main() async {
     terrainProvider: terrain,
   );
   validateParcelWorldState(world, content, terrain);
-  stdout.writeln('live save loads and validates: ${world.coins} coins, '
-      '${world.structures.length} structures, ${world.roads.length} roads, '
-      '${world.bridges.length} bridges, ${world.constructions.length} '
-      'projects, capacity ${world.builderCapacity}');
+  stdout.writeln(
+    'live save loads and validates: ${world.coins} coins, '
+    '${world.structures.length} structures, ${world.roads.length} roads, '
+    '${world.bridges.length} bridges, ${world.constructions.length} '
+    'projects, capacity ${world.builderCapacity}',
+  );
 
   final ledger = townLedger(world, content);
-  stdout.writeln('next report projection: taxes ${ledger.taxes} '
-      '(gross ${ledger.grossTaxes.toStringAsFixed(1)} x '
-      '${ledger.contentment}%), upkeep ${ledger.upkeep}, '
-      'net ${ledger.net}');
-  stdout.writeln('vitality: population ${world.population}, employed '
-      '${world.employedPopulation}, waiting ${world.waitingHouseholds}, '
-      'unemployed ${ledger.employmentDemand}, vacant homes '
-      '${ledger.residentialVacancy}, open jobs ${ledger.jobVacancy}');
+  stdout.writeln(
+    'next report projection: taxes ${ledger.taxes} '
+    '(gross ${ledger.grossTaxes.toStringAsFixed(1)} x '
+    '${ledger.contentment}%), upkeep ${ledger.upkeep}, '
+    'net ${ledger.net}',
+  );
+  stdout.writeln(
+    'vitality: population ${world.population}, employed '
+    '${world.employedPopulation}, waiting ${world.waitingHouseholds}, '
+    'unemployed ${ledger.employmentDemand}, vacant homes '
+    '${ledger.residentialVacancy}, open jobs ${ledger.jobVacancy}',
+  );
   for (final entry in ledger.coverage.entries) {
-    stdout.writeln('  ${entry.key} coverage '
-        '${(entry.value * 100).toStringAsFixed(1)}%');
+    stdout.writeln(
+      '  ${entry.key} coverage '
+      '${(entry.value * 100).toStringAsFixed(1)}%',
+    );
   }
-  stdout.writeln('next parcel price: '
-      '${content.economy.parcelBaseCoins + content.economy.parcelPerPopulationCoins * world.population} '
-      'coins at population ${world.population}');
+  stdout.writeln(
+    'next parcel price: '
+    '${content.economy.parcelBaseCoins + content.economy.parcelPerPopulationCoins * world.population} '
+    'coins at population ${world.population}',
+  );
+  final limitsKm2 = world.ownedTileCount * tileAreaSquareMetres / 1e6;
+  final builtKm2 = world.builtTileCount * tileAreaSquareMetres / 1e6;
+  stdout.writeln(
+    'footprint: city limits ${limitsKm2.toStringAsFixed(3)} '
+    'km2 (${world.ownedTileCount} tiles), built '
+    '${builtKm2.toStringAsFixed(3)} km2 (${world.builtTileCount} tiles), '
+    'density ${limitsKm2 > 0 ? (world.population / limitsKm2).round() : 0}'
+    '/km2',
+  );
 
   // Round-trip: the save must survive a save→load cycle unchanged.
   final saved = worldToSheetTables(world);
@@ -72,8 +94,10 @@ Future<void> main() async {
     terrainProvider: terrain,
   );
   validateParcelWorldState(reloaded, content, terrain);
-  stdout.writeln('round-trip ok: ${reloaded.coins} coins, '
-      '${reloaded.structures.length} structures, '
-      '${reloaded.roads.length} roads, ${reloaded.bridges.length} bridges, '
-      'population ${reloaded.population}');
+  stdout.writeln(
+    'round-trip ok: ${reloaded.coins} coins, '
+    '${reloaded.structures.length} structures, '
+    '${reloaded.roads.length} roads, ${reloaded.bridges.length} bridges, '
+    'population ${reloaded.population}',
+  );
 }

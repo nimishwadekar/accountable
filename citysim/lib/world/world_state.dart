@@ -347,6 +347,20 @@ class ParcelWorldState {
     for (final structure in structures)
       for (final cell in structure.footprint) cell: structure,
   };
+
+  /// Tiles of land inside the town's limits: every owned parcel is
+  /// a square parcelSize × parcelSize block, and parcels never
+  /// overlap, so the count is simply parcels × parcel area.
+  int get ownedTileCount => parcels.length * parcelSize * parcelSize;
+
+  /// Tiles of built-up land: every completed structure's footprint
+  /// cell plus every road cell. Bridge water spans are water, not
+  /// land, and unfinished constructions are not built yet, so both
+  /// stay out until they complete.
+  int get builtTileCount => {
+    for (final structure in structures) ...structure.footprint,
+    for (final road in roads) road.cell,
+  }.length;
   Set<CellCoord> get reservedCells => {
     for (final job in constructions) ...job.footprint,
     for (final job in constructions) ...job.roadCells,

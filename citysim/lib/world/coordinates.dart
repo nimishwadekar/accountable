@@ -1,6 +1,18 @@
 const defaultParcelSize = 8;
 const worldRenderChunkSize = 16;
 
+/// Physical ground size of one tile's edge, in metres. The world
+/// renders 64 px wide per tile with walkers 9 px tall at the seeded
+/// 0.6 sprite scale, so 12 m tiles read people at ~1.69 m — the
+/// human average — while a road tile matches a complete street and
+/// a one-tile cottage a 144 m² footprint. City limits, built-up
+/// area, and population density all derive from this; it is world
+/// geometry, like [defaultParcelSize], not tunable content.
+const double tileEdgeMetres = 12;
+
+/// Ground area of one tile, in square metres.
+const double tileAreaSquareMetres = tileEdgeMetres * tileEdgeMetres;
+
 class CellCoord implements Comparable<CellCoord> {
   const CellCoord(this.column, this.row);
 

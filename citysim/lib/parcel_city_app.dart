@@ -1099,6 +1099,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         : (world.population * economy.waitingHouseholdsCapPercent / 100)
               .floor();
     final employmentBarMax = world.population < 1 ? 1 : world.population;
+    // Physical scale: 12 m tiles turn the tile counts into km².
+    final limitsKm2 = world.ownedTileCount * tileAreaSquareMetres / 1e6;
+    final builtKm2 = world.builtTileCount * tileAreaSquareMetres / 1e6;
+    final density = limitsKm2 > 0 ? (world.population / limitsKm2).round() : 0;
     final contentmentColor = ledger.contentment >= 90
         ? const Color(0xFF1E6552)
         : ledger.contentment >= 60
@@ -1145,6 +1149,11 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             '${world.population} households · ${world.employedPopulation} '
             'employed · ${ledger.residentialVacancy} vacant homes · '
             '${ledger.jobVacancy} open jobs',
+            style: const TextStyle(fontSize: 11, color: Color(0xFF617267)),
+          ),
+          Text(
+            'City limits ${limitsKm2.toStringAsFixed(3)} km² · built '
+            '${builtKm2.toStringAsFixed(3)} km² · density $density/km²',
             style: const TextStyle(fontSize: 11, color: Color(0xFF617267)),
           ),
         ],

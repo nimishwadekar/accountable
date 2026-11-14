@@ -67,8 +67,8 @@ void main() {
     const walkers = PedestrianContent(
       spriteScale: 0.6,
       walkFrameRate: 7,
-      speedMin: 0.55,
-      speedRange: 0.35,
+      speedMin: 0.2,
+      speedRange: 0.1,
       populationPercent: 20,
       lateralWanderX: 3,
       lateralWanderY: 2,
@@ -76,8 +76,8 @@ void main() {
     const off = PedestrianContent(
       spriteScale: 0.6,
       walkFrameRate: 7,
-      speedMin: 0.55,
-      speedRange: 0.35,
+      speedMin: 0.2,
+      speedRange: 0.1,
       populationPercent: 0,
       lateralWanderX: 3,
       lateralWanderY: 2,

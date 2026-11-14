@@ -239,10 +239,18 @@ the current slice.
   using the pack's walk cycles — their count a percentage of population
   (`populationPercent`, 20%, floored at one walker once anyone lives there;
   0% turns them off; painted sidewalk still bounds the count), each new
-  walker appearing at the doorstep of a random building — water carries a
+  walker appearing at the doorstep of a random building, moving at the
+  gait-consistent pace the walk cycle depicts (~2.4–3.6 m/s, feet landing
+  on the stride) — water carries a
   gentle travelling shimmer, and vegetation (trees, flowers) sways slightly
   in the wind. Ambience is muted when the platform requests reduced motion,
   is excluded from saves and progression, and never affects gameplay.
+- A physical scale for the map: one tile is 12 m of ground — walkers read
+  ~1.69 m, the human average; a road tile, a complete street; a one-tile
+  cottage, 144 m² — so the town card reports city limits and built-up area
+  in km² (owned parcels vs. structure footprints plus roads; bridge water
+  spans and unfinished constructions stay out) and average population
+  density (population ÷ city limits).
 
 ## 8. Future features and open decisions
 
