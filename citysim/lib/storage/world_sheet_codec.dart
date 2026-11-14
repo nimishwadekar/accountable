@@ -17,6 +17,9 @@ import '../world/world_state.dart';
 import 'sheet_tables.dart';
 
 const _seedKey = 'seed';
+const _populationKey = 'population';
+const _employedPopulationKey = 'employed_population';
+const _waitingHouseholdsKey = 'waiting_households';
 const _coinsKey = 'coins';
 const _coinsEarnedKey = 'coins_earned';
 const _coinsSpentKey = 'coins_spent';
@@ -30,6 +33,9 @@ const _constructionDayKey = 'construction_day';
 SheetTables worldToSheetTables(ParcelWorldState state) {
   final userData = <String, String>{
     _seedKey: '${state.seed}',
+    _populationKey: '${state.population}',
+    _employedPopulationKey: '${state.employedPopulation}',
+    _waitingHouseholdsKey: '${state.waitingHouseholds}',
     _coinsKey: '${state.coins}',
     _coinsEarnedKey: '${state.totalCoinsEarned}',
     _coinsSpentKey: '${state.totalCoinsSpent}',
@@ -109,6 +115,14 @@ ParcelWorldState sheetTablesToWorld(
 }) {
   final userData = tables.userData;
   final seed = _userInt(userData, _seedKey);
+  // Aggregate state. Absent keys default to zero, so saves from
+  // before the demand system load as empty towns demographically —
+  // the live save carries its real numbers via hand migration.
+  int counter(String key) =>
+      userData.containsKey(key) ? _userInt(userData, key) : 0;
+  final population = counter(_populationKey);
+  final employedPopulation = counter(_employedPopulationKey);
+  final waitingHouseholds = counter(_waitingHouseholdsKey);
   final simulatedDate = _userDate(userData, _simulatedDateKey);
   final highWaterDate = _userDate(userData, _highWaterDateKey);
   final lastCheckInKey = userData[_lastCheckInDateKey];
@@ -358,11 +372,6 @@ ParcelWorldState sheetTablesToWorld(
     }
   }
 
-  final population = structures.fold<int>(
-    0,
-    (sum, structure) => sum + structure.population,
-  );
-
   // Every planned tile must belong to a live project — an orphan means
   // the tables were hand-edited or a write was truncated.
   final liveProjects = constructions.map((job) => job.id).toSet();
@@ -399,6 +408,9 @@ ParcelWorldState sheetTablesToWorld(
     simulatedDate: simulatedDate,
     checkInHighWaterDate: highWaterDate,
     constructionDay: constructionDay,
+    waitingHouseholds: waitingHouseholds,
+    population: population,
+    employedPopulation: employedPopulation,
     coins: _userInt(userData, _coinsKey),
     totalCoinsEarned: _userInt(userData, _coinsEarnedKey),
     totalCoinsSpent: _userInt(userData, _coinsSpentKey),

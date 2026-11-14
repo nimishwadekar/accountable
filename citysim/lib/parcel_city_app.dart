@@ -548,7 +548,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             '${quote.price} coins · ${quote.landCellCount} land cells and '
             '${quote.cells.length - quote.landCellCount} water cells.\n\n'
             '${quote.basePrice} base '
-            '+ ${quote.perPopulationCoins} × ${world.population} population. '
+            '+ ${quote.perPopulationCoins} × '
+            '${world.population} population. '
             'The price grows as the settlement does.\n\n'
             'Buildings and roads are not included.',
           ),
@@ -609,7 +610,14 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                       '${definition.constructionStages} stages — one per '
                       'daily check-in. Once complete it pays '
                       '+${definition.taxCoins} tax and costs '
-                      '−${definition.upkeepCoins} upkeep at each report.',
+                      '−${definition.upkeepCoins} upkeep at each report. '
+                      '${definition.isResidential
+                          ? 'A household moves in while the town wants homes.'
+                          : definition.isCommerce
+                          ? 'Positions staff as demand for its ${definition.jobs} jobs appears.'
+                          : definition.isService
+                          ? 'It covers ${definition.serviceCapacity} households of ${definition.serviceCategory} service.'
+                          : ''}',
           ),
           actions: [
             TextButton(
@@ -780,9 +788,11 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     final paid = value('upkeepPaid');
     final shortfall = value('upkeepShortfall');
     final net = value('net');
+    final contentment = value('contentment');
     final advanced = value('stagesAdvanced');
     final completions =
         (payload['completions'] as List?)?.cast<String>() ?? const [];
+    final arrivals = (payload['arrivals'] as List?)?.cast<String>() ?? const [];
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -799,10 +809,16 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                 style: const TextStyle(color: Color(0xFF9A5B2B)),
               ),
             Text(
+              'Contentment      $contentment% · taxes ×'
+              '${(contentment / 100).toStringAsFixed(2)}',
+            ),
+            Text(
               'Net                 ${net >= 0 ? '+' : ''}$net',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
+            for (final arrival in arrivals)
+              Text(arrival, style: const TextStyle(color: Color(0xFF1E6552))),
             if (advanced > 0) Text('$advanced construction stage(s) advanced'),
             for (final name in completions)
               Text(
@@ -853,6 +869,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                 state: world,
                 saveError: _saveError,
                 nextReportNet: townLedger(world, _requireContent).net,
+                population: world.population,
                 canCheckIn: canCheckInWorldToday(world),
                 onCheckIn: _checkIn,
               ),
@@ -1013,12 +1030,11 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         Padding(
           padding: const EdgeInsets.only(top: 4, bottom: 8),
           child: Text(
-            '${world.builderCapacity - world.constructions.length} of '
+            '${world.builderCapacity - world.constructions.where((job) => job.kind == WorldConstructionKind.structure).length} of '
             '${world.builderCapacity} builders available',
             style: const TextStyle(fontSize: 12, color: Color(0xFF617267)),
           ),
         ),
-        const SizedBox(height: 10),
         if (_tool == _WorldTool.road) _roadControls(world),
         if (_tool == _WorldTool.parcel && _selectedParcel != null)
           _parcelAction(world, _selectedParcel!),
@@ -1033,6 +1049,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         for (final job in world.constructions)
           if (job.kind != WorldConstructionKind.road)
             _projectProgressCard(world, job),
+        const SizedBox(height: 12),
+        _townCard(world),
         const SizedBox(height: 12),
         _ClockControls(
           state: world,
@@ -1066,6 +1084,93 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       ],
     ),
   );
+
+  /// The town's vitality: contentment, the two demand bars, and
+  /// service coverage. Steering information, never a header chip —
+  /// header width shifts the map fit.
+  Widget _townCard(ParcelWorldState world) {
+    final ledger = townLedger(world, _requireContent);
+    final economy = _requireContent.economy;
+    // The bars' scales: the waiting list's cap and the population.
+    final resiBarMax =
+        (world.population * economy.waitingHouseholdsCapPercent / 100).floor() <
+            1
+        ? 1
+        : (world.population * economy.waitingHouseholdsCapPercent / 100)
+              .floor();
+    final employmentBarMax = world.population < 1 ? 1 : world.population;
+    final contentmentColor = ledger.contentment >= 90
+        ? const Color(0xFF1E6552)
+        : ledger.contentment >= 60
+        ? const Color(0xFF9A5B2B)
+        : const Color(0xFFA03D2B);
+    return _PanelCard(
+      title: 'Town',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Contentment ${ledger.contentment}% · taxes ×'
+            '${(ledger.contentment / 100).toStringAsFixed(2)}',
+            style: TextStyle(color: contentmentColor),
+          ),
+          if (ledger.coverage.isEmpty)
+            Text(
+              'No services demanded yet — they matter from '
+              '${economy.serviceRequirementPopulation} '
+              'households.',
+              style: const TextStyle(fontSize: 11, color: Color(0xFF617267)),
+            )
+          else
+            for (final category in ledger.coverage.keys)
+              Text(
+                '${category[0].toUpperCase()}${category.substring(1)} '
+                'coverage ${(ledger.coverage[category]! * 100).round()}%',
+                style: const TextStyle(fontSize: 11, color: Color(0xFF617267)),
+              ),
+          const SizedBox(height: 6),
+          _demandRow(
+            'Residential demand',
+            ledger.residentialDemand,
+            resiBarMax,
+            'households waiting to move in',
+          ),
+          _demandRow(
+            'Employment demand',
+            ledger.employmentDemand,
+            employmentBarMax,
+            'citizens needing jobs',
+          ),
+          Text(
+            '${world.population} households · ${world.employedPopulation} '
+            'employed · ${ledger.residentialVacancy} vacant homes · '
+            '${ledger.jobVacancy} open jobs',
+            style: const TextStyle(fontSize: 11, color: Color(0xFF617267)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _demandRow(String label, int demand, int barMax, String unit) =>
+      Tooltip(
+        message: unit,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              demand > 0 ? '$label: $demand' : '$label: none',
+              style: const TextStyle(fontSize: 12),
+            ),
+            LinearProgressIndicator(
+              value: (demand / barMax).clamp(0.0, 1.0),
+              minHeight: 5,
+              borderRadius: BorderRadius.circular(3),
+            ),
+            const SizedBox(height: 4),
+          ],
+        ),
+      );
 
   Widget _roadControls(ParcelWorldState world) {
     // Creep cards for every in-flight stretch — roads consume no
@@ -1202,6 +1307,26 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     );
   }
 
+  /// Occupancy text for the inspector: households for homes,
+  /// staffed positions for commerce, nothing for civic.
+  /// Capacity text for the inspector — occupancy itself is a town
+  /// aggregate, so a building shows what it offers.
+  String? _capacityLabel(PlacedStructure structure) {
+    final model = _requireContent.structure(structure.catalogueId);
+    if (model == null) return null;
+    if (model.isResidential) {
+      return 'Houses up to ${model.households} household(s)';
+    }
+    if (model.isCommerce) {
+      return 'Offers ${model.jobs} job(s)';
+    }
+    if (model.isService) {
+      return 'Covers ${model.serviceCapacity} households of '
+          '${model.serviceCategory} service';
+    }
+    return null;
+  }
+
   Widget _parcelAction(ParcelWorldState world, ParcelCoord parcel) {
     ParcelPurchaseQuote? quote;
     String? failure;
@@ -1221,7 +1346,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             ),
             Text(
               '${quote.price} coins · ${quote.basePrice} base '
-              '+ ${quote.perPopulationCoins} × ${world.population} population.',
+              '+ ${quote.perPopulationCoins} × '
+              '${world.population} population.',
             ),
             if (world.coins < quote.price)
               Text('Save ${quote.price - world.coins} more coin(s).'),
@@ -1480,11 +1606,13 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           Text('Parcel ${parcel.key} · ${terrain.kind.name}'),
           Text(queries.ownsCell(cell) ? 'Owned land' : 'Unowned frontier'),
           if (road != null) Text('${road.style.name} road'),
-          if (structure != null)
+          if (structure != null) ...[
             Text(
               _requireContent.structure(structure.catalogueId)?.name ??
                   'Structure',
             ),
+            if (_capacityLabel(structure) case final label?) Text(label),
+          ],
           if (job != null)
             Text(switch (job.kind) {
               WorldConstructionKind.structure =>
@@ -1508,6 +1636,7 @@ class _WorldHeader extends StatelessWidget {
     required this.state,
     required this.saveError,
     required this.nextReportNet,
+    required this.population,
     required this.canCheckIn,
     required this.onCheckIn,
   });
@@ -1518,6 +1647,9 @@ class _WorldHeader extends StatelessWidget {
   /// Projected net of the next check-in's report: taxes minus
   /// upkeep, before the zero floor.
   final int nextReportNet;
+
+  /// Occupied households — the settlement's population.
+  final int population;
   final bool canCheckIn;
   final VoidCallback onCheckIn;
 
@@ -1571,7 +1703,7 @@ class _WorldHeader extends StatelessWidget {
         ),
         Chip(
           avatar: const Icon(Icons.groups_rounded, color: Color(0xFF35695A)),
-          label: Text('${state.population} population'),
+          label: Text('$population population'),
           backgroundColor: const Color(0xFFE3F2EA),
         ),
         // The button's number is the next report's projected net —

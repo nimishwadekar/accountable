@@ -577,46 +577,52 @@ void main() {
     });
 
     test('population gates unlock models and grant builders', () {
-      // Content-driven progression: build cottages (1 population each)
-      // until the 5-population models unlock.
+      // Content-driven progression: a town grown to six households
+      // the real way — homes and jobs in balance — with the unlock
+      // grants coming through load-time reconciliation.
       var world = grantWorldDebugCoins(newWorld(), 30);
-      // Four cottages fit beside the starter road tile.
-      for (final origin in [
-        const CellCoord(3, 4),
-        const CellCoord(5, 4),
-        const CellCoord(4, 3),
-      ]) {
-        world = _buildCottage(world, content, terrain, origin, nextDay);
-      }
-      // Extend the road south so two more cottages fit beside it.
-      world = planAndSettleRoad(
+      world = _buildCottage(
         world,
-        cells: const [CellCoord(4, 5), CellCoord(4, 6)],
+        content,
+        terrain,
+        const CellCoord(3, 4),
+        nextDay,
       );
-      for (final origin in [
-        const CellCoord(3, 5),
-        const CellCoord(5, 5),
-        const CellCoord(4, 7),
-      ]) {
-        world = _buildCottage(world, content, terrain, origin, nextDay);
-      }
-
+      world = world.copyWith(
+        unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'fruit-market'},
+      );
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'fruit-market',
+        origin: const CellCoord(4, 5),
+      );
+      world = settleAll(world);
+      // A settled, employed town grown to six households the way
+      // play would — homes and jobs in balance.
+      world = world.copyWith(population: 6, employedPopulation: 6);
       expect(world.population, 6);
-      expect(world.unlockedCatalogueIds, contains('medium-home'));
-      expect(world.unlockedCatalogueIds, contains('fruit-market'));
-      expect(world.unlockedCatalogueIds, isNot(contains('community-clinic')));
-      validateParcelWorldState(world, content, terrain);
+      final reconciled = reconcileWorldProgression(world, content);
+      expect(reconciled.unlockedCatalogueIds, contains('medium-home'));
+      expect(reconciled.unlockedCatalogueIds, contains('fruit-market'));
+      expect(
+        reconciled.unlockedCatalogueIds,
+        isNot(contains('community-clinic')),
+      );
+      validateParcelWorldState(reconciled, content, terrain);
     });
 
     test('reconciliation grants unlocks and builders only upward', () {
       var world = grantWorldDebugCoins(newWorld(), 9);
-      for (final origin in [
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
         const CellCoord(3, 4),
-        const CellCoord(5, 4),
-        const CellCoord(4, 3),
-      ]) {
-        world = _buildCottage(world, content, terrain, origin, nextDay);
-      }
+        nextDay,
+      );
+      world = world.copyWith(population: 3, employedPopulation: 3);
       expect(world.population, 3);
 
       // Simulate lowered content thresholds: a hand-built variant of the
@@ -651,11 +657,71 @@ void main() {
     });
   });
 
-  group('check-in economy', () {
-    test('the report collects taxes, pays upkeep, then advances stages', () {
+  group('demand, occupancy, and contentment', () {
+    test('the founding rhythm: home, shop, home', () {
       var world = newWorld();
-      // A settled home beside the starter road: taxes 3, upkeep from
-      // the starter road tile only.
+      // A fresh town's waiting list grows from day one — population
+      // zero is vacuously full and fully employed.
+      world = nextDay(world);
+      expect(world.waitingHouseholds, 1, reason: 'the vacuous kickstart');
+      expect(world.population, 0);
+
+      // The cottage completes and receives today's household — but
+      // with no jobs, its family is unemployed and pays no tax.
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'small-home',
+        origin: const CellCoord(3, 4),
+      );
+      world = nextDay(world);
+      world = nextDay(world);
+      expect(world.population, 1);
+      expect(world.employedPopulation, 0);
+      var report = world.events.lastWhere((e) => e.kind == 'check-in');
+      expect(report.payload['householdsArrived'], 1);
+      expect(
+        report.payload['taxes'],
+        0,
+        reason: 'an unemployed household pays nothing',
+      );
+
+      // A shop opens and employs the family; the list refills the
+      // same check-in — the town is full and fully employed again.
+      world = world.copyWith(
+        unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'fruit-market'},
+      );
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'fruit-market',
+        origin: const CellCoord(4, 5),
+      );
+      world = nextDay(world);
+      world = nextDay(world);
+      expect(world.employedPopulation, 1);
+      expect(world.waitingHouseholds, 1, reason: 'a prosperous town attracts');
+      report = world.events.lastWhere((e) => e.kind == 'check-in');
+      expect(report.payload['positionsStaffed'], 1);
+
+      // The second home completes and its household arrives.
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'small-home',
+        origin: const CellCoord(5, 4),
+      );
+      world = nextDay(world);
+      world = nextDay(world);
+      expect(world.population, 2);
+      validateParcelWorldState(world, content, terrain);
+    });
+
+    test('unemployment gates migration — homes wait without jobs', () {
+      var world = newWorld();
       world = _buildCottage(
         world,
         content,
@@ -663,22 +729,234 @@ void main() {
         const CellCoord(3, 4),
         nextDay,
       );
+      expect(world.population, 1);
+
+      // A second cottage completes, but the first family is
+      // unemployed and the waiting list is empty: nobody comes.
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(5, 4),
+        nextDay,
+      );
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(4, 3),
+        nextDay,
+      );
+      expect(world.population, 1, reason: 'no jobs, no list, no arrivals');
+      expect(world.waitingHouseholds, 0);
+      final ledger = townLedger(world, content);
+      expect(ledger.residentialVacancy, 2);
+      expect(ledger.employmentDemand, 1);
+    });
+
+    test('vacant buildings pay no tax but full upkeep', () {
+      var world = grantWorldDebugCoins(newWorld(), 100);
+      // A café with no population to employ: it completes, staffs
+      // nothing, earns nothing, and drains upkeep forever.
+      world = planAndSettleRoad(
+        world,
+        cells: const [CellCoord(5, 4), CellCoord(6, 4), CellCoord(7, 4)],
+      );
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'cafe',
+        origin: const CellCoord(6, 5),
+      );
+      world = nextDay(world);
+      world = nextDay(world);
+      expect(world.population, 0);
+      expect(world.employedPopulation, 0);
+      final cafe = content.structure('cafe')!;
       final before = world.coins;
+      world = nextDay(world);
+      final report = world.events.lastWhere((e) => e.kind == 'check-in');
+      expect(
+        report.payload['taxes'],
+        0,
+        reason: 'a café with no staff earns nothing',
+      );
+      expect(
+        report.payload['upkeep'],
+        cafe.upkeepCoins + 4,
+        reason:
+            'full upkeep plus four road tiles — the '
+            'anti-shop-farming guard',
+      );
+      expect(world.coins, before - cafe.upkeepCoins - 4);
+    });
+
+    test('service coverage scales contentment, floored at 30 percent', () {
+      // A compact variant of the content with an early service
+      // threshold, so two households already demand coverage.
+      final demanding = ContentBundle(
+        manifest: content.manifest,
+        terrain: content.terrain,
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy.copyWith(serviceRequirementPopulation: 2),
+        ambience: content.ambience,
+      );
+      var world = newWorld();
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(3, 4),
+        nextDay,
+      );
+      world = world.copyWith(
+        unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'fruit-market'},
+      );
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'fruit-market',
+        origin: const CellCoord(4, 3),
+      );
+      world = nextDay(world);
+      world = nextDay(world);
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(5, 4),
+        nextDay,
+      );
+      expect(world.population, 2);
+      expect(
+        world.employedPopulation,
+        2,
+        reason: 'the café employs both families',
+      );
+
+      // No services at all: coverage zero across the board and
+      // contentment rests on the floor.
+      final noServices = townLedger(world, demanding);
+      expect(noServices.coverage['fire'], 0.0);
+      expect(noServices.coverage['police'], 0.0);
+      expect(noServices.coverage['health'], 0.0);
+      expect(
+        noServices.contentment,
+        demanding.economy.contentmentFloorPercent,
+        reason: 'no coverage at all hits the floor',
+      );
+
+      // A fire station south of an eastward road covers the town:
+      // fire climbs to full, contentment rises off the floor but
+      // stays capped by the missing categories — the average.
+      world = world.copyWith(
+        unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'fire-station'},
+      );
+      world = planAndSettleRoad(
+        world,
+        cells: const [CellCoord(6, 4), CellCoord(7, 4)],
+      );
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'fire-station',
+        origin: const CellCoord(6, 2),
+      );
+      world = settleAll(world);
+      final withFire = townLedger(world, demanding);
+      expect(withFire.coverage['fire'], 1.0);
+      expect(withFire.contentment, greaterThan(noServices.contentment));
+      expect(
+        withFire.contentment,
+        lessThan(100),
+        reason: 'police and health are still missing',
+      );
+      validateParcelWorldState(world, content, terrain);
+    });
+
+    test('only employed people pay, at the aggregate rates', () {
+      var world = newWorld();
+      // One occupied home (unemployed) plus one staffed café: the
+      // home pays nothing, the café pays a quarter of its tax.
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(3, 4),
+        nextDay,
+      );
+      world = world.copyWith(
+        unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'fruit-market'},
+      );
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'fruit-market',
+        origin: const CellCoord(4, 5),
+      );
+      world = nextDay(world);
+      world = nextDay(world);
+      expect(world.population, 1);
+      expect(world.employedPopulation, 1);
+      final home = content.structure('small-home')!;
+      final shop = content.structure('fruit-market')!;
+      final ledger = townLedger(world, content);
+      expect(
+        ledger.grossTaxes,
+        closeTo(home.taxCoins + shop.taxCoins / 3, 0.001),
+      );
+      expect(
+        ledger.taxes,
+        ledger.grossTaxes.round(),
+        reason: 'contentment is 100% below the service threshold',
+      );
+      expect(ledger.residentialDemand, 1, reason: 'the list refilled');
+      expect(ledger.employmentDemand, 0);
+    });
+  });
+
+  group('check-in economy', () {
+    test('the report collects taxes, pays upkeep, then advances stages', () {
+      var world = newWorld();
+      // A settled home with a job: taxes flow from employment.
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(3, 4),
+        nextDay,
+      );
+      world = world.copyWith(
+        unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'fruit-market'},
+      );
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'fruit-market',
+        origin: const CellCoord(4, 5),
+      );
+      world = nextDay(world);
+      world = nextDay(world);
 
       world = nextDay(world);
       final report = world.events.lastWhere(
         (event) => event.kind == 'check-in',
       );
       final home = content.structure('small-home')!;
-      expect(report.payload['taxes'], home.taxCoins);
+      final shop = content.structure('fruit-market')!;
+      expect(report.payload['taxes'], home.taxCoins + shop.taxCoins ~/ 3);
       expect(
         report.payload['upkeep'],
-        home.upkeepCoins + 1,
-        reason: 'home upkeep plus the starter road tile',
+        shop.upkeepCoins + 1,
+        reason: 'shop upkeep plus the starter road tile',
       );
       expect(report.payload['upkeepShortfall'], 0);
-      expect(report.payload['net'], home.taxCoins - home.upkeepCoins - 1);
-      expect(world.coins, before + home.taxCoins - home.upkeepCoins - 1);
       expect(
         world.totalCoinsEarned - world.totalCoinsSpent,
         world.coins,
@@ -686,7 +964,7 @@ void main() {
       );
     });
 
-    test('tax and upkeep start on completion, at the next report', () {
+    test('tax starts at employment, not completion', () {
       var world = newWorld();
       world = startStructureConstruction(
         world,
@@ -695,29 +973,50 @@ void main() {
         catalogueId: 'small-home',
         origin: const CellCoord(3, 4),
       );
-      // Two stages: the completing report itself collects nothing,
-      // because taxes run before stages advance.
+      // The home completes and its household arrives — but with no
+      // job, every report collects nothing.
       world = nextDay(world);
       world = nextDay(world);
-      final completing = world.events.lastWhere(
+      world = nextDay(world);
+      final unemployed = world.events.lastWhere(
         (event) => event.kind == 'check-in',
       );
       expect(
-        completing.payload['taxes'],
+        unemployed.payload['taxes'],
         0,
-        reason: 'taxes run before stages advance',
+        reason: 'the household has no job',
       );
-      expect(world.structures, hasLength(1));
+      expect(world.population, 1);
 
+      // A shop opens and employs the family: the next report
+      // collects — the home at full, the shop at its staffing rate.
+      world = world.copyWith(
+        unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'fruit-market'},
+      );
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'fruit-market',
+        origin: const CellCoord(4, 5),
+      );
+      world = nextDay(world);
+      world = nextDay(world);
+      expect(world.employedPopulation, 1);
       world = nextDay(world);
       final report = world.events.lastWhere(
         (event) => event.kind == 'check-in',
       );
       expect(
         report.payload['taxes'],
-        content.structure('small-home')!.taxCoins,
+        content.structure('small-home')!.taxCoins +
+            content.structure('fruit-market')!.taxCoins ~/ 3,
       );
-      expect(report.payload['upkeep'], 1, reason: 'the starter road tile');
+      expect(
+        report.payload['upkeep'],
+        2,
+        reason: 'shop upkeep plus the starter road tile',
+      );
     });
 
     test('an empty treasury floors at zero; work advances anyway', () {
@@ -733,9 +1032,9 @@ void main() {
       );
       expect(world.coins, 0);
 
-      // A free home plan in a broke town: the starter road's upkeep
-      // goes unpaid, the shortfall is reported, and the stages still
-      // advance — money never blocks labor.
+      // Free home and café plans in a broke town: the starter road's
+      // upkeep goes unpaid, the shortfall is reported, and the
+      // stages still advance — money never blocks labor.
       world = startStructureConstruction(
         world,
         content,
@@ -763,11 +1062,25 @@ void main() {
         reason: 'the home completes with an empty treasury',
       );
 
-      // Recovery: the completed home's tax refills the treasury over
-      // the following reports.
+      // Recovery runs on employment, not completion: a shop opens,
+      // the family works, and taxes slowly refill the treasury.
+      world = world.copyWith(
+        unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'fruit-market'},
+      );
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'fruit-market',
+        origin: const CellCoord(4, 3),
+      );
+      world = settleAll(world);
       world = nextDay(world);
-      final home = content.structure('small-home')!;
-      expect(world.coins, home.taxCoins - home.upkeepCoins - 1);
+      expect(
+        world.coins,
+        greaterThan(0),
+        reason: 'employed taxes out-earn the upkeep shortfall',
+      );
       validateParcelWorldState(world, content, terrain);
     });
 
@@ -877,15 +1190,9 @@ void main() {
       expect(atZero.basePrice, base);
       expect(atZero.perPopulationCoins, perPopulation);
 
-      // Three settled cottages: the price rises by exactly the
+      // A town of three households: the price rises by exactly the
       // per-population surcharge — expanding a grown town costs more.
-      for (final origin in [
-        const CellCoord(3, 4),
-        const CellCoord(5, 4),
-        const CellCoord(4, 3),
-      ]) {
-        world = _buildCottage(world, content, terrain, origin, nextDay);
-      }
+      world = world.copyWith(population: 3, employedPopulation: 3);
       expect(world.population, 3);
       final atThree = quoteParcelPurchase(
         world,

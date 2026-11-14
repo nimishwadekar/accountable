@@ -42,6 +42,10 @@ class StructureDefinition {
     this.taxCoins = 0,
     this.upkeepCoins = 0,
     this.constructionStages = 1,
+    this.households = 0,
+    this.jobs = 0,
+    this.serviceCategory,
+    this.serviceCapacity = 0,
   });
 
   final String id;
@@ -90,6 +94,31 @@ class StructureDefinition {
   /// Net treasury effect of one completed building per check-in.
   int get netCoinsPerCheckIn => taxCoins - upkeepCoins;
 
+  /// Households this home can hold — its occupancy capacity. A
+  /// residential model: filled family by family at check-ins while
+  /// residential demand exists. Zero on non-residential models.
+  final int households;
+
+  /// Job positions this commerce building offers — its occupancy
+  /// capacity, staffed one position per check-in while commercial
+  /// demand exists. Zero on non-commerce models.
+  final int jobs;
+
+  /// Service category this civic building covers (e.g. 'fire'),
+  /// or null on non-service models.
+  final String? serviceCategory;
+
+  /// Households one completed service building of this model covers.
+  final int serviceCapacity;
+
+  /// The occupancy-flavoured classification: a model is what it
+  /// offers. Households make it residential, jobs make it commerce,
+  /// a service category makes it a service building; anything else
+  /// is plain civic (upkeep drain, no coverage).
+  bool get isResidential => households > 0;
+  bool get isCommerce => jobs > 0;
+  bool get isService => serviceCategory != null;
+
   /// Disabled models stay loadable for existing saves but are hidden from
   /// new purchases and unlock grants.
   final bool enabled;
@@ -119,6 +148,10 @@ class StructureDefinition {
     int? taxCoins,
     int? upkeepCoins,
     int? constructionStages,
+    int? households,
+    int? jobs,
+    String? serviceCategory,
+    int? serviceCapacity,
   }) => StructureDefinition(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -135,6 +168,10 @@ class StructureDefinition {
     taxCoins: taxCoins ?? this.taxCoins,
     upkeepCoins: upkeepCoins ?? this.upkeepCoins,
     constructionStages: constructionStages ?? this.constructionStages,
+    households: households ?? this.households,
+    jobs: jobs ?? this.jobs,
+    serviceCategory: serviceCategory ?? this.serviceCategory,
+    serviceCapacity: serviceCapacity ?? this.serviceCapacity,
   );
 
   Map<String, Object?> toJson() => {
@@ -152,6 +189,10 @@ class StructureDefinition {
     'taxCoins': taxCoins,
     'upkeepCoins': upkeepCoins,
     'constructionStages': constructionStages,
+    'households': households,
+    'jobs': jobs,
+    if (serviceCategory != null) 'serviceCategory': serviceCategory,
+    'serviceCapacity': serviceCapacity,
   };
 
   static StructureDefinition fromJson(Map<String, Object?> json) =>
@@ -177,6 +218,12 @@ class StructureDefinition {
         taxCoins: json['taxCoins'] as int? ?? 0,
         upkeepCoins: json['upkeepCoins'] as int? ?? 0,
         constructionStages: json['constructionStages'] as int? ?? 1,
+        households: json['households'] as int? ?? 0,
+        jobs: json['jobs'] as int? ?? 0,
+        serviceCategory: (json['serviceCategory'] as String?)?.isEmpty == true
+            ? null
+            : json['serviceCategory'] as String?,
+        serviceCapacity: json['serviceCapacity'] as int? ?? 0,
       );
 }
 
@@ -444,6 +491,12 @@ class EconomyContent {
     this.bridgeTaxCoinsPerTile = 0,
     this.bridgeUpkeepCoinsPerTile = 0,
     this.parcelPerPopulationCoins = 0,
+    this.migrationPercentPerCheckIn = 2,
+    this.employmentPercentPerCheckIn = 5,
+    this.waitingHouseholdsCapPercent = 10,
+    this.contentmentFloorPercent = 0,
+    this.serviceRequirementPopulation = 0,
+    this.requiredServiceCategories = const [],
   });
 
   /// The single town treasury's opening balance for a brand-new
@@ -469,6 +522,34 @@ class EconomyContent {
   /// a settlement gets pricier as it grows, pricing each parcel by
   /// the buyer's size rather than the land's distance.
   final int parcelPerPopulationCoins;
+
+  /// Households that may move in per check-in, as a percentage of
+  /// population (floored at one). Also the waiting list's refill
+  /// rate — growth costs check-ins, not money.
+  final int migrationPercentPerCheckIn;
+
+  /// Job positions that may staff per check-in, as a percentage of
+  /// population (floored at one). Employment adjusts faster than
+  /// migration.
+  final int employmentPercentPerCheckIn;
+
+  /// The waiting list's cap, as a percentage of population (floored
+  /// at one) — the residential demand bar's scale.
+  final int waitingHouseholdsCapPercent;
+
+  /// Contentment never drops below this percentage — the
+  /// no-dead-ends guarantee: unhappy citizens still pay something, so
+  /// even a neglected town keeps a trickle of income.
+  final int contentmentFloorPercent;
+
+  /// Population below which no service coverage is demanded — the
+  /// early game stays pure.
+  final int serviceRequirementPopulation;
+
+  /// Service categories whose coverage feeds contentment (e.g.
+  /// 'fire', 'police', 'health'). Capacities come from the models
+  /// carrying each category.
+  final List<String> requiredServiceCategories;
 
   /// Per-tile tax and upkeep of infrastructure, collected at each
   /// check-in. Tax seeds at zero — paving must never mint coins — but
@@ -502,10 +583,52 @@ class EconomyContent {
     'bridgeUpkeepCoinsPerTile': bridgeUpkeepCoinsPerTile,
     'parcelBaseCoins': parcelBaseCoins,
     'parcelPerPopulationCoins': parcelPerPopulationCoins,
+    'migrationPercentPerCheckIn': migrationPercentPerCheckIn,
+    'employmentPercentPerCheckIn': employmentPercentPerCheckIn,
+    'waitingHouseholdsCapPercent': waitingHouseholdsCapPercent,
+    'contentmentFloorPercent': contentmentFloorPercent,
+    'serviceRequirementPopulation': serviceRequirementPopulation,
+    'requiredServiceCategories': requiredServiceCategories,
     'builderProgression': builderProgression
         .map((step) => step.toJson())
         .toList(),
   };
+
+  EconomyContent copyWith({
+    int? startingTreasuryCoins,
+    int? roadTileCostCoins,
+    int? bridgeTileCostCoins,
+    int? parcelBaseCoins,
+    int? parcelPerPopulationCoins,
+    int? migrationPercentPerCheckIn,
+    int? employmentPercentPerCheckIn,
+    int? waitingHouseholdsCapPercent,
+    int? contentmentFloorPercent,
+    int? serviceRequirementPopulation,
+    List<String>? requiredServiceCategories,
+    List<BuilderProgressionStep>? builderProgression,
+  }) => EconomyContent(
+    startingTreasuryCoins: startingTreasuryCoins ?? this.startingTreasuryCoins,
+    startingBuilderCapacity: startingBuilderCapacity,
+    roadTileCostCoins: roadTileCostCoins ?? this.roadTileCostCoins,
+    bridgeTileCostCoins: bridgeTileCostCoins ?? this.bridgeTileCostCoins,
+    parcelBaseCoins: parcelBaseCoins ?? this.parcelBaseCoins,
+    parcelPerPopulationCoins:
+        parcelPerPopulationCoins ?? this.parcelPerPopulationCoins,
+    migrationPercentPerCheckIn:
+        migrationPercentPerCheckIn ?? this.migrationPercentPerCheckIn,
+    employmentPercentPerCheckIn:
+        employmentPercentPerCheckIn ?? this.employmentPercentPerCheckIn,
+    waitingHouseholdsCapPercent:
+        waitingHouseholdsCapPercent ?? this.waitingHouseholdsCapPercent,
+    contentmentFloorPercent:
+        contentmentFloorPercent ?? this.contentmentFloorPercent,
+    serviceRequirementPopulation:
+        serviceRequirementPopulation ?? this.serviceRequirementPopulation,
+    requiredServiceCategories:
+        requiredServiceCategories ?? this.requiredServiceCategories,
+    builderProgression: builderProgression ?? this.builderProgression,
+  );
 
   static EconomyContent fromJson(Map<String, Object?> json) {
     final bridge = json['bridgeCost'] as Map<String, Object?>;
@@ -520,6 +643,20 @@ class EconomyContent {
       bridgeUpkeepCoinsPerTile: json['bridgeUpkeepCoinsPerTile'] as int? ?? 0,
       parcelBaseCoins: json['parcelBaseCoins']! as int,
       parcelPerPopulationCoins: json['parcelPerPopulationCoins'] as int? ?? 0,
+      migrationPercentPerCheckIn:
+          json['migrationPercentPerCheckIn'] as int? ?? 2,
+      employmentPercentPerCheckIn:
+          json['employmentPercentPerCheckIn'] as int? ?? 5,
+      waitingHouseholdsCapPercent:
+          json['waitingHouseholdsCapPercent'] as int? ?? 10,
+      contentmentFloorPercent: json['contentmentFloorPercent'] as int? ?? 0,
+      serviceRequirementPopulation:
+          json['serviceRequirementPopulation'] as int? ?? 0,
+      requiredServiceCategories: [
+        for (final category
+            in json['requiredServiceCategories'] as List? ?? const [])
+          category as String,
+      ],
       builderProgression: [
         for (final step in json['builderProgression']! as List)
           BuilderProgressionStep.fromJson(
@@ -934,6 +1071,30 @@ List<ContentIssue> validateContentData({
     if (model.constructionStages < 1) {
       error('${model.id}: construction needs at least one stage.');
     }
+    if (model.households < 0) {
+      error('${model.id}: households must not be negative.');
+    }
+    if (model.jobs < 0) {
+      error('${model.id}: jobs must not be negative.');
+    }
+    if (model.households > 0 && model.jobs > 0) {
+      error(
+        '${model.id}: a model cannot be both residential (households) '
+        'and commercial (jobs).',
+      );
+    }
+    if (model.serviceCapacity < 0) {
+      error('${model.id}: service capacity must not be negative.');
+    }
+    if (model.serviceCategory != null && model.serviceCapacity < 1) {
+      error(
+        '${model.id}: service category "${model.serviceCategory}" needs '
+        'a capacity of at least one household.',
+      );
+    }
+    if (model.serviceCategory == null && model.serviceCapacity > 0) {
+      error('${model.id}: service capacity without a service category.');
+    }
     if (model.unlockAtPopulation < 0) {
       error('${model.id}: unlock threshold must not be negative.');
     }
@@ -1099,6 +1260,38 @@ List<ContentIssue> validateContentData({
   }
   if (economy.parcelPerPopulationCoins < 0) {
     error('The parcel population surcharge must not be negative.');
+  }
+  if (economy.migrationPercentPerCheckIn < 0 ||
+      economy.employmentPercentPerCheckIn < 0 ||
+      economy.waitingHouseholdsCapPercent < 0) {
+    error('Demand percentages must not be negative.');
+  }
+  if (economy.contentmentFloorPercent < 0 ||
+      economy.contentmentFloorPercent > 100) {
+    error('The contentment floor must be a percentage within [0, 100].');
+  }
+  if (economy.serviceRequirementPopulation < 0) {
+    error('The service requirement population must not be negative.');
+  }
+  final categories = economy.requiredServiceCategories;
+  if (categories.toSet().length != categories.length) {
+    error('Required service categories must be unique.');
+  }
+  for (final category in categories) {
+    if (category.isEmpty) {
+      error('Required service categories must not be empty strings.');
+    }
+  }
+  for (final category in categories) {
+    final covered = catalogue.any(
+      (model) => model.enabled && model.serviceCategory == category,
+    );
+    if (!covered) {
+      warning(
+        'Required service category "$category" has no enabled model '
+        'providing it — contentment can never reach 100%.',
+      );
+    }
   }
   if (economy.roadUpkeepCoinsPerTile < 0 ||
       economy.bridgeUpkeepCoinsPerTile < 0) {

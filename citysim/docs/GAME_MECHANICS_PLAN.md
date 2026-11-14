@@ -323,9 +323,9 @@ collect taxes, net upkeep, advance every active construction one stage
   tax 0, positive upkeep), so they are a real maintenance expense;
   homes and commerce carry the tax base (decided 2026-11-13: shops
   and offices net positive). The anti-compounding guard rests on
-  civic upkeep, infrastructure upkeep, and crew capacity, with a
-  future growth rule — commerce needs nearby homes — as the backstop
-  against shop farming.
+  civic upkeep, infrastructure upkeep, and crew capacity, with the
+  stage-2 occupancy design below — vacant commerce earns nothing and
+  pays full upkeep — as the backstop against shop farming.
 - **Treasury purchases** are parcels, road stretch plans, and bridges
   — in stage 1 all buildings, civic ones included, plan free and are
   built by labor (a per-model planning fee for landmarks can be
@@ -417,6 +417,123 @@ Props stay free, instant, and unstaged. Calibration against the live
 town (51 homes, 12 commerce, 6 civic, 109 road tiles + 17 bridge
 tiles): roughly +85 per check-in; an early five-home town roughly +3.
 
+**Stage 2 — demand, occupancy, and contentment (designed
+2026-11-14, implemented 2026-11-14).** The growth-rules stage: demand
+does not gate building, it drives occupancy. Anything can always be
+planned and built, but homes sit vacant and shops stay shuttered
+until demand exists for them — vacant buildings pay no tax and full
+upkeep, which is the whole anti-shop-farming guard: an unpatronized
+shop is a pure upkeep drain.
+
+- **Population is occupied households.** One occupied home = one
+  household = one population; vacant homes and all commerce/civic
+  count zero residents (commerce contributes jobs, civic coverage).
+  Per-model household capacities (apartments housing three families)
+  are a later content pass — the mechanism already stores counts.
+- **Demand, in household units.** Residential demand = frontier
+  appeal + jobs − population; commercial demand = population − jobs.
+  Both clamp at zero; the bars' hints do the steering ("needs jobs",
+  "needs homes"). The frontier appeal constant kickstarts the loop —
+  people want to homestead this valley — and job overshoot is the
+  feature: a new shop's jobs attract residents, so the loop
+  oscillates instead of settling.
+- **Arrivals are check-in events.** Households move in and shop
+  positions fill only at check-ins, capped by a rate knob (seed: one
+  per check-in) — growth costs check-ins, not money, and the town
+  visibly grows one family a day.
+- **Contentment is the tax multiplier.** Coverage per required
+  service category (fire, police, health — content lists them) is
+  capacity ÷ population, clamped at 1.0; contentment is the average
+  across categories as a percentage. Collected taxes multiply by
+  contentment, rounded once on the total. Requirements phase in late
+  (nothing demanded below roughly ten households), so the early game
+  stays exactly as pure as stage 1.
+- **The contentment floor is 30 percent** — the no-dead-ends
+  guarantee under this system. Unhappy citizens still pay something
+  (it is a utopia, not a tax strike), so even the most neglected
+  town keeps a trickle of income and can always afford the road tile
+  that starts its recovery. Doctrine extended: contentment gates
+  income, never growth; the fix for low contentment — service
+  buildings — is always free labor.
+- **Storage.** A ninth `occupancy` column on the Tiles sheet holds
+  filled units per completed structure: households for residential,
+  staffed positions for commerce (a cafe staffs up job-by-job
+  exactly as an apartment fills family-by-family). Short rows pad
+  to vacant; over-capacity stored values grandfather rather than
+  reject, so content edits never invalidate saves.
+- **Framing keeps it chill.** The report speaks in invitations, not
+  alarms ("a few folks mention the clinic is far", contentment
+  deltas); a town at equilibrium asks nothing. A garden asks for
+  water; that is gardening, not stress. The canary while playtesting
+  is the requirement curve — slow it before ever considering removal.
+
+Suggested slices: occupancy and demand first (the structural half),
+then service coverage and contentment (the pressure half), then the
+bars and retune. All quantities are per-settlement and compose with
+the multi-city direction below.
+
+**Stage 2.1 — the waiting-list demand system (decided and
+implemented 2026-11-14).**
+Reworks stage 2's demand half and its storage: the per-structure
+occupancy column is **removed**. The town is the character and
+citizens are its vitals — three stored aggregates replace the
+distribution of occupancy across buildings, which the final design
+(tax fractions, aggregate demand, percentage rates) never reads.
+
+- **State (UserData):** `waiting_households` (the waiting list),
+  `population` (households in town), `employed_population`
+  (households holding jobs). Derived always: vacant residential
+  capacity = Σ model households − population; unemployment =
+  population − employed; job capacity = Σ model jobs caps
+  employed. A population above capacity grandfathers (content
+  edits shrink capacity; arrivals simply pause).
+- **Residential demand is the waiting list.** Each check-in, while
+  the town is full (no vacant residential capacity) and fully
+  employed, the list refills by up to `migrationPercentPerCheckIn`
+  (2%) of population, minimum 1 — the same rate arrivals drain it.
+  Population zero satisfies both conditions vacuously, so a fresh
+  town's list grows from day one; this replaces the frontier-appeal
+  constant. Growth stops while unemployment exists. Cap:
+  `waitingHouseholdsCapPercent` (10%) of population, minimum 1 —
+  the bar's scale.
+- **Arrivals scale with the town:** up to 2% of population
+  (minimum 1) households move in per check-in while the list is
+  non-empty and vacant homes exist — regardless of unemployment.
+- **Employment demand** (renamed from commercial demand) **is the
+  unemployed count**: population − employed. Bar scale:
+  population. While citizens are unemployed and positions vacant,
+  up to `employmentPercentPerCheckIn` (5%) of population (minimum
+  1) positions staff per check-in. Employment adjusts faster than
+  migration — jobs catch up to people, then people follow jobs.
+- **Only employed people pay tax.** Home taxes scale by
+  employed ÷ residential capacity; commerce taxes by employed ÷
+  job capacity; both multiply by contentment, rounded once on the
+  total. Every home pays the average rate — unemployment reads as
+  a town condition, not a named household's. Unemployment's cost
+  is lost tax and blocked migration; contentment stays purely
+  service coverage.
+- **Check-in sequence:** taxes, upkeep, stage advancement,
+  arrivals, staffing, list growth — counter increments only, no
+  per-structure writes.
+- **Growth shape:** roughly 2% per check-in at full steam (a
+  doubling in about five weeks), with the player's build rate as
+  the real limiter. Early game: income is zero until the first
+  job exists — the founding wave is one household, then a shop
+  must open before the next family comes. Home, shop, home.
+- **Deleted:** the ninth Tiles column, `PlacedStructure.occupancy`,
+  the derived employment pairings, per-structure check-in writes.
+  Flavor concession: arrival lines are aggregate ("a household
+  moved in"); completions stay located.
+- **Migration:** the live save carries population 51, employed 49,
+  waiting 0, column stripped. Income lands near 265 (the two
+  unemployed households' lost tax).
+- **Content fields:** economy gains `migrationPercentPerCheckIn`
+  (2), `employmentPercentPerCheckIn` (5),
+  `waitingHouseholdsCapPercent` (10);
+  `frontierAppealHouseholds` and `householdsPerCheckIn` retire.
+  The walled-shop corner is unchanged (grant-button escape until
+  demolition lands).
+
 **Multiple cities (future concept, discussed 2026-11-14).** Several
 starting cities scattered around the map, unconnected at first, each
 with its own progression and its own treasury; connecting them by
@@ -455,9 +572,7 @@ joins — player's choice, the bigger city, or adjacency not mattering
 at all. Not a today problem.
 
 **Open questions.** A more natural starting treasury than a flat 20;
-the stage-2 occupancy model (household-by-household vs. full on
-completion, riding the flat tax as a multiplier); a commerce-needs-
-homes growth rule as the backstop against shop farming; whether
+whether
 splinter settlers ask permission or build unilaterally; whether
 settler construction renders as process (scaffolding) or arrives
 between sessions; model-unlock thresholds and catalogue tiers under
@@ -489,6 +604,10 @@ Before committing to additional mechanics, decide:
   staffing, resource chains, leaderboards, or mandatory streaks.
 - No actual finance-data integration in this prototype.
 - No demolition, relocation, cancellation, refunds, or automatic construction
-  timers in the current slice.
+  timers in the current slice. Demolition is planned future work; when it
+  lands it must stay affordable at an empty treasury (free or labor-priced)
+  — a coin-priced demolition would reintroduce the walled-town dead end it
+  exists to remove. Until then, the coin grant in the clock panel is the
+  escape hatch for that contrived corner.
 - The map is intended to grow over the long term, but generated country-scale
   geography and long-run content balance are not yet implemented.

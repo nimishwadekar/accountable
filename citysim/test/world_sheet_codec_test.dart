@@ -23,8 +23,16 @@ void main() {
   /// fixtures. A starter road, a paved road to the river, a completed
   /// bridge over it, a completed cottage, and a half-funded café project.
   SheetTables handwrittenTables() => SheetTables(
+    ownedParcels: [
+      ['0', '0'],
+      ['1', '0'],
+      ['2', '0'],
+    ],
     userData: {
       'seed': '7',
+      'population': '1',
+      'employed_population': '1',
+      'waiting_households': '0',
       'coins': '3',
       'coins_earned': '4',
       'coins_spent': '1',
@@ -34,11 +42,6 @@ void main() {
       'checkin_count': '1',
       'construction_day': '5',
     },
-    ownedParcels: [
-      ['0', '0'],
-      ['1', '0'],
-      ['2', '0'],
-    ],
     tiles: [
       ['4', '4', 'road', 'complete', 'dirt', '', '', ''],
       ['5', '4', 'road', 'complete', 'asphalt', '', '', ''],
@@ -47,16 +50,7 @@ void main() {
       for (var column = 8; column <= 15; column++)
         ['$column', '4', 'bridge', 'complete', '', '', '', ''],
       ['16', '4', 'road', 'complete', 'asphalt', '', '', ''],
-      [
-        '3',
-        '4',
-        'structure',
-        'complete',
-        'small-home',
-        'home-small-yellow',
-        'east',
-        '',
-      ],
+      ['3', '4', 'structure', 'complete', 'small-home', 'home-small-yellow', 'east', ''],
       ['6', '5', 'structure', 'planned', 'cafe', 'cafe', 'east', ''],
     ],
     projects: [
@@ -143,6 +137,11 @@ void main() {
     expect(cottage.facing, 'east');
     expect(cottage.footprint, [const CellCoord(3, 4)]);
     expect(cottage.population, 1);
+
+    // The aggregate counters round-trip through UserData.
+    expect(world.population, 1);
+    expect(world.employedPopulation, 1);
+    expect(world.waitingHouseholds, 0);
 
     final project = world.constructions.single;
     expect(project.catalogueId, 'cafe');

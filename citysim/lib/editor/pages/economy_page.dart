@@ -105,6 +105,49 @@ class _EconomyPageState extends State<EconomyPage> {
                     _edit((e) => e['parcelPerPopulationCoins'] = v),
               ),
             ),
+            SizedBox(
+              width: 170,
+              child: IntField(
+                label: 'Migration % / check-in',
+                value: asInt(economy['migrationPercentPerCheckIn'], 2),
+                min: 0,
+                help:
+                    'Households that may move in per check-in, as a '
+                    'percentage of population (floored at one). Also '
+                    "the waiting list's refill rate — growth costs "
+                    'check-ins, not money.',
+                onChanged: (v) =>
+                    _edit((e) => e['migrationPercentPerCheckIn'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 180,
+              child: IntField(
+                label: 'Employment % / check-in',
+                value: asInt(economy['employmentPercentPerCheckIn'], 5),
+                min: 0,
+                help:
+                    'Job positions that may staff per check-in, as a '
+                    'percentage of population (floored at one). '
+                    'Employment adjusts faster than migration.',
+                onChanged: (v) =>
+                    _edit((e) => e['employmentPercentPerCheckIn'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 170,
+              child: IntField(
+                label: 'Waiting list cap %',
+                value: asInt(economy['waitingHouseholdsCapPercent'], 10),
+                min: 0,
+                help:
+                    "The residential waiting list's cap, as a "
+                    'percentage of population (floored at one) — the '
+                    "residential demand bar's scale.",
+                onChanged: (v) =>
+                    _edit((e) => e['waitingHouseholdsCapPercent'] = v),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -174,6 +217,80 @@ class _EconomyPageState extends State<EconomyPage> {
           'Derived: a 4-tile road plan = ${4 * asInt(economy['roadTileCostCoins'])} coins upfront · '
           'a 4-span bridge = ${asInt(bridge['bridgeTileCostCoins']) * 4 + 2 * asInt(economy['roadTileCostCoins'])} coins upfront · '
           'a parcel at population 25 = ${asInt(economy['parcelBaseCoins']) + 25 * asInt(economy['parcelPerPopulationCoins'])} coins',
+          style: const TextStyle(fontSize: 11, color: Colors.black54),
+        ),
+        const SizedBox(height: 12),
+        Text('Contentment', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            SizedBox(
+              width: 160,
+              child: IntField(
+                label: 'Contentment floor %',
+                value: asInt(economy['contentmentFloorPercent']),
+                min: 0,
+                help:
+                    'Contentment never drops below this percentage — '
+                    'the no-dead-ends guarantee: unhappy citizens still '
+                    'pay something, so a neglected town always keeps a '
+                    'trickle of income.',
+                onChanged: (v) =>
+                    _edit((e) => e['contentmentFloorPercent'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 180,
+              child: IntField(
+                label: 'Services demanded at pop.',
+                value: asInt(economy['serviceRequirementPopulation']),
+                min: 0,
+                help:
+                    'Population below which no service coverage is '
+                    'demanded — the early game stays pure.',
+                onChanged: (v) =>
+                    _edit((e) => e['serviceRequirementPopulation'] = v),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          children: [
+            for (
+              var index = 0;
+              index < (economy['requiredServiceCategories'] as List).length;
+              index++
+            )
+              InputChip(
+                label: Text(
+                  '${(economy['requiredServiceCategories'] as List)[index]}',
+                ),
+                onDeleted: () => _edit((e) {
+                  final list = [...(e['requiredServiceCategories'] as List)];
+                  list.removeAt(index);
+                  e['requiredServiceCategories'] = list;
+                }),
+              ),
+            ActionChip(
+              label: const Text('Add category'),
+              onPressed: () => _edit((e) {
+                final list = [
+                  ...(e['requiredServiceCategories'] as List? ?? const []),
+                ];
+                list.add('service${list.length + 1}');
+                e['requiredServiceCategories'] = list;
+              }),
+            ),
+          ],
+        ),
+        Text(
+          'Required service categories feed contentment: average '
+          'coverage across them multiplies collected taxes. Capacities '
+          'come from the models carrying each category.',
           style: const TextStyle(fontSize: 11, color: Colors.black54),
         ),
         const SizedBox(height: 12),

@@ -261,6 +261,69 @@ class _CataloguePageState extends State<CataloguePage> {
                     ),
                   ),
                 ),
+                if (!isDecoration) ...[
+                  SizedBox(
+                    width: 110,
+                    child: IntField(
+                      label: 'Households',
+                      value: asInt(model['households']),
+                      min: 0,
+                      help:
+                          'Households this home can hold — its '
+                          'occupancy capacity, filled family by family '
+                          'at check-ins while residential demand exists. '
+                          'Zero on non-residential models.',
+                      onChanged: (v) =>
+                          _editModel(id, (model) => model['households'] = v),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 90,
+                    child: IntField(
+                      label: 'Jobs',
+                      value: asInt(model['jobs']),
+                      min: 0,
+                      help:
+                          'Job positions this commerce building '
+                          'offers, staffed one per check-in while '
+                          'commercial demand exists. Zero on '
+                          'non-commercial models.',
+                      onChanged: (v) =>
+                          _editModel(id, (model) => model['jobs'] = v),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 130,
+                    child: IntField(
+                      label: 'Service capacity',
+                      value: asInt(model['serviceCapacity']),
+                      min: 0,
+                      help:
+                          'Households one completed service building '
+                          'of this model covers. Needs a service '
+                          'category.',
+                      onChanged: (v) => _editModel(
+                        id,
+                        (model) => model['serviceCapacity'] = v,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 150,
+                    child: TextFieldBox(
+                      label: 'Service category',
+                      value: '${model['serviceCategory'] ?? ''}',
+                      help:
+                          'Which required category this building '
+                          'covers (e.g. fire, police, health). Empty on '
+                          'non-service models.',
+                      onChanged: (v) => _editModel(
+                        id,
+                        (model) => model['serviceCategory'] = v,
+                      ),
+                    ),
+                  ),
+                ],
                 SizedBox(
                   width: 150,
                   child: IntField(

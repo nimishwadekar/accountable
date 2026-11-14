@@ -328,6 +328,27 @@ void main() {
     expect(content.economy.bridgeUpkeepCoinsPerTile, 1);
     expect(content.economy.roadTaxCoinsPerTile, 0);
     expect(content.economy.bridgeTaxCoinsPerTile, 0);
+    // Stage-2.1 seeds: waiting-list demand and contentment.
+    expect(content.economy.migrationPercentPerCheckIn, 2);
+    expect(content.economy.employmentPercentPerCheckIn, 5);
+    expect(content.economy.waitingHouseholdsCapPercent, 10);
+    expect(content.economy.contentmentFloorPercent, 30);
+    expect(content.economy.serviceRequirementPopulation, 10);
+    expect(content.economy.requiredServiceCategories, [
+      'fire',
+      'police',
+      'health',
+    ]);
+    expect(byId['small-home']!.households, 1);
+    expect(byId['apartments']!.households, 1);
+    expect(byId['cafe']!.jobs, 4);
+    expect(byId['tall-office']!.jobs, 5);
+    expect(byId['fire-station']!.serviceCategory, 'fire');
+    expect(byId['fire-station']!.serviceCapacity, 50);
+    expect(byId['community-clinic']!.serviceCategory, 'health');
+    expect(byId['community-clinic']!.serviceCapacity, 25);
+    expect(byId['hospital']!.serviceCategory, 'health');
+    expect(byId['water-tower']!.serviceCategory, isNull);
     expect(content.economy.builderProgression, hasLength(3));
     expect(
       content.economy.builderCapacityForPopulation(1000),

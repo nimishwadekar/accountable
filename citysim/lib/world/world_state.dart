@@ -1,7 +1,6 @@
+import '../content/content_bundle.dart';
 import 'coordinates.dart';
 import 'terrain_provider.dart';
-
-import '../content/content_bundle.dart';
 
 const parcelWorldGeneratorVersion = 1;
 const parcelWorldRulesVersion = 2;
@@ -257,6 +256,9 @@ class ParcelWorldState {
     required this.coins,
     required this.totalCoinsEarned,
     required this.totalCoinsSpent,
+    this.waitingHouseholds = 0,
+    this.population = 0,
+    this.employedPopulation = 0,
     required this.nextEntityNumber,
     required this.nextEventNumber,
     required this.lastCheckInDate,
@@ -291,6 +293,21 @@ class ParcelWorldState {
   final int coins;
   final int totalCoinsEarned;
   final int totalCoinsSpent;
+
+  /// Households that want to move in but cannot (no housing) — the
+  /// residential waiting list. Stored: it accumulates across
+  /// check-ins.
+  final int waitingHouseholds;
+
+  /// Households living in town. Stored as the single aggregate —
+  /// the distribution across buildings is never read. A population
+  /// above the current residential capacity grandfathers (content
+  /// edits shrink capacity; arrivals pause until it recovers).
+  final int population;
+
+  /// Households holding jobs. Staffing raises it while unemployment
+  /// and job vacancies exist; never above population.
+  final int employedPopulation;
   final int nextEntityNumber;
   final int nextEventNumber;
 
@@ -317,10 +334,8 @@ class ParcelWorldState {
       .where((structure) => structure.kind == StructureKind.building)
       .length;
 
-  /// Derived progression metric: the population of every completed
-  /// structure (snapshotted at placement). Never stored.
-  int get population =>
-      structures.fold<int>(0, (sum, structure) => sum + structure.population);
+  /// Unemployed citizens — the employment demand.
+  int get unemployment => population - employedPopulation;
 
   Map<ParcelCoord, OwnedParcel> get parcelsByCoord => {
     for (final parcel in parcels) parcel.coord: parcel,
@@ -350,6 +365,9 @@ class ParcelWorldState {
     int? coins,
     int? totalCoinsEarned,
     int? totalCoinsSpent,
+    int? waitingHouseholds,
+    int? population,
+    int? employedPopulation,
     int? nextEntityNumber,
     int? nextEventNumber,
     DateTime? lastCheckInDate,
@@ -376,6 +394,9 @@ class ParcelWorldState {
     coins: coins ?? this.coins,
     totalCoinsEarned: totalCoinsEarned ?? this.totalCoinsEarned,
     totalCoinsSpent: totalCoinsSpent ?? this.totalCoinsSpent,
+    waitingHouseholds: waitingHouseholds ?? this.waitingHouseholds,
+    population: population ?? this.population,
+    employedPopulation: employedPopulation ?? this.employedPopulation,
     nextEntityNumber: nextEntityNumber ?? this.nextEntityNumber,
     nextEventNumber: nextEventNumber ?? this.nextEventNumber,
     lastCheckInDate: lastCheckInDate ?? this.lastCheckInDate,

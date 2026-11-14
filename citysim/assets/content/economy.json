@@ -18,11 +18,21 @@
       "capacity": 4
     }
   ],
+  "contentmentFloorPercent": 30,
+  "employmentPercentPerCheckIn": 5,
+  "migrationPercentPerCheckIn": 2,
   "parcelBaseCoins": 32,
   "parcelPerPopulationCoins": 2,
+  "requiredServiceCategories": [
+    "fire",
+    "police",
+    "health"
+  ],
   "roadTaxCoinsPerTile": 0,
   "roadTileCostCoins": 4,
   "roadUpkeepCoinsPerTile": 1,
+  "serviceRequirementPopulation": 10,
   "startingBuilderCapacity": 1,
-  "startingTreasuryCoins": 20
+  "startingTreasuryCoins": 20,
+  "waitingHouseholdsCapPercent": 10
 }

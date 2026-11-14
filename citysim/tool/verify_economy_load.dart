@@ -1,7 +1,7 @@
 // Verification-only: loads the live content and the live save sheets
 // through the game's own parse+codec+validate path, then prints the
-// town's next-report projection. Not part of the app or tests; run
-// with `dart run tool/verify_economy_load.dart`.
+// town's next-report projection and vitality. Not part of the app or
+// tests; run with `dart run tool/verify_economy_load.dart`.
 import 'dart:io';
 
 import 'package:citysim/content/content_bundle.dart';
@@ -22,11 +22,9 @@ Future<void> main() async {
     ambience: await readCategory('ambience.json'),
     terrain: await readCategory('terrain.json'),
   );
-  stdout.writeln(
-    'content parses; treasury start '
-    '${content.economy.startingTreasuryCoins}, parcel '
-    '${content.economy.parcelBaseCoins}',
-  );
+  stdout.writeln('content parses; treasury start '
+      '${content.economy.startingTreasuryCoins}, parcel '
+      '${content.economy.parcelBaseCoins}');
 
   String sheets(String name) =>
       File('assets/test_sheets/$name.csv').readAsStringSync();
@@ -44,23 +42,27 @@ Future<void> main() async {
     terrainProvider: terrain,
   );
   validateParcelWorldState(world, content, terrain);
-  stdout.writeln(
-    'live save loads and validates: ${world.coins} coins, '
-    '${world.structures.length} structures, ${world.roads.length} roads, '
-    '${world.bridges.length} bridges, ${world.constructions.length} '
-    'projects, capacity ${world.builderCapacity}',
-  );
+  stdout.writeln('live save loads and validates: ${world.coins} coins, '
+      '${world.structures.length} structures, ${world.roads.length} roads, '
+      '${world.bridges.length} bridges, ${world.constructions.length} '
+      'projects, capacity ${world.builderCapacity}');
 
   final ledger = townLedger(world, content);
-  stdout.writeln(
-    'next report projection: taxes ${ledger.taxes}, upkeep '
-    '${ledger.upkeep}, net ${ledger.net}',
-  );
-  stdout.writeln(
-    'next parcel price: '
-    '${content.economy.parcelBaseCoins + content.economy.parcelPerPopulationCoins * world.population} '
-    'coins at population ${world.population}',
-  );
+  stdout.writeln('next report projection: taxes ${ledger.taxes} '
+      '(gross ${ledger.grossTaxes.toStringAsFixed(1)} x '
+      '${ledger.contentment}%), upkeep ${ledger.upkeep}, '
+      'net ${ledger.net}');
+  stdout.writeln('vitality: population ${world.population}, employed '
+      '${world.employedPopulation}, waiting ${world.waitingHouseholds}, '
+      'unemployed ${ledger.employmentDemand}, vacant homes '
+      '${ledger.residentialVacancy}, open jobs ${ledger.jobVacancy}');
+  for (final entry in ledger.coverage.entries) {
+    stdout.writeln('  ${entry.key} coverage '
+        '${(entry.value * 100).toStringAsFixed(1)}%');
+  }
+  stdout.writeln('next parcel price: '
+      '${content.economy.parcelBaseCoins + content.economy.parcelPerPopulationCoins * world.population} '
+      'coins at population ${world.population}');
 
   // Round-trip: the save must survive a save→load cycle unchanged.
   final saved = worldToSheetTables(world);
@@ -70,9 +72,8 @@ Future<void> main() async {
     terrainProvider: terrain,
   );
   validateParcelWorldState(reloaded, content, terrain);
-  stdout.writeln(
-    'round-trip ok: ${reloaded.coins} coins, '
-    '${reloaded.structures.length} structures, '
-    '${reloaded.roads.length} roads, ${reloaded.bridges.length} bridges',
-  );
+  stdout.writeln('round-trip ok: ${reloaded.coins} coins, '
+      '${reloaded.structures.length} structures, '
+      '${reloaded.roads.length} roads, ${reloaded.bridges.length} bridges, '
+      'population ${reloaded.population}');
 }

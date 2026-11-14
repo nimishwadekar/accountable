@@ -89,10 +89,7 @@ ParcelWorldState checkInWorldForToday(
         // Population gates: unlock models whose threshold the
         // settlement now reaches, then reconcile builder capacity
         // with the progression table.
-        final population = structures.fold<int>(
-          0,
-          (sum, structure) => sum + structure.population,
-        );
+        final population = state.population;
         for (final candidate in content.purchaseableModels) {
           if (population >= candidate.unlockAtPopulation &&
               unlocked.add(candidate.id)) {
@@ -224,6 +221,63 @@ ParcelWorldState checkInWorldForToday(
     }
   }
 
+  // Arrivals, staffing, and list growth — counter increments with
+  // percentage budgets of population, floored at one. A home
+  // completing this very check-in counts as capacity today.
+  var population = state.population;
+  var employed = state.employedPopulation;
+  var waiting = state.waitingHouseholds;
+  final economy = content.economy;
+  var residentialCapacity = 0;
+  var jobCapacity = 0;
+  for (final structure in structures) {
+    final model = content.structure(structure.catalogueId);
+    if (model == null) continue;
+    if (model.isResidential) {
+      residentialCapacity += model.households;
+    } else if (model.isCommerce) {
+      jobCapacity += model.jobs;
+    }
+  }
+  int budget(int percent) {
+    if (percent <= 0) return 0;
+    return (population * percent / 100).floor().clamp(1, 1 << 30);
+  }
+
+  // Households move in while the waiting list and vacant homes both
+  // exist — regardless of unemployment.
+  final migrationBudget = budget(economy.migrationPercentPerCheckIn);
+  final vacantHomes = residentialCapacity - population;
+  final householdsArrived =
+      (waiting < migrationBudget ? waiting : migrationBudget).clamp(
+        0,
+        vacantHomes < 0 ? 0 : vacantHomes,
+      );
+  population += householdsArrived;
+  waiting -= householdsArrived;
+
+  // Positions staff while citizens are unemployed and jobs vacant.
+  final employmentBudget = budget(economy.employmentPercentPerCheckIn);
+  final unemployed = population - employed;
+  final vacantJobs = jobCapacity - employed;
+  final positionsStaffed =
+      (unemployed < employmentBudget ? unemployed : employmentBudget).clamp(
+        0,
+        vacantJobs < 0 ? 0 : vacantJobs,
+      );
+  employed += positionsStaffed;
+
+  // The list refills only when the end state is full and fully
+  // employed — a prosperous town attracts. Population zero
+  // satisfies both vacuously, kickstarting a fresh town.
+  final full = residentialCapacity - population <= 0;
+  final fullyEmployed = population == employed;
+  if (full && fullyEmployed) {
+    final cap = budget(economy.waitingHouseholdsCapPercent);
+    final refill = budget(economy.migrationPercentPerCheckIn);
+    waiting = (waiting + refill).clamp(0, cap);
+  }
+
   final report = _event(
     state,
     kind: 'check-in',
@@ -235,8 +289,11 @@ ParcelWorldState checkInWorldForToday(
       'upkeepPaid': paid,
       'upkeepShortfall': shortfall,
       'net': taxes - paid,
+      'contentment': ledger.contentment,
       'stagesAdvanced': advanced,
       'completions': completions,
+      'householdsArrived': householdsArrived,
+      'positionsStaffed': positionsStaffed,
     },
   );
   return state.copyWith(
@@ -245,6 +302,9 @@ ParcelWorldState checkInWorldForToday(
     totalCoinsSpent: state.totalCoinsSpent + paid,
     lastCheckInDate: state.simulatedDate,
     checkInCount: state.checkInCount + 1,
+    waitingHouseholds: waiting,
+    population: population,
+    employedPopulation: employed,
     nextEntityNumber: nextEntity,
     unlockedCatalogueIds: unlocked,
     builderCapacity: capacity,

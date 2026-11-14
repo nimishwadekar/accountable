@@ -553,10 +553,94 @@ section 8 of the mechanics plan. The engineering shape as built:
   immediately; the earned-minus-spent ledger stays historical. The
   fallback, if a funded project ever exists at the switch: the funded
   fraction becomes stages done, rounded down.
+### Demand, occupancy, and contentment (stage 2, designed and
+implemented 2026-11-14)
+
+The engineering shape as built — full design and decisions in
+section 8 of the mechanics plan:
+
+- **Content fields.** Per-model `households` (residential capacity),
+  `jobs` (commerce capacity), and `serviceCategory` +
+  `serviceCapacity` (civic); `economy.json` gains
+  `frontierAppealHouseholds`, `householdsPerCheckIn`, the required
+  service category list, and `contentmentFloorPercent` (seeded 30).
+- **State and reducer.** `PlacedStructure.households` holds filled
+  units; population and jobs derive as sums. The check-in gains an
+  arrivals phase after stage advancement — households move in and
+  positions fill while demand is positive, capped by the rate, in
+  deterministic first-vacant placement order. The town ledger's
+  taxes multiply by contentment (average service coverage × 100,
+  floored, rounded once on the total).
+- **Codec.** A ninth `occupancy` column on the Tiles sheet for
+  completed structures; short rows pad to vacant; over-capacity
+  stored values grandfather instead of failing validation.
+- **Migration.** None in code — the live save is grandfathered by
+  hand (a script sets residential rows to full households and
+  commerce rows to full staffing, landing at population 51, jobs
+  48).
+- **UI.** Demand bars and service coverage live in a Town panel
+  card, never the header (header width shifts the map fit); the
+  report gains arrival, opening, and contentment-delta lines.
+
 - **Auto-placed props** (traffic lights at junctions and similar) ride
   the future growth-rules category and reuse the road junction masks
   the renderer already computes; they interact with the
   free-prop-placement sheet described above.
+
+### Waiting-list demand (stage 2.1, decided and implemented 2026-11-14)
+
+The engineering shape — full design in section 8 of the mechanics
+plan. Aggregate state replaces per-structure occupancy:
+
+- **State.** Three UserData keys — `waiting_households`,
+  `population`, `employed_population` (each defaults to zero when
+  absent, so pre-stage-2 saves load). The ninth Tiles column is
+  removed; `PlacedStructure.occupancy` and the derived employment
+  pairings are deleted.
+- **Content.** Economy gains `migrationPercentPerCheckIn` (2),
+  `employmentPercentPerCheckIn` (5), `waitingHouseholdsCapPercent`
+  (10); `frontierAppealHouseholds` and `householdsPerCheckIn`
+  retire. Editor fields follow.
+- **Reducer.** The check-in's arrivals, staffing, and list-growth
+  phases are counter increments with percentage budgets (of
+  population, floored at one): arrivals drain the list into vacant
+  residential capacity; staffing raises employed while unemployment
+  and job vacancies exist; the list refills last, only when the end
+  state is full and fully employed.
+- **Ledger.** `townLedger` reads the counters: home taxes scale by
+  employed ÷ residential capacity, commerce taxes by employed ÷
+  job capacity, contentment multiplies the total;
+  `commercialDemand` renames to `employmentDemand` (unemployment).
+- **UI.** "Commercial demand" renames to "Employment demand"; the
+  residential bar scales to the 10% cap, the employment bar to
+  population; inspector occupancy lines become content-capacity
+  lines; report arrival lines are counts.
+- **Pins.** Pop-zero kickstart (list grows vacuously, first
+  household arrives into the first home); percentage budgets floor
+  at one and scale with population; the list cap; employment
+  clearing faster than migration; unemployed households pay no tax
+  (income is zero until the first job); growth requires employment
+  (the home-shop-home founding rhythm); the live save lands near
+  its current income.
+
+### Demolition (planned future work)
+
+Scoping and constraints agreed 2026-11-14:
+
+- **Never-occupied first.** The predicate already exists —
+  `structure.occupancy == 0` means nobody ever lived or worked there
+  (occupancy never decreases). Vacant demolition moves nothing
+  derived, asks nothing of the ledger, and closes the walled-town
+  dead end immediately.
+- **Affordable at zero.** Demolition must be free or labor-priced; a
+  coin price reintroduces the dead end it exists to remove.
+- **Occupied demolition is a later slice** and needs population
+  high-water guards first: unlocks and builder capacity re-derive
+  from population on load (so evictions would re-lock models and
+  shrink capacity, breaking the reconcile-upward promise), and
+  population-scaled parcel prices and service coverage would become
+  churn-exploitable (demolish homes, buy the cheaper parcel, rebuild
+  for free).
 
 ### Regression checks
 
