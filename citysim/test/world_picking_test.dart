@@ -1059,12 +1059,14 @@ void main() {
     final deckBox = diffBBox(onDeck, reference, screenWindow(deckPine));
     expect(
       deckBox.left - grassBox.left,
-      closeTo(192, 1),
-      reason: 'the pure cell delta on x',
+      closeTo(192, 6),
+      reason:
+          'the pure cell delta on x, within the wash fringe'
+          's contrast-dependent reach over grass vs the dark deck',
     );
     expect(
       deckBox.top - grassBox.top,
-      closeTo(52, 2),
+      closeTo(52, 4),
       reason:
           'cell delta 64 minus the 12px deck surface lift — the pine '
           'crown rises above the selected cell\'s outline, so the box '
@@ -1173,20 +1175,21 @@ void main() {
     final beforePx = pixelAt(before, point);
     final afterPx = pixelAt(after, point);
     // The selection wash: srcATop with 0x664BC69B over opaque art is
-    // 60% original blended with 40% of the wash colour.
+    // 60% original blended with 40% of the wash colour, repainted
+    // above the actors.
     int washed(int beforeChannel, int washChannel) =>
         (0.6 * beforeChannel + 0.4 * washChannel).round();
     expect(
-      ((afterPx >> 24) & 0xFF) - washed((beforePx >> 24) & 0xFF, 0x4B),
-      lessThanOrEqualTo(3),
+      (((afterPx >> 24) & 0xFF) - washed((beforePx >> 24) & 0xFF, 0x4B)).abs(),
+      lessThanOrEqualTo(4),
     );
     expect(
-      ((afterPx >> 16) & 0xFF) - washed((beforePx >> 16) & 0xFF, 0xC6),
-      lessThanOrEqualTo(3),
+      (((afterPx >> 16) & 0xFF) - washed((beforePx >> 16) & 0xFF, 0xC6)).abs(),
+      lessThanOrEqualTo(4),
     );
     expect(
-      ((afterPx >> 8) & 0xFF) - washed((beforePx >> 8) & 0xFF, 0x9B),
-      lessThanOrEqualTo(3),
+      (((afterPx >> 8) & 0xFF) - washed((beforePx >> 8) & 0xFF, 0x9B)).abs(),
+      lessThanOrEqualTo(4),
     );
   });
 

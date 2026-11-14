@@ -732,4 +732,247 @@ void main() {
     }
     image.dispose();
   });
+  testWidgets('selection x-rays obstructing structures, not repaints', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    ParcelWorldProbe.recording = true;
+
+    // A cottage at (2,3) with its neighbour in front at (3,3) (one
+    // depth step east, art overlapping half the sprite), plus a far
+    // cottage at (8,6) as the control. Rendered three ways: nothing
+    // selected (A), the back cottage selected (B), and the front
+    // cottage removed with the back one still selected (C).
+    ParcelWorldState town({required bool withFront}) => sheetTablesToWorld(
+      SheetTables(
+        userData: const {
+          'seed': '7',
+          'coins': '10',
+          'coins_earned': '10',
+          'coins_spent': '0',
+          'simulated_date': '2026-11-05',
+          'high_water_date': '2026-11-05',
+          'construction_day': '0',
+        },
+        ownedParcels: const [
+          ['0', '0'],
+        ],
+        tiles: [
+          const ['4', '4', 'road', 'complete', 'asphalt', '', '', ''],
+          const ['5', '4', 'road', 'complete', 'asphalt', '', '', ''],
+          const ['6', '4', 'road', 'complete', 'asphalt', '', '', ''],
+          const [
+            '2',
+            '3',
+            'structure',
+            'complete',
+            'small-home',
+            'home-small-yellow',
+            'east',
+            '',
+          ],
+          if (withFront)
+            const [
+              '3',
+              '3',
+              'structure',
+              'complete',
+              'small-home',
+              'home-small-yellow',
+              'east',
+              '',
+            ],
+          const [
+            '8',
+            '6',
+            'structure',
+            'complete',
+            'small-home',
+            'home-small-yellow',
+            'east',
+            '',
+          ],
+        ],
+        props: const [
+          // A lamp in front of the selected cottage whose sprite rect
+          // overlaps the cottage's rect but whose art (a thin pole,
+          // west of the cottage's art) never covers it — the mask
+          // test must leave it opaque.
+          ['2', '4', '7', '7', 'street-lamp', 'lightpole-a', ''],
+        ],
+        projects: const [],
+      ),
+      content: content,
+      terrainProvider: ContentTerrainProvider(content.terrain),
+    );
+
+    Future<(ui.Image, ByteData)> render(
+      ParcelWorldState world,
+      CellCoord? selected,
+    ) async {
+      final boundaryKey = GlobalKey();
+      Widget app() => MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: RepaintBoundary(
+            key: boundaryKey,
+            child: ParcelWorldView(
+              state: world,
+              content: content,
+              terrainProvider: ContentTerrainProvider(content.terrain),
+              selectedCell: selected,
+              onCellTap: (cell, structureId, subtileX, subtileY) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(app());
+      var settled = false;
+      for (var attempt = 0; attempt < 10 && !settled; attempt++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 300)),
+        );
+        ParcelWorldProbe.reset();
+        for (var i = 0; i < 6; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        settled =
+            ParcelWorldProbe.samples.isNotEmpty &&
+            ParcelWorldProbe.samples.every((s) => s.chunkRecords == 0);
+      }
+      expect(settled, isTrue, reason: 'chunks should finish recording');
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: app(),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      final image = (await _capture(tester, boundaryKey))!;
+      final bytes = (await tester.runAsync(() => image.toByteData()))!;
+      return (image, bytes);
+    }
+
+    final (imageA, bytesA) = await render(town(withFront: true), null);
+    final (imageB, bytesB) = await render(
+      town(withFront: true),
+      const CellCoord(2, 3),
+    );
+    final (imageC, bytesC) = await render(
+      town(withFront: false),
+      const CellCoord(2, 3),
+    );
+
+    (int, int, int) rgb(int rgba) =>
+        (rgba >> 24, (rgba >> 16) & 0xFF, (rgba >> 8) & 0xFF);
+
+    // The dim draws the occluder at 40% over what is behind it:
+    // B ~= 0.4*A + 0.6*behind, where behind is grass (render C shows
+    // it where the front cottage stood) or the washed selection.
+    int blendMatches(ByteData a, ByteData b, ByteData c, Rect region) {
+      var matches = 0;
+      for (var y = region.top.round(); y < region.bottom.round(); y++) {
+        for (var x = region.left.round(); x < region.right.round(); x++) {
+          final pa = rgb(a.getUint32((y * 800 + x) * 4));
+          final pb = rgb(b.getUint32((y * 800 + x) * 4));
+          final pc = rgb(c.getUint32((y * 800 + x) * 4));
+          final eR = 0.4 * pa.$1 + 0.6 * pc.$1;
+          final eG = 0.4 * pa.$2 + 0.6 * pc.$2;
+          final eB = 0.4 * pa.$3 + 0.6 * pc.$3;
+          if ((pb.$1 - eR).abs() <= 5 &&
+              (pb.$2 - eG).abs() <= 5 &&
+              (pb.$3 - eB).abs() <= 5) {
+            matches++;
+          }
+        }
+      }
+      return matches;
+    }
+
+    // 1. The far cottage is untouched: selecting a building far
+    //    behind it changes nothing in its sprite region.
+    var farSame = 0;
+    var farTotal = 0;
+    for (var y = 378; y < 408; y++) {
+      for (var x = 440; x < 488; x++) {
+        farTotal++;
+        if (bytesA.getUint32((y * 800 + x) * 4) ==
+            bytesB.getUint32((y * 800 + x) * 4)) {
+          farSame++;
+        }
+      }
+    }
+    expect(farSame, farTotal, reason: 'the far cottage must not dim');
+
+    // 2. The front cottage draws at 40% over the grass behind it.
+    expect(
+      blendMatches(bytesA, bytesB, bytesC, Rect.fromLTWH(406, 250, 16, 26)),
+      greaterThan(10),
+      reason: 'the obstructing cottage is see-through over grass',
+    );
+
+    // 3. The selected cottage wears its wash at its own depth: its
+    //    unobstructed art shifts green.
+    var washed = 0;
+    for (var y = 232; y < 260; y++) {
+      for (var x = 350; x < 374; x++) {
+        final a = rgb(bytesA.getUint32((y * 800 + x) * 4));
+        final b = rgb(bytesB.getUint32((y * 800 + x) * 4));
+        if ((b.$2 - b.$1) - (a.$2 - a.$1) >= 8) washed++;
+      }
+    }
+    expect(
+      washed,
+      greaterThan(10),
+      reason: 'the selection wash rides the selected sprite',
+    );
+
+    // 4. Where the front cottage covers the selected one, the
+    //    selection repaints itself solid above the dimmed occluder:
+    //    the covered opaque-art pixels equal render C (the same
+    //    washed cottage with nothing in front) exactly. The overlap
+    //    sits on the cottage art's faded right edge, so the
+    //    semi-transparent fringe lets the ghost show proportionally —
+    //    only the opaque core matches, which is what the count pins.
+    var solidSelection = 0;
+    for (var y = 249; y < 256; y++) {
+      for (var x = 381; x < 390; x++) {
+        if (bytesB.getUint32((y * 800 + x) * 4) ==
+            bytesC.getUint32((y * 800 + x) * 4)) {
+          solidSelection++;
+        }
+      }
+    }
+    expect(
+      solidSelection,
+      greaterThanOrEqualTo(15),
+      reason: 'the selected cottage stays solid through its occluder',
+    );
+
+    // 5. The lamp in front whose art never covers the cottage stays
+    //    fully opaque — coverage is pixel-tested, not box-tested.
+    var lampSame = 0;
+    var lampTotal = 0;
+    for (var y = 248; y < 278; y++) {
+      for (var x = 328; x < 344; x++) {
+        lampTotal++;
+        if (bytesA.getUint32((y * 800 + x) * 4) ==
+            bytesB.getUint32((y * 800 + x) * 4)) {
+          lampSame++;
+        }
+      }
+    }
+    expect(lampSame, lampTotal, reason: 'a non-covering sprite must not dim');
+
+    imageA.dispose();
+    imageB.dispose();
+    imageC.dispose();
+  });
 }

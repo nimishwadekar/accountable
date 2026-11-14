@@ -391,6 +391,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   terrainCache: _terrainCache,
                   pixelRatio: _pixelRatio,
                   bands: _bandImages,
+                  masks: _masks,
                   onBandPattern: _noteBandPattern,
                   parcelMode: widget.parcelMode,
                   showTileGrid: widget.showTileGrid,
@@ -989,6 +990,32 @@ double _smoothMin(double a, double b, double k) {
   return b + (a - b) * h - k * h * (1 - h);
 }
 
+/// Whether two sprites' opaque art actually covers the same screen
+/// point: the pixel test behind the selection x-ray. Either mask
+/// missing falls back to the bounding boxes — rects touching is
+/// coverage enough until the masks decode.
+bool spriteArtOverlaps(
+  Rect rectA,
+  SpriteMask? maskA,
+  Rect rectB,
+  SpriteMask? maskB, {
+  int step = 2,
+}) {
+  if (!rectA.overlaps(rectB)) return false;
+  if (maskA == null || maskB == null) return true;
+  final overlap = rectA.intersect(rectB);
+  for (var y = overlap.top; y < overlap.bottom; y += step) {
+    for (var x = overlap.left; x < overlap.right; x += step) {
+      final ax = ((x - rectA.left) / rectA.width * maskA.width).floor();
+      final ay = ((y - rectA.top) / rectA.height * maskA.height).floor();
+      final bx = ((x - rectB.left) / rectB.width * maskB.width).floor();
+      final by = ((y - rectB.top) / rectB.height * maskB.height).floor();
+      if (maskA.hits(ax, ay) && maskB.hits(bx, by)) return true;
+    }
+  }
+  return false;
+}
+
 /// Plane distance from a point to a segment.
 double _distanceToSegment(
   double px,
@@ -1209,6 +1236,7 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.terrainCache,
     required this.pixelRatio,
     required this.bands,
+    required this.masks,
     required this.onBandPattern,
     required this.parcelMode,
     required this.showTileGrid,
@@ -1261,6 +1289,10 @@ class _ParcelWorldPainter extends CustomPainter {
   /// Composed shore-band overlays by neighbourhood pattern — the
   /// neighbouring land's material fading out over the water tile.
   final Map<String, ui.Image> bands;
+
+  /// Per-pixel picking masks for the decoded sprites — the selection
+  /// x-ray tests art coverage through them.
+  final Map<String, SpriteMask> masks;
 
   /// Reports a newly recorded band pattern to the view state so its
   /// overlay can compose; called during paint, never repainting
@@ -2165,6 +2197,14 @@ class _ParcelWorldPainter extends CustomPainter {
       (role) => content.sprite(role)?.walkable ?? const [],
       deckLift: content.sprite('bridge.body.se')?.surfaceLift ?? 0,
     );
+    // The selection x-ray: the picked object's wash rides its own
+    // draw at its own depth, and anything standing in front of it
+    // draws translucent, so the selection shows through its
+    // obstructors instead of being repainted on top of them.
+    final selectedStructure = selectedCell == null
+        ? null
+        : queries.structuresByCell[selectedCell!];
+    final xray = _selectionXrayTargets(size, queries);
     final actors = <(double, void Function())>[];
     for (final structure in queries.structuresInBounds(
       left: bounds.left - 5,
@@ -2172,9 +2212,31 @@ class _ParcelWorldPainter extends CustomPainter {
       top: bounds.top - 5,
       bottom: bounds.bottom + 5,
     )) {
+      final depth = _structureDepth(structure).toDouble();
+      final isSelected = selectedStructure?.id == structure.id;
+      var dimmed = false;
+      if (xray != null && !isSelected) {
+        final definition = content.structure(structure.catalogueId)!;
+        final role = structure.assetRole ?? definition.assetRoles.first;
+        final assetPath = content.tryAssetPathFor(role, structure.facing);
+        final image = assetPath == null ? null : images[assetPath];
+        if (image != null) {
+          dimmed = _occludesSelection(
+            xray,
+            depth,
+            _worldRectToScreen(
+              _structureRect(image, definition, structure, content),
+              size,
+              scale,
+              offset,
+            ),
+            _maskFor(assetPath),
+          );
+        }
+      }
       actors.add((
-        _structureDepth(structure).toDouble(),
-        () => _drawStructure(canvas, size, structure, seconds),
+        depth,
+        () => _drawStructure(canvas, size, structure, seconds, dimmed: dimmed),
       ));
     }
     for (final prop in queries.propsInBounds(
@@ -2183,9 +2245,36 @@ class _ParcelWorldPainter extends CustomPainter {
       top: bounds.top - 5,
       bottom: bounds.bottom + 5,
     )) {
+      final depth = propDepth(prop);
+      var dimmed = false;
+      if (xray != null) {
+        final definition = content.structure(prop.catalogueId)!;
+        final role = prop.assetRole ?? definition.assetRoles.first;
+        final assetPath = content.tryAssetPathFor(role, prop.facing);
+        final image = assetPath == null ? null : images[assetPath];
+        final sprite = content.sprite(role);
+        if (image != null && sprite != null && assetPath != null) {
+          dimmed = _occludesSelection(
+            xray,
+            depth,
+            _worldRectToScreen(
+              _propRect(
+                image,
+                sprite,
+                prop,
+                surfaceLift: _surfaceLift(prop.cell, queries, content),
+              ),
+              size,
+              scale,
+              offset,
+            ),
+            _maskFor(assetPath),
+          );
+        }
+      }
       actors.add((
-        propDepth(prop),
-        () => _drawProp(canvas, size, prop, seconds),
+        depth,
+        () => _drawProp(canvas, size, prop, seconds, dimmed: dimmed),
       ));
     }
     // Bridge tiles draw split along their surface plane, both pieces
@@ -2254,12 +2343,129 @@ class _ParcelWorldPainter extends CustomPainter {
     return false;
   }
 
+  /// The selected entity's art coverage for the x-ray: each piece's
+  /// painter depth and screen rect. Actors in front of a piece
+  /// (greater depth) whose art overlaps it draw translucent, so the
+  /// picked object stays visible through whatever stands before it.
+  /// Null when nothing with a sprite is selected.
+  List<(double, Rect, SpriteMask?)>? _selectionXrayTargets(
+    Size size,
+    WorldQueries queries,
+  ) {
+    final cell = selectedCell;
+    if (cell == null) return null;
+    final structure = queries.structuresByCell[cell];
+    if (structure != null) {
+      final definition = content.structure(structure.catalogueId)!;
+      final role = structure.assetRole ?? definition.assetRoles.first;
+      final assetPath = content.tryAssetPathFor(role, structure.facing);
+      final image = assetPath == null ? null : images[assetPath];
+      if (image == null) return null;
+      return [
+        (
+          _structureDepth(structure).toDouble(),
+          _worldRectToScreen(
+            _structureRect(image, definition, structure, content),
+            size,
+            scale,
+            offset,
+          ),
+          _maskFor(assetPath),
+        ),
+      ];
+    }
+    if (selectedPropId case final id?) {
+      final prop = queries.propsById[id];
+      if (prop != null) {
+        final definition = content.structure(prop.catalogueId)!;
+        final role = prop.assetRole ?? definition.assetRoles.first;
+        final assetPath = content.tryAssetPathFor(role, prop.facing);
+        final image = assetPath == null ? null : images[assetPath];
+        final sprite = content.sprite(role);
+        if (image == null || sprite == null || assetPath == null) {
+          return null;
+        }
+        return [
+          (
+            propDepth(prop),
+            _worldRectToScreen(
+              _propRect(
+                image,
+                sprite,
+                prop,
+                surfaceLift: _surfaceLift(prop.cell, queries, content),
+              ),
+              size,
+              scale,
+              offset,
+            ),
+            _maskFor(assetPath),
+          ),
+        ];
+      }
+    }
+    final bridge = _bridgeAt(cell);
+    if (bridge == null) return null;
+    // One target per tile: the bridge's pieces draw at their own
+    // depths, so an occluder is tested against each piece it could
+    // stand before.
+    final targets = <(double, Rect, SpriteMask?)>[];
+    void addTile(String role, CellCoord tile) {
+      final path = content.tryAssetPath(role);
+      final image = path == null ? null : images[path];
+      final sprite = content.sprite(role);
+      if (image == null || sprite == null) return;
+      targets.add((
+        (tile.column + tile.row).toDouble(),
+        _tileScreenRect(image, sprite, tile, size, scale, offset),
+        _maskFor(path),
+      ));
+    }
+
+    final body = bridgeBodyRole(bridge.nearBank, bridge.farBank);
+    for (final tile in bridge.waterCells) {
+      addTile(body, tile);
+    }
+    addTile(
+      bridgeRampRole(bridge.nearBank, bridge.waterCells.first),
+      bridge.nearBank,
+    );
+    addTile(
+      bridgeRampRole(bridge.farBank, bridge.waterCells.last),
+      bridge.farBank,
+    );
+    return targets.isEmpty ? null : targets;
+  }
+
+  /// The picking mask for a loaded sprite path, if extracted yet.
+  SpriteMask? _maskFor(String? path) => path == null ? null : masks[path];
+
+  /// Whether an actor at [depth] covering [rect]/[mask] stands in
+  /// front of any of the selected entity's art — the x-ray dims it.
+  /// Coverage is pixel-tested through the sprites' picking masks, so
+  /// only art that actually covers the selection's art dims; a sprite
+  /// whose bounding box merely grazes the selection's tile stays
+  /// opaque.
+  bool _occludesSelection(
+    List<(double, Rect, SpriteMask?)> targets,
+    double depth,
+    Rect rect,
+    SpriteMask? mask,
+  ) {
+    for (final target in targets) {
+      if (depth <= target.$1 || !rect.overlaps(target.$2)) continue;
+      if (spriteArtOverlaps(rect, mask, target.$2, target.$3)) return true;
+    }
+    return false;
+  }
+
   void _drawStructure(
     Canvas canvas,
     Size size,
     PlacedStructure structure,
-    double seconds,
-  ) {
+    double seconds, {
+    bool dimmed = false,
+  }) {
     final definition = content.structure(structure.catalogueId)!;
     final role = structure.assetRole ?? definition.assetRoles.first;
     final image = images[content.tryAssetPathFor(role, structure.facing)];
@@ -2279,9 +2485,9 @@ class _ParcelWorldPainter extends CustomPainter {
       image.height.toDouble(),
     );
     final paint = Paint()..filterQuality = FilterQuality.medium;
-    if (dimStructures) {
-      // X-ray: modulate the sprite's alpha (white at 40%) so tiles
-      // and banks behind the structure show through — one draw call,
+    if (dimStructures || dimmed) {
+      // X-ray: modulate the sprite's alpha (white at 40%) so what
+      // stands behind the structure shows through — one draw call,
       // no offscreen layer.
       paint.color = const Color(0x66FFFFFF);
     }
@@ -2314,8 +2520,15 @@ class _ParcelWorldPainter extends CustomPainter {
   }
 
   /// Draws a placed prop — same treatment as a structure (x-ray dim,
-  /// vegetation sway), anchored at its subtile instead of a footprint.
-  void _drawProp(Canvas canvas, Size size, PlacedProp prop, double seconds) {
+  /// selection wash, vegetation sway), anchored at its subtile
+  /// instead of a footprint.
+  void _drawProp(
+    Canvas canvas,
+    Size size,
+    PlacedProp prop,
+    double seconds, {
+    bool dimmed = false,
+  }) {
     final definition = content.structure(prop.catalogueId)!;
     final role = prop.assetRole ?? definition.assetRoles.first;
     final image = images[content.tryAssetPathFor(role, prop.facing)];
@@ -2340,12 +2553,12 @@ class _ParcelWorldPainter extends CustomPainter {
       image.height.toDouble(),
     );
     final paint = Paint()..filterQuality = FilterQuality.medium;
-    if (dimStructures) {
+    if (dimStructures || dimmed) {
       paint.color = const Color(0x66FFFFFF);
     }
     // A selected prop holds still: the selection wash repaints the
-    // unswayed sprite, and the swaying original behind it used to
-    // show through as a double image.
+    // unswayed sprite on top (see [_drawSelection]), and the swaying
+    // original behind it would show through as a double image.
     if (!sprite.sways || prop.id == selectedPropId) {
       canvas.drawImageRect(image, source, rect, paint);
       return;
@@ -2682,20 +2895,24 @@ class _ParcelWorldPainter extends CustomPainter {
 
   void _drawSelection(Canvas canvas, Size size, WorldQueries queries) {
     if (selectedCell case final cell?) {
-      // Selection highlights everything at the tapped cell: a
-      // structure's whole footprint (with its sprite washed in the
-      // selection colour), a bridge's full crossing between banks
-      // (deck and ramps washed the same way), or the bare tile.
+      // An object highlights itself — the wash on its own sprite,
+      // repainted above the actors so it stays solid through its
+      // x-rayed obstructors — never its tiles. Only a bare tile
+      // carries the cell outline.
       final structure = queries.structuresByCell[cell];
       final bridge = structure == null ? _bridgeAt(cell) : null;
-      final cells =
-          structure?.footprint ??
-          (bridge == null
-              ? [cell]
-              : [...bridge.waterCells, bridge.nearBank, bridge.farBank]);
-      for (final selected in cells) {
+      final prop = selectedPropId == null
+          ? null
+          : queries.propsById[selectedPropId!];
+      if (structure != null) {
+        _tintStructureSprite(canvas, size, structure);
+      } else if (bridge != null) {
+        _tintBridgeSprite(canvas, size, bridge);
+      } else if (prop != null) {
+        _tintPropSprite(canvas, size, prop);
+      } else {
         final center = _worldToScreen(
-          _cellWorldCenter(selected),
+          _cellWorldCenter(cell),
           size,
           scale,
           offset,
@@ -2707,17 +2924,6 @@ class _ParcelWorldPainter extends CustomPainter {
           scale,
           fill: const Color(0x334BC69B),
         );
-      }
-      if (structure != null) {
-        _tintStructureSprite(canvas, size, structure);
-      } else if (bridge != null) {
-        _tintBridgeSprite(canvas, size, bridge);
-      }
-      if (selectedPropId case final id?) {
-        final prop = queries.propsById[id];
-        if (prop != null) {
-          _tintPropSprite(canvas, size, prop);
-        }
       }
     }
     if (bridgeStartCell case final start?) {
@@ -2934,8 +3140,9 @@ class _ParcelWorldPainter extends CustomPainter {
   }
 
   /// Washes the selected structure's own sprite in the selection
-  /// colour, so the object itself reads as picked — not just the
-  /// footprint diamonds beneath it.
+  /// colour and repaints it above the actors — above the obstructors
+  /// the x-ray dims in [_drawActors] — so the picked object itself
+  /// stays solid while everything covering it turns see-through.
   void _tintStructureSprite(
     Canvas canvas,
     Size size,
@@ -2965,8 +3172,9 @@ class _ParcelWorldPainter extends CustomPainter {
   }
 
   /// Washes the selected prop's sprite in the selection colour — the
-  /// same wash structures and bridges get, so a picked prop reads as
-  /// picked however many share its tile.
+  /// same wash structures and bridges get, repainted above the
+  /// actors, so a picked prop reads as picked however many share its
+  /// tile.
   void _tintPropSprite(Canvas canvas, Size size, PlacedProp prop) {
     final definition = content.structure(prop.catalogueId)!;
     final role = prop.assetRole ?? definition.assetRoles.first;
@@ -2997,15 +3205,13 @@ class _ParcelWorldPainter extends CustomPainter {
   }
 
   /// Washes the selected bridge's deck and ramps in the selection
-  /// colour — the same wash structures get — so the crossing itself
-  /// reads as picked, not just the tiles beneath it. The same roles
-  /// and rects the actor pass draws, repainted through a colour
-  /// filter — and in the actor pass's own depth order (base-cell
-  /// column + row), so the wash stays a pure recolour: this pass
-  /// runs above the actors, and painting the ramps after the bodies
-  /// put whichever ramp is visually far on top of the deck tile
-  /// that occludes it — the far end of the bridge drew over the
-  /// bridge.
+  /// colour — the same wash structures get, repainted above the
+  /// actors. The same roles and rects the actor pass draws, repainted
+  /// through a colour filter — and in the actor pass's own depth
+  /// order (base-cell column + row), so the wash stays a pure
+  /// recolour: painting the ramps after the bodies would put whichever
+  /// ramp is visually far on top of the deck tile that occludes it —
+  /// the far end of the bridge would draw over the bridge.
   void _tintBridgeSprite(Canvas canvas, Size size, CompletedBridge bridge) {
     const wash = ColorFilter.mode(Color(0x664BC69B), BlendMode.srcATop);
     void tinted(String role, CellCoord cell) {

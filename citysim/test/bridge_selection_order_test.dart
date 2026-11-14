@@ -97,6 +97,9 @@ Future<(ui.Image, ByteData)> _capture(
 /// 0x664BC69B over the sprite srcATop, leaving 60% of the original
 /// colour blended with 40% of the wash colour.
 bool _washedMatches(int before, int after) {
+  // The tint repaints the washed sprite above the actors (and above
+  // the outline fill), so the visible change is the plain wash:
+  // 60% original blended with 40% of the wash colour.
   int delta(int beforeChannel, int afterChannel, int washChannel) =>
       (afterChannel - (0.6 * beforeChannel + 0.4 * washChannel).round()).abs();
   return delta(before >> 24 & 0xFF, after >> 24 & 0xFF, 0x4B) <= 3 &&
