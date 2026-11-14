@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../content/content_models.dart' show PedestrianContent;
 import 'coordinates.dart';
 import 'road_sprite_resolver.dart';
 import 'world_state.dart'
@@ -45,6 +46,25 @@ Map<CellCoord, String> pedestrianBridgeRoles(ParcelWorldState state) {
     }
   }
   return roles;
+}
+
+/// How many walkers a town of [population] carries: street life as
+/// a percentage of the town's people, floored at one walker once
+/// anyone lives there — streets fill as families arrive — and
+/// bounded by the painted sidewalk that actually exists
+/// ([walkableCount]), so an unpainted world stays empty no matter
+/// how many people live in it. A zero percent turns pedestrians
+/// off.
+int pedestrianTargetCount(
+  int population,
+  PedestrianContent pedestrians,
+  int walkableCount,
+) {
+  if (pedestrians.populationPercent <= 0 || population <= 0) return 0;
+  return math.min(
+    math.max(1, (population * pedestrians.populationPercent / 100).floor()),
+    walkableCount,
+  );
 }
 
 /// World-px lift of a point on a bridge tile's surface, by grid
@@ -261,6 +281,49 @@ class PedestrianLattice {
     for (var attempts = 0; attempts < 16; attempts++) {
       final spot = _spots[random.nextInt(_spots.length)];
       if (neighborsOf(spot).isNotEmpty) return spot;
+    }
+    return null;
+  }
+
+  /// A walkable spot in front of a building — a painted subtile in a
+  /// road cell bordering [footprint], on the edge facing the
+  /// building, so a walker appears at its doorstep. When the facing
+  /// edge carries no paint (a road role may paint only one side),
+  /// any painted subtile in a bordering cell still counts. Null
+  /// when nothing walkable fronts the footprint.
+  LatticeSpot? frontSpot(Iterable<CellCoord> footprint, math.Random random) {
+    final facing = <LatticeSpot>{};
+    final beside = <LatticeSpot>{};
+    for (final cell in footprint) {
+      void collect(CellCoord road, bool Function(int x, int y) isFacingEdge) {
+        final rows = _masks[road];
+        if (rows == null) return;
+        for (var y = 0; y < 8; y++) {
+          for (var x = 0; x < 8; x++) {
+            if ((rows[y] >> x & 1) != 1) continue;
+            final spot = LatticeSpot(road, x, y);
+            (isFacingEdge(x, y) ? facing : beside).add(spot);
+          }
+        }
+      }
+
+      // The road cell's edge shared with the building is the front:
+      // a road east of a footprint cell faces it with its west edge.
+      collect(cell.offset(1, 0), (x, y) => x == 0);
+      collect(cell.offset(-1, 0), (x, y) => x == 7);
+      collect(cell.offset(0, -1), (x, y) => y == 7);
+      collect(cell.offset(0, 1), (x, y) => y == 0);
+    }
+    // Only spots a walker can leave — a front without outlets would
+    // strand a pedestrian mid-walk cycle.
+    for (final pool in [facing, beside]) {
+      final candidates = [
+        for (final spot in pool)
+          if (neighborsOf(spot).isNotEmpty) spot,
+      ];
+      if (candidates.isNotEmpty) {
+        return candidates[random.nextInt(candidates.length)];
+      }
     }
     return null;
   }

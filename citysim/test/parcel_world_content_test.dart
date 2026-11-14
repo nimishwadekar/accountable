@@ -361,6 +361,9 @@ void main() {
     expect(content.ambience.ambientTimeScale, 1.0);
     // 0.6 draws a person at ~1.8 m on the 0.2 m/px scale ruler.
     expect(content.ambience.pedestrians.spriteScale, closeTo(0.6, 0.001));
+    // Street life follows population: 20% of the live save's 51 is
+    // the ten walkers the old road-based formula happened to show.
+    expect(content.ambience.pedestrians.populationPercent, 20);
   });
 
   test('negative cell coordinates map to the correct neighboring parcels', () {

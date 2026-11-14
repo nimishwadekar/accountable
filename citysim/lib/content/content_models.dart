@@ -731,8 +731,7 @@ class PedestrianContent {
     required this.walkFrameRate,
     required this.speedMin,
     required this.speedRange,
-    required this.roadCellsPerPerson,
-    required this.maxCount,
+    required this.populationPercent,
     required this.lateralWanderX,
     required this.lateralWanderY,
   });
@@ -741,8 +740,12 @@ class PedestrianContent {
   final double walkFrameRate;
   final double speedMin;
   final double speedRange;
-  final int roadCellsPerPerson;
-  final int maxCount;
+
+  /// Street life as a percentage of the town's population, floored
+  /// at one walker once anyone lives there. Zero turns pedestrians
+  /// off; painted sidewalk still bounds the count.
+  final int populationPercent;
+
   final double lateralWanderX;
   final double lateralWanderY;
 
@@ -751,8 +754,7 @@ class PedestrianContent {
     'walkFrameRate': walkFrameRate,
     'speedMin': speedMin,
     'speedRange': speedRange,
-    'roadCellsPerPerson': roadCellsPerPerson,
-    'maxCount': maxCount,
+    'populationPercent': populationPercent,
     'lateralWanderX': lateralWanderX,
     'lateralWanderY': lateralWanderY,
   };
@@ -763,8 +765,9 @@ class PedestrianContent {
         walkFrameRate: (json['walkFrameRate']! as num).toDouble(),
         speedMin: (json['speedMin']! as num).toDouble(),
         speedRange: (json['speedRange']! as num).toDouble(),
-        roadCellsPerPerson: json['roadCellsPerPerson']! as int,
-        maxCount: json['maxCount']! as int,
+        // Absent defaults to the seed so content written before the
+        // percent existed still loads.
+        populationPercent: (json['populationPercent'] as int?) ?? 20,
         lateralWanderX: (json['lateralWanderX']! as num).toDouble(),
         lateralWanderY: (json['lateralWanderY']! as num).toDouble(),
       );
@@ -1370,8 +1373,7 @@ List<ContentIssue> validateContentData({
       ambience.pedestrians.walkFrameRate <= 0 ||
       ambience.pedestrians.speedMin <= 0 ||
       ambience.pedestrians.speedRange < 0 ||
-      ambience.pedestrians.roadCellsPerPerson < 1 ||
-      ambience.pedestrians.maxCount < 0) {
+      ambience.pedestrians.populationPercent < 0) {
     error('Pedestrian ambience values are out of range.');
   }
   return issues;

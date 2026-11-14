@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:citysim/content/content_models.dart' show RoadStyle;
+import 'package:citysim/content/content_models.dart'
+    show PedestrianContent, RoadStyle;
 import 'package:citysim/world/coordinates.dart';
 import 'package:citysim/world/pedestrian_lattice.dart';
 import 'package:citysim/world/world_state.dart';
@@ -60,6 +61,39 @@ void main() {
     );
     expect(lattice.walkableCount, 0);
     expect(lattice.randomSpawn(math.Random(1)), isNull);
+  });
+
+  test('street life scales with population, not roads', () {
+    const walkers = PedestrianContent(
+      spriteScale: 0.6,
+      walkFrameRate: 7,
+      speedMin: 0.55,
+      speedRange: 0.35,
+      populationPercent: 20,
+      lateralWanderX: 3,
+      lateralWanderY: 2,
+    );
+    const off = PedestrianContent(
+      spriteScale: 0.6,
+      walkFrameRate: 7,
+      speedMin: 0.55,
+      speedRange: 0.35,
+      populationPercent: 0,
+      lateralWanderX: 3,
+      lateralWanderY: 2,
+    );
+    // Nobody lives anywhere: empty streets, however much sidewalk.
+    expect(pedestrianTargetCount(0, walkers, 500), 0);
+    // The first family puts one person on the street, and 20% of
+    // the live save's 51 is the ten walkers the old road-based
+    // formula happened to show.
+    expect(pedestrianTargetCount(1, walkers, 500), 1);
+    expect(pedestrianTargetCount(10, walkers, 500), 2);
+    expect(pedestrianTargetCount(51, walkers, 500), 10);
+    // Painted sidewalk bounds the count, and a zero percent turns
+    // pedestrians off.
+    expect(pedestrianTargetCount(51, walkers, 4), 4);
+    expect(pedestrianTargetCount(51, off, 500), 0);
   });
 
   test('painted lanes flow within tiles and across borders', () {
@@ -123,6 +157,38 @@ void main() {
     expect(spawn, isNotNull);
     expect(lattice.containsSpot(spawn!), isTrue);
     expect(lattice.neighborsOf(spawn), isNotEmpty);
+  });
+
+  test('front spots put a walker at the building\'s doorstep', () {
+    // The same five-tile road with its north sidewalk ring, and
+    // buildings on either side of the painted middle tile.
+    final cells = <CellCoord>{
+      for (var column = 0; column < 5; column++) CellCoord(column, 0),
+    };
+    const ring = [255, 0, 0, 0, 0, 0, 0, 0];
+    final lattice = PedestrianLattice(
+      roadCells: cells,
+      connectionCells: cells,
+      maskFor: (role) => role == 'road.straight.se' ? ring : const [],
+    );
+    // A building north of the road fronts the tile's painted north
+    // edge — the ring is its doorstep.
+    final north = lattice.frontSpot(const [CellCoord(2, -1)], math.Random(1));
+    expect(north, isNotNull);
+    expect(north!.cell, const CellCoord(2, 0));
+    expect(north.y, 0, reason: 'the building faces the road from the north');
+    expect(lattice.containsSpot(north), isTrue);
+
+    // A building south of the road faces the tile's unpainted south
+    // edge; the painted ring on the same bordering tile still counts
+    // as in front.
+    final south = lattice.frontSpot(const [CellCoord(2, 1)], math.Random(1));
+    expect(south, isNotNull);
+    expect(south!.cell, const CellCoord(2, 0));
+    expect(south.y, 0);
+
+    // A building away from any road has no front at all.
+    expect(lattice.frontSpot(const [CellCoord(0, 5)], math.Random(1)), isNull);
   });
 
   test('approach tiles beside a junction use the pelican mask', () {

@@ -219,7 +219,7 @@ when lowering thresholds below values old saves may already have passed).
 Everything currently in `parcel_world_tuning.dart` except the camera block:
 `ambientTimeScale`, water shimmer (bands, period, opacity, tint), vegetation
 sway (angle, frequencies), pedestrian pacing (frame rate, speed range,
-density, cap, wander, sprite scale), and the unowned-land wash colour.
+population percent, wander, sprite scale), and the unowned-land wash colour.
 
 ## 5. Dashboard (Flutter web, served by the editor server)
 

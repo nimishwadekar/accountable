@@ -236,10 +236,13 @@ the current slice.
   coin grant.
 - Recent event history and a separate local parcel-world save.
 - Ambient life that is presentation-only: pedestrians wander connected roads
-  using the pack's walk cycles, water carries a gentle travelling shimmer, and
-  vegetation (trees, flowers) sways slightly in the wind. Ambience is muted
-  when the platform requests reduced motion, is excluded from saves and
-  progression, and never affects gameplay.
+  using the pack's walk cycles — their count a percentage of population
+  (`populationPercent`, 20%, floored at one walker once anyone lives there;
+  0% turns them off; painted sidewalk still bounds the count), each new
+  walker appearing at the doorstep of a random building — water carries a
+  gentle travelling shimmer, and vegetation (trees, flowers) sways slightly
+  in the wind. Ambience is muted when the platform requests reduced motion,
+  is excluded from saves and progression, and never affects gameplay.
 
 ## 8. Future features and open decisions
 

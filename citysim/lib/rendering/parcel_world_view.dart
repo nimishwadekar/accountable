@@ -3845,6 +3845,7 @@ class _PedestrianSim {
   final List<_Pedestrian> list = [];
   int _roadCount = -1;
   int _bridgeCount = -1;
+  int _population = -1;
   double _lastSeconds = 0;
 
   /// The walkable surface, rebuilt whenever the road or bridge count
@@ -3872,10 +3873,14 @@ class _PedestrianSim {
     final roadCells = <CellCoord>{for (final road in state.roads) road.cell};
     // Bridge completion changes the walkable surface without touching
     // the road count — banks were already roads — so it triggers too.
+    // Population changes on check-in arrivals, so new walkers join
+    // mid-session while existing walkers keep their positions.
     if (roadCells.length != _roadCount ||
-        state.bridges.length != _bridgeCount) {
+        state.bridges.length != _bridgeCount ||
+        state.population != _population) {
       _roadCount = roadCells.length;
       _bridgeCount = state.bridges.length;
+      _population = state.population;
       _lastSeconds = seconds;
       _reconcile(roadCells, state, pedestrians, maskFor, deckLift);
       return;
@@ -3917,21 +3922,18 @@ class _PedestrianSim {
           !lattice.containsSpot(pedestrian.from) ||
           !lattice.containsSpot(pedestrian.to),
     );
-    // The population formula stays road-cell based, capped by the
-    // paint that actually exists: an unpainted world is empty.
-    final target = math.min(
-      (roadCells.length / pedestrians.roadCellsPerPerson).floor().clamp(
-        0,
-        pedestrians.maxCount,
-      ),
+    // Street life scales with the town's people, not its roads.
+    final target = pedestrianTargetCount(
+      state.population,
+      pedestrians,
       lattice.walkableCount,
     );
     while (list.length > target) {
       list.removeLast();
     }
-    final random = math.Random(state.seed + roadCells.length);
+    final random = math.Random(state.seed + state.population);
     while (list.length < target) {
-      final from = lattice.randomSpawn(random);
+      final from = _spawnSpot(state, random);
       if (from == null) break;
       final next = _pickNext(from, null, lattice, random);
       if (next == null) continue;
@@ -3951,6 +3953,22 @@ class _PedestrianSim {
         ),
       );
     }
+  }
+
+  /// Where a new walker appears: at the doorstep of a random
+  /// building, so street life gathers where life is. A few attempts
+  /// keep the choice cheap on dense maps; when no building fronts
+  /// painted sidewalk — or the town has none yet — any walkable
+  /// spot serves.
+  LatticeSpot? _spawnSpot(ParcelWorldState state, math.Random random) {
+    for (var attempts = 0; attempts < 8; attempts++) {
+      if (state.structures.isEmpty) break;
+      final structure =
+          state.structures[random.nextInt(state.structures.length)];
+      final spot = lattice.frontSpot(structure.footprint, random);
+      if (spot != null) return spot;
+    }
+    return lattice.randomSpawn(random);
   }
 }
 

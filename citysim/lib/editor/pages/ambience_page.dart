@@ -160,28 +160,17 @@ class _AmbiencePageState extends State<AmbiencePage> {
             SizedBox(
               width: 200,
               child: IntField(
-                label: 'Per N road cells',
-                value: asInt(pedestrians['roadCellsPerPerson'], 6),
-                min: 1,
-                help:
-                    'One pedestrian spawns per this many connected road '
-                    'cells.',
-                onChanged: (v) => _edit(
-                  (a) => (a['pedestrians'] as Map)['roadCellsPerPerson'] = v,
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 160,
-              child: IntField(
-                label: 'Max count',
-                value: asInt(pedestrians['maxCount'], 10),
+                label: '% of population',
+                value: asInt(pedestrians['populationPercent'], 20),
                 min: 0,
                 help:
-                    'Hard cap on simultaneous pedestrians. 0 turns them '
-                    'off.',
-                onChanged: (v) =>
-                    _edit((a) => (a['pedestrians'] as Map)['maxCount'] = v),
+                    'Street life as a percentage of the population, '
+                    'floored at one walker once anyone lives there. '
+                    'New walkers appear in front of a random building. '
+                    '0 turns pedestrians off.',
+                onChanged: (v) => _edit(
+                  (a) => (a['pedestrians'] as Map)['populationPercent'] = v,
+                ),
               ),
             ),
             WalkCyclePreview(
@@ -191,7 +180,8 @@ class _AmbiencePageState extends State<AmbiencePage> {
           ],
           description:
               'People wander connected roads using the pack\'s walk '
-              'cycles; density scales with road count.',
+              'cycles; density scales with population, and walkers '
+              'appear at building doorsteps.',
         ),
         _section(
           'Unowned-land wash',
