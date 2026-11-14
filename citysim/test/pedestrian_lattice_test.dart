@@ -384,24 +384,27 @@ void main() {
       closeTo(-0.875, 0.001),
     );
 
-    // Bridge spots floor just above their tile's surface piece
-    // (cell + 0.05) — even at the tile's very back, where far-side
-    // lanes would otherwise sink under the art — and never cross the
-    // next cell's depth, so buildings in front still occlude them.
+    // Bridge spots climb a ramp through the cell: just above their
+    // tile's surface piece (cell + 0.05) at the back — even where
+    // far-side lanes would otherwise sink under the art — and past
+    // the next tile's pieces (cell + 1.02 posts, + 1.05 surface)
+    // before the front edge, so boundary crossings never dip the
+    // walker under the next tile's art. The front corner stays below
+    // the next cell's own back corner, so walkers order
+    // front-to-back across cells.
     expect(
       lattice.walkerSortDepth(const LatticeSpot(CellCoord(1, 0), 0, 0)),
-      closeTo(1.1, 0.001),
-      reason: 'the back of the ramp floors to just above the surface',
+      closeTo(1.129, 0.001),
+      reason: 'the back of the ramp sits just above the surface',
     );
     expect(
       lattice.walkerSortDepth(const LatticeSpot(CellCoord(2, 0), 3, 3)),
-      closeTo(2.1, 0.001),
+      closeTo(2.541, 0.001),
     );
-    // The front of a bridge tile keeps its ground depth — still below
-    // the next cell.
     expect(
       lattice.walkerSortDepth(const LatticeSpot(CellCoord(2, 0), 7, 7)),
-      closeTo(2.875, 0.001),
+      closeTo(3.091, 0.001),
+      reason: 'the front corner clears the next tile, not the next cell',
     );
   });
 

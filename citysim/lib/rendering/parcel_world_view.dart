@@ -2285,9 +2285,11 @@ class _ParcelWorldPainter extends CustomPainter {
     // order the whole sprites stacked in — supports hang under the
     // next tile's art and show through its transparent gaps, the way
     // painter's order always painted them. Walkers on bridge tiles
-    // floor their depth just above the surface (+0.1), so they stand
-    // on decks and ramps without sinking under them, and never cross
-    // the next cell's depth — buildings in front still occlude them.
+    // climb a depth ramp through the cell — above their tile's
+    // surface at the back, past the next tile's pieces before the
+    // front edge — so boundary crossings never dip them under the
+    // next tile's art, and they stay below the next cell's own
+    // back-corner walker, so front-to-back order holds across cells.
     for (final (role, cell) in _bridgeTilesInBounds(bounds)) {
       final depth = (cell.column + cell.row).toDouble();
       actors.add((
@@ -4037,9 +4039,10 @@ class _Pedestrian {
   }
 
   /// Painter's depth, lerped between the spots' sort depths. Bridge
-  /// spots floor theirs just above their tile's surface piece; ground
-  /// spots keep the plain ground depth; mixed road↔ramp steps blend
-  /// across the seam.
+  /// spots climb a ramp through their cell (above their tile's
+  /// surface at the back, past the next tile's pieces before the
+  /// front edge); ground spots keep the plain ground depth; mixed
+  /// road↔ramp steps blend across the seam.
   double depth(PedestrianLattice lattice) {
     final a = lattice.walkerSortDepth(from);
     final b = lattice.walkerSortDepth(to);

@@ -185,17 +185,24 @@ class PedestrianLattice {
       _roles[cell]?.startsWith('bridge.') ?? false;
 
   /// Painter's depth for a walker at [spot]. Ground spots keep their
-  /// plain ground depth. Bridge spots floor theirs just above their
-  /// tile's surface piece (which sorts at cell + 0.05): a walker on a
-  /// deck or ramp must never sink under the surface they stand on,
-  /// and the floor stays below the next cell's depth so buildings in
-  /// front still occlude them.
+  /// plain ground depth. Bridge spots climb a ramp through the cell:
+  /// just above their own tile's surface piece (cell + 0.05) at the
+  /// back, and past the next tile's pieces (cell + 1.02 posts,
+  /// + 1.05 surface) before the front edge — so crossing a tile
+  /// boundary never dips the walker under the next tile's art —
+  /// while staying below the next cell's own back-corner walker, so
+  /// walkers still order front-to-back across cells.
   double walkerSortDepth(LatticeSpot spot) {
     final cellDepth = spot.cell.column + spot.cell.row;
     // The ground-plane offset: fx + fy for the subtile centre.
     final ground = cellDepth + (spot.x + spot.y + 1) / propSubtilesPerAxis - 1;
     if (!isBridgeCell(spot.cell)) return ground;
-    return math.max(ground, cellDepth + 0.1);
+    // Back corner: cell + 0.129, above the surface piece. Front
+    // corner: cell + 1.091, above the next tile's surface (+ 1.05)
+    // and below the next cell's back corner (+ 1.129).
+    return cellDepth +
+        0.06 +
+        (spot.x + spot.y + 1) * 1.1 / (propSubtilesPerAxis * 2);
   }
 
   bool isWalkable(CellCoord cell, int x, int y) {
