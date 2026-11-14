@@ -515,8 +515,12 @@ section 8 of the mechanics plan. The engineering shape as built:
 - **Content fields.** Per-model `taxCoins`, `upkeepCoins`, and stage
   count in the catalogue; `economy.json` gains `startingTreasuryCoins`
   and per-tile road and bridge tax and upkeep. Purchase prices scale
-  up with the new income (parcel base 32, road tile 4, bridge tile 12)
-  and `builderProgression` gets seeded thresholds. Editor support: a
+  up with the new income (parcel base 32 plus 2 per population —
+  added 2026-11-14 so expansion stays a progression as the town
+  grows; road tile 4; bridge tile 12) and `builderProgression` gets
+  seeded thresholds. The multi-city direction those parcel prices
+  were chosen to compose with is recorded in section 8 of the
+  mechanics plan. Editor support: a
   net-per-report column in the structures palette; validation keeps
   tax and upkeep non-negative and infra tax at 0. Growth rules remain
   a future category — deterministic content, outcomes stored in the

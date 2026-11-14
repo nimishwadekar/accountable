@@ -443,6 +443,7 @@ class EconomyContent {
     this.roadUpkeepCoinsPerTile = 0,
     this.bridgeTaxCoinsPerTile = 0,
     this.bridgeUpkeepCoinsPerTile = 0,
+    this.parcelPerPopulationCoins = 0,
   });
 
   /// The single town treasury's opening balance for a brand-new
@@ -461,8 +462,13 @@ class EconomyContent {
   /// tile per check-in.
   final int bridgeTileCostCoins;
 
-  /// Flat parcel price: every parcel on the map costs the same.
+  /// Base parcel price at population zero.
   final int parcelBaseCoins;
+
+  /// Added to [parcelBaseCoins] per point of population — expanding
+  /// a settlement gets pricier as it grows, pricing each parcel by
+  /// the buyer's size rather than the land's distance.
+  final int parcelPerPopulationCoins;
 
   /// Per-tile tax and upkeep of infrastructure, collected at each
   /// check-in. Tax seeds at zero — paving must never mint coins — but
@@ -495,6 +501,7 @@ class EconomyContent {
     'bridgeTaxCoinsPerTile': bridgeTaxCoinsPerTile,
     'bridgeUpkeepCoinsPerTile': bridgeUpkeepCoinsPerTile,
     'parcelBaseCoins': parcelBaseCoins,
+    'parcelPerPopulationCoins': parcelPerPopulationCoins,
     'builderProgression': builderProgression
         .map((step) => step.toJson())
         .toList(),
@@ -512,6 +519,7 @@ class EconomyContent {
       bridgeTaxCoinsPerTile: json['bridgeTaxCoinsPerTile'] as int? ?? 0,
       bridgeUpkeepCoinsPerTile: json['bridgeUpkeepCoinsPerTile'] as int? ?? 0,
       parcelBaseCoins: json['parcelBaseCoins']! as int,
+      parcelPerPopulationCoins: json['parcelPerPopulationCoins'] as int? ?? 0,
       builderProgression: [
         for (final step in json['builderProgression']! as List)
           BuilderProgressionStep.fromJson(
@@ -1088,6 +1096,9 @@ List<ContentIssue> validateContentData({
   }
   if (economy.parcelBaseCoins < 0) {
     error('The parcel price must not be negative.');
+  }
+  if (economy.parcelPerPopulationCoins < 0) {
+    error('The parcel population surcharge must not be negative.');
   }
   if (economy.roadUpkeepCoinsPerTile < 0 ||
       economy.bridgeUpkeepCoinsPerTile < 0) {

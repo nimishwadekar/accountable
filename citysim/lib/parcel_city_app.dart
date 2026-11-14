@@ -547,6 +547,9 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           content: Text(
             '${quote.price} coins · ${quote.landCellCount} land cells and '
             '${quote.cells.length - quote.landCellCount} water cells.\n\n'
+            '${quote.basePrice} base '
+            '+ ${quote.perPopulationCoins} × ${world.population} population. '
+            'The price grows as the settlement does.\n\n'
             'Buildings and roads are not included.',
           ),
           actions: [
@@ -1217,8 +1220,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
               '${quote.landCellCount} land cells · ${quote.cells.length - quote.landCellCount} water cells',
             ),
             Text(
-              '${quote.price} coins · parcels, road plans, and bridges are '
-              "the treasury's purchases.",
+              '${quote.price} coins · ${quote.basePrice} base '
+              '+ ${quote.perPopulationCoins} × ${world.population} population.',
             ),
             if (world.coins < quote.price)
               Text('Save ${quote.price - world.coins} more coin(s).'),

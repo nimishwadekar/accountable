@@ -19,6 +19,7 @@
     }
   ],
   "parcelBaseCoins": 32,
+  "parcelPerPopulationCoins": 2,
   "roadTaxCoinsPerTile": 0,
   "roadTileCostCoins": 4,
   "roadUpkeepCoinsPerTile": 1,

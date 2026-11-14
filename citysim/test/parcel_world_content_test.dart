@@ -319,8 +319,11 @@ void main() {
     expect(
       content.economy.parcelBaseCoins,
       32,
-      reason: 'flat parcel price: every parcel on the map costs the same',
+      reason:
+          'the flat part of the parcel price, before the population '
+          'surcharge',
     );
+    expect(content.economy.parcelPerPopulationCoins, 2);
     expect(content.economy.roadUpkeepCoinsPerTile, 1);
     expect(content.economy.bridgeUpkeepCoinsPerTile, 1);
     expect(content.economy.roadTaxCoinsPerTile, 0);

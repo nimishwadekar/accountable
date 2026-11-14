@@ -181,7 +181,7 @@ tracked by git like any other source file.
 }
 ```
 
-Formula *shapes* (e.g. how distance steps into parcel price) stay in code;
+Formula *shapes* (e.g. how population steps into parcel price) stay in code;
 the numbers are content. If a shape change is ever wanted, that is a code
 change.
 
@@ -241,8 +241,8 @@ Layout: category sidebar + content pane + persistent validation bar.
   slider, baseOffsetY, sway toggle. Code-referenced roles show a lock badge
   on the name field only.
 - **Economy & progression** — numeric fields with range validation and
-  derived-value hints (e.g. bridge cost at spans 1–4, parcel price at
-  distance rings), plus the builder-progression table editor (population
+  derived-value hints (e.g. bridge cost at spans 1–4, parcel price at a
+  sample population), plus the builder-progression table editor (population
   thresholds → capacity, monotonic, starting capacity shown locked at 1)
   and a warning when unlock thresholds are lowered below values existing
   saves may already have passed.

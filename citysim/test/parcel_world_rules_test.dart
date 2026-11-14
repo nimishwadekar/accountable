@@ -860,6 +860,56 @@ void main() {
       );
     });
 
+    test('parcel prices scale with the settlement population', () {
+      var world = grantWorldDebugCoins(newWorld(), 500);
+      final base = content.economy.parcelBaseCoins;
+      final perPopulation = content.economy.parcelPerPopulationCoins;
+
+      // Population zero: the flat base price, and the quote exposes
+      // the breakdown the buy dialog shows.
+      final atZero = quoteParcelPurchase(
+        world,
+        content,
+        terrain,
+        const ParcelCoord(1, 0),
+      );
+      expect(atZero.price, base);
+      expect(atZero.basePrice, base);
+      expect(atZero.perPopulationCoins, perPopulation);
+
+      // Three settled cottages: the price rises by exactly the
+      // per-population surcharge — expanding a grown town costs more.
+      for (final origin in [
+        const CellCoord(3, 4),
+        const CellCoord(5, 4),
+        const CellCoord(4, 3),
+      ]) {
+        world = _buildCottage(world, content, terrain, origin, nextDay);
+      }
+      expect(world.population, 3);
+      final atThree = quoteParcelPurchase(
+        world,
+        content,
+        terrain,
+        const ParcelCoord(1, 0),
+      );
+      expect(atThree.price, base + 3 * perPopulation);
+
+      // The purchase charges the scaled price and records it.
+      world = purchaseAdjacentParcel(
+        world,
+        content,
+        terrain,
+        const ParcelCoord(1, 0),
+      );
+      expect(world.parcels.last.pricePaid, base + 3 * perPopulation);
+      expect(
+        world.totalCoinsSpent,
+        greaterThanOrEqualTo(base + 3 * perPopulation),
+      );
+      validateParcelWorldState(world, content, terrain);
+    });
+
     test('water parcels are buyable but fog beyond the map is not', () {
       var world = grantWorldDebugCoins(newWorld(), 100);
       world = purchaseAdjacentParcel(

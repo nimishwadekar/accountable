@@ -82,13 +82,27 @@ class _EconomyPageState extends State<EconomyPage> {
             SizedBox(
               width: 150,
               child: IntField(
-                label: 'Parcel price (flat)',
+                label: 'Parcel base price',
                 value: asInt(economy['parcelBaseCoins']),
                 min: 0,
                 help:
-                    'Coins for the closest neighboring parcel, before '
-                    'distance and portfolio surcharges.',
+                    'Flat coins for a neighboring parcel at '
+                    'population zero.',
                 onChanged: (v) => _edit((e) => e['parcelBaseCoins'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 170,
+              child: IntField(
+                label: 'Parcel per population',
+                value: asInt(economy['parcelPerPopulationCoins']),
+                min: 0,
+                help:
+                    'Coins added to the parcel price for every point '
+                    'of population — expanding a settlement gets '
+                    'pricier as it grows.',
+                onChanged: (v) =>
+                    _edit((e) => e['parcelPerPopulationCoins'] = v),
               ),
             ),
           ],
@@ -159,7 +173,7 @@ class _EconomyPageState extends State<EconomyPage> {
         Text(
           'Derived: a 4-tile road plan = ${4 * asInt(economy['roadTileCostCoins'])} coins upfront · '
           'a 4-span bridge = ${asInt(bridge['bridgeTileCostCoins']) * 4 + 2 * asInt(economy['roadTileCostCoins'])} coins upfront · '
-          'every parcel = ${asInt(economy['parcelBaseCoins'])} coins',
+          'a parcel at population 25 = ${asInt(economy['parcelBaseCoins']) + 25 * asInt(economy['parcelPerPopulationCoins'])} coins',
           style: const TextStyle(fontSize: 11, color: Colors.black54),
         ),
         const SizedBox(height: 12),

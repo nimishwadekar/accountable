@@ -87,10 +87,12 @@ authored parcel map in `terrain.json` (grass and water parcels on a
   committing that bridge plan; the bridge itself remains unfinished until its
   cost is funded.
 
-Current parcel prices are prototype values and may be retuned. The implementation
-uses a base price with modest outward and owned-parcel increments; the precise
-formula is documented with the rules code rather than treated as a permanent
-shop price.
+Current parcel prices are prototype values and may be retuned. A parcel costs
+a base price plus a per-population surcharge — expanding a settlement gets
+pricier as it grows, so land becomes a progression gated by the tax base that
+must pay for it. Population only ever rises (no demolition, no churn), so the
+price is monotonic and cannot be gamed by shrinking. The precise formula is
+documented with the rules code rather than treated as a permanent shop price.
 
 ## 5. Roads and builders
 
@@ -327,7 +329,9 @@ collect taxes, net upkeep, advance every active construction one stage
 - **Treasury purchases** are parcels, road stretch plans, and bridges
   — in stage 1 all buildings, civic ones included, plan free and are
   built by labor (a per-model planning fee for landmarks can be
-  revisited later). Road stretch plans and bridges are bought upfront
+  revisited later). Parcels are population-scaled (base plus a
+  per-population surcharge), keeping the save-up cadence constant as
+  the town grows. Road stretch plans and bridges are bought upfront
   and then build one tile per check-in — creeping construction
   replaces per-tile coin funding.
 - **No coin-rush.** Growth costs check-ins, not money; a
@@ -398,8 +402,9 @@ per completed building. The decisions:
 afterward).** The old prices were sized for a +1-coin-per-day income,
 so upfront prices scale up alongside home taxes. Economy: starting
 treasury 20; road and bridge tax/upkeep 0/1 per tile;
-`parcelBaseCoins` 32, `roadTileCostCoins` 4, `bridgeTileCostCoins` 12
-(a lighter 24/3/8 alternative if the richer late game feels right);
+`parcelBaseCoins` 32 plus `parcelPerPopulationCoins` 2 per population,
+`roadTileCostCoins` 4, `bridgeTileCostCoins` 12 (a lighter 24/3/8
+alternative if the richer late game feels right);
 builder progression 10→2, 25→3, 50→4. Homes (tax/upkeep/stages):
 small 3/0/2, medium 5/0/3, large 6/0/3, mobile 2/0/2, apartments
 8/1/4. Commerce nets +2 to +4 (tax/upkeep/stages): cafe 4/2/2,
@@ -411,6 +416,43 @@ stages): clinic, fire-station, and police-station 0/4/3, church
 Props stay free, instant, and unstaged. Calibration against the live
 town (51 homes, 12 commerce, 6 civic, 109 road tiles + 17 bridge
 tiles): roughly +85 per check-in; an early five-home town roughly +3.
+
+**Multiple cities (future concept, discussed 2026-11-14).** Several
+starting cities scattered around the map, unconnected at first, each
+with its own progression and its own treasury; connecting them by
+road is the later milestone this plan already wants to reward. The
+motivation is structural: when the first city saturates, the second
+replays the tight early economy, and expansion pressure never has to
+carry the whole game alone. Population-scaled parcel pricing was
+chosen deliberately to compose with this — it prices each parcel by
+the buyer's size, so it partitions cleanly along settlement lines
+where distance-based pricing would tangle cities together. The lift,
+in the order the decisions force themselves:
+
+- **Settlement partition of the state.** Per-city treasury,
+  population, builder capacity, and unlock set; a settlement tag on
+  every parcel. The five sheets grow a settlement dimension — the
+  biggest schema change since the codec. The earned-minus-spent
+  ledger invariant becomes per-city.
+- **One heartbeat, many reports.** One check-in per day advances
+  every city — the day passes everywhere, protecting the
+  one-check-in product rule. The town report becomes a multi-city
+  report or a city picker.
+- **Purchase locality.** Every treasury purchase needs a settlement
+  context — a road built in one city draws from that city's treasury
+  alone. This is the invasive part; it touches every purchase path
+  in the reducer.
+- **Founding mechanics.** How a second city starts on disconnected
+  land: the lore above (boat colonization, splinter households)
+  supplies the story; mechanically a founding action is needed —
+  claim a charted parcel, receive a starter road and perhaps a
+  founding stake. Design slowly; this is genuinely new gameplay.
+- **Authoring weight.** The map is hand-authored; several cities
+  wants a bigger canvas and camera/UX for jumping between them.
+
+Open even later: when a parcel borders two settlements, which one it
+joins — player's choice, the bigger city, or adjacency not mattering
+at all. Not a today problem.
 
 **Open questions.** A more natural starting treasury than a flat 20;
 the stage-2 occupancy model (household-by-household vs. full on

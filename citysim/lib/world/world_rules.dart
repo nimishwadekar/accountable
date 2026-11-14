@@ -26,10 +26,20 @@ class ParcelPurchaseQuote {
     required this.coord,
     required this.price,
     required this.cells,
+    required this.basePrice,
+    required this.perPopulationCoins,
   });
 
   final ParcelCoord coord;
+
+  /// Total price: [basePrice] plus [perPopulationCoins] for every
+  /// point of the settlement's population — expanding a town gets
+  /// pricier as it grows.
   final int price;
+
+  /// The flat part of the price, before the population surcharge.
+  final int basePrice;
+  final int perPopulationCoins;
   final List<TerrainCell> cells;
   int get landCellCount => cells.where((cell) => cell.isLand).length;
 }
@@ -173,10 +183,14 @@ ParcelPurchaseQuote quoteParcelPurchase(
       .cells(state.parcelSize)
       .map((cell) => terrainProvider.sample(cell, state.seed))
       .toList();
+  final base = content.economy.parcelBaseCoins;
+  final perPopulation = content.economy.parcelPerPopulationCoins;
   return ParcelPurchaseQuote(
     coord: candidate,
-    price: content.economy.parcelBaseCoins,
+    price: base + perPopulation * state.population,
     cells: cells,
+    basePrice: base,
+    perPopulationCoins: perPopulation,
   );
 }
 
