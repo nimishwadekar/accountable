@@ -50,7 +50,16 @@ void main() {
       for (var column = 8; column <= 15; column++)
         ['$column', '4', 'bridge', 'complete', '', '', '', ''],
       ['16', '4', 'road', 'complete', 'asphalt', '', '', ''],
-      ['3', '4', 'structure', 'complete', 'small-home', 'home-small-yellow', 'east', ''],
+      [
+        '3',
+        '4',
+        'structure',
+        'complete',
+        'small-home',
+        'home-small-yellow',
+        'east',
+        '',
+      ],
       ['6', '5', 'structure', 'planned', 'cafe', 'cafe', 'east', ''],
     ],
     projects: [

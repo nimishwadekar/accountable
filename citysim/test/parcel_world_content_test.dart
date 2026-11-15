@@ -405,9 +405,25 @@ void main() {
       0,
     ]);
     expect(content.sprite('road.straight.se')!.lanes['north-1'], isNull);
-    // Render tuning ships empty: anchors default to the computed
-    // ground centre until the Vehicles page authors them.
-    expect(content.ambience.cars.render, isEmpty);
+    // Render tuning is authored on the Vehicles page (2026-11),
+    // so it grows with tuning; the invariant is that every entry
+    // names a real type with in-range, well-named anchors.
+    for (final entry in content.ambience.cars.render.entries) {
+      expect(
+        content.ambience.cars.types.any((type) => type.id == entry.key),
+        isTrue,
+        reason: 'render tuning "${entry.key}" names a vehicle type',
+      );
+      for (final anchor in entry.value.anchor.entries) {
+        expect(
+          const ['NE', 'NW', 'SE', 'SW'].contains(anchor.key),
+          isTrue,
+          reason: 'anchor direction "${anchor.key}" is valid',
+        );
+        expect(anchor.value.$1, inInclusiveRange(-0.5, 1.5));
+        expect(anchor.value.$2, inInclusiveRange(-0.5, 1.5));
+      }
+    }
   });
 
   test('negative cell coordinates map to the correct neighboring parcels', () {

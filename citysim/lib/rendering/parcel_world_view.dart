@@ -14,6 +14,7 @@ import 'package:citysim/rendering/sprite_picking.dart';
 
 import '../content/content_bundle.dart';
 import '../world/car_traffic.dart';
+import '../world/vehicle_lattice.dart' show pitchRotation;
 import '../world/coordinates.dart';
 import '../world/pedestrian_lattice.dart';
 import '../world/road_sprite_resolver.dart';
@@ -2342,11 +2343,36 @@ class _ParcelWorldPainter extends CustomPainter {
       ));
     }
     for (final car in traffic.actors) {
-      actors.add((traffic.actorDepth(car), () => _drawCar(canvas, size, car)));
+      final compass = carCompassForHeading(car.headingDx, car.headingDy);
+      final image = images[carAssetPath(car.type, car.variant, compass)];
+      // Half the body's diagonal in cells — a quarter of the drawn
+      // bounding-box width — positions the deep end the sort key
+      // is taken from, so a nose already over a bridge tile or the
+      // car ahead clears its art instead of clipping through.
+      final halfDiag = image == null
+          ? 0.0
+          : image.width *
+                0.5 *
+                (content.ambience.cars.render[car.type]?.scale ??
+                    content.ambience.cars.spriteScale) /
+                64;
+      actors.add((
+        traffic.actorDepth(car, halfDiagCells: halfDiag),
+        () => _drawCar(canvas, size, car),
+      ));
     }
-    actors.sort((a, b) => a.$1.compareTo(b.$1));
-    for (final actor in actors) {
-      actor.$2();
+    // Dart's sort is not stable: equal depths — a car exactly level
+    // with a bridge piece or another car — would swap arbitrarily
+    // frame to frame and flicker. Sorting the indices with the
+    // insertion order as the tie-break keeps painter order fixed
+    // unless a depth actually crosses.
+    final order = [for (var i = 0; i < actors.length; i++) i]
+      ..sort((a, b) {
+        final depth = actors[a].$1.compareTo(actors[b].$1);
+        return depth != 0 ? depth : a.compareTo(b);
+      });
+    for (final index in order) {
+      actors[index].$2();
     }
   }
 
@@ -2711,17 +2737,44 @@ class _ParcelWorldPainter extends CustomPainter {
     final anchorX = anchor?.$1 ?? 0.5;
     final anchorY =
         anchor?.$2 ?? (image.height - image.width / 4) / image.height;
+    final source = Rect.fromLTWH(
+      0,
+      0,
+      image.width.toDouble(),
+      image.height.toDouble(),
+    );
+    final paint = Paint()..filterQuality = FilterQuality.medium;
+    // Slopes: the lift field's gradient pitches the sprite onto
+    // the tangent plane through a rigid rotation about the ground
+    // anchor — silhouette and lengths preserved; the lateral axis
+    // banks slightly, the accepted trade against the shear's
+    // slope-proportional squash. Flat ground takes the fast path.
+    final (col, row) = traffic.actorPosition(car);
+    final (gCol, gRow) = traffic.lattice.liftGradient(col, row);
+    if (gCol.abs() + gRow.abs() < 0.01) {
+      canvas.drawImageRect(
+        image,
+        source,
+        Rect.fromLTWH(
+          screen.dx - anchorX * width,
+          screen.dy + 2 * scale - anchorY * height,
+          width,
+          height,
+        ),
+        paint,
+      );
+      return;
+    }
+    canvas.save();
+    canvas.translate(screen.dx, screen.dy + 2 * scale);
+    canvas.rotate(pitchRotation(gCol, gRow, car.headingDx, car.headingDy));
     canvas.drawImageRect(
       image,
-      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-      Rect.fromLTWH(
-        screen.dx - anchorX * width,
-        screen.dy + 2 * scale - anchorY * height,
-        width,
-        height,
-      ),
-      Paint()..filterQuality = FilterQuality.medium,
+      source,
+      Rect.fromLTWH(-anchorX * width, -anchorY * height, width, height),
+      paint,
     );
+    canvas.restore();
   }
 
   /// A continuous grid offset, in cells, as a world vector — the

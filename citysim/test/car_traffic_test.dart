@@ -458,4 +458,136 @@ void main() {
     empty.update(0, state.copyWith(population: 0), carContent, twoLanePaint);
     expect(empty.actors, isEmpty);
   });
+
+  test('car sort depth follows its deep end onto bridge tiles', () {
+    final state = carState(
+      roads: [
+        roadAt('approach', 0, 0),
+        roadAt('near-bank', 1, 0),
+        roadAt('far-bank', 3, 0),
+        roadAt('beyond', 4, 0),
+      ],
+      bridges: [
+        CompletedBridge(
+          id: 'bridge',
+          waterCells: const [CellCoord(2, 0)],
+          nearBank: const CellCoord(1, 0),
+          farBank: const CellCoord(3, 0),
+          pricePaid: 6,
+          completedAtDay: 0,
+        ),
+      ],
+      population: 10,
+    );
+    final sim = CarTrafficSim();
+    sim.update(0, state, carContent, twoLanePaint);
+
+    // The continuous depth formula: ground positions stay below
+    // their cell's depth, bridge positions climb above the tile
+    // pieces at +0.02/+0.05.
+    expect(sim.lattice.depthAt(0.5, 0.5), closeTo(0.0, 0.001));
+    expect(sim.lattice.depthAt(1.6, 0.5), greaterThan(1.05));
+
+    // An eastbound car at the last ground subtile before the bank,
+    // with a body long enough that its nose is over the bank: the
+    // sort key must follow the nose onto the bridge formula and
+    // clear the bank tile's pieces — the point depth alone sits
+    // below them until the anchor crosses, which is the boundary
+    // clip.
+    final car = CarActor(
+      type: 'sedan',
+      variant: null,
+      spot: const LatticeSpot(CellCoord(0, 0), 7, 4),
+      headingDx: 1,
+      headingDy: 0,
+    );
+    final base = sim.actorDepth(car);
+    final deep = sim.actorDepth(car, halfDiagCells: 0.5);
+    expect(base, lessThan(1.05));
+    expect(deep, greaterThan(base));
+    expect(deep, greaterThan(1.05));
+    // The deep end is the front for eastbound travel and the rear
+    // for westbound — same gain, opposite direction.
+    final westbound = CarActor(
+      type: 'sedan',
+      variant: null,
+      spot: const LatticeSpot(CellCoord(1, 0), 0, 2),
+      headingDx: -1,
+      headingDy: 0,
+    );
+    expect(
+      sim.actorDepth(westbound, halfDiagCells: 0.5),
+      greaterThan(sim.actorDepth(westbound)),
+    );
+  });
+
+  test('cars pitch onto ramps from the lift gradient', () {
+    final state = carState(
+      roads: [
+        roadAt('approach', 0, 0),
+        roadAt('near-bank', 1, 0),
+        roadAt('far-bank', 3, 0),
+        roadAt('beyond', 4, 0),
+      ],
+      bridges: [
+        CompletedBridge(
+          id: 'bridge',
+          waterCells: const [CellCoord(2, 0)],
+          nearBank: const CellCoord(1, 0),
+          farBank: const CellCoord(3, 0),
+          pricePaid: 6,
+          completedAtDay: 0,
+        ),
+      ],
+      population: 10,
+    );
+    final sim = CarTrafficSim();
+    sim.update(0, state, carContent, twoLanePaint, deckLift: 12);
+
+    // The continuous lift field: the near ramp rises from ground
+    // at its west edge to deck height at its east edge, the deck
+    // sits flat, and ground is zero.
+    expect(sim.lattice.liftAtGrid(1.0, 0.5), closeTo(0, 0.001));
+    expect(sim.lattice.liftAtGrid(2.0, 0.5), closeTo(12, 0.001));
+    expect(sim.lattice.liftAtGrid(2.5, 0.5), closeTo(12, 0.001));
+    expect(sim.lattice.liftAtGrid(0.5, 0.5), 0);
+
+    // The gradient: the ramp's full slope along the bridge axis
+    // and none across it — the quarter-cell sampling stays on the
+    // one-tile ramp strip; the deck and ground are level.
+    final ramp = sim.lattice.liftGradient(1.5, 0.5);
+    expect(ramp.$1, closeTo(12, 0.001));
+    expect(ramp.$2, closeTo(0, 0.001));
+    final deck = sim.lattice.liftGradient(2.5, 0.5);
+    expect(deck.$1, closeTo(0, 0.001));
+    expect(deck.$2, closeTo(0, 0.001));
+    final ground = sim.lattice.liftGradient(0.5, 0.5);
+    expect(ground.$1, 0);
+    expect(ground.$2, 0);
+
+    // The rotation: flat ground is zero, and the seeded 12-px ramp
+    // pitches an eastbound car nose-up by the angle between its
+    // flat trajectory (32, 16) per cell and the ramp trajectory
+    // (32, 4) — about 19.4° counterclockwise on screen.
+    expect(pitchRotation(0, 0, 1, 0), 0);
+    expect(pitchRotation(12, 0, 1, 0), closeTo(-0.3393, 0.001));
+    // Descending mirrors it nose-down, and a northbound climb
+    // pitches by the iso-compressed angle of its own trajectory —
+    // (32, −16) flattening to (32, −28) is a smaller turn.
+    expect(pitchRotation(-12, 0, 1, 0), closeTo(0.2552, 0.001));
+    expect(pitchRotation(0, -12, 0, -1), closeTo(-0.2552, 0.001));
+
+    // A car shares one position between depth and shear: the
+    // actor position is the anchor spot plus lane centring.
+    final car = CarActor(
+      type: 'sedan',
+      variant: null,
+      spot: const LatticeSpot(CellCoord(1, 0), 3, 4),
+      headingDx: 1,
+      headingDy: 0,
+    );
+    final (col, row) = sim.actorPosition(car);
+    expect(col, closeTo(1 + (3 + 0.5) / 8, 0.001));
+    expect(row, closeTo((4 + 0.5) / 8, 0.001));
+  });
 }

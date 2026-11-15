@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'coordinates.dart';
-import 'pedestrian_lattice.dart' show LatticeSpot, PedestrianLattice;
+import 'pedestrian_lattice.dart'
+    show LatticeSpot, PedestrianLattice, bridgeSurfaceLift;
 import 'road_sprite_resolver.dart'
     show
         roadCrossingRole,
@@ -70,8 +73,8 @@ class VehicleLattice {
     required Set<CellCoord> roadCells,
     required Set<CellCoord> connectionCells,
     required Map<String, List<int>>? Function(String role) lanesFor,
-    Map<CellCoord, String> bridgeRoles = const {},
-    double deckLift = 0,
+    this.bridgeRoles = const {},
+    this.deckLift = 0,
   }) : surface = PedestrianLattice(
          roadCells: roadCells,
          connectionCells: connectionCells,
@@ -98,6 +101,46 @@ class VehicleLattice {
   /// physically occupy, sharing the pedestrian lattice's stepping,
   /// lift, and depth.
   final PedestrianLattice surface;
+
+  /// Bridge cells and their ramp/deck roles — the lift field's
+  /// only providers today; any future elevation source joins here.
+  final Map<CellCoord, String> bridgeRoles;
+
+  /// The deck surface's height above the ground plane, world px.
+  final double deckLift;
+
+  /// Surface height at a continuous grid position, in world px —
+  /// the lift field everything standing on the world reads: flat
+  /// ground, a ramp's incline, a deck's full height, evaluated
+  /// anywhere rather than only at lattice spots.
+  double liftAtGrid(double col, double row) {
+    final cell = CellCoord(col.floor(), row.floor());
+    final role = bridgeRoles[cell];
+    if (role == null) return 0;
+    return bridgeSurfaceLift(
+      role,
+      col - cell.column - 0.5,
+      row - cell.row - 0.5,
+      deckLift,
+    );
+  }
+
+  /// The lift field's gradient at a position, in world px per
+  /// cell: (east-west, north-south). Central differences over a
+  /// quarter cell — small enough to stay on a one-tile ramp strip
+  /// when sampling across it, wide enough that seam crossings
+  /// average, so tilts ease in and out instead of snapping.
+  /// This is the elevation contract: anything that feeds
+  /// [liftAtGrid] — bridges today, hills or overpasses tomorrow —
+  /// tilts everything standing on the lattice with no further
+  /// changes.
+  (double, double) liftGradient(double col, double row) {
+    const h = 0.25;
+    return (
+      (liftAtGrid(col + h, row) - liftAtGrid(col - h, row)) / (2 * h),
+      (liftAtGrid(col, row + h) - liftAtGrid(col, row - h)) / (2 * h),
+    );
+  }
 
   /// Per cell, one packed int per subtile: for direction index i
   /// (N=0, E=1, S=2, W=3), bits 3i..3i+2 hold that direction's lane
@@ -166,6 +209,23 @@ class VehicleLattice {
       p1x * steps / propSubtilesPerAxis,
       p1y * steps / propSubtilesPerAxis,
     );
+  }
+
+  /// Painter's depth at a continuous grid position — the walker
+  /// formula (bridge cells climb their per-cell ramp, staying
+  /// above their tile's pieces and below the next tile's)
+  /// evaluated where an extended body's deep end sits. Ground
+  /// positions stay below their cell's depth, so ground actors
+  /// never jump over the structures sharing their cell.
+  double depthAt(double col, double row) {
+    final cell = CellCoord(col.floor(), row.floor());
+    final fx = col - cell.column;
+    final fy = row - cell.row;
+    final cellDepth = cell.column + cell.row;
+    if (surface.isBridgeCell(cell)) {
+      return cellDepth + 0.06 + (fx + fy) * 0.55;
+    }
+    return cellDepth + fx + fy - 1;
   }
 
   /// Lane spots that front a building: subtiles on the road cells
@@ -246,6 +306,32 @@ class VehicleLattice {
     }
     return rows;
   }
+}
+
+/// The screen rotation that pitches a standing sprite onto a
+/// slope, in radians for `Canvas.rotate`, from the lift gradient
+/// in world px per cell and the sprite's grid heading: the angle
+/// between the heading's flat-ground screen trajectory and its
+/// trajectory on the tangent plane. A rigid rotation — lengths
+/// and the silhouette are preserved — at the cost of banking the
+/// lateral axis by the same angle, so the far wheel line floats
+/// slightly on slopes. Flat ground is zero. (The alternative
+/// affine shear plants both wheel lines exactly but compresses
+/// screen verticals in proportion to the slope — 37.5% on the
+/// seeded 12-px ramps — which playtesting found too drastic.)
+double pitchRotation(
+  double gradientCol,
+  double gradientRow,
+  int headingDx,
+  int headingDy,
+) {
+  // The heading's screen trajectory per cell of travel, flat and
+  // sloped: a cell east is (32, 16), a cell north (32, −16), and
+  // the slope subtracts the lift gained along the heading.
+  final du = 32.0 * (headingDx - headingDy);
+  final flat = 16.0 * (headingDx + headingDy);
+  final sloped = flat - (gradientCol * headingDx + gradientRow * headingDy);
+  return math.atan2(sloped, du) - math.atan2(flat, du);
 }
 
 /// A blank lattice for the sim's first frame: nothing is drivable

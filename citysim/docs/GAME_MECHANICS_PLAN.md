@@ -271,7 +271,8 @@ the current slice.
   is the fix when multi-lane roads arrive.)
   Vehicle types mix by authored percents (summing to 100) with colour
   variants rolled per trip, like catalogue variations; cars climb
-  bridges and drive at town pace (~1 cell/s = 12 m/s). Unpainted roles
+  bridges — pitching onto ramps through a lift-gradient rotation about the ground anchor (a rigid turn: silhouette preserved, slight lateral banking; chosen over an exact-ground affine shear whose slope-proportional vertical squash playtesting found too drastic) —
+  and drive at town pace (~1 cell/s = 12 m/s). Unpainted roles
   carry no traffic, so young or unpainted towns stay foot-traffic only,
   and one-way streets are simply lanes painted in one direction.
 

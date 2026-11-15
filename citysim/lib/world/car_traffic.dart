@@ -329,12 +329,45 @@ class CarTrafficSim {
     _collectActors();
   }
 
-  /// Painter's depth for a car, lerped between its spots' depths
-  /// like a walker's.
-  double actorDepth(CarActor car) {
+  /// Painter's depth for a car: lerped between its spots' depths
+  /// like a walker's — and, for an extended body, raised to the
+  /// deep extremity's depth. A car is 3–8 subtiles long, and the
+  /// anchor point alone would let a nose already over a bridge
+  /// tile (or over the car ahead) sort behind that tile's art
+  /// until the anchor crossed; the deep end — the (col+row)-max
+  /// corner, front for east/south travel and rear for
+  /// west/north — is what actually needs to clear it.
+  /// [halfDiagCells] is half the body's diagonal in cells (a
+  /// quarter of the drawn bounding-box width).
+  /// The car's continuous grid position — its anchor spot lerped
+  /// along the driven segment plus the lane-centring offset. The
+  /// sort depth and the slope shear agree on this one position.
+  (double, double) actorPosition(CarActor car) {
+    final fromCol = car.from.cell.column + (car.from.x + 0.5) / 8;
+    final toCol = car.to.cell.column + (car.to.x + 0.5) / 8;
+    final fromRow = car.from.cell.row + (car.from.y + 0.5) / 8;
+    final toRow = car.to.cell.row + (car.to.y + 0.5) / 8;
+    return (
+      fromCol + (toCol - fromCol) * car.progress + car.laneOffsetCol,
+      fromRow + (toRow - fromRow) * car.progress + car.laneOffsetRow,
+    );
+  }
+
+  double actorDepth(CarActor car, {double halfDiagCells = 0}) {
     final a = lattice.surface.walkerSortDepth(car.from);
     final b = lattice.surface.walkerSortDepth(car.to);
-    return a + (b - a) * car.progress;
+    final base = a + (b - a) * car.progress;
+    if (halfDiagCells <= 0) return base;
+    final (col, row) = actorPosition(car);
+    // The deep end sits along the heading for east/south travel
+    // and against it for west/north — either way its (col+row)
+    // gain is the half-diagonal.
+    final sign = car.headingDx + car.headingDy > 0 ? 1.0 : -1.0;
+    final cornerDepth = lattice.depthAt(
+      col + sign * car.headingDx * halfDiagCells,
+      row + sign * car.headingDy * halfDiagCells,
+    );
+    return cornerDepth > base ? cornerDepth : base;
   }
 
   void _reconcileSlots(ParcelWorldState state, CarContent cars) {
