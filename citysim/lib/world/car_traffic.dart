@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../content/content_models.dart' show CarContent, StructureKind;
+import 'coordinates.dart' show CellCoord;
 import 'pedestrian_lattice.dart'
     show LatticeSpot, pedestrianBridgeRoles, pedestrianRoadCells;
 import 'vehicle_lattice.dart'
@@ -251,6 +252,108 @@ class CarActor {
   bool dwelling = true;
 }
 
+/// One car's standings in the painter-order contest resolution.
+/// [actor] is the actor-list index the slot draws — how the
+/// resolved order writes back into the painter sequence — and the
+/// rest is what the pairwise rule compares: the mid-body depth
+/// [anchor], the deep corner's (col+row) gain over it
+/// [halfDiag], whether the car stands on a bridge cell anywhere
+/// along its drawn extent [touchesBridge], and the drawn box on
+/// screen. Built by the renderer in painter order.
+class CarPainterSlot {
+  CarPainterSlot({
+    required this.actor,
+    required this.anchor,
+    required this.halfDiag,
+    required this.touchesBridge,
+    required this.left,
+    required this.top,
+    required this.right,
+    required this.bottom,
+  });
+
+  final int actor;
+  final double anchor;
+  final double halfDiag;
+  final bool touchesBridge;
+  final double left;
+  final double top;
+  final double right;
+  final double bottom;
+}
+
+/// Painter order among the cars, resolving the pairs a single sort
+/// key cannot. The global sort keys every car by its deep corner —
+/// the (col+row)-max point of its drawn footprint — which is
+/// exactly the depth that must clear a bridge tile's art or the
+/// leading end of a car being passed. But a pass has two ends: at
+/// the trailing ends the deep-corner keys of unequal cars (a
+/// sedan against a bus) disagree with the ground under the overlap
+/// by the difference of their spans, so the long car's nose rides
+/// over the short car's tail through much of every pass. When two
+/// cars' sprites actually overlap on screen and their depth spans
+/// interleave — neither body unambiguously deeper — their centres
+/// decide instead. Cars touching a bridge are exempt: there the
+/// deep-corner key is load-bearing — it is what keeps a climbing
+/// car above the deck pieces while its anchor is still behind
+/// them — so the key order stands exactly as the depth sort gave
+/// it. [slots] must arrive in painter order — the order the scene
+/// is about to draw — and the returned list is the same slots
+/// re-ordered. Inversion edges always run from the shallower
+/// centre to the deeper one, so the graph cannot cycle.
+List<CarPainterSlot> resolveCarPainterOrder(List<CarPainterSlot> slots) {
+  final n = slots.length;
+  if (n < 2) return slots;
+  final successors = List.generate(n, (_) => <int>[]);
+  final pending = List<int>.filled(n, 0);
+  for (var i = 0; i < n; i++) {
+    for (var j = i + 1; j < n; j++) {
+      final a = slots[i];
+      final b = slots[j];
+      // Sprites that never meet need no rule; when one body's
+      // span clears the other's the deep-corner key already
+      // holds; and a car touching a bridge keeps its key order.
+      if (a.touchesBridge || b.touchesBridge) continue;
+      if (a.right <= b.left ||
+          b.right <= a.left ||
+          a.bottom <= b.top ||
+          b.bottom <= a.top) {
+        continue;
+      }
+      if ((a.anchor - b.anchor).abs() >= a.halfDiag + b.halfDiag) {
+        continue;
+      }
+      // Contested: the deeper centre draws in front. Only a pair
+      // the incoming order already gets wrong needs an edge.
+      if (a.anchor <= b.anchor) continue;
+      successors[j].add(i);
+      pending[i]++;
+    }
+  }
+  if (successors.every((edges) => edges.isEmpty)) return slots;
+  // Emit the earliest car whose contested predecessors are drawn.
+  final out = <int>[];
+  while (out.length < n) {
+    var pick = -1;
+    for (var i = 0; i < n; i++) {
+      if (pending[i] == 0) {
+        pick = i;
+        break;
+      }
+    }
+    if (pick < 0) break; // Unreachable: edges order by centre.
+    pending[pick] = -1;
+    out.add(pick);
+    for (final next in successors[pick]) {
+      pending[next]--;
+    }
+  }
+  for (var i = 0; i < n; i++) {
+    if (pending[i] > 0) out.add(i); // Defensive: keep every car.
+  }
+  return [for (final i in out) slots[i]];
+}
+
 enum _CarPhase { planning, dwellingStart, driving, dwellingEnd, cooldown }
 
 class _CarSlot {
@@ -329,19 +432,9 @@ class CarTrafficSim {
     _collectActors();
   }
 
-  /// Painter's depth for a car: lerped between its spots' depths
-  /// like a walker's — and, for an extended body, raised to the
-  /// deep extremity's depth. A car is 3–8 subtiles long, and the
-  /// anchor point alone would let a nose already over a bridge
-  /// tile (or over the car ahead) sort behind that tile's art
-  /// until the anchor crossed; the deep end — the (col+row)-max
-  /// corner, front for east/south travel and rear for
-  /// west/north — is what actually needs to clear it.
-  /// [halfDiagCells] is half the body's diagonal in cells (a
-  /// quarter of the drawn bounding-box width).
   /// The car's continuous grid position — its anchor spot lerped
   /// along the driven segment plus the lane-centring offset. The
-  /// sort depth and the slope shear agree on this one position.
+  /// sort depth and the slope pitch agree on this one position.
   (double, double) actorPosition(CarActor car) {
     final fromCol = car.from.cell.column + (car.from.x + 0.5) / 8;
     final toCol = car.to.cell.column + (car.to.x + 0.5) / 8;
@@ -353,10 +446,32 @@ class CarTrafficSim {
     );
   }
 
-  double actorDepth(CarActor car, {double halfDiagCells = 0}) {
+  /// The car's mid-body painter depth — the spot depth lerped
+  /// along the driven segment, before any extremity raise. Pairs
+  /// of cars whose sprites contest on screen compare these (see
+  /// [resolveCarPainterOrder]): the deep corner is exactly right
+  /// at the leading end of a pass but wrong at the trailing end of
+  /// unequal cars, where the bodies' centres are the fair judge.
+  double actorAnchorDepth(CarActor car) {
     final a = lattice.surface.walkerSortDepth(car.from);
     final b = lattice.surface.walkerSortDepth(car.to);
-    final base = a + (b - a) * car.progress;
+    return a + (b - a) * car.progress;
+  }
+
+  /// Painter's depth for a car: the mid-body depth raised, for an
+  /// extended body, to the deep extremity's depth. A car is 3–8
+  /// subtiles long, and the anchor point alone would let a nose
+  /// already over a bridge tile (or over the car ahead) sort
+  /// behind that tile's art until the anchor crossed; the deep
+  /// end — the (col+row)-max corner of the drawn footprint, front
+  /// for east/south travel and rear for west/north — is what
+  /// actually needs to clear it. [halfDiagCells] is that corner's
+  /// (col+row) gain over the anchor: half the drawn footprint's
+  /// length plus half its width, which is the drawn width in
+  /// cells — so the key evaluates the true deepest ground point
+  /// under the sprite.
+  double actorDepth(CarActor car, {double halfDiagCells = 0}) {
+    final base = actorAnchorDepth(car);
     if (halfDiagCells <= 0) return base;
     final (col, row) = actorPosition(car);
     // The deep end sits along the heading for east/south travel
@@ -368,6 +483,28 @@ class CarTrafficSim {
       row + sign * car.headingDy * halfDiagCells,
     );
     return cornerDepth > base ? cornerDepth : base;
+  }
+
+  /// Whether any of the car's drawn extent — the anchor or the
+  /// deep corner — stands on a bridge cell. Such cars are exempt
+  /// from contested painter re-ordering (see
+  /// [resolveCarPainterOrder]): near a bridge the deep-corner key
+  /// is load-bearing, keeping a climbing car above the deck
+  /// pieces while its anchor is still behind them, and an
+  /// anchor-based contest would pull it back under the art.
+  bool touchesBridge(CarActor car, {double halfDiagCells = 0}) {
+    final (col, row) = actorPosition(car);
+    if (lattice.surface.isBridgeCell(CellCoord(col.floor(), row.floor()))) {
+      return true;
+    }
+    if (halfDiagCells <= 0) return false;
+    final sign = car.headingDx + car.headingDy > 0 ? 1.0 : -1.0;
+    return lattice.surface.isBridgeCell(
+      CellCoord(
+        (col + sign * car.headingDx * halfDiagCells).floor(),
+        (row + sign * car.headingDy * halfDiagCells).floor(),
+      ),
+    );
   }
 
   void _reconcileSlots(ParcelWorldState state, CarContent cars) {

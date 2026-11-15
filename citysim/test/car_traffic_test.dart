@@ -590,4 +590,70 @@ void main() {
     expect(col, closeTo(1 + (3 + 0.5) / 8, 0.001));
     expect(row, closeTo((4 + 0.5) / 8, 0.001));
   });
+
+  test('contested cars re-order by their bodies, not their noses', () {
+    // The passing moment: the sprites overlap, the depth spans
+    // interleave, and the bus's far tail gives it the deeper
+    // deep-corner key — exactly right at the leading ends, wrong
+    // here at the sedan's tail against the bus's nose. The
+    // sedan's centre is the deeper body, so it must draw in front.
+    CarPainterSlot slot(
+      int actor,
+      double anchor,
+      double halfDiag, {
+      bool touchesBridge = false,
+    }) => CarPainterSlot(
+      actor: actor,
+      anchor: anchor,
+      halfDiag: halfDiag,
+      touchesBridge: touchesBridge,
+      left: 90,
+      top: 5,
+      right: 130,
+      bottom: 45,
+    );
+
+    expect(
+      resolveCarPainterOrder([slot(0, 4.75, 0.45), slot(1, 4.7, 0.65)])
+          .map((s) => s.actor),
+      [1, 0],
+    );
+
+    // Bodies whose spans clear each other keep the sort's order —
+    // the deep-corner key is exactly right there — and equal
+    // centres tie to the incoming order.
+    expect(
+      resolveCarPainterOrder([slot(0, 3.8, 0.45), slot(1, 4.75, 0.45)])
+          .map((s) => s.actor),
+      [0, 1],
+    );
+    expect(
+      resolveCarPainterOrder([slot(0, 4.75, 0.45), slot(1, 4.75, 0.45)])
+          .map((s) => s.actor),
+      [0, 1],
+    );
+
+    // A third car ahead of the pass keeps its place: only the
+    // contested inversion swaps.
+    expect(
+      resolveCarPainterOrder([
+        slot(0, 4.2, 0.4),
+        slot(1, 4.75, 0.45),
+        slot(2, 4.7, 0.65),
+      ]).map((s) => s.actor),
+      [0, 2, 1],
+    );
+
+    // A car touching a bridge is exempt even from a contest it
+    // would lose: near a bridge the deep-corner key is
+    // load-bearing — it keeps a climbing car above the deck
+    // pieces — so the key order stands exactly as sorted.
+    expect(
+      resolveCarPainterOrder([
+        slot(0, 4.75, 0.45, touchesBridge: true),
+        slot(1, 4.7, 0.65),
+      ]).map((s) => s.actor),
+      [0, 1],
+    );
+  });
 }

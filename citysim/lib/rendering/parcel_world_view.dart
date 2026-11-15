@@ -2342,13 +2342,15 @@ class _ParcelWorldPainter extends CustomPainter {
         () => _drawPedestrian(canvas, size, pedestrian, seconds),
       ));
     }
+    final carSlotByActor = <int, CarPainterSlot>{};
     for (final car in traffic.actors) {
       final compass = carCompassForHeading(car.headingDx, car.headingDy);
       final image = images[carAssetPath(car.type, car.variant, compass)];
-      // Half the body's diagonal in cells — a quarter of the drawn
-      // bounding-box width — positions the deep end the sort key
-      // is taken from, so a nose already over a bridge tile or the
-      // car ahead clears its art instead of clipping through.
+      // The deep corner's (col+row) gain over the anchor — half
+      // the drawn footprint's length plus half its width, which is
+      // the drawn width in cells — positions the deep end the sort
+      // key is taken from, so a nose already over a bridge tile or
+      // the car ahead clears its art instead of clipping through.
       final halfDiag = image == null
           ? 0.0
           : image.width *
@@ -2360,6 +2362,26 @@ class _ParcelWorldPainter extends CustomPainter {
         traffic.actorDepth(car, halfDiagCells: halfDiag),
         () => _drawCar(canvas, size, car),
       ));
+      // Contest standings for the pairwise pass below: the drawn
+      // box, the mid-body depth, and the bridge exemption.
+      if (image != null) {
+        final screen = _carScreenPoint(size, car);
+        final (width, height, anchorX, anchorY) = _carBox(
+          image,
+          car.type,
+          compass,
+        );
+        carSlotByActor[actors.length - 1] = CarPainterSlot(
+          actor: actors.length - 1,
+          anchor: traffic.actorAnchorDepth(car),
+          halfDiag: halfDiag,
+          touchesBridge: traffic.touchesBridge(car, halfDiagCells: halfDiag),
+          left: screen.dx - anchorX * width,
+          top: screen.dy + 2 * scale - anchorY * height,
+          right: screen.dx + (1 - anchorX) * width,
+          bottom: screen.dy + 2 * scale + (1 - anchorY) * height,
+        );
+      }
     }
     // Dart's sort is not stable: equal depths — a car exactly level
     // with a bridge piece or another car — would swap arbitrarily
@@ -2371,6 +2393,27 @@ class _ParcelWorldPainter extends CustomPainter {
         final depth = actors[a].$1.compareTo(actors[b].$1);
         return depth != 0 ? depth : a.compareTo(b);
       });
+    // Contested cars re-order among themselves: a single key
+    // cannot serve both ends of a pass (a sedan's tail against a
+    // bus's nose), so mutually overlapping cars whose depth spans
+    // interleave swap to their bodies' centre order. The slots are
+    // read off the sorted sequence — the resolver must see painter
+    // order, not the order the cars were built in — and written
+    // back into the same positions, so every other actor keeps
+    // its slot and its depth. Cars touching a bridge are exempt
+    // (the resolver's rule): their deep-corner key is what keeps
+    // them above the deck pieces while climbing.
+    if (carSlotByActor.length > 1) {
+      final painterSlots = <CarPainterSlot>[
+        for (final index in order) ?carSlotByActor[index],
+      ];
+      final resolved = resolveCarPainterOrder(painterSlots);
+      var next = 0;
+      for (var p = 0; p < order.length && next < resolved.length; p++) {
+        if (carSlotByActor[order[p]] == null) continue;
+        order[p] = resolved[next++].actor;
+      }
+    }
     for (final index in order) {
       actors[index].$2();
     }
@@ -2695,11 +2738,14 @@ class _ParcelWorldPainter extends CustomPainter {
     );
   }
 
-  void _drawCar(Canvas canvas, Size size, CarActor car) {
-    // Exactly where a pedestrian stands: the segment's spots, the
-    // progress between them, and the lift under each end — ramps
-    // and decks carry cars the same way they carry walkers. The
-    // lane paint already places the car; no offsets are computed.
+  /// The car's ground point on screen — exactly where a
+  /// pedestrian stands: the segment's spots, the progress between
+  /// them, and the lift under each end, so ramps and decks carry
+  /// cars the way they carry walkers. The lane paint already
+  /// places the car; no offsets are computed. The draw and the
+  /// painter-order contest test share this one point so they
+  /// cannot drift apart.
+  Offset _carScreenPoint(Size size, CarActor car) {
     final a = _spotWorldCenter(car.from);
     final b = _spotWorldCenter(car.to);
     final liftFrom = traffic.lattice.surface.liftAt(car.from);
@@ -2711,7 +2757,35 @@ class _ParcelWorldPainter extends CustomPainter {
           a.dy + (b.dy - a.dy) * car.progress - lift,
         ) +
         _gridOffsetWorld(car.laneOffsetCol, car.laneOffsetRow);
-    final screen = _worldToScreen(world, size, scale, offset);
+    return _worldToScreen(world, size, scale, offset);
+  }
+
+  /// The car's drawn box: on-screen width and height, and the
+  /// ground anchor's fractions inside it — authored per direction
+  /// in the editor's Vehicles page, or the computed default: the
+  /// ground centre of tight iso art, a quarter of the box width
+  /// above the box bottom. Pinning the box bottom instead drifts
+  /// cars off their lanes sideways on east-west travel and along
+  /// the lane on north-south.
+  (double, double, double, double) _carBox(
+    ui.Image image,
+    String type,
+    String compass,
+  ) {
+    final render = content.ambience.cars.render[type];
+    final unit =
+        0.5 * scale * (render?.scale ?? content.ambience.cars.spriteScale);
+    final anchor = render?.anchor[compass];
+    return (
+      image.width * unit,
+      image.height * unit,
+      anchor?.$1 ?? 0.5,
+      anchor?.$2 ?? (image.height - image.width / 4) / image.height,
+    );
+  }
+
+  void _drawCar(Canvas canvas, Size size, CarActor car) {
+    final screen = _carScreenPoint(size, car);
     if (screen.dx < -80 ||
         screen.dx > size.width + 80 ||
         screen.dy < -90 ||
@@ -2722,21 +2796,7 @@ class _ParcelWorldPainter extends CustomPainter {
     final image = images[carAssetPath(car.type, car.variant, compass)];
     if (image == null) return;
     ParcelWorldProbe.countActor();
-    final render = content.ambience.cars.render[car.type];
-    final unit =
-        0.5 * scale * (render?.scale ?? content.ambience.cars.spriteScale);
-    final width = image.width * unit;
-    final height = image.height * unit;
-    // The ground anchor: authored per direction in the editor's
-    // Vehicles page, or the computed default — the ground centre of
-    // tight iso art, a quarter of the box width above the box
-    // bottom. Pinning the box bottom instead drifts cars off their
-    // lanes sideways on east-west travel and along the lane on
-    // north-south.
-    final anchor = render?.anchor[compass];
-    final anchorX = anchor?.$1 ?? 0.5;
-    final anchorY =
-        anchor?.$2 ?? (image.height - image.width / 4) / image.height;
+    final (width, height, anchorX, anchorY) = _carBox(image, car.type, compass);
     final source = Rect.fromLTWH(
       0,
       0,
