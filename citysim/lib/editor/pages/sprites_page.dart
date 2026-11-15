@@ -40,6 +40,12 @@ class _SpritesPageState extends State<SpritesPage> {
   /// one subcategory is expanded at a time.
   String? _expandedSubcategory;
 
+  /// The sprite role whose full editor is open; one card at a time.
+  /// Cards stay light — thumbnails, name, toggle — until opened:
+  /// mounting every card's fields and plot preview at once is what
+  /// made long subcategories lag to scroll and expand.
+  String? _expandedRole;
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +56,7 @@ class _SpritesPageState extends State<SpritesPage> {
         _selectedCategory = (meta['category'] as String?) ?? 'buildings';
         _expandedSubcategory =
             (meta['subcategory'] as String?) ?? _selectedCategory;
+        _expandedRole = role;
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final context = _focusKey.currentContext;
@@ -144,6 +151,7 @@ class _SpritesPageState extends State<SpritesPage> {
                             entry.key,
                             entry.value,
                             focused: entry.key == widget.focusRole,
+                            expanded: entry.key == _expandedRole,
                           ),
                         ),
                     ],
@@ -160,6 +168,7 @@ class _SpritesPageState extends State<SpritesPage> {
     String role,
     Map<String, Object?> meta, {
     focused = false,
+    required bool expanded,
   }) {
     final pathEntries = spritePathEntries(meta);
     final anchor = ((meta['groundAnchor'] as List?) ?? const [0.5, 1.0]);
@@ -178,369 +187,388 @@ class _SpritesPageState extends State<SpritesPage> {
           : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Every door facing of the sprite renders here; the settings
-            // to the right are shared by all of them.
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final (label, path) in pathEntries) ...[
-                  if (label.isNotEmpty)
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 9,
-                        color: Colors.black54,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  SpriteThumb(path: path, size: 52),
-                  const SizedBox(height: 4),
-                ],
-              ],
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
+            // The always-visible header: every door facing renders
+            // here (the settings below are shared by all of them),
+            // the role's name, and the expand toggle. Cards stay
+            // this light until opened — mounting every card's
+            // fields and plot preview at once is what made long
+            // subcategories lag to scroll and expand.
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => setState(() {
+                _expandedRole = expanded ? null : role;
+              }),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: Text(
-                          role,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontFamily: 'monospace',
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      if (codeReferenced)
-                        Tooltip(
-                          message:
-                              'This role name is constructed in game code; '
-                              'renaming it would break rendering. Only its '
-                              'metadata is editable.',
-                          child: Chip(
-                            avatar: const Icon(Icons.lock_rounded, size: 12),
-                            label: const Text(
-                              'code',
-                              style: TextStyle(fontSize: 10),
-                            ),
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                          ),
-                        ),
-                    ],
-                  ),
-                  Text(
-                    pathEntries.map((entry) => entry.$2).join('  |  '),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.black54,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // The sprite on its plot, placed exactly as the game
-                  // places it — tune scale and anchor here and watch it
-                  // settle live instead of hot-restarting the game. The
-                  // road-side selection is controlled so the per-side
-                  // shift fields below always edit the side the plot
-                  // shows. Road and bridge tiles paint their lattices
-                  // right on the tile — ramps and decks ride their
-                  // incline — so pick a brush and tap subtiles: the
-                  // sidewalk where pedestrians may walk, or a
-                  // direction's lane where cars may drive.
-                  if (_paintsWalkable(category))
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(
-                        children: [
-                          for (final brush in const [
-                            ('walk', 'Walk'),
-                            ('north', 'Cars N'),
-                            ('east', 'Cars E'),
-                            ('south', 'Cars S'),
-                            ('west', 'Cars W'),
-                          ])
-                            Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: ChoiceChip(
-                                label: Text(brush.$2),
-                                tooltip: brush.$1 == 'walk'
-                                    ? 'Paint the sidewalk — where pedestrians '
-                                          'may walk'
-                                    : 'Paint the ${brush.$1}bound lane — '
-                                          'cars traveling ${brush.$1}',
-                                selected:
-                                    (_paintBrushes[role] ?? 'walk') == brush.$1,
-                                onSelected: (_) => setState(
-                                  () => _paintBrushes[role] = brush.$1,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                labelPadding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  if (_paintsWalkable(category) &&
-                      (_paintBrushes[role] ?? 'walk') != 'walk')
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(
-                        children: [
-                          for (final lane in const [1, 2, 3, 4])
-                            Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: ChoiceChip(
-                                label: Text('Lane $lane'),
-                                tooltip:
-                                    'Paint lane $lane of the selected '
-                                    'direction — painted subtiles carry '
-                                    '$lane travel chevron'
-                                    '${lane == 1 ? '' : 's'}',
-                                selected: (_paintLanes[role] ?? 1) == lane,
-                                onSelected: (_) =>
-                                    setState(() => _paintLanes[role] = lane),
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                labelPadding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  SpritePlotPreview(
-                    categories: widget.categories,
-                    role: role,
-                    roadSide: _roadSides[role] ?? 'south',
-                    onRoadSideChanged: (side) =>
-                        setState(() => _roadSides[role] = side),
-                    walkableRows: _paintsWalkable(category)
-                        ? (meta['walkable'] as List?)?.cast<int>()
-                        : null,
-                    laneRows: _paintsWalkable(category)
-                        ? _laneRowsOf(meta)
-                        : null,
-                    activeLane:
-                        _paintsWalkable(category) &&
-                            (_paintBrushes[role] ?? 'walk') != 'walk'
-                        ? '${_paintBrushes[role]}-${_paintLanes[role] ?? 1}'
-                        : null,
-                    onPaintSubtile: _paintsWalkable(category)
-                        ? (x, y) => _editRole(
-                            role,
-                            (sprite) => _paintSubtile(sprite, x, y, role),
-                          )
-                        : null,
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 2,
-                    children: [
-                      SizedBox(
-                        width: 150,
-                        child: _categoryDropdown(role, category),
-                      ),
-                      SizedBox(
-                        width: 150,
-                        child: TextFieldBox(
-                          label: 'Subcategory',
-                          value: subcategory,
-                          help:
-                              'Group within the category. Catalogue models '
-                              'pick variants only from sprites sharing this '
-                              'subcategory; typing a new name creates a new '
-                              'group.',
-                          onChanged: (v) => _editRole(
-                            role,
-                            (sprite) => sprite['subcategory'] = v,
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 110,
-                        child: DoubleField(
-                          label: 'Scale',
-                          value: asDouble(meta['renderScale'], 0.5),
-                          min: 0.05,
-                          help:
-                              'Art scaling factor. 0.5 renders the '
-                              "pack's 128px art at one tile; smaller values "
-                              'shrink the sprite.',
-                          onChanged: (v) => _editRole(
-                            role,
-                            (sprite) => sprite['renderScale'] = v,
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 130,
-                        child: DoubleField(
-                          label: 'Offset Y',
-                          value: asDouble(meta['baseOffsetY']),
-                          min: 0,
-                          help:
-                              'Pixels of art hanging below the ground '
-                              'diamond (for example bridge support posts). '
-                              'The renderer shifts the sprite down by this '
-                              'amount.',
-                          onChanged: (v) => _editRole(
-                            role,
-                            (sprite) => sprite['baseOffsetY'] = v,
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 200,
-                        child: DoubleSliderField(
-                          label: 'Anchor X',
-                          value: asDouble(anchor[0], 0.5),
-                          min: 0,
-                          max: 1,
-                          divisions: 100,
-                          help:
-                              'Horizontal point of the art pinned to the '
-                              'footprint, as a fraction of image width '
-                              '(0.5 = centred). Drag the slider or type an '
-                              'exact value.',
-                          onChanged: (v) => _editRole(role, (sprite) {
-                            if (sprite['groundAnchor'] is! List) {
-                              sprite['groundAnchor'] = [0.5, 1.0];
-                            }
-                            (sprite['groundAnchor'] as List)[0] = v;
-                          }),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 200,
-                        child: DoubleSliderField(
-                          label: 'Anchor Y',
-                          value: asDouble(anchor.length > 1 ? anchor[1] : 1, 1),
-                          min: 0,
-                          max: 1,
-                          divisions: 100,
-                          help:
-                              'Vertical point of the art pinned to the '
-                              'footprint, as a fraction of image height '
-                              '(1 = bottom edge rests on the ground). Drag '
-                              'the slider or type an exact value.',
-                          onChanged: (v) => _editRole(role, (sprite) {
-                            if (sprite['groundAnchor'] is! List) {
-                              sprite['groundAnchor'] = [0.5, 1.0];
-                            }
-                            (sprite['groundAnchor'] as List)[1] = v;
-                          }),
-                        ),
-                      ),
-                      // Only facings sprites shift per road side —
-                      // their structures are the ones that save a
-                      // facing. The sliders edit the side the plot
-                      // preview above is showing.
-                      if (pathEntries.any((entry) => entry.$1.isNotEmpty)) ...[
-                        SizedBox(
-                          width: 210,
-                          child: DoubleSliderField(
-                            label:
-                                'Shift E–W · ${_roadSides[role] ?? 'south'} side',
-                            value: _sideShiftValue(
-                              meta,
-                              _roadSides[role] ?? 'south',
-                              0,
-                            ),
-                            min: -0.5,
-                            max: 0.5,
-                            divisions: 100,
-                            help:
-                                'Slides the art east (positive) or west '
-                                '(negative) for this road side, in '
-                                'fractions of the sprite width. Pick the '
-                                'road side on the plot preview above, then '
-                                'drag — the preview follows live.',
-                            onChanged: (v) => _editSideShift(
-                              role,
-                              _roadSides[role] ?? 'south',
-                              0,
-                              v,
+                      for (final (label, path) in pathEntries) ...[
+                        if (label.isNotEmpty)
+                          Text(
+                            label,
+                            style: const TextStyle(
+                              fontSize: 9,
+                              color: Colors.black54,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                        ),
-                        SizedBox(
-                          width: 210,
-                          child: DoubleSliderField(
-                            label:
-                                'Shift N–S · ${_roadSides[role] ?? 'south'} side',
-                            value: _sideShiftValue(
-                              meta,
-                              _roadSides[role] ?? 'south',
-                              1,
-                            ),
-                            min: -0.5,
-                            max: 0.5,
-                            divisions: 100,
-                            help:
-                                'Slides the art south (positive) or north '
-                                '(negative) for this road side — hug the '
-                                'road with the sign that matches it, in '
-                                'fractions of the sprite width.',
-                            onChanged: (v) => _editSideShift(
-                              role,
-                              _roadSides[role] ?? 'south',
-                              1,
-                              v,
-                            ),
-                          ),
-                        ),
+                        SpriteThumb(path: path, size: 52),
+                        const SizedBox(height: 4),
                       ],
-                      // Only props sway in the wind; the option stays
-                      // hidden for every other category.
-                      if (category == 'props')
-                        SizedBox(
-                          width: 190,
-                          child: SwitchListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            title: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Flexible(
-                                  child: Text(
-                                    'Sways in wind',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                ),
-                                FieldHelp(
-                                  'Gently rocks the sprite around its '
-                                  'ground anchor to suggest wind. Only '
-                                  'props may sway.',
-                                ),
-                              ],
-                            ),
-                            value: meta['sways'] == true,
-                            onChanged: (v) => _editRole(
-                              role,
-                              (sprite) => sprite['sways'] = v,
+                    ],
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            role,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'monospace',
+                              fontSize: 13,
                             ),
                           ),
                         ),
-                    ],
+                        if (codeReferenced)
+                          Tooltip(
+                            message:
+                                'This role name is constructed in game code; '
+                                'renaming it would break rendering. Only its '
+                                'metadata is editable.',
+                            child: Chip(
+                              avatar: const Icon(Icons.lock_rounded, size: 12),
+                              label: const Text(
+                                'code',
+                                style: TextStyle(fontSize: 10),
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    size: 20,
+                    color: Colors.green.shade800,
                   ),
                 ],
               ),
             ),
+            if (expanded) ...[
+              Text(
+                pathEntries.map((entry) => entry.$2).join('  |  '),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Colors.black54,
+                  fontFamily: 'monospace',
+                ),
+              ),
+              const SizedBox(height: 8),
+              // The sprite on its plot, placed exactly as the game
+              // places it — tune scale and anchor here and watch it
+              // settle live instead of hot-restarting the game. The
+              // road-side selection is controlled so the per-side
+              // shift fields below always edit the side the plot
+              // shows. Road and bridge tiles paint their lattices
+              // right on the tile — ramps and decks ride their
+              // incline — so pick a brush and tap subtiles: the
+              // sidewalk where pedestrians may walk, or a
+              // direction's lane where cars may drive.
+              if (_paintsWalkable(category))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      for (final brush in const [
+                        ('walk', 'Walk'),
+                        ('north', 'Cars N'),
+                        ('east', 'Cars E'),
+                        ('south', 'Cars S'),
+                        ('west', 'Cars W'),
+                      ])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: ChoiceChip(
+                            label: Text(brush.$2),
+                            tooltip: brush.$1 == 'walk'
+                                ? 'Paint the sidewalk — where pedestrians '
+                                      'may walk'
+                                : 'Paint the ${brush.$1}bound lane — '
+                                      'cars traveling ${brush.$1}',
+                            selected:
+                                (_paintBrushes[role] ?? 'walk') == brush.$1,
+                            onSelected: (_) =>
+                                setState(() => _paintBrushes[role] = brush.$1),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            labelPadding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              if (_paintsWalkable(category) &&
+                  (_paintBrushes[role] ?? 'walk') != 'walk')
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      for (final lane in const [1, 2, 3, 4])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: ChoiceChip(
+                            label: Text('Lane $lane'),
+                            tooltip:
+                                'Paint lane $lane of the selected '
+                                'direction — painted subtiles carry '
+                                '$lane travel chevron'
+                                '${lane == 1 ? '' : 's'}',
+                            selected: (_paintLanes[role] ?? 1) == lane,
+                            onSelected: (_) =>
+                                setState(() => _paintLanes[role] = lane),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            labelPadding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              SpritePlotPreview(
+                categories: widget.categories,
+                role: role,
+                roadSide: _roadSides[role] ?? 'south',
+                onRoadSideChanged: (side) =>
+                    setState(() => _roadSides[role] = side),
+                walkableRows: _paintsWalkable(category)
+                    ? (meta['walkable'] as List?)?.cast<int>()
+                    : null,
+                laneRows: _paintsWalkable(category) ? _laneRowsOf(meta) : null,
+                activeLane:
+                    _paintsWalkable(category) &&
+                        (_paintBrushes[role] ?? 'walk') != 'walk'
+                    ? '${_paintBrushes[role]}-${_paintLanes[role] ?? 1}'
+                    : null,
+                onPaintSubtile: _paintsWalkable(category)
+                    ? (x, y) => _editRole(
+                        role,
+                        (sprite) => _paintSubtile(sprite, x, y, role),
+                      )
+                    : null,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 12,
+                runSpacing: 2,
+                children: [
+                  SizedBox(
+                    width: 150,
+                    child: _categoryDropdown(role, category),
+                  ),
+                  SizedBox(
+                    width: 150,
+                    child: TextFieldBox(
+                      label: 'Subcategory',
+                      value: subcategory,
+                      help:
+                          'Group within the category. Catalogue models '
+                          'pick variants only from sprites sharing this '
+                          'subcategory; typing a new name creates a new '
+                          'group.',
+                      onChanged: (v) => _editRole(
+                        role,
+                        (sprite) => sprite['subcategory'] = v,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 110,
+                    child: DoubleField(
+                      label: 'Scale',
+                      value: asDouble(meta['renderScale'], 0.5),
+                      min: 0.05,
+                      help:
+                          'Art scaling factor. 0.5 renders the '
+                          "pack's 128px art at one tile; smaller values "
+                          'shrink the sprite.',
+                      onChanged: (v) => _editRole(
+                        role,
+                        (sprite) => sprite['renderScale'] = v,
+                      ),
+                    ),
+                  ),
+                  // Only bridges carry art below the ground plane
+                  // (support posts under the elevated deck); for
+                  // everything else, sinking the art is what Anchor
+                  // Y is for.
+                  if (category == 'bridges')
+                    SizedBox(
+                      width: 130,
+                      child: DoubleField(
+                        label: 'Offset Y',
+                        value: asDouble(meta['baseOffsetY']),
+                        min: 0,
+                        help:
+                            'Pixels of art hanging below the ground '
+                            'diamond (for example bridge support posts). '
+                            'The renderer shifts the sprite down by this '
+                            'amount.',
+                        onChanged: (v) => _editRole(
+                          role,
+                          (sprite) => sprite['baseOffsetY'] = v,
+                        ),
+                      ),
+                    ),
+                  SizedBox(
+                    width: 200,
+                    child: DoubleSliderField(
+                      label: 'Anchor X',
+                      value: asDouble(anchor[0], 0.5),
+                      min: 0,
+                      max: 1,
+                      divisions: 100,
+                      help:
+                          'Horizontal point of the art pinned to the '
+                          'footprint, as a fraction of image width '
+                          '(0.5 = centred). Drag the slider or type an '
+                          'exact value.',
+                      onChanged: (v) => _editRole(role, (sprite) {
+                        if (sprite['groundAnchor'] is! List) {
+                          sprite['groundAnchor'] = [0.5, 1.0];
+                        }
+                        (sprite['groundAnchor'] as List)[0] = v;
+                      }),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 200,
+                    child: DoubleSliderField(
+                      label: 'Anchor Y',
+                      value: asDouble(anchor.length > 1 ? anchor[1] : 1, 1),
+                      min: 0,
+                      max: 1,
+                      divisions: 100,
+                      help:
+                          'Vertical point of the art pinned to the '
+                          'footprint, as a fraction of image height '
+                          '(1 = bottom edge rests on the ground). Drag '
+                          'the slider or type an exact value.',
+                      onChanged: (v) => _editRole(role, (sprite) {
+                        if (sprite['groundAnchor'] is! List) {
+                          sprite['groundAnchor'] = [0.5, 1.0];
+                        }
+                        (sprite['groundAnchor'] as List)[1] = v;
+                      }),
+                    ),
+                  ),
+                  // Only facings sprites shift per road side —
+                  // their structures are the ones that save a
+                  // facing. The sliders edit the side the plot
+                  // preview above is showing.
+                  if (pathEntries.any((entry) => entry.$1.isNotEmpty)) ...[
+                    SizedBox(
+                      width: 210,
+                      child: DoubleSliderField(
+                        label:
+                            'Shift E–W · ${_roadSides[role] ?? 'south'} side',
+                        value: _sideShiftValue(
+                          meta,
+                          _roadSides[role] ?? 'south',
+                          0,
+                        ),
+                        min: -0.5,
+                        max: 0.5,
+                        divisions: 100,
+                        help:
+                            'Slides the art east (positive) or west '
+                            '(negative) for this road side, in '
+                            'fractions of the sprite width. Pick the '
+                            'road side on the plot preview above, then '
+                            'drag — the preview follows live.',
+                        onChanged: (v) => _editSideShift(
+                          role,
+                          _roadSides[role] ?? 'south',
+                          0,
+                          v,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 210,
+                      child: DoubleSliderField(
+                        label:
+                            'Shift N–S · ${_roadSides[role] ?? 'south'} side',
+                        value: _sideShiftValue(
+                          meta,
+                          _roadSides[role] ?? 'south',
+                          1,
+                        ),
+                        min: -0.5,
+                        max: 0.5,
+                        divisions: 100,
+                        help:
+                            'Slides the art south (positive) or north '
+                            '(negative) for this road side — hug the '
+                            'road with the sign that matches it, in '
+                            'fractions of the sprite width.',
+                        onChanged: (v) => _editSideShift(
+                          role,
+                          _roadSides[role] ?? 'south',
+                          1,
+                          v,
+                        ),
+                      ),
+                    ),
+                  ],
+                  // Only props sway in the wind; the option stays
+                  // hidden for every other category.
+                  if (category == 'props')
+                    SizedBox(
+                      width: 190,
+                      child: SwitchListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Flexible(
+                              child: Text(
+                                'Sways in wind',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                            FieldHelp(
+                              'Gently rocks the sprite around its '
+                              'ground anchor to suggest wind. Only '
+                              'props may sway.',
+                            ),
+                          ],
+                        ),
+                        value: meta['sways'] == true,
+                        onChanged: (v) =>
+                            _editRole(role, (sprite) => sprite['sways'] = v),
+                      ),
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

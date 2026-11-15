@@ -36,6 +36,9 @@ class _VehiclesPageState extends State<VehiclesPage> {
   int _imageWidth = 0;
   int _imageHeight = 0;
 
+  /// Bumped on reset so the fields remount with restored defaults.
+  int _resetCount = 0;
+
   Map<String, Object?> get _cars =>
       subMap(ambienceMap(widget.categories), 'cars');
 
@@ -103,6 +106,42 @@ class _VehiclesPageState extends State<VehiclesPage> {
       (_typeRender?['scale'] as num?)?.toDouble() ??
       asDouble(_cars['spriteScale'], 0.9);
 
+  /// The tuned placement expressed as a world-space nudge from the
+  /// computed default, in subtiles along the grid axes — (east-west,
+  /// north-south), positive east and south. The same two degrees of
+  /// freedom as the anchor fractions, rotated onto the grid axes the
+  /// iso screen diagonals hide.
+  (double, double) get _shiftSubtiles {
+    final override = _anchorOverride;
+    if (override == null || _imageWidth == 0) return (0, 0);
+    final unit = 0.5 * _scale;
+    final screenWidth = _imageWidth * unit;
+    final screenHeight = _imageHeight * unit;
+    // The car's screen displacement from its default placement:
+    // moving the anchor within the art shifts the drawn car the
+    // other way.
+    final sx = -(override.$1 - 0.5) * screenWidth;
+    final sy = -(override.$2 - _defaultAnchorY) * screenHeight;
+    // Screen to grid: a cell maps to ((col−row)·32, (col+row)·16)
+    // world px, so a subtile step is ((col−row)·4, (col+row)·2).
+    return (sx / 8 + sy / 4, sy / 4 - sx / 8);
+  }
+
+  /// Writes a world-space nudge, in subtiles, back as anchor
+  /// fractions against the computed default.
+  void _writeShift(double colSubtiles, double rowSubtiles) {
+    // The art is still loading — nothing to convert against yet.
+    if (_imageWidth == 0) return;
+    final unit = 0.5 * _scale;
+    final screenWidth = _imageWidth * unit;
+    final screenHeight = _imageHeight * unit;
+    final sx = (colSubtiles - rowSubtiles) * 4;
+    final sy = (colSubtiles + rowSubtiles) * 2;
+    final ax = (0.5 - sx / screenWidth).clamp(-0.5, 1.5);
+    final ay = (_defaultAnchorY - sy / screenHeight).clamp(-0.5, 1.5);
+    _writeAnchor(ax, ay);
+  }
+
   void _editCars(void Function(Map<String, Object?> cars) edit) {
     widget.onChanged((categories) {
       final ambience = (categories['ambience.json'] as Map)
@@ -154,6 +193,9 @@ class _VehiclesPageState extends State<VehiclesPage> {
   }
 
   void _resetAnchor() {
+    // Bumped so the fields remount with the restored defaults —
+    // their initial values only read at creation.
+    _resetCount++;
     widget.onChanged((categories) {
       final ambience = (categories['ambience.json'] as Map)
           .cast<String, Object?>();
@@ -266,10 +308,15 @@ class _VehiclesPageState extends State<VehiclesPage> {
                   },
                 ),
                 const SizedBox(height: 8),
-                // Keyed so switching vehicle or facing refreshes the
+                // Keyed so switching vehicle, facing, — or the
+                // sprite resolving with its true pixel size, which
+                // moves the computed default — refreshes the
                 // fields' initial values.
                 KeyedSubtree(
-                  key: ValueKey('fields-$_typeId-$_variantId-$_direction'),
+                  key: ValueKey(
+                    'fields-$_typeId-$_variantId-$_direction-'
+                    '$_imageWidth-$_imageHeight-$_resetCount',
+                  ),
                   child: Wrap(
                     spacing: 16,
                     runSpacing: 4,
@@ -278,31 +325,31 @@ class _VehiclesPageState extends State<VehiclesPage> {
                       SizedBox(
                         width: 170,
                         child: DoubleField(
-                          label: 'Anchor X',
-                          value: _anchorX,
-                          min: -0.5,
-                          max: 1.5,
+                          label: 'Shift E–W',
+                          value: _shiftSubtiles.$1,
+                          decimals: 2,
                           help:
-                              'Where the sprite\'s contact point sits '
-                              'across its width — 0.5 is the centre. Nudge '
-                              'if the art drifts left or right of its lane.',
-                          onChanged: (v) => _writeAnchor(v, _anchorY),
+                              'World-space nudge along the east-west '
+                              'grid axis, in subtiles (a subtile is 1/8 of '
+                              'a tile); positive moves the car east. '
+                              'Measured from the computed ground-centre '
+                              'placement — tune until the wheels straddle '
+                              'the crosshair.',
+                          onChanged: (v) => _writeShift(v, _shiftSubtiles.$2),
                         ),
                       ),
                       SizedBox(
                         width: 170,
                         child: DoubleField(
-                          label: 'Anchor Y',
-                          value: _anchorY,
-                          min: -0.5,
-                          max: 1.5,
+                          label: 'Shift N–S',
+                          value: _shiftSubtiles.$2,
+                          decimals: 2,
                           help:
-                              'How far down the sprite the contact point '
-                              'sits — 1.0 is the very bottom, smaller lifts '
-                              'the car. The default is the computed ground '
-                              'centre: a quarter of the box width above the '
-                              'bottom.',
-                          onChanged: (v) => _writeAnchor(_anchorX, v),
+                              'World-space nudge along the north-south '
+                              'grid axis, in subtiles; positive moves the '
+                              'car south. Measured from the computed '
+                              'ground-centre placement.',
+                          onChanged: (v) => _writeShift(_shiftSubtiles.$1, v),
                         ),
                       ),
                       SizedBox(
@@ -327,9 +374,11 @@ class _VehiclesPageState extends State<VehiclesPage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'anchor (${_anchorX.toStringAsFixed(3)}, '
-                  '${_anchorY.toStringAsFixed(3)}) '
+                  'shift (${_shiftSubtiles.$1.toStringAsFixed(2)}, '
+                  '${_shiftSubtiles.$2.toStringAsFixed(2)}) subtiles '
                   '${overridden ? '' : '— computed default'} · '
+                  'anchor (${_anchorX.toStringAsFixed(3)}, '
+                  '${_anchorY.toStringAsFixed(3)}) · '
                   'scale ${_scale.toStringAsFixed(2)} · '
                   '${_imageWidth == 0 ? 'loading art' : '$_imageWidth×$_imageHeight px'}',
                   style: const TextStyle(fontSize: 11, color: Colors.black54),
@@ -427,6 +476,10 @@ class _VehicleAnchorPreviewState extends State<VehicleAnchorPreview> {
     _stream = null;
     _listener = null;
     _loadedPath = widget.assetPath;
+    // Drop the previous facing's art immediately — the preview
+    // shows road, lane, and crosshair until the new sprite
+    // resolves, never the wrong car.
+    _image = null;
     final stream = NetworkImage(ContentApi().assetUrl(widget.assetPath))
         .resolve(const ImageConfiguration());
     late ImageStreamListener listener;

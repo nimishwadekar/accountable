@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -65,13 +64,25 @@ class _EditorShellState extends State<EditorShell> {
   /// and its uncontrolled text fields re-read the restored values.
   int _rebuildToken = 0;
 
+  /// The category files with unsaved changes, computed once per
+  /// frame after edits (see [_scheduleDirtyCheck]) — the toolbar,
+  /// revert button, and switch guard read this cache instead of
+  /// deep-comparing the whole bundle on every rebuild.
+  List<String> _dirtyFiles = const [];
+
+  /// Whether a post-frame dirty check is already queued.
+  bool _dirtyCheckScheduled = false;
+
   /// The category file each page edits; null for read-only pages.
+  /// The Vehicles page tunes cars.render inside ambience.json —
+  /// it shares that file (and its revert) with the Ambience page.
   static const _pageCategories = <String?>[
     null,
     'terrain.json',
     'catalogue.json',
     'sprites.json',
     'economy.json',
+    'ambience.json',
     'ambience.json',
   ];
 
@@ -90,6 +101,7 @@ class _EditorShellState extends State<EditorShell> {
         _saved = _deepCopy(categories);
         _loading = false;
         _dirty = false;
+        _dirtyFiles = const [];
         _issues = [];
         _issuesStatus = '';
       });
@@ -133,8 +145,48 @@ class _EditorShellState extends State<EditorShell> {
   void _mutate(void Function(Map<String, Object?> categories) edit) {
     setState(() {
       edit(_categories);
-      _dirty = !_deepEquals(_categories, _saved);
+      // Optimistically dirty: the true diff can be costly on large
+      // content (terrain maps, the painted lane masks), so it runs
+      // after the frame — edits and typing never wait on it.
+      _dirty = true;
     });
+    _scheduleDirtyCheck();
+  }
+
+  /// Coalesces dirty checks to one per frame, off the input path.
+  void _scheduleDirtyCheck() {
+    if (_dirtyCheckScheduled) return;
+    _dirtyCheckScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _dirtyCheckScheduled = false;
+      if (!mounted) return;
+      final files = _computeDirtyFiles();
+      if (_dirty == files.isNotEmpty && _sameFiles(files, _dirtyFiles)) {
+        return;
+      }
+      setState(() {
+        _dirtyFiles = files;
+        _dirty = files.isNotEmpty;
+      });
+    });
+  }
+
+  List<String> _computeDirtyFiles() {
+    final changes = <String>[];
+    for (final entry in _categories.entries) {
+      if (!_deepEquals(_saved[entry.key], entry.value)) {
+        changes.add(entry.key);
+      }
+    }
+    return changes;
+  }
+
+  static bool _sameFiles(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   Future<void> _validate() async {
@@ -165,6 +217,7 @@ class _EditorShellState extends State<EditorShell> {
       setState(() {
         _saved = _deepCopy(_categories);
         _dirty = false;
+        _dirtyFiles = const [];
         _issues = [];
         _issuesStatus = 'Saved. Hot-restart the game to see changes.';
       });
@@ -185,23 +238,12 @@ class _EditorShellState extends State<EditorShell> {
     }
   }
 
-  List<String> _diffSummary() {
-    if (!_dirty) return const [];
-    final changes = <String>[];
-    for (final entry in _categories.entries) {
-      final before = _saved[entry.key];
-      final after = entry.value;
-      if (!_deepEquals(before, after)) {
-        changes.add(entry.key);
-      }
-    }
-    return changes;
-  }
+  List<String> _diffSummary() => _dirtyFiles;
 
   bool _pageDirty(int index) {
     final file = _pageCategories[index];
     if (file == null) return false;
-    return !_deepEquals(_categories[file], _saved[file]);
+    return _dirtyFiles.contains(file);
   }
 
   /// Reverts the current page's category to the last saved values. The
@@ -213,10 +255,10 @@ class _EditorShellState extends State<EditorShell> {
     setState(() {
       _categories[file] = _deepCopy(_saved[file] as Map<String, Object?>);
       _rebuildToken++;
-      _dirty = !_deepEquals(_categories, _saved);
       _issues = [];
       _issuesStatus = '';
     });
+    _scheduleDirtyCheck();
   }
 
   /// Jumps to the sprite editor for [role] (from a catalogue variant
@@ -269,6 +311,7 @@ class _EditorShellState extends State<EditorShell> {
           _categories = _deepCopy(_saved);
           _rebuildToken++;
           _dirty = false;
+          _dirtyFiles = const [];
           _issues = [];
           _issuesStatus = 'Unsaved changes were discarded.';
         });
@@ -503,7 +546,45 @@ class _EditorShellState extends State<EditorShell> {
   );
 }
 
-Map<String, Object?> _deepCopy(Map<String, Object?> source) =>
-    jsonDecode(jsonEncode(source)) as Map<String, Object?>;
+Map<String, Object?> _deepCopy(Map<String, Object?> source) => {
+  for (final entry in source.entries) entry.key: _deepCopyValue(entry.value),
+};
 
-bool _deepEquals(Object? a, Object? b) => jsonEncode(a) == jsonEncode(b);
+Object? _deepCopyValue(Object? value) => switch (value) {
+  Map() => <String, Object?>{
+    for (final entry in value.entries)
+      entry.key as String: _deepCopyValue(entry.value),
+  },
+  List() => <Object?>[for (final item in value) _deepCopyValue(item)],
+  _ => value,
+};
+
+/// Structural equality over parsed JSON shapes. This used to
+/// jsonEncode both sides and compare strings — correct, but it
+/// serialized the whole bundle (~120 KB of strings, plus GC churn)
+/// on every dirty check, which ran per frame while editing; a
+/// recursive walk does the same job orders of magnitude faster.
+bool _deepEquals(Object? a, Object? b) {
+  if (identical(a, b)) return true;
+  if (a is Map && b is Map) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (!b.containsKey(entry.key)) return false;
+      if (!_deepEquals(entry.value, b[entry.key])) return false;
+    }
+    return true;
+  }
+  if (a is List && b is List) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!_deepEquals(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  // Numbers compare by value and runtime type, matching the old
+  // JSON-string semantics: 1 and 1.0 encode differently.
+  if (a is num && b is num) {
+    return a == b && a.runtimeType == b.runtimeType;
+  }
+  return a == b;
+}

@@ -295,6 +295,22 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
   /// host, so the page's per-side fields edit the side the plot shows.
   String _ownRoadSide = 'south';
 
+  /// The role and closure of the cached overlay lift — rebuilt only
+  /// when the role changes, so repaint checks can compare by
+  /// identity.
+  String? _liftRole;
+  double Function(double fx, double fy)? _lift;
+
+  double Function(double fx, double fy)? _cachedOverlayLift(
+    Map<String, Object?> meta,
+  ) {
+    if (_liftRole != widget.role) {
+      _liftRole = widget.role;
+      _lift = _walkableOverlayLift(meta);
+    }
+    return _lift;
+  }
+
   /// The road side the plot currently shows.
   String get _roadSide => widget.roadSide ?? _ownRoadSide;
 
@@ -600,8 +616,10 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
     final fit = math.min(widget.width / bounds.width, height / bounds.height);
     // Bridge tiles paint their lattice on the elevated surface, so
     // the overlay — and the taps that paint it — ride the same lift
-    // the game gives people standing there.
-    final overlayLift = painting ? _walkableOverlayLift(meta) : null;
+    // the game gives people standing there. The closure is cached
+    // per role so the painter's shouldRepaint can compare it by
+    // identity across rebuilds.
+    final overlayLift = painting ? _cachedOverlayLift(meta) : null;
     void toggleAt(Offset local) {
       final callback = widget.onPaintSubtile;
       if (callback == null) return;
@@ -1017,10 +1035,10 @@ class _SpritePlotPainter extends CustomPainter {
       oldDelegate.roadColumnAxisImage != roadColumnAxisImage ||
       oldDelegate.roadRowAxisImage != roadRowAxisImage ||
       oldDelegate.roadSide != roadSide ||
-      oldDelegate.walkableRows != walkableRows ||
-      oldDelegate.laneRows != laneRows ||
+      !_sameRows(oldDelegate.walkableRows, walkableRows) ||
+      !_sameLaneMaps(oldDelegate.laneRows, laneRows) ||
       oldDelegate.activeLane != activeLane ||
-      oldDelegate.overlayLift != overlayLift;
+      !identical(oldDelegate.overlayLift, overlayLift);
 
   /// A chevron tally in a lane subtile: [count] strokes — the lane
   /// number — stacked along the direction of travel, on the iso
@@ -1071,6 +1089,28 @@ class _SpritePlotPainter extends CustomPainter {
       canvas.drawLine(back - across * reach * 0.55, tip, paint);
     }
   }
+}
+
+/// Row-byte equality for the repaint check — the page hands the
+/// painter freshly cast lists on every rebuild, so identity never
+/// holds; the masks are eight ints.
+bool _sameRows(List<int>? a, List<int>? b) {
+  if (a == null || b == null) return a == b;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+/// Lane-mask equality for the repaint check, same reason.
+bool _sameLaneMaps(Map<String, List<int>>? a, Map<String, List<int>>? b) {
+  if (a == null || b == null) return a == b;
+  if (a.length != b.length) return false;
+  for (final entry in a.entries) {
+    if (!_sameRows(entry.value, b[entry.key])) return false;
+  }
+  return true;
 }
 
 /// Lane overlay colours by direction of travel: fill, edge, and the
