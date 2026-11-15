@@ -12,7 +12,8 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 - region borders: parcel granularity. Parcels can group together under a "settlement", later could be states. Local economy and coin banks stay local to a settlement unless explicitly transferred.
 - Scatter lots of greenery around to make it an uninhabited lush jungle
 - Rewarding unlocks for connecting two towns via roads, since that's a big milestone.
-- select roads properly.
+- Road additions: proper selection, road classification for car speeds and priority.
+- Entity-aware road ambience: queue at each intersection: pedestrian crossing state or car crossing state. Each waits for the other to finish with bounded time. Cars wait behind eo. Proper traffic basically.
 - Could have rail later too.
 - Demolition.
 - sheets and accountable integration.

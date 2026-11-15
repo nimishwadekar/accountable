@@ -383,6 +383,7 @@ void main() {
         ambientTimeScale: content.ambience.ambientTimeScale,
         vegetationSway: content.ambience.vegetationSway,
         pedestrians: content.ambience.pedestrians,
+        cars: content.ambience.cars,
         unownedLandWash: content.ambience.unownedLandWash,
         tileGrid: const TileGridContent(alpha: 55, colorRgb: [30, 101, 82]),
       ),

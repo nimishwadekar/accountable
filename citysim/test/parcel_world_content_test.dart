@@ -236,6 +236,7 @@ void main() {
       ambientTimeScale: content.ambience.ambientTimeScale,
       vegetationSway: content.ambience.vegetationSway,
       pedestrians: content.ambience.pedestrians,
+      cars: content.ambience.cars,
       unownedLandWash: content.ambience.unownedLandWash,
       tileGrid: const TileGridContent(alpha: 300, colorRgb: [30, 101, 82]),
     );
@@ -364,6 +365,22 @@ void main() {
     // Street life follows population: 20% of the live save's 51 is
     // the ten walkers the old road-based formula happened to show.
     expect(content.ambience.pedestrians.populationPercent, 20);
+    // Traffic follows population too: ten types, percents summing
+    // to one hundred, a sedan-heavy civilian mix, and colour
+    // variants rolled per trip.
+    expect(content.ambience.cars.populationPercent, 10);
+    expect(content.ambience.cars.minTripCells, 10);
+    expect(content.ambience.cars.types, hasLength(10));
+    expect(
+      content.ambience.cars.types.fold(0, (sum, type) => sum + type.percent),
+      100,
+    );
+    expect(
+      content.ambience.cars.types
+          .firstWhere((type) => type.id == 'sedan')
+          .variants,
+      const ['blue', 'white', 'red'],
+    );
   });
 
   test('negative cell coordinates map to the correct neighboring parcels', () {

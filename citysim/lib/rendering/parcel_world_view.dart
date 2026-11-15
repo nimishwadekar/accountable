@@ -13,6 +13,7 @@ import 'package:citysim/rendering/perf_probe.dart';
 import 'package:citysim/rendering/sprite_picking.dart';
 
 import '../content/content_bundle.dart';
+import '../world/car_traffic.dart';
 import '../world/coordinates.dart';
 import '../world/pedestrian_lattice.dart';
 import '../world/road_sprite_resolver.dart';
@@ -186,6 +187,9 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   double _pixelRatio = 1.0;
 
   final _PedestrianSim _pedestrians = _PedestrianSim();
+
+  /// Ambient car traffic — render-only, like the pedestrians.
+  final CarTrafficSim _traffic = CarTrafficSim();
 
   /// Hovered cell for desktop live previews (touch never hovers).
   CellCoord? _hoverCell;
@@ -396,6 +400,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   parcelMode: widget.parcelMode,
                   showTileGrid: widget.showTileGrid,
                   pedestrians: _pedestrians,
+                  traffic: _traffic,
                 ),
               ),
             ),
@@ -598,6 +603,15 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
           for (final frame in [1, 2, 3, 4])
             'assets/characters/'
                 'char_${character}_walk_${direction}_f0$frame.png',
+      // Ambient vehicles follow the same doctrine: render-only art,
+      // no manifest roles.
+      for (final type in content.ambience.cars.types)
+        for (final variant in <String?>[
+          ...type.variants,
+          if (type.variants.isEmpty) null,
+        ])
+          for (final direction in ['NE', 'NW', 'SE', 'SW'])
+            carAssetPath(type.id, variant, direction),
     };
 
     if (retryFailed) {
@@ -1241,6 +1255,7 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.parcelMode,
     required this.showTileGrid,
     required this.pedestrians,
+    required this.traffic,
   }) : super(repaint: ambient);
 
   final ParcelWorldState state;
@@ -1305,6 +1320,9 @@ class _ParcelWorldPainter extends CustomPainter {
   /// Whether the faint tile grid draws — every mode except inspect.
   final bool showTileGrid;
   final _PedestrianSim pedestrians;
+
+  /// Ambient car traffic — render-only, like the pedestrians.
+  final CarTrafficSim traffic;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2198,6 +2216,12 @@ class _ParcelWorldPainter extends CustomPainter {
       (role) => content.sprite(role)?.walkable ?? const [],
       deckLift: content.sprite('bridge.body.se')?.surfaceLift ?? 0,
     );
+    traffic.update(
+      seconds,
+      state,
+      content.ambience.cars,
+      deckLift: content.sprite('bridge.body.se')?.surfaceLift ?? 0,
+    );
     // The selection x-ray: the picked object's wash rides its own
     // draw at its own depth, and anything standing in front of it
     // draws translucent, so the selection shows through its
@@ -2315,6 +2339,9 @@ class _ParcelWorldPainter extends CustomPainter {
         pedestrian.depth(pedestrians.lattice),
         () => _drawPedestrian(canvas, size, pedestrian, seconds),
       ));
+    }
+    for (final car in traffic.actors) {
+      actors.add((traffic.sortDepth(car), () => _drawCar(canvas, size, car)));
     }
     actors.sort((a, b) => a.$1.compareTo(b.$1));
     for (final actor in actors) {
@@ -2639,6 +2666,98 @@ class _ParcelWorldPainter extends CustomPainter {
       ),
       Paint()..filterQuality = FilterQuality.medium,
     );
+  }
+
+  /// Lane keeping: how far a driving car sits from its heading's
+  /// centre line, in world px on the right-hand side, and how far a
+  /// dwelling car pulls toward its building, as a fraction of a
+  /// grid step. Curbs blend into lanes over the first and last
+  /// stretch of a trip, so cars pull out and in instead of jumping.
+  static const double _carLaneOffsetWorldPx = 10;
+  static const double _carCurbPull = 0.3;
+  static const double _carCurbBlendCells = 1.5;
+
+  void _drawCar(Canvas canvas, Size size, CarActor car) {
+    final world = _carWorldPosition(car);
+    final screen = _worldToScreen(world, size, scale, offset);
+    if (screen.dx < -80 ||
+        screen.dx > size.width + 80 ||
+        screen.dy < -90 ||
+        screen.dy > size.height + 90) {
+      return;
+    }
+    final compass = carCompassForHeading(car.headingDx, car.headingDy);
+    final image = images[carAssetPath(car.type, car.variant, compass)];
+    if (image == null) return;
+    ParcelWorldProbe.countActor();
+    final unit = 0.5 * scale * content.ambience.cars.spriteScale;
+    final width = image.width * unit;
+    final height = image.height * unit;
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+      Rect.fromLTWH(
+        screen.dx - width / 2,
+        screen.dy + 2 * scale - height,
+        width,
+        height,
+      ),
+      Paint()..filterQuality = FilterQuality.medium,
+    );
+  }
+
+  /// A car's world position: its continuous grid position projected
+  /// to world space, lifted onto bridges, and offset to its lane or
+  /// curb.
+  Offset _carWorldPosition(CarActor car) {
+    final base = Offset(
+      (car.gridColumn - car.gridRow) * (_logicalTileWidth / 2),
+      (car.gridColumn + car.gridRow) * (_logicalTileHeight / 2),
+    );
+    final cell = CellCoord(car.gridColumn.floor(), car.gridRow.floor());
+    final lift = traffic.surfaceLift(
+      cell,
+      car.gridColumn - cell.column - 0.5,
+      car.gridRow - cell.row - 0.5,
+    );
+    return base + _carHeadingOffset(car) + Offset(0, -lift);
+  }
+
+  /// Where a car sits across the road: dwelling cars park at their
+  /// building's curb; driving cars keep right, blending out of the
+  /// start curb and into the end curb over the first and last
+  /// stretch of the trip.
+  Offset _carHeadingOffset(CarActor car) {
+    final atStart = car.distanceCells < car.tripCells / 2;
+    final curb =
+        _gridDeltaWorld(atStart ? car.startCurb : car.endCurb) * _carCurbPull;
+    if (car.dwelling) return curb;
+    final lane = _carLaneOffset(car.headingDx, car.headingDy);
+    if (car.distanceCells < _carCurbBlendCells) {
+      return Offset.lerp(curb, lane, car.distanceCells / _carCurbBlendCells)!;
+    }
+    final remaining = car.tripCells - car.distanceCells;
+    if (remaining < _carCurbBlendCells) {
+      return Offset.lerp(curb, lane, remaining / _carCurbBlendCells)!;
+    }
+    return lane;
+  }
+
+  /// A unit grid step's world vector.
+  Offset _gridDeltaWorld((int, int) delta) => Offset(
+    (delta.$1 - delta.$2) * (_logicalTileWidth / 2),
+    (delta.$1 + delta.$2) * (_logicalTileHeight / 2),
+  );
+
+  /// The right-hand side of a heading, in world px — the
+  /// screen-space perpendicular, so opposing cars pass each other
+  /// like traffic instead of overlapping.
+  Offset _carLaneOffset(int dx, int dy) {
+    final heading = _gridDeltaWorld((dx, dy));
+    final length = heading.distance;
+    if (length == 0) return Offset.zero;
+    return Offset(-heading.dy / length, heading.dx / length) *
+        _carLaneOffsetWorldPx;
   }
 
   _CellBounds _visibleCellBounds(Size size, double cameraScale, Offset pan) {

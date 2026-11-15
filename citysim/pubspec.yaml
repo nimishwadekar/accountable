@@ -28,6 +28,7 @@ flutter:
     - assets/content/
     - assets/test_sheets/
     - assets/characters/
+    - assets/vehicles/
     - assets/sprites/buildings/apartments/
     - assets/sprites/buildings/civic/
     - assets/sprites/buildings/commerce/

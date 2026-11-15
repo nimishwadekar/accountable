@@ -27,6 +27,7 @@ class _AmbiencePageState extends State<AmbiencePage> {
     final ambience = ambienceMap(widget.categories);
     final sway = subMap(ambience, 'vegetationSway');
     final pedestrians = subMap(ambience, 'pedestrians');
+    final cars = subMap(ambience, 'cars');
     final wash = subMap(ambience, 'unownedLandWash');
     final tileGrid = subMap(ambience, 'tileGrid');
 
@@ -186,6 +187,156 @@ class _AmbiencePageState extends State<AmbiencePage> {
               'People wander connected roads using the pack\'s walk '
               'cycles; density scales with population, and walkers '
               'appear at building doorsteps.',
+        ),
+        _section(
+          'Ambient cars',
+          [
+            SizedBox(
+              width: 200,
+              child: IntField(
+                label: '% of population',
+                value: asInt(cars['populationPercent'], 10),
+                min: 0,
+                help:
+                    'Traffic as a percentage of the population, floored '
+                    'at one car once anyone lives there. 0 turns cars '
+                    'off.',
+                onChanged: (v) =>
+                    _edit((a) => (a['cars'] as Map)['populationPercent'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 240,
+              child: DoubleSlider(
+                label: 'Min speed (cells/s)',
+                value: asDouble(cars['speedMin'], 0.9),
+                min: 0.1,
+                max: 3,
+                divisions: 29,
+                help:
+                    'Slowest driving speed, in grid cells per second. '
+                    'One cell/s is 12 m/s at the 12 m tile — honest '
+                    'in-town pace.',
+                onChanged: (v) =>
+                    _edit((a) => (a['cars'] as Map)['speedMin'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 240,
+              child: DoubleSlider(
+                label: 'Speed range',
+                value: asDouble(cars['speedRange'], 0.3),
+                min: 0,
+                max: 1.5,
+                divisions: 15,
+                help: 'Random extra speed on top of the minimum.',
+                onChanged: (v) =>
+                    _edit((a) => (a['cars'] as Map)['speedRange'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 240,
+              child: DoubleSlider(
+                label: 'Sprite scale',
+                value: asDouble(cars['spriteScale'], 0.9),
+                min: 0.2,
+                max: 3,
+                divisions: 28,
+                help: 'Size multiplier of vehicle art relative to a tile.',
+                onChanged: (v) =>
+                    _edit((a) => (a['cars'] as Map)['spriteScale'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 240,
+              child: DoubleSlider(
+                label: 'Curb dwell (s)',
+                value: asDouble(cars['dwellSeconds'], 2.5),
+                min: 0.5,
+                max: 10,
+                divisions: 19,
+                help:
+                    'How long a car sits at each curb — loading up on '
+                    'departure, parked on arrival.',
+                onChanged: (v) =>
+                    _edit((a) => (a['cars'] as Map)['dwellSeconds'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 240,
+              child: DoubleSlider(
+                label: 'Respawn delay (s)',
+                value: asDouble(cars['respawnDelaySeconds'], 4),
+                min: 0,
+                max: 15,
+                divisions: 15,
+                help:
+                    'Pause between a slot\'s trips, jittered so slots '
+                    'desynchronize.',
+                onChanged: (v) =>
+                    _edit((a) => (a['cars'] as Map)['respawnDelaySeconds'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 200,
+              child: IntField(
+                label: 'Min trip (cells)',
+                value: asInt(cars['minTripCells'], 10),
+                min: 0,
+                max: 50,
+                help:
+                    'A trip\'s minimum length in road cells. The trip '
+                    'planner\'s distance map filters nearer ends, so no '
+                    'rerolls are needed — and young towns stay '
+                    'foot-traffic-only until buildings sit this far '
+                    'apart.',
+                onChanged: (v) =>
+                    _edit((a) => (a['cars'] as Map)['minTripCells'] = v),
+              ),
+            ),
+            for (final entry in ((cars['types'] as Map?) ?? const {}).entries)
+              SizedBox(
+                width: 150,
+                child: IntField(
+                  label: '${entry.key} %',
+                  value: asInt((entry.value as Map)['percent'], 0),
+                  min: 0,
+                  max: 100,
+                  help:
+                      'This vehicle type\'s share of traffic. All type '
+                      'percents must sum to 100.',
+                  onChanged: (v) => _edit(
+                    (a) =>
+                        (((a['cars'] as Map)['types'] as Map)[entry.key]
+                                as Map)['percent'] =
+                            v,
+                  ),
+                ),
+              ),
+            Builder(
+              builder: (context) {
+                final total = [
+                  for (final value
+                      in ((cars['types'] as Map?) ?? const {}).values)
+                    asInt((value as Map)['percent']),
+                ].fold(0, (sum, value) => sum + value);
+                return Text(
+                  'Type mix total: $total% '
+                  '${total == 100 ? '— balanced' : '— must sum to 100'}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: total == 100 ? const Color(0xFF1E6552) : Colors.red,
+                  ),
+                );
+              },
+            ),
+          ],
+          description:
+              'Cars run errands between buildings: one slot per '
+              'population share, each spawning at a start building\'s '
+              'curb, driving a planned path to an end building at '
+              'least the minimum trip away, parking, and leaving. '
+              'Vehicle types mix by percent; colours roll per trip.',
         ),
         _section(
           'Unowned-land wash',

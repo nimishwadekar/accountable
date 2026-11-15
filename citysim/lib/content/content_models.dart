@@ -773,6 +773,119 @@ class PedestrianContent {
       );
 }
 
+/// One vehicle item type in the traffic mix — an art family, the
+/// way a catalogue model is one building family.
+class CarTypeContent {
+  const CarTypeContent({
+    required this.id,
+    required this.percent,
+    this.variants = const [],
+  });
+
+  /// The type's id; sprites resolve as `veh_<id>_<variant>_<dir>`
+  /// or `veh_<id>_<dir>` when the type has no colour variants.
+  final String id;
+
+  /// This type's share of traffic. All types sum to one hundred,
+  /// validated.
+  final int percent;
+
+  /// Colour variants under the type, like a model's asset roles —
+  /// one is rolled per car and held for the trip's life. Empty for
+  /// single-colour types.
+  final List<String> variants;
+
+  Map<String, Object?> toJson() => {
+    'percent': percent,
+    if (variants.isNotEmpty) 'variants': variants,
+  };
+
+  static CarTypeContent fromJson(String id, Map<String, Object?> json) =>
+      CarTypeContent(
+        id: id,
+        percent: json['percent']! as int,
+        variants: [
+          for (final value in (json['variants'] as List?) ?? const [])
+            value as String,
+        ],
+      );
+}
+
+/// Ambient car traffic: population-scaled slots running errands
+/// between buildings, tuned like the pedestrians.
+class CarContent {
+  const CarContent({
+    required this.populationPercent,
+    required this.speedMin,
+    required this.speedRange,
+    required this.spriteScale,
+    required this.dwellSeconds,
+    required this.respawnDelaySeconds,
+    required this.minTripCells,
+    required this.types,
+  });
+
+  /// Traffic as a percentage of the town's population, floored at
+  /// one car once anyone lives there. Zero turns cars off — and an
+  /// absent `cars` section reads as zero, so pre-car content loads.
+  final int populationPercent;
+
+  /// Driving speed in grid cells per second. One cell/s is 12 m/s
+  /// at the 12 m tile — honest in-town pace.
+  final double speedMin;
+
+  /// Random extra speed on top of the minimum, so cars overtake.
+  final double speedRange;
+
+  /// Draw size multiplier relative to the standard tile unit.
+  final double spriteScale;
+
+  /// How long a car sits at each curb — loading up on departure,
+  /// parked on arrival.
+  final double dwellSeconds;
+
+  /// Pause between a slot's trips, jittered in the sim so slots
+  /// desynchronize.
+  final double respawnDelaySeconds;
+
+  /// A trip's minimum length in road cells: the planner's BFS
+  /// distance map filters ends nearer than this, so degenerate
+  /// trips need no rerolls.
+  final int minTripCells;
+
+  /// The traffic mix: item types with authored percents (summing
+  /// to one hundred) and colour variants.
+  final List<CarTypeContent> types;
+
+  Map<String, Object?> toJson() => {
+    'populationPercent': populationPercent,
+    'speedMin': speedMin,
+    'speedRange': speedRange,
+    'spriteScale': spriteScale,
+    'dwellSeconds': dwellSeconds,
+    'respawnDelaySeconds': respawnDelaySeconds,
+    'minTripCells': minTripCells,
+    'types': {for (final type in types) type.id: type.toJson()},
+  };
+
+  static CarContent fromJson(Map<String, Object?> json) => CarContent(
+    populationPercent: (json['populationPercent'] as int?) ?? 0,
+    speedMin: (json['speedMin'] as num?)?.toDouble() ?? 0.9,
+    speedRange: (json['speedRange'] as num?)?.toDouble() ?? 0.3,
+    spriteScale: (json['spriteScale'] as num?)?.toDouble() ?? 0.9,
+    dwellSeconds: (json['dwellSeconds'] as num?)?.toDouble() ?? 2.5,
+    respawnDelaySeconds: (json['respawnDelaySeconds'] as num?)?.toDouble() ?? 4,
+    minTripCells: (json['minTripCells'] as int?) ?? 10,
+    types: [
+      for (final entry in ((json['types'] as Map?) ?? const {}).entries)
+        CarTypeContent.fromJson(
+          entry.key as String,
+          (entry.value as Map).cast<String, Object?>(),
+        ),
+    ],
+  );
+}
+
 class UnownedLandWashContent {
   const UnownedLandWashContent({required this.alpha, required this.colorRgb});
 
@@ -825,6 +938,7 @@ class AmbienceContent {
     required this.ambientTimeScale,
     required this.vegetationSway,
     required this.pedestrians,
+    required this.cars,
     required this.unownedLandWash,
     required this.tileGrid,
   });
@@ -832,6 +946,7 @@ class AmbienceContent {
   final double ambientTimeScale;
   final VegetationSwayContent vegetationSway;
   final PedestrianContent pedestrians;
+  final CarContent cars;
   final UnownedLandWashContent unownedLandWash;
   final TileGridContent tileGrid;
 
@@ -839,6 +954,7 @@ class AmbienceContent {
     'ambientTimeScale': ambientTimeScale,
     'vegetationSway': vegetationSway.toJson(),
     'pedestrians': pedestrians.toJson(),
+    'cars': cars.toJson(),
     'unownedLandWash': unownedLandWash.toJson(),
     'tileGrid': tileGrid.toJson(),
   };
@@ -850,6 +966,9 @@ class AmbienceContent {
     ),
     pedestrians: PedestrianContent.fromJson(
       json['pedestrians']! as Map<String, Object?>,
+    ),
+    cars: CarContent.fromJson(
+      (json['cars'] as Map?)?.cast<String, Object?>() ?? const {},
     ),
     unownedLandWash: UnownedLandWashContent.fromJson(
       json['unownedLandWash']! as Map<String, Object?>,
@@ -1375,6 +1494,24 @@ List<ContentIssue> validateContentData({
       ambience.pedestrians.speedRange < 0 ||
       ambience.pedestrians.populationPercent < 0) {
     error('Pedestrian ambience values are out of range.');
+  }
+  final cars = ambience.cars;
+  if (cars.populationPercent < 0 ||
+      cars.speedMin <= 0 ||
+      cars.speedRange < 0 ||
+      cars.spriteScale <= 0 ||
+      cars.dwellSeconds < 0 ||
+      cars.respawnDelaySeconds < 0 ||
+      cars.minTripCells < 0) {
+    error('Car ambience values are out of range.');
+  }
+  if (cars.types.isEmpty) {
+    if (cars.populationPercent > 0) {
+      error('Car traffic needs at least one vehicle type.');
+    }
+  } else if (cars.types.any((type) => type.percent < 0) ||
+      cars.types.fold(0, (sum, type) => sum + type.percent) != 100) {
+    error('Car type percents must be non-negative and sum to 100.');
   }
   return issues;
 }
