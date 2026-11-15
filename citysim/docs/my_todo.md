@@ -4,11 +4,11 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 
 - Demolition.
 - fix progression unlocks.
-- terrain elevation and slops and cliffs and a general way to model elevation gradients in tiles for stuff.
 - composite sprite editor: create new sprite from existing sprites. Multi-tile roads as composites of single-tile roads.
 - Scatter lots of greenery around to make it an uninhabited lush jungle
 - sheets and accountable integration.
 
+- terrain elevation and slops and cliffs and their sprites.
 - region borders: parcel granularity. Parcels can group together under a "settlement", later could be states. Local economy and coin banks stay local to a settlement unless explicitly transferred.
 - decide how people move into the place. progression is starting multiple cities without connecting them initially. Figure out how.
 - Rewarding unlocks for connecting two towns via roads, since that's a big milestone.
