@@ -228,11 +228,13 @@ class SpritePlotPreview extends StatefulWidget {
   const SpritePlotPreview({
     required this.categories,
     required this.role,
-    this.width = 300,
+    this.width = 600,
     this.roadSide,
     this.onRoadSideChanged,
     this.walkableRows,
-    this.onToggleWalkable,
+    this.laneRows,
+    this.activeLane,
+    this.onPaintSubtile,
     super.key,
   });
 
@@ -249,11 +251,26 @@ class SpritePlotPreview extends StatefulWidget {
   final void Function(String side)? onRoadSideChanged;
 
   /// The road tile's walkable lattice — eight row bytes from the raw
-  /// sprite map — and the tap callback that paints it. Provided
-  /// together, the preview draws the 8×8 sidewalk lattice over the
-  /// tile and taps toggle subtiles; the page commits the edit.
+  /// sprite map — drawn green over the tile. The lane lattice draws
+  /// with it, colour-coded by direction; taps paint whichever the
+  /// host page routes through [onPaintSubtile].
   final List<int>? walkableRows;
-  final void Function(int x, int y)? onToggleWalkable;
+
+  /// The road tile's lane masks, keyed by `direction-lane` — drawn
+  /// over the tile, each direction in its own colour with a travel
+  /// chevron. A subtile in several directions is a crossing.
+  final Map<String, List<int>>? laneRows;
+
+  /// The lane key currently being painted (`direction-lane`, e.g.
+  /// `east-2`): that lane renders at full strength while sibling
+  /// lanes of the same direction fade. Null when the sidewalk brush
+  /// is selected.
+  final String? activeLane;
+
+  /// Tap callback while painting is active. The page owns the
+  /// selected brush — sidewalk or one lane — and commits the edit;
+  /// the preview only locates the subtile.
+  final void Function(int x, int y)? onPaintSubtile;
 
   /// Preview width in logical pixels; the height follows the content.
   final double width;
@@ -572,19 +589,21 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
     }
     bounds = bounds.inflate(6);
 
+    // The height follows the content's aspect, capped in proportion
+    // to the width so wide plots never grow a letterbox.
     final height = (widget.width * bounds.height / bounds.width).clamp(
       70.0,
-      240.0,
+      widget.width * 0.8,
     );
     // The painter's fit transform, mirrored for tap hit-testing.
-    final editingWalkable = widget.onToggleWalkable != null;
+    final painting = widget.onPaintSubtile != null;
     final fit = math.min(widget.width / bounds.width, height / bounds.height);
     // Bridge tiles paint their lattice on the elevated surface, so
     // the overlay — and the taps that paint it — ride the same lift
     // the game gives people standing there.
-    final overlayLift = editingWalkable ? _walkableOverlayLift(meta) : null;
+    final overlayLift = painting ? _walkableOverlayLift(meta) : null;
     void toggleAt(Offset local) {
-      final callback = widget.onToggleWalkable;
+      final callback = widget.onPaintSubtile;
       if (callback == null) return;
       final translate = Offset(
         (widget.width - bounds.width * fit) / 2 - bounds.left * fit,
@@ -655,7 +674,7 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
           ),
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTapUp: editingWalkable
+          onTapUp: painting
               ? (details) => toggleAt(details.localPosition)
               : null,
           child: CustomPaint(
@@ -673,9 +692,9 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
               roadColumnAxisImage: _roadColumnAxisImage,
               roadRowAxisImage: _roadRowAxisImage,
               roadSide: _roadSide,
-              walkableRows: editingWalkable
-                  ? widget.walkableRows ?? const []
-                  : null,
+              walkableRows: painting ? widget.walkableRows ?? const [] : null,
+              laneRows: painting ? widget.laneRows : null,
+              activeLane: widget.activeLane,
               overlayLift: overlayLift,
             ),
           ),
@@ -685,10 +704,10 @@ class _SpritePlotPreviewState extends State<SpritePlotPreview> {
               ? '8×8 lattice · subtile '
                     '(${_propSubtileChoices[_propSubtileIndex].$2},'
                     '${_propSubtileChoices[_propSubtileIndex].$3})'
-              : editingWalkable
+              : painting
               ? 'sidewalk lattice · '
                     '${_walkableCount(widget.walkableRows)}/64 walkable · '
-                    'tap to paint'
+                    'lanes ${_laneCount(widget.laneRows)}/64 · tap to paint'
               : '$plotColumns×$plotRows plot'
                     '${tileStyle ? ' · drawn tile-fit' : ''}'
                     '${turned ? ' · turned to the street' : ''}',
@@ -718,6 +737,8 @@ class _SpritePlotPainter extends CustomPainter {
     required this.roadRowAxisImage,
     required this.roadSide,
     this.walkableRows,
+    this.laneRows,
+    this.activeLane,
     this.overlayLift,
   });
 
@@ -740,6 +761,15 @@ class _SpritePlotPainter extends CustomPainter {
   /// The road tile's walkable row bytes; non-null draws the paintable
   /// sidewalk lattice over the centre tile.
   final List<int>? walkableRows;
+
+  /// The road tile's lane masks, keyed `direction-lane`; non-null
+  /// draws the driving lattice over the centre tile, each direction
+  /// in its own colour with a travel chevron.
+  final Map<String, List<int>>? laneRows;
+
+  /// The lane key being painted, for emphasis over sibling lanes of
+  /// the same direction.
+  final String? activeLane;
 
   /// Corner lifts for the walkable overlay on elevated tiles (bridge
   /// ramps and decks); null keeps the lattice flat on the ground.
@@ -853,11 +883,13 @@ class _SpritePlotPainter extends CustomPainter {
       );
     }
 
-    // The road tile's paintable sidewalk lattice, over the art so the
-    // green cells read as painted-on walkability. The centre tile is
-    // the tile-style plot; the grid is the props' 8×8 geometry.
+    // The road tile's paintable lattices, over the art so the green
+    // cells read as painted-on walkability and the coloured ones as
+    // lanes. The centre tile is the tile-style plot; the grid is the
+    // props' 8×8 geometry.
     final walkRows = walkableRows;
-    if (walkRows != null) {
+    final laneMap = laneRows;
+    if (walkRows != null || laneMap != null) {
       // Subtile quads with corner lifts: flat road tiles draw the
       // usual diamonds; bridge ramps and decks shear the grid onto
       // the elevated surface so paint lands where the art is.
@@ -893,12 +925,77 @@ class _SpritePlotPainter extends CustomPainter {
             ..lineTo(corners[3].dx, corners[3].dy)
             ..close();
           final walkable =
-              y < walkRows.length && (walkRows[y].clamp(0, 255) >> x & 1) == 1;
+              walkRows != null &&
+              y < walkRows.length &&
+              (walkRows[y].clamp(0, 255) >> x & 1) == 1;
           if (walkable) {
             canvas.drawPath(cell, fill);
             canvas.drawPath(cell, edge);
-          } else {
+          }
+          // Lanes paint in their direction's colour — north blue,
+          // east amber, south violet, west rose — with a chevron
+          // tally showing direction and lane number at once: one
+          // chevron per lane, pointing the way its traffic moves.
+          // Sibling lanes of the direction being painted fade so
+          // its extent reads clearly; a subtile in several
+          // directions — or several lanes of one — is a crossing
+          // and carries a dot instead.
+          final paintedKeys = <String>[];
+          if (laneMap != null) {
+            for (final entry in laneMap.entries) {
+              final mask = entry.value;
+              if (mask.length != 8 || (mask[y].clamp(0, 255) >> x & 1) != 1) {
+                continue;
+              }
+              paintedKeys.add(entry.key);
+              final direction = entry.key.split('-').first;
+              final (laneFill, laneEdge, laneFaint) =
+                  laneOverlayColors[direction]!;
+              var fill = laneFill;
+              final active = activeLane;
+              if (active != null &&
+                  active != entry.key &&
+                  active.split('-').first == direction) {
+                fill = laneFaint;
+              }
+              canvas.drawPath(cell, Paint()..color = fill);
+              canvas.drawPath(
+                cell,
+                Paint()
+                  ..color = laneEdge
+                  ..strokeWidth = 1 / math.max(fit, 0.25)
+                  ..style = PaintingStyle.stroke,
+              );
+            }
+          }
+          final paintedDirections = {
+            for (final key in paintedKeys) key.split('-').first,
+          };
+          if (!walkable && paintedDirections.isEmpty) {
             canvas.drawPath(cell, faint);
+          }
+          if (paintedKeys.isNotEmpty) {
+            final centre = Offset(
+              (corners[0].dx + corners[2].dx) / 2,
+              (corners[0].dy + corners[2].dy) / 2,
+            );
+            if (paintedKeys.length == 1) {
+              final key = paintedKeys.single;
+              _drawLaneChevron(
+                canvas,
+                centre,
+                corners,
+                key.split('-').first,
+                int.tryParse(key.split('-')[1]) ?? 1,
+                fit,
+              );
+            } else {
+              canvas.drawCircle(
+                centre,
+                (corners[1] - corners[3]).distance * 0.09,
+                Paint()..color = const Color(0xE6FFFFFF),
+              );
+            }
           }
         }
       }
@@ -921,8 +1018,69 @@ class _SpritePlotPainter extends CustomPainter {
       oldDelegate.roadRowAxisImage != roadRowAxisImage ||
       oldDelegate.roadSide != roadSide ||
       oldDelegate.walkableRows != walkableRows ||
+      oldDelegate.laneRows != laneRows ||
+      oldDelegate.activeLane != activeLane ||
       oldDelegate.overlayLift != overlayLift;
+
+  /// A chevron tally in a lane subtile: [count] strokes — the lane
+  /// number — stacked along the direction of travel, on the iso
+  /// compass (north is screen up-right, east down-right, south
+  /// down-left, west up-left). One glyph carries both direction
+  /// and lane identity.
+  void _drawLaneChevron(
+    Canvas canvas,
+    Offset centre,
+    List<Offset> corners,
+    String direction,
+    int count,
+    double fit,
+  ) {
+    // The quad's east and south corners from its centre give the
+    // iso screen axes; a grid heading maps onto them.
+    final east = corners[1] - centre;
+    final south = corners[2] - centre;
+    final (dx, dy) = switch (direction) {
+      'north' => (0, -1),
+      'east' => (1, 0),
+      'south' => (0, 1),
+      _ => (-1, 0),
+    };
+    var heading = Offset(
+      (dx - dy) * east.dx + (dx + dy) * south.dx,
+      (dx - dy) * east.dy + (dx + dy) * south.dy,
+    );
+    final length = heading.distance;
+    if (length == 0) return;
+    heading /= length;
+    final across = Offset(-heading.dy, heading.dx);
+    final chevrons = count.clamp(1, 4);
+    // A lone chevron spans the subtile; a tally packs its strokes
+    // along the heading with room between them.
+    final reach = length * (chevrons == 1 ? 0.5 : 0.26);
+    final spacing = length * 0.28;
+    final halfSpan = (chevrons - 1) / 2 * spacing;
+    final paint = Paint()
+      ..color = const Color(0xE6FFFFFF)
+      ..strokeWidth = 1.2 / math.max(fit, 0.25)
+      ..strokeCap = StrokeCap.round;
+    for (var k = 0; k < chevrons; k++) {
+      final origin = centre + heading * (k * spacing - halfSpan);
+      final tip = origin + heading * reach;
+      final back = origin - heading * reach * 0.6;
+      canvas.drawLine(back + across * reach * 0.55, tip, paint);
+      canvas.drawLine(back - across * reach * 0.55, tip, paint);
+    }
+  }
 }
+
+/// Lane overlay colours by direction of travel: fill, edge, and the
+/// faint fill sibling lanes take while one of them is painted.
+const laneOverlayColors = {
+  'north': (Color(0x803E7BC8), Color(0xFF2E5FA8), Color(0x263E7BC8)),
+  'east': (Color(0x80C89A3E), Color(0xFFA87A20), Color(0x26C89A3E)),
+  'south': (Color(0x809A5BC8), Color(0xFF7A3FA8), Color(0x269A5BC8)),
+  'west': (Color(0x80C85B7A), Color(0xFFA83A5A), Color(0x26C85B7A)),
+};
 
 /// Walkable subtile count of a road tile's row bytes, for the paint
 /// caption.
@@ -930,6 +1088,23 @@ int _walkableCount(List<int>? rows) {
   var count = 0;
   for (final row in rows ?? const <int>[]) {
     for (var bits = row.clamp(0, 255); bits != 0; bits &= bits - 1) {
+      count++;
+    }
+  }
+  return count;
+}
+
+/// Lane subtile count of a role's lane masks — the union across
+/// directions, so a crossing counts once — for the paint caption.
+int _laneCount(Map<String, List<int>>? lanes) {
+  if (lanes == null) return 0;
+  var count = 0;
+  for (var y = 0; y < 8; y++) {
+    var row = 0;
+    for (final mask in lanes.values) {
+      if (mask.length == 8) row |= mask[y].clamp(0, 255).toInt();
+    }
+    for (var bits = row; bits != 0; bits &= bits - 1) {
       count++;
     }
   }

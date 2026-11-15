@@ -326,7 +326,7 @@ void main() {
             categories: categories,
             role: 'road.straight.se',
             walkableRows: const [255, 0, 0, 0, 0, 0, 0, 0],
-            onToggleWalkable: (x, y) => toggles.add((x, y)),
+            onPaintSubtile: (x, y) => toggles.add((x, y)),
           ),
         ),
       ),
@@ -335,16 +335,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(
-      find.text('sidewalk lattice · 8/64 walkable · tap to paint'),
+      find.text('sidewalk lattice · 8/64 walkable · lanes 0/64 · tap to paint'),
       findsOneWidget,
     );
 
     // The preview's fit transform, mirrored to aim taps at subtile
     // centres: a 1×1 tile plot (diamond 64×32) inflated by 6 on every
     // side, laid out to the preview's fixed width of 300.
-    const width = 300.0;
+    const width = 600.0;
     final bounds = const Rect.fromLTRB(-38, -22, 38, 22);
-    final height = (width * bounds.height / bounds.width).clamp(70.0, 240.0);
+    final height = (width * bounds.height / bounds.width).clamp(
+      70.0,
+      width * 0.8,
+    );
     final fit = math.min(width / bounds.width, height / bounds.height);
     final translate = Offset(
       (width - bounds.width * fit) / 2 - bounds.left * fit,
@@ -400,7 +403,7 @@ void main() {
             categories: categories,
             role: 'bridge.ramp.nw',
             walkableRows: const [255, 0, 0, 0, 0, 0, 0, 0],
-            onToggleWalkable: (x, y) => toggles.add((x, y)),
+            onPaintSubtile: (x, y) => toggles.add((x, y)),
           ),
         ),
       ),
@@ -410,9 +413,12 @@ void main() {
     expect(tester.takeException(), isNull);
 
     // The preview's fit transform for the missing-art 1×1 tile plot.
-    const width = 300.0;
+    const width = 600.0;
     final bounds = const Rect.fromLTRB(-38, -22, 38, 22);
-    final height = (width * bounds.height / bounds.width).clamp(70.0, 240.0);
+    final height = (width * bounds.height / bounds.width).clamp(
+      70.0,
+      width * 0.8,
+    );
     final fit = math.min(width / bounds.width, height / bounds.height);
     final translate = Offset(
       (width - bounds.width * fit) / 2 - bounds.left * fit,

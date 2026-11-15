@@ -10,6 +10,7 @@ import 'pages/catalogue_page.dart';
 import 'pages/economy_page.dart';
 import 'pages/overview_page.dart';
 import 'pages/sprites_page.dart';
+import 'pages/vehicles_page.dart';
 
 /// The content editor dashboard shell: sidebar navigation over the
 /// category editors, a shared save/validate bar, and unsaved-change
@@ -353,6 +354,14 @@ class _EditorShellState extends State<EditorShell> {
           onChanged: _mutate,
         ),
       ),
+      (
+        'Vehicles',
+        VehiclesPage(
+          key: ValueKey('vehicles-$_rebuildToken'),
+          categories: _categories,
+          onChanged: _mutate,
+        ),
+      ),
     ];
 
     return Scaffold(
@@ -392,6 +401,11 @@ class _EditorShellState extends State<EditorShell> {
                 icon: Icon(Icons.air_outlined),
                 selectedIcon: Icon(Icons.air_rounded),
                 label: Text('Ambience'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.directions_car_outlined),
+                selectedIcon: Icon(Icons.directions_car_rounded),
+                label: Text('Vehicles'),
               ),
             ],
           ),

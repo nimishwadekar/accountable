@@ -4,6 +4,9 @@ import 'package:citysim/content/content_models.dart'
     show CarContent, CarTypeContent, RoadStyle, StructureKind;
 import 'package:citysim/world/car_traffic.dart';
 import 'package:citysim/world/coordinates.dart';
+import 'package:citysim/world/pedestrian_lattice.dart'
+    show LatticeSpot, pedestrianBridgeRoles, pedestrianRoadCells;
+import 'package:citysim/world/vehicle_lattice.dart';
 import 'package:citysim/world/world_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -84,22 +87,53 @@ const carContent = CarContent(
   ],
 );
 
+/// Two-lane paint: an eastbound band on rows 4-5 (right-hand
+/// traffic) and a westbound band on rows 2-3, on every role —
+/// straights, end caps, ramps, and decks alike.
+Map<String, List<int>> twoLanePaint(String role) => {
+  'east-1': [for (var y = 0; y < 8; y++) y == 4 || y == 5 ? 255 : 0],
+  'west-1': [for (var y = 0; y < 8; y++) y == 2 || y == 3 ? 255 : 0],
+};
+
+/// The lane lattice a town's roads carry under the test paint.
+VehicleLattice latticeFor(ParcelWorldState state, {double deckLift = 0}) =>
+    VehicleLattice(
+      roadCells: pedestrianRoadCells(state),
+      connectionCells: {
+        for (final road in state.roads) road.cell,
+        for (final bridge in state.bridges) ...bridge.waterCells,
+      },
+      lanesFor: twoLanePaint,
+      bridgeRoles: pedestrianBridgeRoles(state),
+      deckLift: deckLift,
+    );
+
 /// A long east-west road with a home at the west end and a shop at
 /// the east end — twenty road cells apart.
-(ParcelWorldState, CellCoord, CellCoord) errandTown({int population = 10}) {
-  final roads = [
-    for (var column = 0; column <= 20; column++) roadAt('r$column', column, 0),
-  ];
+(ParcelWorldState, VehicleLattice, CellCoord, CellCoord) errandTown({
+  int population = 10,
+}) {
   final state = carState(
-    roads: roads,
+    roads: [
+      for (var column = 0; column <= 20; column++)
+        roadAt('r$column', column, 0),
+    ],
     structures: [
       building('home', 0, 1, population: 1),
       building('shop', 20, 1),
     ],
     population: population,
   );
-  return (state, const CellCoord(0, 0), const CellCoord(20, 0));
+  return (
+    state,
+    latticeFor(state),
+    const CellCoord(0, 0),
+    const CellCoord(20, 0),
+  );
 }
+
+int _subtileColumn(LatticeSpot spot) => spot.cell.column * 8 + spot.x;
+int _subtileRow(LatticeSpot spot) => spot.cell.row * 8 + spot.y;
 
 void main() {
   test('traffic scales with population, not roads', () {
@@ -119,51 +153,6 @@ void main() {
       types: [],
     );
     expect(carTargetCount(51, off), 0, reason: 'zero percent is off');
-  });
-
-  test('car graphs drive roads and bridge decks', () {
-    // An east-going bridge: approach, near bank, water, far bank,
-    // continuing road. Banks are road tiles and decks are water —
-    // cars drive both.
-    final state = carState(
-      roads: [
-        roadAt('approach', 0, 0),
-        roadAt('near-bank', 1, 0),
-        roadAt('far-bank', 3, 0),
-        roadAt('beyond', 4, 0),
-      ],
-      bridges: [
-        CompletedBridge(
-          id: 'bridge',
-          waterCells: const [CellCoord(2, 0)],
-          nearBank: const CellCoord(1, 0),
-          farBank: const CellCoord(3, 0),
-          pricePaid: 6,
-          completedAtDay: 0,
-        ),
-      ],
-    );
-    expect(carDrivableCells(state), {
-      const CellCoord(0, 0),
-      const CellCoord(1, 0),
-      const CellCoord(2, 0),
-      const CellCoord(3, 0),
-      const CellCoord(4, 0),
-    });
-  });
-
-  test('front cells border the building on the car graph', () {
-    final state = carState(
-      roads: [roadAt('a', 2, 0), roadAt('b', 3, 1), roadAt('c', 9, 9)],
-    );
-    final drivable = carDrivableCells(state);
-    // A corner lot fronts two sides.
-    expect(carFrontCells(building('corner', 2, 1), drivable), const [
-      CellCoord(2, 0),
-      CellCoord(3, 1),
-    ]);
-    // A building away from any road has no front.
-    expect(carFrontCells(building('lonely', 5, 5), drivable), isEmpty);
   });
 
   test('vehicle types roll by percent, colours by variant', () {
@@ -203,15 +192,26 @@ void main() {
   });
 
   test('trips need buildings a minimum of road apart', () {
-    // No buildings, no trips.
+    final (state, lattice, westFront, eastFront) = errandTown();
+
+    // No buildings, no trips — and no paint, none either.
+    final bareRoads = carState(
+      roads: [for (var c = 0; c <= 20; c++) roadAt('r$c', c, 0)],
+    );
     expect(
-      planCarTrip(
-        carState(roads: [for (var c = 0; c <= 20; c++) roadAt('r$c', c, 0)]),
-        carContent,
-        math.Random(1),
-      ),
+      planCarTrip(bareRoads, carContent, latticeFor(bareRoads), math.Random(1)),
       isNull,
       reason: 'a town without buildings hosts no errands',
+    );
+    final unpainted = VehicleLattice(
+      roadCells: pedestrianRoadCells(bareRoads),
+      connectionCells: {for (final road in bareRoads.roads) road.cell},
+      lanesFor: (_) => null,
+    );
+    expect(
+      planCarTrip(state, carContent, unpainted, math.Random(1)),
+      isNull,
+      reason: 'unpainted roads carry no traffic',
     );
 
     // Buildings two cells apart sit under the ten-cell minimum.
@@ -222,24 +222,35 @@ void main() {
         building('shop', 2, 1),
       ],
     );
-    expect(planCarTrip(near, carContent, math.Random(1)), isNull);
+    expect(
+      planCarTrip(near, carContent, latticeFor(near), math.Random(1)),
+      isNull,
+    );
 
     // Twenty cells apart: a full trip, pinned end to end.
-    final (state, startFront, endFront) = errandTown();
-    final trip = planCarTrip(state, carContent, math.Random(1));
-    expect(trip, isNotNull);
-    final path = trip!.path;
-    expect(path.first, startFront);
-    expect(path.last, endFront);
-    expect(path.length, greaterThanOrEqualTo(11));
-    // Shortest paths are simple, adjacent, and never double back.
-    expect(path.toSet().length, path.length);
-    for (var i = 1; i < path.length; i++) {
+    final path = planCarTrip(state, carContent, lattice, math.Random(1));
+    expect(path, isNotNull);
+    final trip = path!;
+    expect(trip.first.cell, anyOf(westFront, eastFront));
+    expect(trip.last.cell, anyOf(westFront, eastFront));
+    expect(trip.first.cell, isNot(trip.last.cell));
+    // Ten road cells is eighty subtile hops at minimum.
+    expect(trip.length - 1, greaterThanOrEqualTo(80));
+    // Every step is one subtile in one axis, and no step reverses
+    // the one before it — cars never U-turn.
+    var previousDx = 0;
+    var previousDy = 0;
+    for (var i = 1; i < trip.length; i++) {
+      final dx = _subtileColumn(trip[i]) - _subtileColumn(trip[i - 1]);
+      final dy = _subtileRow(trip[i]) - _subtileRow(trip[i - 1]);
+      expect(dx.abs() + dy.abs(), 1, reason: 'steps are single subtiles');
       expect(
-        (path[i - 1].column - path[i].column).abs() +
-            (path[i - 1].row - path[i].row).abs(),
-        1,
+        dx == -previousDx && dy == -previousDy,
+        isFalse,
+        reason: 'no step reverses its predecessor',
       );
+      previousDx = dx;
+      previousDy = dy;
     }
 
     // Only homes: the cross-kind bias falls back to any pair.
@@ -250,7 +261,10 @@ void main() {
         building('home-b', 20, 1, population: 1),
       ],
     );
-    expect(planCarTrip(homesOnly, carContent, math.Random(1)), isNotNull);
+    expect(
+      planCarTrip(homesOnly, carContent, latticeFor(homesOnly), math.Random(1)),
+      isNotNull,
+    );
   });
 
   test('bridge crossings carry traffic with climbing lift', () {
@@ -267,8 +281,8 @@ void main() {
           waterCells: const [CellCoord(2, 0)],
           nearBank: const CellCoord(1, 0),
           farBank: const CellCoord(3, 0),
-          pricePaid: 6,
           completedAtDay: 0,
+          pricePaid: 6,
         ),
       ],
       structures: [
@@ -288,68 +302,94 @@ void main() {
       minTripCells: 2,
       types: [CarTypeContent(id: 'sedan', percent: 100)],
     );
-    final trip = planCarTrip(state, content, math.Random(1));
+    final lattice = latticeFor(state, deckLift: 12);
+    final trip = planCarTrip(state, content, lattice, math.Random(1));
     expect(trip, isNotNull);
     expect(
-      trip!.path,
-      contains(const CellCoord(2, 0)),
+      trip!.any((spot) => spot.cell == const CellCoord(2, 0)),
+      isTrue,
       reason: 'the errand crosses the deck over the water',
     );
 
-    // The sim climbs the near ramp and sits flat on the deck.
-    final sim = CarTrafficSim();
-    sim.update(0, state, content, deckLift: 12);
-    expect(sim.surfaceLift(const CellCoord(1, 0), -0.5, 0), 0);
-    expect(sim.surfaceLift(const CellCoord(1, 0), 0.5, 0), 12);
-    expect(sim.surfaceLift(const CellCoord(2, 0), 0, 0), 12);
-    expect(sim.surfaceLift(const CellCoord(0, 0), 0.3, -0.2), 0);
+    // The lattice climbs the near ramp and sits flat on the deck,
+    // through the same surface the pedestrians use.
+    expect(
+      lattice.surface.liftAt(const LatticeSpot(CellCoord(1, 0), 0, 4)),
+      closeTo(12 * 0.0625, 0.001),
+    );
+    expect(
+      lattice.surface.liftAt(const LatticeSpot(CellCoord(1, 0), 7, 4)),
+      closeTo(12 * 0.9375, 0.001),
+    );
+    expect(
+      lattice.surface.liftAt(const LatticeSpot(CellCoord(2, 0), 3, 4)),
+      12,
+    );
+    expect(lattice.surface.liftAt(const LatticeSpot(CellCoord(0, 0), 3, 4)), 0);
   });
 
   test('slots run the errand lifecycle', () {
-    final (state, startFront, endFront) = errandTown();
+    final (state, lattice, westFront, eastFront) = errandTown();
     final sim = CarTrafficSim();
     var seconds = 0.0;
-    sim.update(seconds, state, carContent);
+    sim.update(seconds, state, carContent, twoLanePaint);
     expect(sim.actors, isEmpty, reason: 'new slots start in cooldown');
 
     void step(double dt) {
       for (var t = 0.0; t < dt; t += 0.1) {
         seconds += 0.1;
-        sim.update(seconds, state, carContent);
+        sim.update(seconds, state, carContent, twoLanePaint);
       }
     }
 
-    // Cooldown passes and a car appears, dwelling at its start curb.
+    // Cooldown passes and a car appears, stopped on its start lane.
     step(3);
     expect(sim.actors, hasLength(1));
     final car = sim.actors.single;
     expect(car.dwelling, isTrue);
     // The seeded roll may run the errand either way — the car
-    // spawns at one front and parks at the other.
-    final tripStart = CellCoord(car.gridColumn.floor(), car.gridRow.floor());
-    expect(tripStart, anyOf(startFront, endFront));
-    final tripEnd = tripStart == startFront ? endFront : startFront;
+    // starts at one front and parks at the other.
+    final tripStart = car.from.cell;
+    expect(tripStart, anyOf(westFront, eastFront));
+    final tripEnd = tripStart == westFront ? eastFront : westFront;
     expect(car.type, anyOf('sedan', 'firetruck'));
+    // Lane centring: the car sits at its 2-wide lane's centre, half
+    // a subtile off the subtile it drives.
+    expect(car.laneOffsetCol, 0);
+    expect(
+      car.laneOffsetRow.abs(),
+      closeTo(0.0625, 0.001),
+      reason: "centred between the band's two rows",
+    );
 
     // The departure dwell passes and the car drives.
     step(2.6);
     expect(sim.actors.single.dwelling, isFalse);
 
-    // Twenty cells at one cell per second.
-    step(20);
-    final arrived = sim.actors.single;
-    expect(arrived.dwelling, isTrue, reason: 'parked at the destination');
-    expect(
-      CellCoord(arrived.gridColumn.floor(), arrived.gridRow.floor()),
-      tripEnd,
-    );
+    // Twenty cells at one cell per second — eight subtiles each.
+    // Watch for the arrival rather than racing a fixed window: the
+    // trip length varies a little with the painted front spots. At
+    // arrival the car's leading spot `to` rests on the far front.
+    var arrived = false;
+    for (var i = 0; i < 300 && !arrived; i++) {
+      step(0.1);
+      final current = sim.actors.isEmpty ? null : sim.actors.single;
+      if (current != null && current.dwelling && current.to.cell == tripEnd) {
+        arrived = true;
+      }
+    }
+    expect(arrived, isTrue, reason: 'the car parks at the far front');
 
     // The arrival dwell passes, the car despawns into cooldown...
-    step(2.6);
-    expect(sim.actors, isEmpty);
+    var gone = false;
+    for (var i = 0; i < 60 && !gone; i++) {
+      step(0.1);
+      if (sim.actors.isEmpty) gone = true;
+    }
+    expect(gone, isTrue);
 
-    // ...and a new errand begins after the respawn delay, parked at
-    // its curb. The cooldown is jittered, so watch for it rather
+    // ...and a new errand begins after the respawn delay, stopped
+    // on its curb. The cooldown is jittered, so watch for it rather
     // than racing a fixed window.
     var respawned = false;
     for (var i = 0; i < 60 && !respawned; i++) {
@@ -359,7 +399,7 @@ void main() {
         expect(
           sim.actors.single.dwelling,
           isTrue,
-          reason: 'a fresh errand starts parked at its curb',
+          reason: 'a fresh errand starts stopped on its lane',
         );
       }
     }
@@ -368,25 +408,18 @@ void main() {
     // The same state drives the same traffic: reloads replay.
     final replay = CarTrafficSim();
     var replaySeconds = 0.0;
-    replay.update(replaySeconds, state, carContent);
+    replay.update(replaySeconds, state, carContent, twoLanePaint);
     void replayStep(double dt) {
       for (var t = 0.0; t < dt; t += 0.1) {
         replaySeconds += 0.1;
-        replay.update(replaySeconds, state, carContent);
+        replay.update(replaySeconds, state, carContent, twoLanePaint);
       }
     }
 
     replayStep(3);
     expect(replay.actors.single.type, car.type);
     expect(replay.actors.single.variant, car.variant);
-    expect(
-      CellCoord(
-        replay.actors.single.gridColumn.floor(),
-        replay.actors.single.gridRow.floor(),
-      ),
-      tripStart,
-      reason: 'the same seed replays the same errand',
-    );
+    expect(replay.actors.single.from.cell, tripStart);
   });
 
   test('towns too small for a trip stay foot-traffic only', () {
@@ -401,17 +434,28 @@ void main() {
       population: 10,
     );
     final sim = CarTrafficSim();
-    sim.update(0, state, carContent);
+    sim.update(0, state, carContent, twoLanePaint);
     var seconds = 0.0;
     for (var i = 0; i < 200; i++) {
       seconds += 0.1;
-      sim.update(seconds, state, carContent);
+      sim.update(seconds, state, carContent, twoLanePaint);
     }
     expect(sim.actors, isEmpty, reason: 'planning retries find no pair');
 
+    // Unpainted roads idle their slots the same way.
+    final unpainted = CarTrafficSim();
+    final town = errandTown().$1;
+    unpainted.update(0, town, carContent, (_) => null);
+    var unpaintedSeconds = 0.0;
+    for (var i = 0; i < 100; i++) {
+      unpaintedSeconds += 0.1;
+      unpainted.update(unpaintedSeconds, town, carContent, (_) => null);
+    }
+    expect(unpainted.actors, isEmpty);
+
     // And a town with nobody living in it runs no slots at all.
     final empty = CarTrafficSim();
-    empty.update(0, state.copyWith(population: 0), carContent);
+    empty.update(0, state.copyWith(population: 0), carContent, twoLanePaint);
     expect(empty.actors, isEmpty);
   });
 }

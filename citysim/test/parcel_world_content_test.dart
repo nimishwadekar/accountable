@@ -370,7 +370,7 @@ void main() {
     // variants rolled per trip.
     expect(content.ambience.cars.populationPercent, 10);
     expect(content.ambience.cars.minTripCells, 10);
-    expect(content.ambience.cars.types, hasLength(10));
+    expect(content.ambience.cars.types, hasLength(9));
     expect(
       content.ambience.cars.types.fold(0, (sum, type) => sum + type.percent),
       100,
@@ -381,6 +381,33 @@ void main() {
           .variants,
       const ['blue', 'white', 'red'],
     );
+    // The E-W straight carries the painted traffic lanes (editor,
+    // 2026-11): right-hand drive — eastbound rows 4-5, westbound
+    // rows 2-3, and nothing painted for the cross directions.
+    expect(content.sprite('road.straight.se')!.lanes['east-1'], const [
+      0,
+      0,
+      0,
+      0,
+      255,
+      255,
+      0,
+      0,
+    ]);
+    expect(content.sprite('road.straight.se')!.lanes['west-1'], const [
+      0,
+      0,
+      255,
+      255,
+      0,
+      0,
+      0,
+      0,
+    ]);
+    expect(content.sprite('road.straight.se')!.lanes['north-1'], isNull);
+    // Render tuning ships empty: anchors default to the computed
+    // ground centre until the Vehicles page authors them.
+    expect(content.ambience.cars.render, isEmpty);
   });
 
   test('negative cell coordinates map to the correct neighboring parcels', () {

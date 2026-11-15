@@ -255,6 +255,7 @@ class SpriteDefinition {
     this.subcategory = '',
     this.codeReferenced = false,
     this.walkable = const [],
+    this.lanes = const {},
     this.surfaceLift = 0,
   });
 
@@ -299,6 +300,19 @@ class SpriteDefinition {
       y >= 0 &&
       y < walkable.length &&
       (walkable[y].clamp(0, 255) >> x & 1) == 1;
+
+  /// Directional driving lanes for road tiles, keyed
+  /// `direction-lane` (`north-1` … `west-4`, up to four lanes per
+  /// direction of travel): each value is the tile's 8×8 subtile
+  /// lattice as eight row bytes, in the same indexing as [walkable].
+  /// Distinct lanes of one direction are distinct authored bands —
+  /// a car centres on whichever it drives and never weaves between
+  /// them. A subtile may carry several directions (a crossing,
+  /// where cars keep their heading); cars may only enter a subtile
+  /// moving in a direction it is painted for, and never reverse.
+  /// Empty = the tile carries no traffic; road roles ship blank and
+  /// are painted in the editor.
+  final Map<String, List<int>> lanes;
 
   /// How far the sprite's surface sits above the cell's ground plane,
   /// in world px. Bridge decks render elevated — measured at 12 world
@@ -371,6 +385,7 @@ class SpriteDefinition {
     String? subcategory,
     bool? codeReferenced,
     List<int>? walkable,
+    Map<String, List<int>>? lanes,
     double? surfaceLift,
   }) => SpriteDefinition(
     assetPath: assetPath ?? this.assetPath,
@@ -385,6 +400,7 @@ class SpriteDefinition {
     subcategory: subcategory ?? this.subcategory,
     codeReferenced: codeReferenced ?? this.codeReferenced,
     walkable: walkable ?? this.walkable,
+    lanes: lanes ?? this.lanes,
     surfaceLift: surfaceLift ?? this.surfaceLift,
   );
 
@@ -403,6 +419,7 @@ class SpriteDefinition {
     'subcategory': subcategory,
     'codeReferenced': codeReferenced,
     if (walkable.isNotEmpty) 'walkable': walkable,
+    if (lanes.isNotEmpty) 'lanes': lanes,
     if (surfaceLift != 0) 'surfaceLift': surfaceLift,
   };
 
@@ -428,6 +445,7 @@ class SpriteDefinition {
       subcategory: json['subcategory'] as String? ?? category,
       codeReferenced: json['codeReferenced'] as bool? ?? false,
       walkable: _parseWalkable(json['walkable']),
+      lanes: _parseLanes(json['lanes']),
       surfaceLift: (json['surfaceLift'] as num?)?.toDouble() ?? 0,
     );
   }
@@ -450,6 +468,21 @@ class SpriteDefinition {
   static List<int> _parseWalkable(Object? raw) {
     if (raw is! List) return const [];
     return [for (final row in raw) row is num ? row.toInt() : -1];
+  }
+
+  /// Lane masks per direction, kept exactly as authored so
+  /// [validateContentData] can report malformed rows; the vehicle
+  /// lattice ignores any mask that is not eight bytes in 0–255.
+  static Map<String, List<int>> _parseLanes(Object? raw) {
+    if (raw is! Map) return const {};
+    return {
+      for (final entry in raw.entries)
+        entry.key as String: [
+          for (final row
+              in entry.value is List ? entry.value as List : const [])
+            row is num ? row.toInt() : -1,
+        ],
+    };
   }
 }
 
@@ -811,6 +844,47 @@ class CarTypeContent {
       );
 }
 
+/// Per-type render tuning for vehicle sprites, authored against
+/// the editor's Vehicles page preview: a scale override and
+/// per-direction ground anchors for the fine placement no formula
+/// can guess from hand-drawn art.
+class VehicleRenderContent {
+  const VehicleRenderContent({this.scale, this.anchor = const {}});
+
+  /// Draw scale for this type's art; falls back to the cars'
+  /// global spriteScale when null.
+  final double? scale;
+
+  /// Per-direction ground anchor `[ax, ay]` — fractions of the
+  /// sprite's drawn size, ax from the left edge, ay from the top.
+  /// Absent directions use the computed default: the ground
+  /// centre of tight iso art, a quarter of the box width above
+  /// the box bottom.
+  final Map<String, (double, double)> anchor;
+
+  Map<String, Object?> toJson() => {
+    if (scale != null) 'scale': scale,
+    if (anchor.isNotEmpty)
+      'anchor': {
+        for (final entry in anchor.entries)
+          entry.key: [entry.value.$1, entry.value.$2],
+      },
+  };
+
+  static VehicleRenderContent fromJson(Map<String, Object?> json) =>
+      VehicleRenderContent(
+        scale: (json['scale'] as num?)?.toDouble(),
+        anchor: {
+          for (final entry in ((json['anchor'] as Map?) ?? const {}).entries)
+            if (entry.value is List && (entry.value as List).length >= 2)
+              entry.key as String: (
+                ((entry.value as List)[0] as num?)?.toDouble() ?? 0.5,
+                ((entry.value as List)[1] as num?)?.toDouble() ?? 0.75,
+              ),
+        },
+      );
+}
+
 /// Ambient car traffic: population-scaled slots running errands
 /// between buildings, tuned like the pedestrians.
 class CarContent {
@@ -823,6 +897,7 @@ class CarContent {
     required this.respawnDelaySeconds,
     required this.minTripCells,
     required this.types,
+    this.render = const {},
   });
 
   /// Traffic as a percentage of the town's population, floored at
@@ -857,6 +932,12 @@ class CarContent {
   /// to one hundred) and colour variants.
   final List<CarTypeContent> types;
 
+  /// Per-type render tuning — scale overrides and per-direction
+  /// ground anchors, from the Vehicles page. Absent types render
+  /// with the global spriteScale and the computed ground-centre
+  /// anchor.
+  final Map<String, VehicleRenderContent> render;
+
   Map<String, Object?> toJson() => {
     'populationPercent': populationPercent,
     'speedMin': speedMin,
@@ -866,6 +947,10 @@ class CarContent {
     'respawnDelaySeconds': respawnDelaySeconds,
     'minTripCells': minTripCells,
     'types': {for (final type in types) type.id: type.toJson()},
+    if (render.isNotEmpty)
+      'render': {
+        for (final entry in render.entries) entry.key: entry.value.toJson(),
+      },
   };
 
   static CarContent fromJson(Map<String, Object?> json) => CarContent(
@@ -883,6 +968,12 @@ class CarContent {
           (entry.value as Map).cast<String, Object?>(),
         ),
     ],
+    render: {
+      for (final entry in ((json['render'] as Map?) ?? const {}).entries)
+        entry.key as String: VehicleRenderContent.fromJson(
+          (entry.value as Map).cast<String, Object?>(),
+        ),
+    },
   );
 }
 
@@ -1377,6 +1468,67 @@ List<ContentIssue> validateContentData({
         );
       }
     }
+    if (sprite.lanes.isNotEmpty) {
+      if (sprite.category != 'roads' && sprite.category != 'bridges') {
+        warning(
+          'Sprite "${entry.key}": only road and bridge tiles carry '
+          'driving lanes — cars read them from those roles.',
+        );
+      }
+      for (final lane in sprite.lanes.entries) {
+        final parts = lane.key.split('-');
+        final laneNumber = parts.length == 2 ? int.tryParse(parts[1]) : null;
+        if (parts.length != 2 ||
+            !const ['north', 'east', 'south', 'west'].contains(parts[0]) ||
+            laneNumber == null ||
+            laneNumber < 1 ||
+            laneNumber > 4) {
+          error(
+            'Sprite "${entry.key}": lane "${lane.key}" must name a '
+            'direction and lane number, like "east-2" (lanes 1–4).',
+          );
+          continue;
+        }
+        if (lane.value.length != 8) {
+          error(
+            'Sprite "${entry.key}": the ${lane.key} lane must be '
+            'exactly eight row bytes, one per lattice row.',
+          );
+        } else if (lane.value.any((row) => row < 0 || row > 255)) {
+          error(
+            'Sprite "${entry.key}": the ${lane.key} lane row bytes must '
+            'stay within 0–255.',
+          );
+        }
+      }
+      // Lanes of one direction must not share subtiles — a subtile
+      // belongs to at most one lane per direction (cross-direction
+      // overlap is a crossing and is fine).
+      for (final direction in const ['north', 'east', 'south', 'west']) {
+        final sameDirection = [
+          for (final lane in sprite.lanes.entries)
+            if (lane.key.startsWith('$direction-')) lane.value,
+        ];
+        for (var i = 0; i < sameDirection.length; i++) {
+          for (var j = i + 1; j < sameDirection.length; j++) {
+            final a = sameDirection[i];
+            final b = sameDirection[j];
+            if (a.length != 8 ||
+                b.length != 8 ||
+                List.generate(
+                  8,
+                  (y) =>
+                      a[y].clamp(0, 255).toInt() & b[y].clamp(0, 255).toInt(),
+                ).any((row) => row != 0)) {
+              warning(
+                'Sprite "${entry.key}": lanes of one direction must not '
+                'share subtiles — "$direction" lanes overlap.',
+              );
+            }
+          }
+        }
+      }
+    }
     if (sprite.surfaceLift < 0) {
       error(
         'Sprite "${entry.key}": surfaceLift cannot be negative — '
@@ -1512,6 +1664,31 @@ List<ContentIssue> validateContentData({
   } else if (cars.types.any((type) => type.percent < 0) ||
       cars.types.fold(0, (sum, type) => sum + type.percent) != 100) {
     error('Car type percents must be non-negative and sum to 100.');
+  }
+  for (final entry in cars.render.entries) {
+    if (!cars.types.any((type) => type.id == entry.key)) {
+      error('Car render tuning "${entry.key}" names no vehicle type.');
+      continue;
+    }
+    if (entry.value.scale != null && entry.value.scale! <= 0) {
+      error('Car render tuning "${entry.key}": scale must be positive.');
+    }
+    for (final anchor in entry.value.anchor.entries) {
+      if (!const ['NE', 'NW', 'SE', 'SW'].contains(anchor.key)) {
+        error(
+          'Car render tuning "${entry.key}": anchor direction '
+          '"${anchor.key}" is not one of NE, NW, SE, SW.',
+        );
+        continue;
+      }
+      final (ax, ay) = anchor.value;
+      if (ax < -0.5 || ax > 1.5 || ay < -0.5 || ay > 1.5) {
+        error(
+          'Car render tuning "${entry.key}": the ${anchor.key} anchor '
+          'must stay within −0.5…1.5 of the sprite.',
+        );
+      }
+    }
   }
   return issues;
 }

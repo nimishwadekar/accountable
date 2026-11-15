@@ -1,34 +1,17 @@
 import 'dart:math' as math;
 
 import '../content/content_models.dart' show CarContent, StructureKind;
-import 'coordinates.dart';
-import 'pedestrian_lattice.dart' show bridgeSurfaceLift, pedestrianBridgeRoles;
-import 'world_state.dart' show ParcelWorldState, PlacedStructure;
-
-/// Road cells cars may drive: every completed road — bridge banks
-/// included, they are road tiles — plus completed bridges' water
-/// cells, whose decks continue the road across the water. Half-built
-/// crossings carry no traffic until they finish.
-Set<CellCoord> carDrivableCells(ParcelWorldState state) => {
-  for (final road in state.roads) road.cell,
-  for (final bridge in state.bridges) ...bridge.waterCells,
-};
-
-/// Drivable cells that front a structure: the four-neighbours of
-/// its footprint on the car graph. A corner lot fronts two sides;
-/// every front counts, in a deterministic order.
-List<CellCoord> carFrontCells(
-  PlacedStructure structure,
-  Set<CellCoord> drivable,
-) {
-  final fronts = <CellCoord>{};
-  for (final cell in structure.footprint) {
-    for (final neighbor in cell.neighbors) {
-      if (drivable.contains(neighbor)) fronts.add(neighbor);
-    }
-  }
-  return fronts.toList()..sort();
-}
+import 'pedestrian_lattice.dart'
+    show LatticeSpot, pedestrianBridgeRoles, pedestrianRoadCells;
+import 'vehicle_lattice.dart'
+    show
+        VehicleLattice,
+        blankVehicleLattice,
+        deltaForDirection,
+        directionForDelta,
+        oppositeDirection;
+import 'world_state.dart'
+    show ParcelWorldState, PlacedStructure, propSubtilesPerAxis;
 
 /// How many car slots a town of [population] runs: traffic as a
 /// percentage of the town's people, floored at one car once anyone
@@ -76,109 +59,127 @@ String carAssetPath(String type, String? variant, String compass) =>
     ? 'assets/vehicles/veh_${type}_$compass.png'
     : 'assets/vehicles/veh_${type}_${variant}_$compass.png';
 
-class _CarReach {
-  final Map<CellCoord, int> distance = {};
-  final Map<CellCoord, CellCoord> parent = {};
+class _LaneReach {
+  /// Distance in subtile hops from a source, per (spot, heading)
+  /// state — heading matters because crossings only accept cars
+  /// already moving their way.
+  final Map<(LatticeSpot, int), int> distance = {};
+  final Map<(LatticeSpot, int), (LatticeSpot, int)> parent = {};
+
+  /// The best distance any heading reaches a spot at.
+  int distanceAt(LatticeSpot spot) {
+    var best = -1;
+    for (final direction in const [1, 2, 4, 8]) {
+      final d = distance[(spot, direction)];
+      if (d != null && (best < 0 || d < best)) best = d;
+    }
+    return best;
+  }
+
+  /// The state a path rebuild starts from: the heading that reaches
+  /// [spot] soonest.
+  (LatticeSpot, int)? bestStateAt(LatticeSpot spot) {
+    (LatticeSpot, int)? best;
+    var bestDistance = -1;
+    for (final direction in const [1, 2, 4, 8]) {
+      final state = (spot, direction);
+      final d = distance[state];
+      if (d != null && (bestDistance < 0 || d < bestDistance)) {
+        best = state;
+        bestDistance = d;
+      }
+    }
+    return best;
+  }
 }
 
-/// Multi-source breadth-first search across the drivable cells:
-/// distances count road cells from the nearest source, parents
-/// rebuild the path a car drives.
-_CarReach _breadthFirstSearch(
-  Set<CellCoord> drivable,
-  Iterable<CellCoord> sources,
-) {
-  final reach = _CarReach();
-  final queue = <CellCoord>[];
-  for (final source in sources) {
-    if (!drivable.contains(source)) continue;
-    if (reach.distance.containsKey(source)) continue;
-    reach.distance[source] = 0;
-    queue.add(source);
+/// Breadth-first search over the lane lattice's driving states: a
+/// car facing [heading] may step in direction δ when δ is not the
+/// reverse of its heading and the destination subtile is painted
+/// for δ — so it passes through crossings moving its own way, turns
+/// by stepping onto a single-direction lane, and never reverses.
+_LaneReach _laneSearch(VehicleLattice lattice, List<LatticeSpot> sources) {
+  final reach = _LaneReach();
+  final queue = <(LatticeSpot, int)>[];
+  for (final spot in sources) {
+    final dirs = lattice.dirsAt(spot.cell, spot.x, spot.y);
+    for (final direction in const [1, 2, 4, 8]) {
+      if ((dirs & direction) == 0) continue;
+      final state = (spot, direction);
+      if (reach.distance.containsKey(state)) continue;
+      reach.distance[state] = 0;
+      queue.add(state);
+    }
   }
   var head = 0;
   while (head < queue.length) {
-    final cell = queue[head++];
-    for (final neighbor in cell.neighbors) {
-      if (reach.distance.containsKey(neighbor)) continue;
-      if (!drivable.contains(neighbor)) continue;
-      reach.distance[neighbor] = reach.distance[cell]! + 1;
-      reach.parent[neighbor] = cell;
-      queue.add(neighbor);
+    final (spot, heading) = queue[head++];
+    for (final direction in const [1, 2, 4, 8]) {
+      if (direction == oppositeDirection(heading)) continue;
+      final (dx, dy) = deltaForDirection(direction);
+      final next = lattice.surface.step(spot, dx, dy);
+      if (next == null) continue;
+      if ((lattice.dirsAt(next.cell, next.x, next.y) & direction) == 0) {
+        continue;
+      }
+      final state = (next, direction);
+      if (reach.distance.containsKey(state)) continue;
+      reach.distance[state] = reach.distance[(spot, heading)]! + 1;
+      reach.parent[state] = (spot, heading);
+      queue.add(state);
     }
   }
   return reach;
 }
 
-/// Grid direction from a front cell toward the building it fronts —
-/// where a dwelling car pulls to park.
-(int, int) _curbDirection(PlacedStructure structure, CellCoord front) {
-  for (final neighbor in front.neighbors) {
-    if (structure.footprint.contains(neighbor)) {
-      return (neighbor.column - front.column, neighbor.row - front.row);
-    }
-  }
-  return (0, 0); // Unreachable: fronts are footprint-adjacent.
-}
-
-/// One car's errand: the road cells it drives between two curbs,
-/// plus the grid directions those curbs pull toward.
-class CarTripPlan {
-  CarTripPlan({
-    required this.path,
-    required this.startCurb,
-    required this.endCurb,
-  });
-
-  /// The cells driven, from the start building's front to the end
-  /// building's front. Consecutive cells are always four-adjacent,
-  /// and shortest paths never double back.
-  final List<CellCoord> path;
-  final (int, int) startCurb;
-  final (int, int) endCurb;
-}
-
-/// Plans one errand: a start building, a home-biased end building
-/// at least `minTripCells` of road away — the BFS distance map is
-/// the filter, so degenerate pairs need no rerolls — and the
-/// shortest path between their fronts. Null when the town cannot
-/// host a trip yet: too few buildings, or none far enough apart.
-CarTripPlan? planCarTrip(
+/// Plans one errand on the lane lattice: a start building, a
+/// home-biased end building whose nearest front spot sits at least
+/// `minTripCells` of road away — the BFS distance map is the
+/// filter, so degenerate pairs need no rerolls — and the lane path
+/// between their fronts. Null when the town cannot host a trip:
+/// unpainted roads, too few fronted buildings, or none far enough
+/// apart.
+List<LatticeSpot>? planCarTrip(
   ParcelWorldState state,
   CarContent cars,
+  VehicleLattice lattice,
   math.Random random,
 ) {
-  final drivable = carDrivableCells(state);
-  final fronted = <(PlacedStructure, List<CellCoord>)>[];
+  if (lattice.isEmpty) return null;
+  final fronted = <(PlacedStructure, List<LatticeSpot>)>[];
   for (final structure in state.structures) {
     if (structure.kind != StructureKind.building) continue;
-    final fronts = carFrontCells(structure, drivable);
+    final fronts = lattice.frontSpots(structure.footprint);
     if (fronts.isNotEmpty) fronted.add((structure, fronts));
   }
   if (fronted.isEmpty) return null;
 
+  var minHops = cars.minTripCells * propSubtilesPerAxis;
+  if (minHops < 1) minHops = 1;
   // A bounded number of starts: most towns host a trip from any
   // building, but an isolated one may not — try another.
   for (var attempt = 0; attempt < 8; attempt++) {
     final start = fronted[random.nextInt(fronted.length)];
-    final reach = _breadthFirstSearch(drivable, start.$2);
-    // End candidates: other buildings whose nearest front sits at
-    // least minTripCells of road away from the start's fronts.
-    final ends = <(PlacedStructure, CellCoord)>[];
+    final reach = _laneSearch(lattice, start.$2);
+    final ends = <(PlacedStructure, LatticeSpot, int)>[];
     for (final entry in fronted) {
       if (identical(entry.$1, start.$1)) continue;
-      CellCoord? nearest;
+      LatticeSpot? nearest;
       var best = -1;
       for (final front in entry.$2) {
-        final distance = reach.distance[front];
-        if (distance == null) continue;
+        final distance = reach.distanceAt(front);
+        if (distance < 0) continue;
         if (nearest == null || distance < best) {
           nearest = front;
           best = distance;
         }
       }
-      if (nearest != null && best >= cars.minTripCells) {
-        ends.add((entry.$1, nearest));
+      // NOTE (2026-11): equal-distance ties break to the
+      // first-sorted front spot, so parallel same-direction lanes
+      // pile their traffic into one lane. Seeded tie-breaking
+      // spreads it — deferred until multi-lane roads arrive.
+      if (nearest != null && best >= minHops) {
+        ends.add((entry.$1, nearest, best));
       }
     }
     if (ends.isEmpty) continue;
@@ -195,66 +196,59 @@ CarTripPlan? planCarTrip(
       if (biased.isNotEmpty) pool = biased;
     }
     final end = pool[random.nextInt(pool.length)];
-    // Rebuild the path: the end's front back to a start front.
-    final path = <CellCoord>[end.$2];
-    CellCoord? step = reach.parent[path.last];
-    while (step != null) {
-      path.add(step);
-      step = reach.parent[step];
+    // Rebuild the path from the end's best state back to a source.
+    final endState = reach.bestStateAt(end.$2);
+    if (endState == null) continue;
+    final spots = <LatticeSpot>[end.$2];
+    var previous = reach.parent[endState];
+    while (previous != null) {
+      spots.add(previous.$1);
+      previous = reach.parent[previous];
     }
-    if (path.length < 2) continue;
-    final forward = path.reversed.toList();
-    return CarTripPlan(
-      path: forward,
-      startCurb: _curbDirection(start.$1, forward.first),
-      endCurb: _curbDirection(end.$1, forward.last),
-    );
+    if (spots.length < 2) continue;
+    return spots.reversed.toList();
   }
   return null;
 }
 
-/// One visible car: what it is, where it stands in continuous grid
-/// space, which way it faces, and how far through its trip it is.
-/// Pure data for the renderer — the sim mutates it in place, the
-/// way the pedestrian sim moves its walkers.
+/// One visible car: what it is, and where it stands on the lane
+/// lattice — the segment being driven and the progress along it,
+/// exactly like a pedestrian. Pure data for the renderer; the sim
+/// mutates it in place.
 class CarActor {
   CarActor({
     required this.type,
     required this.variant,
-    required this.gridColumn,
-    required this.gridRow,
+    required LatticeSpot spot,
     required this.headingDx,
     required this.headingDy,
-    required this.dwelling,
-    required this.distanceCells,
-    required this.tripCells,
-    required this.startCurb,
-    required this.endCurb,
-  });
+  }) : from = spot,
+       to = spot;
 
   final String type;
   final String? variant;
 
-  /// Continuous grid coordinates — the car's unoffset centre on the
-  /// road. The renderer adds lane and curb offsets in world space.
-  double gridColumn;
-  double gridRow;
+  /// Position on the lane lattice: the segment being driven and
+  /// the progress along it. While dwelling, both ends are the
+  /// stop's spot.
+  LatticeSpot from;
+  LatticeSpot to;
+  double progress = 0;
 
-  /// Facing in grid steps (one of the four axis unit deltas).
+  /// Facing in grid steps — always the direction of the segment
+  /// being driven, so a car faces the lane it is on.
   int headingDx;
   int headingDy;
 
-  /// True while parked at a curb — the departure and arrival
-  /// pauses.
-  bool dwelling;
+  /// Lateral lane centring, in grid-cell fractions: the car sits at
+  /// the centre of the lane it drives, whatever its painted
+  /// thickness. The renderer turns this into a world offset.
+  double laneOffsetCol = 0;
+  double laneOffsetRow = 0;
 
-  /// Distance driven so far and the trip's total, in road cells —
-  /// the renderer blends curb-to-lane offsets over the first and
-  /// last stretch.
-  double distanceCells;
-  final double tripCells;
-  final (int, int) startCurb;
-  final (int, int) endCurb;
+  /// True while stopped on the lane at a curb — the departure and
+  /// arrival pauses.
+  bool dwelling = true;
 }
 
 enum _CarPhase { planning, dwellingStart, driving, dwellingEnd, cooldown }
@@ -263,55 +257,64 @@ class _CarSlot {
   _CarPhase phase = _CarPhase.planning;
   double timer = 0;
   CarActor? actor;
-  CarTripPlan? trip;
+  List<LatticeSpot>? path;
 
   /// This trip's speed in cells per second.
   double speed = 1;
+
+  /// Distance driven, in subtile hops.
   double distance = 0;
 }
 
-/// Render-only ambient car traffic: population-scaled slots, each
-/// running errands between buildings — spawn at a curb, dwell,
-/// drive the planned path, dwell at the destination, cooldown, then
-/// a new trip. Deliberately excluded from world state and saves,
-/// exactly like the pedestrian sim: ambience never affects
-/// gameplay, and a reload simply restarts the traffic.
+/// Render-only ambient car traffic on the painted lane lattice:
+/// population-scaled slots, each running errands between buildings
+/// — spawn at a curb, dwell, drive the planned lane path, dwell at
+/// the destination, cooldown, then a new trip. Cars stop on the
+/// main lane (parking paint is future work). Deliberately excluded
+/// from world state and saves, exactly like the pedestrian sim:
+/// ambience never affects gameplay, and a reload simply restarts
+/// the traffic.
 class CarTrafficSim {
   final List<CarActor> actors = [];
   final List<_CarSlot> _slots = [];
+  VehicleLattice lattice = blankVehicleLattice;
   int _population = -1;
-  int _drivableCount = -1;
+  int _roadCount = -1;
+  int _bridgeCount = -1;
   int _structureCount = -1;
   double _lastSeconds = 0;
   math.Random _random = math.Random();
-  Map<CellCoord, String> _bridgeRoles = const {};
-  double _deckLift = 0;
 
   /// Advances the traffic. Population changes resize the slot
-  /// count; road, bridge, and building changes reshape trips — all
-  /// three happen on check-ins, so new slots and fronts join
-  /// mid-session while running trips keep their paths.
+  /// count; road, bridge, and building changes rebuild the lane
+  /// lattice — all three happen on check-ins, so new slots and
+  /// fronts join mid-session while running trips keep their paths.
   void update(
     double seconds,
     ParcelWorldState state,
-    CarContent cars, {
+    CarContent cars,
+    Map<String, List<int>>? Function(String role) lanesFor, {
     double deckLift = 0,
   }) {
-    var drivableCount = state.roads.length;
-    for (final bridge in state.bridges) {
-      drivableCount += bridge.waterCells.length;
-    }
     if (state.population != _population ||
-        drivableCount != _drivableCount ||
+        state.roads.length != _roadCount ||
+        state.bridges.length != _bridgeCount ||
         state.structures.length != _structureCount) {
       _population = state.population;
-      _drivableCount = drivableCount;
+      _roadCount = state.roads.length;
+      _bridgeCount = state.bridges.length;
       _structureCount = state.structures.length;
-      _bridgeRoles = state.bridges.isEmpty
-          ? const {}
-          : pedestrianBridgeRoles(state);
-      _deckLift = deckLift;
       _random = math.Random(state.seed + state.population);
+      lattice = VehicleLattice(
+        roadCells: pedestrianRoadCells(state),
+        connectionCells: {
+          for (final road in state.roads) road.cell,
+          for (final bridge in state.bridges) ...bridge.waterCells,
+        },
+        lanesFor: lanesFor,
+        bridgeRoles: pedestrianBridgeRoles(state),
+        deckLift: deckLift,
+      );
       _reconcileSlots(state, cars);
       _collectActors();
       _lastSeconds = seconds;
@@ -324,6 +327,14 @@ class CarTrafficSim {
       _advanceSlot(slot, dt, state, cars);
     }
     _collectActors();
+  }
+
+  /// Painter's depth for a car, lerped between its spots' depths
+  /// like a walker's.
+  double actorDepth(CarActor car) {
+    final a = lattice.surface.walkerSortDepth(car.from);
+    final b = lattice.surface.walkerSortDepth(car.to);
+    return a + (b - a) * car.progress;
   }
 
   void _reconcileSlots(ParcelWorldState state, CarContent cars) {
@@ -367,13 +378,12 @@ class CarTrafficSim {
           slot.actor?.dwelling = false;
         }
       case _CarPhase.driving:
-        slot.distance += slot.speed * dt;
-        final hops = slot.trip!.path.length - 1;
+        slot.distance += slot.speed * propSubtilesPerAxis * dt;
+        final hops = slot.path!.length - 1;
         if (slot.distance >= hops) {
           slot.distance = hops.toDouble();
           _positionActor(slot);
-          final actor = slot.actor!;
-          actor.dwelling = true;
+          slot.actor!.dwelling = true;
           slot.phase = _CarPhase.dwellingEnd;
           slot.timer = cars.dwellSeconds;
         } else {
@@ -383,7 +393,7 @@ class CarTrafficSim {
         slot.timer -= dt;
         if (slot.timer <= 0) {
           slot.actor = null;
-          slot.trip = null;
+          slot.path = null;
           slot.phase = _CarPhase.cooldown;
           // Jittered so slot cycles desynchronize.
           slot.timer = cars.respawnDelaySeconds * (0.5 + _random.nextDouble());
@@ -402,18 +412,18 @@ class CarTrafficSim {
       slot.timer = cars.respawnDelaySeconds;
       return;
     }
-    final trip = planCarTrip(state, cars, _random);
-    if (trip == null) {
-      // The town cannot host a trip yet — roads and buildings are
-      // still growing. Retry after the respawn delay.
+    final path = planCarTrip(state, cars, lattice, _random);
+    if (path == null) {
+      // The town cannot host a trip yet — lanes and buildings are
+      // still being painted and built. Retry after the respawn
+      // delay.
       slot.phase = _CarPhase.cooldown;
       slot.timer = cars.respawnDelaySeconds;
       return;
     }
     final (type, variant) = pickCarModel(cars, _random);
-    final path = trip.path;
     slot
-      ..trip = trip
+      ..path = path
       ..speed = cars.speedMin + _random.nextDouble() * cars.speedRange
       ..distance = 0
       ..phase = _CarPhase.dwellingStart
@@ -421,54 +431,49 @@ class CarTrafficSim {
       ..actor = CarActor(
         type: type,
         variant: variant,
-        gridColumn: path.first.column.toDouble(),
-        gridRow: path.first.row.toDouble(),
-        headingDx: path[1].column - path[0].column,
-        headingDy: path[1].row - path[0].row,
-        dwelling: true,
-        distanceCells: 0,
-        tripCells: (path.length - 1).toDouble(),
-        startCurb: trip.startCurb,
-        endCurb: trip.endCurb,
+        spot: path.first,
+        headingDx: _segmentDx(path, 0),
+        headingDy: _segmentDy(path, 0),
       );
+    // Place the dwelling car on its lane's centre right away, so
+    // the pull-out does not jump sideways when driving begins.
+    _positionActor(slot);
   }
 
+  /// The heading of a path segment, in grid steps — the direction
+  /// of the lane being driven.
+  int _segmentDx(List<LatticeSpot> path, int index) =>
+      ((path[index + 1].cell.column - path[index].cell.column) *
+                  propSubtilesPerAxis +
+              path[index + 1].x -
+              path[index].x)
+          .sign;
+  int _segmentDy(List<LatticeSpot> path, int index) =>
+      ((path[index + 1].cell.row - path[index].cell.row) * propSubtilesPerAxis +
+              path[index + 1].y -
+              path[index].y)
+          .sign;
+
   void _positionActor(_CarSlot slot) {
-    final path = slot.trip!.path;
+    final path = slot.path!;
     final hops = path.length - 1;
     final d = slot.distance.clamp(0.0, hops.toDouble());
     final segment = math.min(d.floor(), hops - 1);
-    final fraction = (d - segment).clamp(0.0, 1.0);
-    final a = path[segment];
-    final b = path[segment + 1];
     final actor = slot.actor!;
-    actor.gridColumn = a.column + (b.column - a.column) * fraction;
-    actor.gridRow = a.row + (b.row - a.row) * fraction;
-    actor.headingDx = b.column - a.column;
-    actor.headingDy = b.row - a.row;
-    actor.distanceCells = d;
-  }
-
-  /// World-px lift of a car standing at [cell] at grid fraction
-  /// (fx, fy), both −0.5…0.5 from the cell centre: ramps climb
-  /// toward the deck, decks sit at full lift, roads lift nothing.
-  double surfaceLift(CellCoord cell, double fx, double fy) {
-    final role = _bridgeRoles[cell];
-    if (role == null) return 0;
-    return bridgeSurfaceLift(role, fx, fy, _deckLift);
-  }
-
-  /// Painter's depth for a car, matching how walkers sort: ground
-  /// cars keep the plain ground depth; cars on bridge tiles climb
-  /// the same per-cell ramp so they never dip under adjacent art.
-  double sortDepth(CarActor actor) {
-    final cell = CellCoord(actor.gridColumn.floor(), actor.gridRow.floor());
-    final fx = actor.gridColumn - cell.column;
-    final fy = actor.gridRow - cell.row;
-    final cellDepth = cell.column + cell.row;
-    if (!_bridgeRoles.containsKey(cell)) {
-      return cellDepth + fx + fy - 1;
-    }
-    return cellDepth + 0.06 + (fx + fy) * 0.55;
+    actor.from = path[segment];
+    actor.to = path[segment + 1];
+    actor.progress = (d - segment).clamp(0.0, 1.0);
+    actor.headingDx = _segmentDx(path, segment);
+    actor.headingDy = _segmentDy(path, segment);
+    // Lane centring: the car sits at the centre of the lane it
+    // drives, whatever its painted thickness — measured at both
+    // ends of the segment and lerped, so tapering bands glide.
+    final direction = directionForDelta(actor.headingDx, actor.headingDy);
+    final fromCentre = lattice.laneCenterOffset(actor.from, direction);
+    final toCentre = lattice.laneCenterOffset(actor.to, direction);
+    actor.laneOffsetCol =
+        fromCentre.$1 + (toCentre.$1 - fromCentre.$1) * actor.progress;
+    actor.laneOffsetRow =
+        fromCentre.$2 + (toCentre.$2 - fromCentre.$2) * actor.progress;
   }
 }

@@ -45,7 +45,7 @@
       "id": "cafe",
       "jobs": 4,
       "kind": "building",
-      "name": "Caf\u00e9",
+      "name": "Café",
       "population": 1,
       "serviceCapacity": 0,
       "subcategory": "commerce",
@@ -779,7 +779,7 @@
       ],
       "constructionStages": 2,
       "costCoins": 0,
-      "description": "The town\u2019s quiet landmark.",
+      "description": "The town’s quiet landmark.",
       "enabled": true,
       "footprint": {
         "columns": 2,
@@ -827,7 +827,7 @@
       ],
       "constructionStages": 3,
       "costCoins": 0,
-      "description": "Fuel for the town\u2019s vehicles.",
+      "description": "Fuel for the town’s vehicles.",
       "enabled": true,
       "footprint": {
         "columns": 2,

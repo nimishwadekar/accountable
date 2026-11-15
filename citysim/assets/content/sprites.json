@@ -100,6 +100,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          255,
+          255,
+          0,
+          0
+        ],
+        "west-1": [
+          0,
+          0,
+          255,
+          255,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/bridges/body/tile_road_bridge_body_SE_normal.png",
       "renderScale": 0.5,
       "subcategory": "body",
@@ -124,6 +146,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ]
+      },
       "path": "sprites/bridges/body/tile_road_bridge_body_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "body",
@@ -148,6 +192,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ]
+      },
       "path": "sprites/bridges/ramp/tile_road_bridge_ramp_NE_normal.png",
       "renderScale": 0.5,
       "subcategory": "ramp",
@@ -171,6 +237,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          255,
+          255,
+          0,
+          0
+        ],
+        "west-1": [
+          0,
+          0,
+          255,
+          255,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/bridges/ramp/tile_road_bridge_ramp_NW_normal.png",
       "renderScale": 0.5,
       "subcategory": "ramp",
@@ -194,6 +282,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          255,
+          255,
+          0,
+          0
+        ],
+        "west-1": [
+          0,
+          0,
+          255,
+          255,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/bridges/ramp/tile_road_bridge_ramp_SE_normal.png",
       "renderScale": 0.5,
       "subcategory": "ramp",
@@ -217,6 +327,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ]
+      },
       "path": "sprites/bridges/ramp/tile_road_bridge_ramp_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "ramp",
@@ -1159,6 +1291,48 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          15,
+          15,
+          0,
+          0
+        ],
+        "north-1": [
+          0,
+          0,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          0,
+          0,
+          0,
+          0,
+          12,
+          12,
+          12,
+          12
+        ],
+        "west-1": [
+          0,
+          0,
+          63,
+          63,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/corner/tile_road_corner_E_normal.png",
       "renderScale": 0.5,
       "subcategory": "corner",
@@ -1182,6 +1356,48 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          240,
+          240,
+          0,
+          0
+        ],
+        "north-1": [
+          0,
+          0,
+          0,
+          0,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          0,
+          0,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ],
+        "west-1": [
+          0,
+          0,
+          252,
+          252,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/corner/tile_road_corner_N_normal.png",
       "renderScale": 0.5,
       "subcategory": "corner",
@@ -1205,6 +1421,48 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          63,
+          63,
+          0,
+          0
+        ],
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          0,
+          0
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          0,
+          0,
+          0,
+          0
+        ],
+        "west-1": [
+          0,
+          0,
+          15,
+          15,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/corner/tile_road_corner_S_normal.png",
       "renderScale": 0.5,
       "subcategory": "corner",
@@ -1228,6 +1486,48 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          252,
+          252,
+          0,
+          0
+        ],
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          0,
+          0,
+          0,
+          0
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          0,
+          0
+        ],
+        "west-1": [
+          0,
+          0,
+          240,
+          240,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/corner/tile_road_corner_W_normal.png",
       "renderScale": 0.5,
       "subcategory": "corner",
@@ -1251,6 +1551,48 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          255,
+          255,
+          0,
+          0
+        ],
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ],
+        "west-1": [
+          0,
+          0,
+          255,
+          255,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/cross/tile_road_xsing_normal.png",
       "renderScale": 0.5,
       "subcategory": "cross",
@@ -1274,6 +1616,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "north-1": [
+          0,
+          0,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          0,
+          0,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ]
+      },
       "path": "sprites/roads/end/tile_road_end_NE_normal.png",
       "renderScale": 0.5,
       "subcategory": "end",
@@ -1297,6 +1661,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          252,
+          252,
+          0,
+          0
+        ],
+        "west-1": [
+          0,
+          0,
+          252,
+          252,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/end/tile_road_end_NW_normal.png",
       "renderScale": 0.5,
       "subcategory": "end",
@@ -1320,6 +1706,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          63,
+          63,
+          0,
+          0
+        ],
+        "west-1": [
+          0,
+          0,
+          63,
+          63,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/end/tile_road_end_SE_normal.png",
       "renderScale": 0.5,
       "subcategory": "end",
@@ -1343,6 +1751,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          0,
+          0
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/end/tile_road_end_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "end",
@@ -1366,6 +1796,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ]
+      },
       "path": "sprites/roads/pelican/tile_road_pelican_NE_normal.png",
       "renderScale": 0.5,
       "subcategory": "pelican",
@@ -1389,6 +1841,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          255,
+          255,
+          0,
+          0
+        ],
+        "west-1": [
+          0,
+          0,
+          255,
+          255,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/pelican/tile_road_pelican_NW_normal.png",
       "renderScale": 0.5,
       "subcategory": "pelican",
@@ -1412,6 +1886,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          255,
+          255,
+          0,
+          0
+        ],
+        "west-1": [
+          0,
+          0,
+          255,
+          255,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/pelican/tile_road_pelican_SE_normal.png",
       "renderScale": 0.5,
       "subcategory": "pelican",
@@ -1435,6 +1931,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ]
+      },
       "path": "sprites/roads/pelican/tile_road_pelican_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "pelican",
@@ -1458,6 +1976,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          255,
+          255,
+          0,
+          0
+        ],
+        "west-1": [
+          0,
+          0,
+          255,
+          255,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/straight/tile_road_straight_SE_normal.png",
       "renderScale": 0.5,
       "subcategory": "straight",
@@ -1481,6 +2021,28 @@
         0.5,
         1
       ],
+      "lanes": {
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ]
+      },
       "path": "sprites/roads/straight/tile_road_straight_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "straight",
@@ -1504,6 +2066,48 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          255,
+          255,
+          0,
+          0
+        ],
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          0,
+          0
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          0,
+          0
+        ],
+        "west-1": [
+          0,
+          0,
+          255,
+          255,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/t/tile_road_intersection_NE_normal.png",
       "renderScale": 0.5,
       "subcategory": "t",
@@ -1527,6 +2131,48 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          63,
+          63,
+          0,
+          0
+        ],
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ],
+        "west-1": [
+          0,
+          0,
+          63,
+          63,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/t/tile_road_intersection_NW_normal.png",
       "renderScale": 0.5,
       "subcategory": "t",
@@ -1550,6 +2196,48 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          252,
+          252,
+          0,
+          0
+        ],
+        "north-1": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ],
+        "west-1": [
+          0,
+          0,
+          252,
+          252,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/t/tile_road_intersection_SE_normal.png",
       "renderScale": 0.5,
       "subcategory": "t",
@@ -1573,6 +2261,48 @@
         0.5,
         1
       ],
+      "lanes": {
+        "east-1": [
+          0,
+          0,
+          0,
+          0,
+          255,
+          255,
+          0,
+          0
+        ],
+        "north-1": [
+          0,
+          0,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "south-1": [
+          0,
+          0,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ],
+        "west-1": [
+          0,
+          0,
+          255,
+          255,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
       "path": "sprites/roads/t/tile_road_intersection_SW_normal.png",
       "renderScale": 0.5,
       "subcategory": "t",

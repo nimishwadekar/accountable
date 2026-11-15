@@ -2220,6 +2220,7 @@ class _ParcelWorldPainter extends CustomPainter {
       seconds,
       state,
       content.ambience.cars,
+      (role) => content.sprite(role)?.lanes,
       deckLift: content.sprite('bridge.body.se')?.surfaceLift ?? 0,
     );
     // The selection x-ray: the picked object's wash rides its own
@@ -2341,7 +2342,7 @@ class _ParcelWorldPainter extends CustomPainter {
       ));
     }
     for (final car in traffic.actors) {
-      actors.add((traffic.sortDepth(car), () => _drawCar(canvas, size, car)));
+      actors.add((traffic.actorDepth(car), () => _drawCar(canvas, size, car)));
     }
     actors.sort((a, b) => a.$1.compareTo(b.$1));
     for (final actor in actors) {
@@ -2668,17 +2669,22 @@ class _ParcelWorldPainter extends CustomPainter {
     );
   }
 
-  /// Lane keeping: how far a driving car sits from its heading's
-  /// centre line, in world px on the right-hand side, and how far a
-  /// dwelling car pulls toward its building, as a fraction of a
-  /// grid step. Curbs blend into lanes over the first and last
-  /// stretch of a trip, so cars pull out and in instead of jumping.
-  static const double _carLaneOffsetWorldPx = 10;
-  static const double _carCurbPull = 0.3;
-  static const double _carCurbBlendCells = 1.5;
-
   void _drawCar(Canvas canvas, Size size, CarActor car) {
-    final world = _carWorldPosition(car);
+    // Exactly where a pedestrian stands: the segment's spots, the
+    // progress between them, and the lift under each end — ramps
+    // and decks carry cars the same way they carry walkers. The
+    // lane paint already places the car; no offsets are computed.
+    final a = _spotWorldCenter(car.from);
+    final b = _spotWorldCenter(car.to);
+    final liftFrom = traffic.lattice.surface.liftAt(car.from);
+    final liftTo = traffic.lattice.surface.liftAt(car.to);
+    final lift = liftFrom + (liftTo - liftFrom) * car.progress;
+    final world =
+        Offset(
+          a.dx + (b.dx - a.dx) * car.progress,
+          a.dy + (b.dy - a.dy) * car.progress - lift,
+        ) +
+        _gridOffsetWorld(car.laneOffsetCol, car.laneOffsetRow);
     final screen = _worldToScreen(world, size, scale, offset);
     if (screen.dx < -80 ||
         screen.dx > size.width + 80 ||
@@ -2690,15 +2696,27 @@ class _ParcelWorldPainter extends CustomPainter {
     final image = images[carAssetPath(car.type, car.variant, compass)];
     if (image == null) return;
     ParcelWorldProbe.countActor();
-    final unit = 0.5 * scale * content.ambience.cars.spriteScale;
+    final render = content.ambience.cars.render[car.type];
+    final unit =
+        0.5 * scale * (render?.scale ?? content.ambience.cars.spriteScale);
     final width = image.width * unit;
     final height = image.height * unit;
+    // The ground anchor: authored per direction in the editor's
+    // Vehicles page, or the computed default — the ground centre of
+    // tight iso art, a quarter of the box width above the box
+    // bottom. Pinning the box bottom instead drifts cars off their
+    // lanes sideways on east-west travel and along the lane on
+    // north-south.
+    final anchor = render?.anchor[compass];
+    final anchorX = anchor?.$1 ?? 0.5;
+    final anchorY =
+        anchor?.$2 ?? (image.height - image.width / 4) / image.height;
     canvas.drawImageRect(
       image,
       Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
       Rect.fromLTWH(
-        screen.dx - width / 2,
-        screen.dy + 2 * scale - height,
+        screen.dx - anchorX * width,
+        screen.dy + 2 * scale - anchorY * height,
         width,
         height,
       ),
@@ -2706,59 +2724,12 @@ class _ParcelWorldPainter extends CustomPainter {
     );
   }
 
-  /// A car's world position: its continuous grid position projected
-  /// to world space, lifted onto bridges, and offset to its lane or
-  /// curb.
-  Offset _carWorldPosition(CarActor car) {
-    final base = Offset(
-      (car.gridColumn - car.gridRow) * (_logicalTileWidth / 2),
-      (car.gridColumn + car.gridRow) * (_logicalTileHeight / 2),
-    );
-    final cell = CellCoord(car.gridColumn.floor(), car.gridRow.floor());
-    final lift = traffic.surfaceLift(
-      cell,
-      car.gridColumn - cell.column - 0.5,
-      car.gridRow - cell.row - 0.5,
-    );
-    return base + _carHeadingOffset(car) + Offset(0, -lift);
-  }
-
-  /// Where a car sits across the road: dwelling cars park at their
-  /// building's curb; driving cars keep right, blending out of the
-  /// start curb and into the end curb over the first and last
-  /// stretch of the trip.
-  Offset _carHeadingOffset(CarActor car) {
-    final atStart = car.distanceCells < car.tripCells / 2;
-    final curb =
-        _gridDeltaWorld(atStart ? car.startCurb : car.endCurb) * _carCurbPull;
-    if (car.dwelling) return curb;
-    final lane = _carLaneOffset(car.headingDx, car.headingDy);
-    if (car.distanceCells < _carCurbBlendCells) {
-      return Offset.lerp(curb, lane, car.distanceCells / _carCurbBlendCells)!;
-    }
-    final remaining = car.tripCells - car.distanceCells;
-    if (remaining < _carCurbBlendCells) {
-      return Offset.lerp(curb, lane, remaining / _carCurbBlendCells)!;
-    }
-    return lane;
-  }
-
-  /// A unit grid step's world vector.
-  Offset _gridDeltaWorld((int, int) delta) => Offset(
-    (delta.$1 - delta.$2) * (_logicalTileWidth / 2),
-    (delta.$1 + delta.$2) * (_logicalTileHeight / 2),
+  /// A continuous grid offset, in cells, as a world vector — the
+  /// same 2:1 iso projection the cell centres use.
+  Offset _gridOffsetWorld(double col, double row) => Offset(
+    (col - row) * (_logicalTileWidth / 2),
+    (col + row) * (_logicalTileHeight / 2),
   );
-
-  /// The right-hand side of a heading, in world px — the
-  /// screen-space perpendicular, so opposing cars pass each other
-  /// like traffic instead of overlapping.
-  Offset _carLaneOffset(int dx, int dy) {
-    final heading = _gridDeltaWorld((dx, dy));
-    final length = heading.distance;
-    if (length == 0) return Offset.zero;
-    return Offset(-heading.dy / length, heading.dx / length) *
-        _carLaneOffsetWorldPx;
-  }
 
   _CellBounds _visibleCellBounds(Size size, double cameraScale, Offset pan) {
     final corners = [

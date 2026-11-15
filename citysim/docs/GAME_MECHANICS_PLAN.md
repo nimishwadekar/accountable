@@ -253,15 +253,27 @@ the current slice.
   density (population ÷ city limits).
 - Ambient car traffic, presentation-only like the walkers: one slot per
   population share (`populationPercent`, 10%, floored at one car once
-  anyone lives there), each running errands — spawn at a random building's
-  curb, dwell, drive a shortest path to a home-biased end building at
-  least `minTripCells` (10) road cells away (the planner's distance map
-  filters nearer ends, so no rerolls), park, and leave after a respawn
-  delay. Vehicle types mix by authored percents (summing to 100) with
-  colour variants rolled per trip, like catalogue variations; cars keep
-  to the right-hand lane, pull to the curb while dwelling, climb bridges,
-  and drive at town pace (~1 cell/s = 12 m/s). Young towns stay
-  foot-traffic only until buildings sit far enough apart.
+  anyone lives there), each running errands — spawn stopped on the lane
+  at a random building's front, dwell, drive a planned lane path to a
+  home-biased end building at least `minTripCells` (10) road cells away
+  (the planner's distance map filters nearer ends, so no rerolls), park
+  on the lane, and leave after a respawn delay. Traffic drives on
+  **painted directional lanes** — the same doctrine as sidewalks: each
+  road and bridge role carries lane masks keyed `north-1`…`west-4`, up
+  to four lanes per direction of travel; a subtile painted for one
+  direction is a lane, several directions a crossing where cars keep
+  their heading, and cars never reverse. Distinct lanes of one direction
+  are distinct bands — a car centres on whichever it drives and never
+  weaves between them, so turning is stepping from one direction's lane
+  into another and corners are authored paint. (Known limitation, noted
+  2026-11: the planner breaks path ties deterministically, so parallel
+  same-direction lanes pile traffic into one lane; seeded tie-breaking
+  is the fix when multi-lane roads arrive.)
+  Vehicle types mix by authored percents (summing to 100) with colour
+  variants rolled per trip, like catalogue variations; cars climb
+  bridges and drive at town pace (~1 cell/s = 12 m/s). Unpainted roles
+  carry no traffic, so young or unpainted towns stay foot-traffic only,
+  and one-way streets are simply lanes painted in one direction.
 
 ## 8. Future features and open decisions
 

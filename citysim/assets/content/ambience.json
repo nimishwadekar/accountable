@@ -9,16 +9,53 @@
     "speedRange": 0.3,
     "spriteScale": 0.9,
     "types": {
-      "box": { "percent": 8, "variants": ["red", "yellow", "green"] },
-      "bus_school": { "percent": 7 },
-      "firetruck": { "percent": 7 },
-      "garbage": { "percent": 6 },
-      "pickup": { "percent": 18, "variants": ["orange", "black", "red"] },
-      "police": { "percent": 5 },
-      "sedan": { "percent": 22, "variants": ["blue", "white", "red"] },
-      "swat": { "percent": 2 },
-      "truck": { "percent": 10, "variants": ["red", "green", "yellow"] },
-      "van": { "percent": 15, "variants": ["white", "black", "purple"] }
+      "bus_school": {
+        "percent": 7
+      },
+      "firetruck": {
+        "percent": 7
+      },
+      "garbage": {
+        "percent": 6
+      },
+      "pickup": {
+        "percent": 20,
+        "variants": [
+          "orange",
+          "black",
+          "red"
+        ]
+      },
+      "police": {
+        "percent": 5
+      },
+      "sedan": {
+        "percent": 24,
+        "variants": [
+          "blue",
+          "white",
+          "red"
+        ]
+      },
+      "swat": {
+        "percent": 2
+      },
+      "truck": {
+        "percent": 12,
+        "variants": [
+          "red",
+          "green",
+          "yellow"
+        ]
+      },
+      "van": {
+        "percent": 17,
+        "variants": [
+          "white",
+          "black",
+          "purple"
+        ]
+      }
     }
   },
   "pedestrians": {

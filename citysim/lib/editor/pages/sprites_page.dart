@@ -250,10 +250,78 @@ class _SpritesPageState extends State<SpritesPage> {
                   // settle live instead of hot-restarting the game. The
                   // road-side selection is controlled so the per-side
                   // shift fields below always edit the side the plot
-                  // shows. Road and bridge tiles paint their walkable
-                  // lattice right on the tile — ramps and decks ride
-                  // their incline — so tap subtiles to mark where
-                  // pedestrians may walk.
+                  // shows. Road and bridge tiles paint their lattices
+                  // right on the tile — ramps and decks ride their
+                  // incline — so pick a brush and tap subtiles: the
+                  // sidewalk where pedestrians may walk, or a
+                  // direction's lane where cars may drive.
+                  if (_paintsWalkable(category))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          for (final brush in const [
+                            ('walk', 'Walk'),
+                            ('north', 'Cars N'),
+                            ('east', 'Cars E'),
+                            ('south', 'Cars S'),
+                            ('west', 'Cars W'),
+                          ])
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: ChoiceChip(
+                                label: Text(brush.$2),
+                                tooltip: brush.$1 == 'walk'
+                                    ? 'Paint the sidewalk — where pedestrians '
+                                          'may walk'
+                                    : 'Paint the ${brush.$1}bound lane — '
+                                          'cars traveling ${brush.$1}',
+                                selected:
+                                    (_paintBrushes[role] ?? 'walk') == brush.$1,
+                                onSelected: (_) => setState(
+                                  () => _paintBrushes[role] = brush.$1,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                labelPadding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  if (_paintsWalkable(category) &&
+                      (_paintBrushes[role] ?? 'walk') != 'walk')
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          for (final lane in const [1, 2, 3, 4])
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: ChoiceChip(
+                                label: Text('Lane $lane'),
+                                tooltip:
+                                    'Paint lane $lane of the selected '
+                                    'direction — painted subtiles carry '
+                                    '$lane travel chevron'
+                                    '${lane == 1 ? '' : 's'}',
+                                selected: (_paintLanes[role] ?? 1) == lane,
+                                onSelected: (_) =>
+                                    setState(() => _paintLanes[role] = lane),
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                labelPadding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   SpritePlotPreview(
                     categories: widget.categories,
                     role: role,
@@ -263,10 +331,18 @@ class _SpritesPageState extends State<SpritesPage> {
                     walkableRows: _paintsWalkable(category)
                         ? (meta['walkable'] as List?)?.cast<int>()
                         : null,
-                    onToggleWalkable: _paintsWalkable(category)
+                    laneRows: _paintsWalkable(category)
+                        ? _laneRowsOf(meta)
+                        : null,
+                    activeLane:
+                        _paintsWalkable(category) &&
+                            (_paintBrushes[role] ?? 'walk') != 'walk'
+                        ? '${_paintBrushes[role]}-${_paintLanes[role] ?? 1}'
+                        : null,
+                    onPaintSubtile: _paintsWalkable(category)
                         ? (x, y) => _editRole(
                             role,
-                            (sprite) => _toggleWalkableBit(sprite, x, y),
+                            (sprite) => _paintSubtile(sprite, x, y, role),
                           )
                         : null,
                   ),
@@ -525,6 +601,15 @@ class _SpritesPageState extends State<SpritesPage> {
   /// The road side each role's plot preview is showing.
   final Map<String, String> _roadSides = {};
 
+  /// The selected paint brush per role: 'walk' (the default,
+  /// sidewalks) or a lane direction. The plot's taps route through
+  /// it.
+  final Map<String, String> _paintBrushes = {};
+
+  /// The selected lane number per role, one to four — which of a
+  /// direction's lanes the brush paints.
+  final Map<String, int> _paintLanes = {};
+
   /// One component of a side's shift entry, straight from the raw
   /// sprite map; missing entries read as zero.
   double _sideShiftValue(Map<String, Object?> meta, String side, int index) {
@@ -554,7 +639,7 @@ class _SpritesPageState extends State<SpritesPage> {
   }
 
   /// Walkable subtiles are painted on road and bridge tiles — the two
-  /// surfaces pedestrians read masks from.
+  /// surfaces pedestrians read masks from — and so are driving lanes.
   bool _paintsWalkable(String category) =>
       category == 'roads' || category == 'bridges';
 
@@ -566,6 +651,42 @@ class _SpritesPageState extends State<SpritesPage> {
     if (rows is! List || rows.length != 8) {
       rows = <int>[for (var i = 0; i < 8; i++) 0];
       sprite['walkable'] = rows;
+    }
+    final current = rows[y] is num ? (rows[y] as num).toInt() : 0;
+    rows[y] = current ^ (1 << x);
+  }
+
+  /// Lane masks of a role from its raw sprite map, for the plot.
+  Map<String, List<int>>? _laneRowsOf(Map<String, Object?> meta) {
+    final raw = meta['lanes'];
+    if (raw is! Map) return null;
+    final lanes = <String, List<int>>{};
+    for (final entry in raw.entries) {
+      if (entry.value is! List) continue;
+      lanes[entry.key as String] = [
+        for (final row in entry.value as List) row is num ? row.toInt() : 0,
+      ];
+    }
+    return lanes.isEmpty ? null : lanes;
+  }
+
+  /// One tap on the plot: the selected brush paints — the sidewalk,
+  /// or one direction's lane. Lane rows are created on first paint.
+  void _paintSubtile(Map<String, Object?> sprite, int x, int y, String role) {
+    final brush = _paintBrushes[role] ?? 'walk';
+    if (brush == 'walk') {
+      _toggleWalkableBit(sprite, x, y);
+      return;
+    }
+    var lanes = sprite['lanes'];
+    if (lanes is! Map) {
+      lanes = <String, Object?>{};
+      sprite['lanes'] = lanes;
+    }
+    var rows = lanes['$brush-${_paintLanes[role] ?? 1}'];
+    if (rows is! List || rows.length != 8) {
+      rows = <int>[for (var i = 0; i < 8; i++) 0];
+      lanes['$brush-${_paintLanes[role] ?? 1}'] = rows;
     }
     final current = rows[y] is num ? (rows[y] as num).toInt() : 0;
     rows[y] = current ^ (1 << x);
