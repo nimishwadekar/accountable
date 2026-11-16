@@ -5,7 +5,6 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 - Demolition.
 - fix progression unlocks.
 - composite sprite editor: create new sprite from existing sprites. Multi-tile roads as composites of single-tile roads.
-- Scatter lots of greenery around to make it an uninhabited lush jungle
 - sheets and accountable integration.
 
 - terrain elevation and slops and cliffs and their sprites.
