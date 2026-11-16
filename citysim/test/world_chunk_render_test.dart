@@ -20,6 +20,7 @@
 /// art.
 library;
 
+import 'dart:math' as math;
 import 'dart:typed_data' show ByteData;
 import 'dart:ui' as ui;
 
@@ -351,6 +352,175 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
+
+  testWidgets('the sway zoom gate stills vegetation below minScale', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // A pine on the owned starter parcel, in camera view: pines sway
+    // (their sprites carry `sways`), so its pixels are the probe.
+    // The world has no structures, so population zero means no
+    // pedestrians and no cars. The terrain rides without its painted
+    // nature — a jungle of wild props would trickle sprite variants
+    // in for minutes, and this test pins one pine's motion, not the
+    // forest's.
+    final terrain = ContentTerrainProvider(
+      TerrainContent(
+        generatorVersion: content.terrain.generatorVersion,
+        parcels: content.terrain.parcels,
+        tiles: content.terrain.tiles,
+        props: const [],
+      ),
+    );
+    final world = _anchorWorld(content).copyWith(
+      props: [
+        PlacedProp(
+          id: 'prop:4:3:2.2',
+          catalogueId: 'pine-tree',
+          cell: const CellCoord(4, 3),
+          subtileX: 2,
+          subtileY: 2,
+          pricePaid: 0,
+          placedAtDay: 0,
+        ),
+      ],
+    );
+    // Only the gate differs between the two bundles.
+    ContentBundle withGate(double minScale) => ContentBundle(
+      manifest: content.manifest,
+      catalogue: content.catalogue,
+      sprites: content.sprites,
+      economy: content.economy,
+      ambience: AmbienceContent(
+        ambientTimeScale: content.ambience.ambientTimeScale,
+        vegetationSway: VegetationSwayContent(
+          maxAngleRadians: content.ambience.vegetationSway.maxAngleRadians,
+          baseFrequency: content.ambience.vegetationSway.baseFrequency,
+          frequencySteps: content.ambience.vegetationSway.frequencySteps,
+          frequencyStep: content.ambience.vegetationSway.frequencyStep,
+          minScale: minScale,
+        ),
+        pedestrians: content.ambience.pedestrians,
+        cars: content.ambience.cars,
+        unownedLandWash: content.ambience.unownedLandWash,
+        tileGrid: content.ambience.tileGrid,
+      ),
+      terrain: content.terrain,
+    );
+
+    final boundaryKey = GlobalKey();
+    Widget app(ContentBundle bundle) => MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: RepaintBoundary(
+          key: boundaryKey,
+          child: ParcelWorldView(
+            state: world,
+            content: bundle,
+            terrainProvider: terrain,
+            onCellTap: (cell, structureId, subtileX, subtileY) {},
+          ),
+        ),
+      ),
+    );
+
+    // Captures the boundary, advances ambient time by [gap], captures
+    // again, and counts differing pixels. Both captures happen before
+    // any byte is read: a sprite landing mid-pair could otherwise
+    // appear in the second capture only.
+    Future<int> differingPixelsAfter(Duration gap) async {
+      final a = (await _capture(tester, boundaryKey))!;
+      await tester.pump(gap);
+      final b = (await _capture(tester, boundaryKey))!;
+      final bytesA = await tester.runAsync(() => a.toByteData());
+      expect(bytesA, isNotNull);
+      final bytesB = await tester.runAsync(() => b.toByteData());
+      expect(bytesB, isNotNull);
+      var differing = 0;
+      for (var y = 0; y < a.height; y++) {
+        for (var x = 0; x < a.width; x++) {
+          final i = y * a.width + x;
+          if (bytesA!.getUint32(i * 4) != bytesB!.getUint32(i * 4)) {
+            differing++;
+          }
+        }
+      }
+      a.dispose();
+      b.dispose();
+      return differing;
+    }
+
+    // Gate open (0 — sway at every zoom): the pine rocks between
+    // frames. Two gaps so a phase where sin happens to repeat cannot
+    // flake the assertion.
+    ParcelWorldProbe.recording = true;
+    ParcelWorldProbe.reset();
+    await tester.pumpWidget(app(withGate(0)));
+    // Settle: decode art (real asset I/O only progresses inside
+    // runAsync windows) until a window passes with no chunk records
+    // and no change in the actor count — wave-two sprites (fog
+    // wisps, prop variants) land progressively, and a sprite
+    // appearing between captures would pollute the pixel comparison
+    // below. The count is compared across windows, since within one
+    // window nothing new can arrive.
+    var settled = false;
+    var lastActors = -1;
+    var quietWindows = 0;
+    for (var attempt = 0; attempt < 25 && !settled; attempt++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 400)),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      ParcelWorldProbe.reset();
+      for (var i = 0; i < 3; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      final frames = ParcelWorldProbe.samples;
+      final actors = frames.isEmpty ? -1 : frames.last.actorOps;
+      quietWindows = actors == lastActors ? quietWindows + 1 : 0;
+      settled =
+          frames.isNotEmpty &&
+          frames.every((s) => s.chunkRecords == 0) &&
+          quietWindows >= 2;
+      lastActors = actors;
+    }
+    expect(settled, isTrue, reason: 'the artwork should finish decoding');
+    // Composed shore bands chain asynchronously after the chunks
+    // record; give them real-async windows before comparing pixels.
+    for (var i = 0; i < 3; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    final live = math.max(
+      await differingPixelsAfter(const Duration(milliseconds: 700)),
+      await differingPixelsAfter(const Duration(milliseconds: 450)),
+    );
+    expect(
+      live,
+      greaterThan(30),
+      reason: 'with the gate open the pine must rock between frames',
+    );
+
+    // Gate shut (2.0 — above the camera's zoom 1): the same pine
+    // draws still, pixel-identical across the same time gaps.
+    await tester.pumpWidget(app(withGate(2)));
+    await tester.pump(const Duration(milliseconds: 100));
+    final still = math.max(
+      await differingPixelsAfter(const Duration(milliseconds: 700)),
+      await differingPixelsAfter(const Duration(milliseconds: 450)),
+    );
+    expect(
+      still,
+      lessThan(5),
+      reason: 'below minScale the pine must draw still',
+    );
+  }, timeout: const Timeout(Duration(minutes: 3)));
 
   testWidgets('parcel mode swaps the cell grid for the parcel grid', (
     tester,

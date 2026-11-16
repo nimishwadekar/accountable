@@ -131,6 +131,21 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   final Map<String, ui.Image> _images = {};
   final Map<String, Future<ui.Image>> _imageRequests = {};
 
+  /// Asset paths the chunk pictures can draw — every sprite role the
+  /// ground samples (terrain tiles only; roads, actors, and wisps
+  /// draw in their own per-frame layers). Ground art decodes in its
+  /// own first wave and gates the canvas mount, and only these
+  /// arrivals re-record chunks: a late character or car decode must
+  /// never invalidate the terrain layer.
+  late final Set<String> _groundPaths = {
+    for (final role in widget.content.sprites.keys)
+      if (role.startsWith('terrain.')) ...widget.content.allAssetPaths(role),
+  };
+
+  /// Whether every ground sprite has decoded — the moment the canvas
+  /// may mount and record its chunks once, complete.
+  bool get _groundArtReady => _groundPaths.every(_images.containsKey);
+
   /// Per-pixel picking masks for the decoded sprites, keyed by asset
   /// path. Filled alongside [_images]; taps read them synchronously.
   final Map<String, SpriteMask> _masks = {};
@@ -182,6 +197,11 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     ),
   );
   final _TerrainChunkCache _terrainCache = _TerrainChunkCache();
+
+  /// Session-static actors — structures, props, bridge pieces —
+  /// sorted once per world or selection change and replayed across
+  /// camera motion (see [_drawActors]).
+  final _StaticActorCache _staticActors = _StaticActorCache();
 
   /// Display pixel ratio, captured per build so chunk textures
   /// rasterize at the display's real density.
@@ -291,7 +311,14 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
               ),
             );
           }
-          if (_images.isEmpty) {
+          // The canvas mounts with complete ground art — ground
+          // decodes in its own first wave — so the chunk layer
+          // records once, finished, instead of re-recording per
+          // arriving sprite. A settled load with some art mounts too,
+          // keeping a broken pack visible rather than spinning
+          // forever.
+          final settled = snapshot.connectionState == ConnectionState.done;
+          if (!_groundArtReady && !(settled && _images.isNotEmpty)) {
             return const Center(child: CircularProgressIndicator());
           }
           final world = Listener(
@@ -394,6 +421,8 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   dimStructures: widget.dimStructures,
                   ambient: _ambient,
                   terrainCache: _terrainCache,
+                  staticActors: _staticActors,
+                  groundPaths: _groundPaths,
                   pixelRatio: _pixelRatio,
                   bands: _bandImages,
                   masks: _masks,
@@ -572,6 +601,14 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     });
   }
 
+  /// Decodes every sprite the scene can draw. Ground art goes first,
+  /// in its own awaited wave: the canvas mounts only once every
+  /// ground sprite is in (see the flip in [build]), so the chunk
+  /// layer records exactly once, finished — never per arriving
+  /// sprite. Everything else lands silently — the painter shares the
+  /// image map and the ambient clock repaints every frame, so
+  /// sprites stream in without a rebuild per decode — with one
+  /// coalesced repaint per wave so muted animations still see them.
   Future<void> _loadMissingImages({bool retryFailed = false}) async {
     final content = widget.content;
     final roles = <String>{
@@ -618,7 +655,8 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     if (retryFailed) {
       _imageRequests.removeWhere((path, _) => !_images.containsKey(path));
     }
-    final pending = <Future<ui.Image>>[];
+    final ground = <Future<ui.Image>>[];
+    final rest = <Future<ui.Image>>[];
     for (final path in paths) {
       if (_images.containsKey(path)) continue;
       final request = _imageRequests.putIfAbsent(path, () {
@@ -626,7 +664,10 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
         unawaited(
           future.then<void>((image) {
             if (mounted) {
-              setState(() => _images[path] = image);
+              // Silent landing: no setState per decode. The painter
+              // holds this map by reference, so the ambient repaints
+              // pick each sprite up the moment it arrives.
+              _images[path] = image;
               unawaited(_loadMask(path, image));
             } else {
               image.dispose();
@@ -635,10 +676,18 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
         );
         return future;
       });
-      pending.add(request);
+      (_groundPaths.contains(path) ? ground : rest).add(request);
     }
-    await Future.wait(pending);
+    // Wave one: ground art, awaited before the canvas mounts.
+    await Future.wait(ground, eagerError: false);
+    if (mounted) setState(() {});
+    // Wave two: everything else, streaming in through the ambient
+    // repaints while it decodes.
+    await Future.wait(rest, eagerError: false);
     await _decodeBandMaterials();
+    // Final flush — covers muted animations, where nothing else
+    // repaints between decodes.
+    if (mounted) setState(() {});
   }
 
   /// Decodes the ground materials the shore band needs: the land
@@ -1249,6 +1298,8 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.dimStructures,
     required this.ambient,
     required this.terrainCache,
+    required this.staticActors,
+    required this.groundPaths,
     required this.pixelRatio,
     required this.bands,
     required this.masks,
@@ -1300,6 +1351,14 @@ class _ParcelWorldPainter extends CustomPainter {
   final bool dimStructures;
   final _AmbientClock ambient;
   final _TerrainChunkCache terrainCache;
+
+  /// The session-static actor pass — structures, props, and bridge
+  /// pieces, sorted once and merged with the per-frame dynamics.
+  final _StaticActorCache staticActors;
+
+  /// Asset paths the chunk pictures can draw; only these re-record
+  /// chunks when they decode (see [_ParcelWorldViewState._groundPaths]).
+  final Set<String> groundPaths;
   final double pixelRatio;
 
   /// Composed shore-band overlays by neighbourhood pattern — the
@@ -1427,7 +1486,11 @@ class _ParcelWorldPainter extends CustomPainter {
     _CellBounds bounds,
     _ViewportGeometry viewport,
   ) {
-    terrainCache.resetFor(state, images.length, parcelMode);
+    terrainCache.resetFor(
+      state,
+      groundPaths.where(images.containsKey).length,
+      parcelMode,
+    );
     terrainCache.setTextureFactor(_textureFactorFor(scale, pixelRatio));
     terrainCache.evictDistant();
     final drawn = <_TerrainChunk>[];
@@ -1475,66 +1538,6 @@ class _ParcelWorldPainter extends CustomPainter {
     _drawRoads(canvas, size, bounds);
     _drawShoreBands(canvas, size, drawn);
     _drawFogWisps(canvas, size, drawn);
-  }
-
-  /// Every bridge tile the frame draws, with its sprite role: the
-  /// completed bridges' decks and ramps, plus the funded tiles of
-  /// bridges still building. The surface pass and the actor sort both
-  /// draw from this one list, so the split never drifts between them.
-  List<(String, CellCoord)> _bridgeTilesInBounds(_CellBounds bounds) {
-    final tiles = <(String, CellCoord)>[];
-    for (final bridge in queries.bridgesInBounds(
-      left: bounds.left - 5,
-      right: bounds.right + 5,
-      top: bounds.top - 5,
-      bottom: bounds.bottom + 5,
-    )) {
-      final body = bridgeBodyRole(bridge.nearBank, bridge.farBank);
-      for (final cell in bridge.waterCells) {
-        tiles.add((body, cell));
-      }
-      tiles.add((
-        bridgeRampRole(bridge.nearBank, bridge.waterCells.first),
-        bridge.nearBank,
-      ));
-      tiles.add((
-        bridgeRampRole(bridge.farBank, bridge.waterCells.last),
-        bridge.farBank,
-      ));
-    }
-    // Bridges still under construction: the near ramp rises with the
-    // first delivered cell (the near-bank road), then each delivered
-    // span tile of the deck appears in order, rising out of the dirt
-    // path. The far ramp only draws on the completed bridge — its
-    // bank road arrives with the final cell, and a ramp never stands
-    // on a non-road tile.
-    for (final job in state.constructions) {
-      if (job.kind != WorldConstructionKind.bridge) continue;
-      if (!boundsOverlapsCells(bounds, [
-        ...job.waterCells,
-        job.nearBank!,
-        job.farBank!,
-      ])) {
-        continue;
-      }
-      final delivered = job.stagesDone;
-      final spanTiles = (delivered - 1).clamp(0, job.waterCells.length);
-      final nearBankFunded = delivered >= 1;
-      if (!nearBankFunded && spanTiles <= 0) continue;
-      if (spanTiles > 0) {
-        final body = bridgeBodyRole(job.nearBank!, job.farBank!);
-        for (final cell in job.waterCells.take(spanTiles)) {
-          tiles.add((body, cell));
-        }
-      }
-      if (nearBankFunded) {
-        tiles.add((
-          bridgeRampRole(job.nearBank!, job.waterCells.first),
-          job.nearBank!,
-        ));
-      }
-    }
-    return tiles;
   }
 
   /// One bridge tile, drawn split along its surface plane: the same
@@ -2204,6 +2207,16 @@ class _ParcelWorldPainter extends CustomPainter {
   /// back-to-front pass keyed by base-cell depth, so a raised bridge
   /// deck occludes whatever is behind it and is occluded by whatever
   /// is in front, exactly like any other standing object.
+  ///
+  /// The pass is split. Structures, props, and bridge pieces are
+  /// session-static — their depth, art, and x-ray dimming change only
+  /// with the world or the selection — so they are enumerated over
+  /// the whole world, sorted once, and cached (see
+  /// [_StaticActorCache]); pedestrians and cars are rebuilt every
+  /// frame and merged in. The merge reproduces the single-list
+  /// insertion order the pass used before the split, ties included
+  /// (see [mergeByDepth]), so painter order is identical to the
+  /// unsplit pass.
   void _drawActors(
     Canvas canvas,
     Size size,
@@ -2232,13 +2245,220 @@ class _ParcelWorldPainter extends CustomPainter {
         ? null
         : queries.structuresByCell[selectedCell!];
     final xray = _selectionXrayTargets(size, queries);
-    final actors = <(double, void Function())>[];
-    for (final structure in queries.structuresInBounds(
-      left: bounds.left - 5,
-      right: bounds.right + 5,
-      top: bounds.top - 5,
-      bottom: bounds.bottom + 5,
-    )) {
+    // The statics' bake reads the screen-space camera for the x-ray,
+    // so a live selection carries it in the cache key; without one
+    // the statics are camera-independent and panning replays the
+    // cached order untouched.
+    final statics = staticActors.obtain((
+      world: state,
+      queries: queries,
+      content: content,
+      selectedCell: selectedCell,
+      selectedPropId: selectedPropId,
+      dimStructures: dimStructures,
+      camera: selectedCell == null
+          ? null
+          : (
+              scale: scale,
+              offset: offset,
+              size: size,
+              imageCount: images.length,
+            ),
+    ), () => _buildStaticActors(size, xray, selectedStructure));
+    // Dynamics: rebuilt every frame — pedestrians and cars move.
+    final dynamics = <_Actor>[
+      for (final pedestrian in pedestrians.list)
+        _PedestrianActor(
+          depth: pedestrian.depth(pedestrians.lattice),
+          pedestrian: pedestrian,
+        ),
+    ];
+    // Cars join the dynamics list, contest standings included for
+    // the pairwise resolver below.
+    for (final car in traffic.actors) {
+      final compass = carCompassForHeading(car.headingDx, car.headingDy);
+      final image = images[carAssetPath(car.type, car.variant, compass)];
+      // The deep corner's (col+row) gain over the anchor — half
+      // the drawn footprint's length plus half its width, which is
+      // the drawn width in cells — positions the deep end the sort
+      // key is taken from, so a nose already over a bridge tile or
+      // the car ahead clears its art instead of clipping through.
+      final halfDiag = image == null
+          ? 0.0
+          : image.width *
+                0.5 *
+                (content.ambience.cars.render[car.type]?.scale ??
+                    content.ambience.cars.spriteScale) /
+                64;
+      // Contest standings: the drawn box, the mid-body depth, and
+      // the bridge exemption.
+      Rect? box;
+      if (image != null) {
+        final screen = _carScreenPoint(size, car);
+        final (width, height, anchorX, anchorY) = _carBox(
+          image,
+          car.type,
+          compass,
+        );
+        box = Rect.fromLTRB(
+          screen.dx - anchorX * width,
+          screen.dy + 2 * scale - anchorY * height,
+          screen.dx + (1 - anchorX) * width,
+          screen.dy + 2 * scale + (1 - anchorY) * height,
+        );
+      }
+      dynamics.add(
+        _CarActor(
+          depth: traffic.actorDepth(car, halfDiagCells: halfDiag),
+          car: car,
+          anchor: traffic.actorAnchorDepth(car),
+          halfDiag: halfDiag,
+          touchesBridge: traffic.touchesBridge(car, halfDiagCells: halfDiag),
+          box: box,
+        ),
+      );
+    }
+    // Dart's sort is not stable: equal depths — a car exactly level
+    // with another — would swap arbitrarily frame to frame and
+    // flicker. Sorting the indices with the insertion order as the
+    // tie-break keeps painter order fixed unless a depth actually
+    // crosses. The dynamics list is small; the statics arrive
+    // pre-sorted by the same rule.
+    final dynamicOrder = [for (var i = 0; i < dynamics.length; i++) i]
+      ..sort((a, b) {
+        final depth = dynamics[a].depth.compareTo(dynamics[b].depth);
+        return depth != 0 ? depth : a.compareTo(b);
+      });
+    final sortedDynamics = [for (final i in dynamicOrder) dynamics[i]];
+    final merged = mergeByDepth(statics, sortedDynamics, (a) => a.depth);
+    // Contested cars re-order among themselves: a single key
+    // cannot serve both ends of a pass (a sedan's tail against a
+    // bus's nose), so mutually overlapping cars whose depth spans
+    // interleave swap to their bodies' centre order. The slots are
+    // read off the merged sequence — the resolver must see painter
+    // order, not the order the cars were built in — and written
+    // back into the same positions, so every other actor keeps
+    // its slot and its depth. Cars touching a bridge are exempt
+    // (the resolver's rule): their deep-corner key is what keeps
+    // them above the deck pieces while climbing.
+    final carSlots = <int, CarPainterSlot>{};
+    for (var i = 0; i < merged.length; i++) {
+      final actor = merged[i];
+      if (actor is! _CarActor) continue;
+      final box = actor.box;
+      if (box == null) continue;
+      carSlots[i] = CarPainterSlot(
+        actor: i,
+        anchor: actor.anchor,
+        halfDiag: actor.halfDiag,
+        touchesBridge: actor.touchesBridge,
+        left: box.left,
+        top: box.top,
+        right: box.right,
+        bottom: box.bottom,
+      );
+    }
+    if (carSlots.length > 1) {
+      final resolved = resolveCarPainterOrder(carSlots.values.toList());
+      final before = List<_Actor>.of(merged);
+      var next = 0;
+      for (final position in carSlots.keys) {
+        merged[position] = before[resolved[next++].actor];
+      }
+    }
+    // Draw back to front, culling by the same ±5-cell margin the
+    // bounds queries always used — per piece now, since the cached
+    // statics span the whole world.
+    final left = bounds.left - 5;
+    final right = bounds.right + 5;
+    final top = bounds.top - 5;
+    final bottom = bounds.bottom + 5;
+    for (final actor in merged) {
+      switch (actor) {
+        case _StructureActor(:final structure, :final dimmed):
+          if (!structure.footprint.any(
+            (cell) =>
+                cell.column >= left &&
+                cell.column <= right &&
+                cell.row >= top &&
+                cell.row <= bottom,
+          )) {
+            continue;
+          }
+          _drawStructure(canvas, size, structure, seconds, dimmed: dimmed);
+        case _PropActor(:final prop, :final dimmed):
+          final cell = prop.cell;
+          if (cell.column < left ||
+              cell.column > right ||
+              cell.row < top ||
+              cell.row > bottom) {
+            continue;
+          }
+          _drawProp(canvas, size, prop, seconds, dimmed: dimmed);
+        case _BridgeActor(:final role, :final cell, :final surface):
+          if (cell.column < left ||
+              cell.column > right ||
+              cell.row < top ||
+              cell.row > bottom) {
+            continue;
+          }
+          _drawBridgeTile(
+            canvas,
+            role,
+            cell,
+            size,
+            scale,
+            offset,
+            surface: surface,
+          );
+        case _PedestrianActor(:final pedestrian):
+          _drawPedestrian(canvas, size, pedestrian, seconds);
+        case _CarActor(:final car):
+          _drawCar(canvas, size, car);
+      }
+    }
+  }
+
+  /// Enumerates every session-static actor in the world — the full
+  /// scan, not the camera window, so the cache survives camera
+  /// motion — in the chunk-scan order the bounds queries iterate,
+  /// so equal-depth ties keep the painter order the windowed
+  /// per-frame pass always had. Bridge tiles draw split along their
+  /// surface plane, both pieces in the sort at fractional slots just
+  /// above their cell: posts at +0.02, surface at +0.05. The slots
+  /// keep the pieces after same-depth structures (the tie order the
+  /// full sprites always had) while posts(X) still draw before
+  /// surface(X+1), exactly the order the whole sprites stacked in —
+  /// supports hang under the next tile's art and show through its
+  /// transparent gaps, the way painter's order always painted them.
+  List<_Actor> _buildStaticActors(
+    Size size,
+    List<(double, Rect, SpriteMask?)>? xray,
+    PlacedStructure? selectedStructure,
+  ) {
+    final actors = <_Actor>[];
+
+    void bridgePieces(String role, CellCoord cell) {
+      final depth = (cell.column + cell.row).toDouble();
+      actors.add(
+        _BridgeActor(
+          depth: depth + 0.02,
+          role: role,
+          cell: cell,
+          surface: false,
+        ),
+      );
+      actors.add(
+        _BridgeActor(
+          depth: depth + 0.05,
+          role: role,
+          cell: cell,
+          surface: true,
+        ),
+      );
+    }
+
+    for (final structure in _allByChunkScan(queries.structureChunks)) {
       final depth = _structureDepth(structure).toDouble();
       final isSelected = selectedStructure?.id == structure.id;
       var dimmed = false;
@@ -2261,17 +2481,11 @@ class _ParcelWorldPainter extends CustomPainter {
           );
         }
       }
-      actors.add((
-        depth,
-        () => _drawStructure(canvas, size, structure, seconds, dimmed: dimmed),
-      ));
+      actors.add(
+        _StructureActor(depth: depth, structure: structure, dimmed: dimmed),
+      );
     }
-    for (final prop in queries.propsInBounds(
-      left: bounds.left - 5,
-      right: bounds.right + 5,
-      top: bounds.top - 5,
-      bottom: bounds.bottom + 5,
-    )) {
+    for (final prop in _allByChunkScan(queries.propChunks)) {
       final depth = propDepth(prop);
       var dimmed = false;
       if (xray != null) {
@@ -2299,124 +2513,48 @@ class _ParcelWorldPainter extends CustomPainter {
           );
         }
       }
-      actors.add((
-        depth,
-        () => _drawProp(canvas, size, prop, seconds, dimmed: dimmed),
-      ));
+      actors.add(_PropActor(depth: depth, prop: prop, dimmed: dimmed));
     }
-    // Bridge tiles draw split along their surface plane, both pieces
-    // in the sort at fractional slots just above their cell: posts at
-    // +0.02, surface at +0.05. The slots keep the pieces after
-    // same-depth structures (the tie order the full sprites always
-    // had) while posts(X) still draw before surface(X+1), exactly the
-    // order the whole sprites stacked in — supports hang under the
-    // next tile's art and show through its transparent gaps, the way
-    // painter's order always painted them. Walkers on bridge tiles
-    // climb a depth ramp through the cell — above their tile's
-    // surface at the back, past the next tile's pieces before the
-    // front edge — so boundary crossings never dip them under the
-    // next tile's art, and they stay below the next cell's own
-    // back-corner walker, so front-to-back order holds across cells.
-    for (final (role, cell) in _bridgeTilesInBounds(bounds)) {
-      final depth = (cell.column + cell.row).toDouble();
-      actors.add((
-        depth + 0.02,
-        () => _drawBridgeTile(canvas, role, cell, size, scale, offset),
-      ));
-      actors.add((
-        depth + 0.05,
-        () => _drawBridgeTile(
-          canvas,
-          role,
-          cell,
-          size,
-          scale,
-          offset,
-          surface: true,
-        ),
-      ));
+    for (final bridge in _allByChunkScan(queries.bridgeChunks)) {
+      final body = bridgeBodyRole(bridge.nearBank, bridge.farBank);
+      for (final cell in bridge.waterCells) {
+        bridgePieces(body, cell);
+      }
+      bridgePieces(
+        bridgeRampRole(bridge.nearBank, bridge.waterCells.first),
+        bridge.nearBank,
+      );
+      bridgePieces(
+        bridgeRampRole(bridge.farBank, bridge.waterCells.last),
+        bridge.farBank,
+      );
     }
-    for (final pedestrian in pedestrians.list) {
-      actors.add((
-        pedestrian.depth(pedestrians.lattice),
-        () => _drawPedestrian(canvas, size, pedestrian, seconds),
-      ));
-    }
-    final carSlotByActor = <int, CarPainterSlot>{};
-    for (final car in traffic.actors) {
-      final compass = carCompassForHeading(car.headingDx, car.headingDy);
-      final image = images[carAssetPath(car.type, car.variant, compass)];
-      // The deep corner's (col+row) gain over the anchor — half
-      // the drawn footprint's length plus half its width, which is
-      // the drawn width in cells — positions the deep end the sort
-      // key is taken from, so a nose already over a bridge tile or
-      // the car ahead clears its art instead of clipping through.
-      final halfDiag = image == null
-          ? 0.0
-          : image.width *
-                0.5 *
-                (content.ambience.cars.render[car.type]?.scale ??
-                    content.ambience.cars.spriteScale) /
-                64;
-      actors.add((
-        traffic.actorDepth(car, halfDiagCells: halfDiag),
-        () => _drawCar(canvas, size, car),
-      ));
-      // Contest standings for the pairwise pass below: the drawn
-      // box, the mid-body depth, and the bridge exemption.
-      if (image != null) {
-        final screen = _carScreenPoint(size, car);
-        final (width, height, anchorX, anchorY) = _carBox(
-          image,
-          car.type,
-          compass,
-        );
-        carSlotByActor[actors.length - 1] = CarPainterSlot(
-          actor: actors.length - 1,
-          anchor: traffic.actorAnchorDepth(car),
-          halfDiag: halfDiag,
-          touchesBridge: traffic.touchesBridge(car, halfDiagCells: halfDiag),
-          left: screen.dx - anchorX * width,
-          top: screen.dy + 2 * scale - anchorY * height,
-          right: screen.dx + (1 - anchorX) * width,
-          bottom: screen.dy + 2 * scale + (1 - anchorY) * height,
+    // Bridges still under construction: the near ramp rises with the
+    // first delivered cell (the near-bank road), then each delivered
+    // span tile of the deck appears in order, rising out of the dirt
+    // path. The far ramp only draws on the completed bridge — its
+    // bank road arrives with the final cell, and a ramp never stands
+    // on a non-road tile.
+    for (final job in state.constructions) {
+      if (job.kind != WorldConstructionKind.bridge) continue;
+      final delivered = job.stagesDone;
+      final spanTiles = (delivered - 1).clamp(0, job.waterCells.length);
+      final nearBankFunded = delivered >= 1;
+      if (!nearBankFunded && spanTiles <= 0) continue;
+      if (spanTiles > 0) {
+        final body = bridgeBodyRole(job.nearBank!, job.farBank!);
+        for (final cell in job.waterCells.take(spanTiles)) {
+          bridgePieces(body, cell);
+        }
+      }
+      if (nearBankFunded) {
+        bridgePieces(
+          bridgeRampRole(job.nearBank!, job.waterCells.first),
+          job.nearBank!,
         );
       }
     }
-    // Dart's sort is not stable: equal depths — a car exactly level
-    // with a bridge piece or another car — would swap arbitrarily
-    // frame to frame and flicker. Sorting the indices with the
-    // insertion order as the tie-break keeps painter order fixed
-    // unless a depth actually crosses.
-    final order = [for (var i = 0; i < actors.length; i++) i]
-      ..sort((a, b) {
-        final depth = actors[a].$1.compareTo(actors[b].$1);
-        return depth != 0 ? depth : a.compareTo(b);
-      });
-    // Contested cars re-order among themselves: a single key
-    // cannot serve both ends of a pass (a sedan's tail against a
-    // bus's nose), so mutually overlapping cars whose depth spans
-    // interleave swap to their bodies' centre order. The slots are
-    // read off the sorted sequence — the resolver must see painter
-    // order, not the order the cars were built in — and written
-    // back into the same positions, so every other actor keeps
-    // its slot and its depth. Cars touching a bridge are exempt
-    // (the resolver's rule): their deep-corner key is what keeps
-    // them above the deck pieces while climbing.
-    if (carSlotByActor.length > 1) {
-      final painterSlots = <CarPainterSlot>[
-        for (final index in order) ?carSlotByActor[index],
-      ];
-      final resolved = resolveCarPainterOrder(painterSlots);
-      var next = 0;
-      for (var p = 0; p < order.length && next < resolved.length; p++) {
-        if (carSlotByActor[order[p]] == null) continue;
-        order[p] = resolved[next++].actor;
-      }
-    }
-    for (final index in order) {
-      actors[index].$2();
-    }
+    return actors;
   }
 
   /// Stage progress of an in-flight project: stages done over the
@@ -2601,7 +2739,10 @@ class _ParcelWorldPainter extends CustomPainter {
       // no offscreen layer.
       paint.color = const Color(0x66FFFFFF);
     }
-    if (!sprite.sways) {
+    // Sway draws only close enough to see it: below the content's
+    // zoom gate the rock is a sub-pixel shiver, and skipping the
+    // transform keeps far-zoom frames flat draws.
+    if (!sprite.sways || scale < content.ambience.vegetationSway.minScale) {
       canvas.drawImageRect(image, source, rect, paint);
       return;
     }
@@ -2668,8 +2809,12 @@ class _ParcelWorldPainter extends CustomPainter {
     }
     // A selected prop holds still: the selection wash repaints the
     // unswayed sprite on top (see [_drawSelection]), and the swaying
-    // original behind it would show through as a double image.
-    if (!sprite.sways || prop.id == selectedPropId) {
+    // original behind it would show through as a double image. The
+    // zoom gate mutes the rest at far zoom, where the rock is a
+    // sub-pixel shiver not worth a per-sprite transform.
+    if (!sprite.sways ||
+        prop.id == selectedPropId ||
+        scale < content.ambience.vegetationSway.minScale) {
       canvas.drawImageRect(image, source, rect, paint);
       return;
     }
@@ -3890,6 +4035,186 @@ Rect _worldRectToScreen(Rect rect, Size size, double scale, Offset offset) =>
 /// 128×64 tile scale. A 24×32 character frame at this size reads as a
 /// person roughly two-thirds of a small building's height.
 
+/// One drawable entry in the back-to-front actor pass. Structures,
+/// props, and bridge pieces are session-static — their depth, art,
+/// and x-ray dimming change only with the world or the selection —
+/// so they live in a sorted cache (see [_StaticActorCache]);
+/// pedestrians and cars are rebuilt every frame and merged in (see
+/// [mergeByDepth]).
+sealed class _Actor {
+  _Actor({required this.depth});
+
+  /// The painter's sort key: the deepest ground cell under the
+  /// actor, fractional for subtile, bridge-piece, and moving-actor
+  /// slots.
+  final double depth;
+}
+
+/// A standing structure, its x-ray dimming baked at cache-build
+/// time.
+final class _StructureActor extends _Actor {
+  _StructureActor({
+    required super.depth,
+    required this.structure,
+    required this.dimmed,
+  });
+
+  final PlacedStructure structure;
+  final bool dimmed;
+}
+
+/// A placed or wild prop, its x-ray dimming baked at cache-build
+/// time.
+final class _PropActor extends _Actor {
+  _PropActor({required super.depth, required this.prop, required this.dimmed});
+
+  final PlacedProp prop;
+  final bool dimmed;
+}
+
+/// One half of a bridge tile's split draw — posts or surface — at
+/// its fractional slot above the cell's base depth.
+final class _BridgeActor extends _Actor {
+  _BridgeActor({
+    required super.depth,
+    required this.role,
+    required this.cell,
+    required this.surface,
+  });
+
+  final String role;
+  final CellCoord cell;
+  final bool surface;
+}
+
+/// An ambient pedestrian, rebuilt every frame at its walked depth.
+final class _PedestrianActor extends _Actor {
+  _PedestrianActor({required super.depth, required this.pedestrian});
+
+  final _Pedestrian pedestrian;
+}
+
+/// An ambient car, rebuilt every frame, carrying its contest
+/// standings for the pairwise painter-order resolver.
+final class _CarActor extends _Actor {
+  _CarActor({
+    required super.depth,
+    required this.car,
+    required this.anchor,
+    required this.halfDiag,
+    required this.touchesBridge,
+    required this.box,
+  });
+
+  final CarActor car;
+
+  /// The mid-body depth — the resolver's tie-break between
+  /// overlapping cars.
+  final double anchor;
+
+  /// Half the drawn footprint's diagonal, in cells.
+  final double halfDiag;
+
+  /// Whether the car touches a bridge (the resolver's exemption).
+  final bool touchesBridge;
+
+  /// The drawn box on screen, when the sprite has decoded.
+  final Rect? box;
+}
+
+/// Merges the cached static actors with the per-frame dynamics into
+/// one back-to-front sequence. Both lists arrive pre-sorted by
+/// (depth, insertion order); a depth tie draws the static entry
+/// first, which is exactly the single-list insertion order the pass
+/// used before the split — structures, props, and bridge pieces were
+/// appended ahead of pedestrians and cars — so painter order is
+/// unchanged by the split.
+@visibleForTesting
+List<T> mergeByDepth<T>(
+  List<T> statics,
+  List<T> dynamics,
+  double Function(T) depthOf,
+) {
+  final merged = <T>[];
+  var s = 0;
+  var d = 0;
+  while (s < statics.length && d < dynamics.length) {
+    if (depthOf(statics[s]) <= depthOf(dynamics[d])) {
+      merged.add(statics[s++]);
+    } else {
+      merged.add(dynamics[d++]);
+    }
+  }
+  merged.addAll(statics.sublist(s));
+  merged.addAll(dynamics.sublist(d));
+  return merged;
+}
+
+/// Every item in a chunk map, in the y-major, x-minor scan order the
+/// bounds queries iterate — the full-range counterpart of
+/// `WorldQueries.*InBounds`, deduplicated the same way. A cached
+/// static list built in this order keeps the painter order the
+/// windowed per-frame pass always had, ties included.
+List<T> _allByChunkScan<T>(Map<WorldChunkCoord, List<T>> chunks) {
+  if (chunks.isEmpty) return const [];
+  var minX = chunks.keys.first.x;
+  var minY = chunks.keys.first.y;
+  var maxX = minX;
+  var maxY = minY;
+  for (final coord in chunks.keys) {
+    minX = math.min(minX, coord.x);
+    minY = math.min(minY, coord.y);
+    maxX = math.max(maxX, coord.x);
+    maxY = math.max(maxY, coord.y);
+  }
+  final found = <T>{};
+  for (var y = minY; y <= maxY; y++) {
+    for (var x = minX; x <= maxX; x++) {
+      found.addAll(chunks[WorldChunkCoord(x, y)] ?? const []);
+    }
+  }
+  return found.toList();
+}
+
+/// The cache key: everything the static bake reads. Without a
+/// selection the statics are camera-independent; with one, the x-ray
+/// occlusion test runs in screen space, so the camera, canvas, and
+/// decoded-sprite count ride along.
+typedef _StaticActorKey = ({
+  Object world,
+  WorldQueries queries,
+  ContentBundle content,
+  CellCoord? selectedCell,
+  String? selectedPropId,
+  bool dimStructures,
+  ({double scale, Offset offset, Size size, int imageCount})? camera,
+});
+
+/// Session-static actors — structures, props, bridge pieces —
+/// enumerated over the whole world, x-ray dimming baked, sorted once
+/// by (depth, insertion order), and replayed across camera motion.
+/// Rebuilt only when the key changes: a world or terrain change, a
+/// selection change, or — while something is selected — a camera
+/// move or a late sprite decode.
+class _StaticActorCache {
+  _StaticActorKey? _key;
+  List<_Actor>? _sorted;
+
+  List<_Actor> obtain(_StaticActorKey key, List<_Actor> Function() build) {
+    if (_key == key) return _sorted!;
+    _key = key;
+    final built = build();
+    final order = [for (var i = 0; i < built.length; i++) i]
+      ..sort((a, b) {
+        final depth = built[a].depth.compareTo(built[b].depth);
+        return depth != 0 ? depth : a.compareTo(b);
+      });
+    _sorted = [for (final i in order) built[i]];
+    ParcelWorldProbe.countStaticRebuild();
+    return _sorted!;
+  }
+}
+
 /// Elapsed-time source for ambient rendering. A raw ticker rather than an
 /// [AnimationController] so the value is plainly "seconds since startup",
 /// with no repeating wrap that would jump animation phases.
@@ -3977,7 +4302,7 @@ class _TerrainChunk {
 class _TerrainChunkCache {
   final Map<ParcelCoord, _TerrainChunk> chunks = {};
   Object? worldKey;
-  int imageCount = -1;
+  int groundImageCount = -1;
   bool parcelModeKey = false;
   double textureFactor = 1;
   int generation = 0;
@@ -3991,17 +4316,20 @@ class _TerrainChunkCache {
 
   int nextStamp() => ++_stamp;
 
-  /// Drops every chunk when the world, the sprite set, or the terrain
-  /// view mode changed — parcel mode swaps the ground tiles, the
-  /// unowned wash, and the owned outlines inside the recording.
-  void resetFor(Object world, int images, bool parcelMode) {
+  /// Drops every chunk when the world, the ground sprite set, or the
+  /// terrain view mode changed — parcel mode swaps the ground tiles,
+  /// the unowned wash, and the owned outlines inside the recording.
+  /// Only ground art counts as a sprite change: chunk pictures
+  /// sample terrain roles alone, so a late character, car, or prop
+  /// decode must not re-record the world.
+  void resetFor(Object world, int groundImages, bool parcelMode) {
     if (worldKey == world &&
-        imageCount == images &&
+        groundImageCount == groundImages &&
         parcelModeKey == parcelMode) {
       return;
     }
     worldKey = world;
-    imageCount = images;
+    groundImageCount = groundImages;
     parcelModeKey = parcelMode;
     generation++;
     for (final chunk in chunks.values) {

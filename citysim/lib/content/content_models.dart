@@ -751,6 +751,7 @@ class VegetationSwayContent {
     required this.baseFrequency,
     required this.frequencySteps,
     required this.frequencyStep,
+    required this.minScale,
   });
 
   final double maxAngleRadians;
@@ -758,11 +759,19 @@ class VegetationSwayContent {
   final int frequencySteps;
   final double frequencyStep;
 
+  /// Camera scale below which swaying sprites draw still. At far
+  /// zoom the rock is a sub-pixel shiver, and paying a per-sprite
+  /// save/rotate/restore for it is what makes dense vegetation
+  /// expensive — so the gate keeps far-zoom frames flat draws.
+  /// Zero keeps the sway at every zoom.
+  final double minScale;
+
   Map<String, Object?> toJson() => {
     'maxAngleRadians': maxAngleRadians,
     'baseFrequency': baseFrequency,
     'frequencySteps': frequencySteps,
     'frequencyStep': frequencyStep,
+    'minScale': minScale,
   };
 
   static VegetationSwayContent fromJson(Map<String, Object?> json) =>
@@ -771,6 +780,7 @@ class VegetationSwayContent {
         baseFrequency: (json['baseFrequency']! as num).toDouble(),
         frequencySteps: json['frequencySteps']! as int,
         frequencyStep: (json['frequencyStep']! as num).toDouble(),
+        minScale: (json['minScale']! as num).toDouble(),
       );
 }
 
@@ -1787,6 +1797,10 @@ List<ContentIssue> validateContentData({
   if (ambience.vegetationSway.maxAngleRadians < 0 ||
       ambience.vegetationSway.maxAngleRadians > 0.5) {
     error('Vegetation sway angle must be within [0, 0.5] radians.');
+  }
+  if (ambience.vegetationSway.minScale < 0 ||
+      ambience.vegetationSway.minScale > 2) {
+    error('Vegetation sway zoom gate must be within [0, 2].');
   }
   if (ambience.pedestrians.spriteScale <= 0 ||
       ambience.pedestrians.walkFrameRate <= 0 ||

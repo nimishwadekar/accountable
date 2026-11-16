@@ -260,7 +260,9 @@ the current slice.
   gait-consistent pace the walk cycle depicts (~2.4–3.6 m/s, feet landing
   on the stride) — water carries a
   gentle travelling shimmer, and vegetation (trees, flowers) sways slightly
-  in the wind. Ambience is muted when the platform requests reduced motion,
+  in the wind, stilling below the sway zoom gate (`minScale`, 0.75 — at far
+  zoom the rock is a sub-pixel shiver not worth a per-sprite transform).
+  Ambience is muted when the platform requests reduced motion,
   is excluded from saves and progression, and never affects gameplay.
 - A physical scale for the map: one tile is 12 m of ground — walkers read
   ~1.69 m, the human average; a road tile, a complete street; a one-tile

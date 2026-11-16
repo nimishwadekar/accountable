@@ -10,6 +10,9 @@
 ///   zoomed-out frames;
 /// - how much chunk re-recording happened (world or sprite changes,
 ///   or entering previously unseen areas);
+/// - how many static-actor cache rebuilds happened (world or
+///   selection changes — never camera motion alone, which is the
+///   point of the split);
 /// - how many cells the draw bounds cover versus how many are actually
 ///   visible (chunk-granularity overdraw).
 ///
@@ -39,6 +42,7 @@ class FrameSample {
     required this.roadOps,
     required this.outlineOps,
     required this.actorOps,
+    required this.staticRebuilds,
     required this.boundsCells,
     required this.drawnCells,
     required this.onscreenCells,
@@ -66,6 +70,11 @@ class FrameSample {
   final int outlineOps;
 
   final int actorOps;
+
+  /// Static-actor cache rebuilds this frame — a world, selection,
+  /// or (while selected) camera change. Zero in every steady frame,
+  /// idle or moving.
+  final int staticRebuilds;
 
   /// Cells covered by the painter's draw bounds (the lattice bounding
   /// box of the visible diamond).
@@ -107,6 +116,7 @@ class ProbeStats {
       meanChunkDraws = _mean(source.map((s) => s.chunkDraws)),
       meanTotalOps = _mean(source.map((s) => s.totalOps)),
       meanActorOps = _mean(source.map((s) => s.actorOps)),
+      meanStaticRebuilds = _mean(source.map((s) => s.staticRebuilds)),
       meanTerrainOps = _mean(source.map((s) => s.terrainOps)),
       meanWashOps = _mean(source.map((s) => s.washOps)),
       meanRoadOps = _mean(source.map((s) => s.roadOps)),
@@ -127,6 +137,7 @@ class ProbeStats {
   final double meanChunkDraws;
   final double meanTotalOps;
   final double meanActorOps;
+  final double meanStaticRebuilds;
   final double meanTerrainOps;
   final double meanWashOps;
   final double meanRoadOps;
@@ -150,7 +161,8 @@ class ProbeStats {
       ' max ${maxTerrainMs.toStringAsFixed(1)}ms)\n'
       '   draws/frame: ${_fmt(meanTotalOps)} total'
       ' - chunks ${_fmt(meanChunkDraws)},'
-      ' actors ${_fmt(meanActorOps)}\n'
+      ' actors ${_fmt(meanActorOps)},'
+      ' static rebuilds ${_fmt(meanStaticRebuilds)}\n'
       '   record work/frame: terrain ${_fmt(meanTerrainOps)},'
       ' wash ${_fmt(meanWashOps)},'
       ' roads ${_fmt(meanRoadOps)},'
@@ -211,6 +223,7 @@ class ParcelWorldProbe {
   static int _roadOps = 0;
   static int _outlineOps = 0;
   static int _actorOps = 0;
+  static int _staticRebuilds = 0;
   static int _boundsCells = 0;
   static int _drawnCells = 0;
   static int _onscreenCells = 0;
@@ -257,6 +270,7 @@ class ParcelWorldProbe {
     _roadOps = 0;
     _outlineOps = 0;
     _actorOps = 0;
+    _staticRebuilds = 0;
     _boundsCells = 0;
     _drawnCells = 0;
     _onscreenCells = 0;
@@ -310,6 +324,10 @@ class ParcelWorldProbe {
     if (_paintClock != null) _actorOps++;
   }
 
+  static void countStaticRebuild() {
+    if (_paintClock != null) _staticRebuilds++;
+  }
+
   /// Cells covered by drawn chunks.
   static void noteDrawnCells(int cells) {
     if (_paintClock != null) _drawnCells += cells;
@@ -342,6 +360,7 @@ class ParcelWorldProbe {
         roadOps: _carryRoadOps,
         outlineOps: _carryOutlineOps,
         actorOps: _actorOps,
+        staticRebuilds: _staticRebuilds,
         boundsCells: _boundsCells,
         drawnCells: _drawnCells,
         onscreenCells: _onscreenCells,

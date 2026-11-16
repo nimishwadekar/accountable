@@ -270,6 +270,7 @@
     "baseFrequency": 1.1,
     "frequencyStep": 0.13,
     "frequencySteps": 7,
-    "maxAngleRadians": 0.045
+    "maxAngleRadians": 0.045,
+    "minScale": 0.75
   }
 }

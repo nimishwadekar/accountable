@@ -255,6 +255,46 @@ void main() {
     );
   });
 
+  test('the sway zoom gate parses, round-trips, and validates', () {
+    // The shipped gate: sway draws only at 0.75× camera scale and
+    // closer — a content-tunable LOD switch, zero keeping the sway
+    // at every zoom.
+    expect(content.ambience.vegetationSway.minScale, 0.75);
+    final fresh = VegetationSwayContent.fromJson(
+      content.ambience.vegetationSway.toJson(),
+    );
+    expect(fresh.minScale, 0.75, reason: 'the gate round-trips');
+
+    final bad = AmbienceContent(
+      ambientTimeScale: content.ambience.ambientTimeScale,
+      vegetationSway: VegetationSwayContent(
+        maxAngleRadians: content.ambience.vegetationSway.maxAngleRadians,
+        baseFrequency: content.ambience.vegetationSway.baseFrequency,
+        frequencySteps: content.ambience.vegetationSway.frequencySteps,
+        frequencyStep: content.ambience.vegetationSway.frequencyStep,
+        minScale: -1,
+      ),
+      pedestrians: content.ambience.pedestrians,
+      cars: content.ambience.cars,
+      unownedLandWash: content.ambience.unownedLandWash,
+      tileGrid: content.ambience.tileGrid,
+    );
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: bad,
+        terrain: content.terrain,
+      ).any(
+        (issue) =>
+            issue.severity == 'error' &&
+            issue.message.contains('sway zoom gate'),
+      ),
+      isTrue,
+    );
+  });
+
   test('content seed snapshot holds the seeded defaults', () {
     // Snapshot guard: these values are the seeded defaults the dashboard
     // starts from — the original nine models, the promoted Buggy

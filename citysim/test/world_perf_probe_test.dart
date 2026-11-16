@@ -99,9 +99,11 @@ void main() {
 
       // Settle: decode images, initialize the camera, and keep pumping
       // until a window of frames passes without a ground-layer
-      // re-record (late image loads each trigger one). Real asset I/O
-      // only progresses inside runAsync windows; the sample town's
-      // ~130 sprites take a few real seconds in debug mode.
+      // re-record. Ground art decodes in its own first wave and gates
+      // the mount, so the chunks record once, complete; the loop only
+      // waits out the camera's initial frames. Real asset I/O only
+      // progresses inside runAsync windows; the sample town's ~130
+      // sprites take a few real seconds in debug mode.
       debugPrint('[perf] settling…');
       var settled = false;
       for (var attempt = 0; attempt < 10 && !settled; attempt++) {
@@ -233,6 +235,17 @@ void main() {
       // 6. The zoom actually reached the zoomed-out regime.
       expect(panOut.meanScale, lessThan(0.62));
       expect(panOut.meanScale, greaterThan(0.42));
+      // 7. The static actor pass never rebuilds while the world sits
+      //    still or the camera moves — idle, panning, and zooming all
+      //    replay the cached order; only a world or selection change
+      //    rebuilds it.
+      for (final stats in [idle, panIn, pinchOut, panOut]) {
+        expect(
+          stats.meanStaticRebuilds,
+          lessThan(0.01),
+          reason: '${stats.label} must not rebuild the static actors',
+        );
+      }
 
       expect(tester.takeException(), isNull);
     },
