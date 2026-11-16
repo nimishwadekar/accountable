@@ -304,4 +304,128 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+
+  /// The map's nature, riding the real terrain plus authored rows.
+  ContentTerrainProvider natureWith(List<TerrainProp> props) =>
+      ContentTerrainProvider(
+        TerrainContent(
+          generatorVersion: content.terrain.generatorVersion,
+          parcels: content.terrain.parcels,
+          tiles: content.terrain.tiles,
+          props: props,
+        ),
+      );
+
+  test('wild nature renders on unowned parcels but never interacts', () {
+    // A pine on the unowned grass parcel north of the starter, and
+    // one on the owned starter parcel — only the first is the
+    // frontier's to show.
+    final nature = natureWith(const [
+      TerrainProp(
+        catalogueId: 'pine-tree',
+        cell: CellCoord(3, 10),
+        subtileX: 2,
+        subtileY: 3,
+      ),
+      TerrainProp(
+        catalogueId: 'pine-tree',
+        cell: CellCoord(5, 5),
+        subtileX: 1,
+        subtileY: 1,
+      ),
+    ]);
+    final queries = WorldQueries(town(), nature);
+    final visible = queries.propsInBounds(
+      left: 0,
+      right: 10,
+      top: 8,
+      bottom: 16,
+    );
+    expect(visible, hasLength(1));
+    expect(visible.single.id, 'prop:3,10:2.3');
+    expect(visible.single.pricePaid, 0, reason: 'nature is free');
+    // The interactive half of the view stays save-only: wild props
+    // cannot be picked up, block nothing, and resolve by no id.
+    expect(queries.propsByCell, isEmpty);
+    expect(queries.propsById, isEmpty);
+    expect(queries.propsByAnchor, isEmpty);
+  });
+
+  test('buying a parcel materializes its nature rows verbatim', () {
+    final nature = natureWith(const [
+      TerrainProp(
+        catalogueId: 'pine-tree',
+        cell: CellCoord(3, 10),
+        subtileX: 2,
+        subtileY: 3,
+        assetRole: 'pine-tall',
+      ),
+      TerrainProp(
+        catalogueId: 'pine-tree',
+        cell: CellCoord(4, 12),
+        subtileX: 5,
+        subtileY: 6,
+      ),
+      TerrainProp(
+        catalogueId: 'pine-tree',
+        cell: CellCoord(5, 5),
+        subtileX: 1,
+        subtileY: 1,
+      ),
+    ]);
+    var world = town();
+    world = purchaseAdjacentParcel(
+      world,
+      content,
+      nature,
+      const ParcelCoord(0, 1),
+    );
+    // The parcel's rows copy in with the codec's id scheme; the row
+    // on already-owned land never joins (the save owns that truth).
+    expect(
+      world.props.map((prop) => prop.id),
+      containsAll(['prop:3,10:2.3', 'prop:4,12:5.6']),
+    );
+    expect(world.props.map((prop) => prop.id), isNot(contains('prop:5,5:1.1')));
+    final tree = world.props.firstWhere((prop) => prop.id == 'prop:3,10:2.3');
+    expect(tree.assetRole, 'pine-tall', reason: 'the stored variant copies');
+    expect(tree.pricePaid, 0);
+    // Materialized props are settlement props now: the save validates.
+    expect(
+      () => validateParcelWorldState(world, content, nature),
+      returnsNormally,
+    );
+    // And pick-up clears them — the settlement chops its own trees.
+    world = pickUpProp(world, content, propId: 'prop:3,10:2.3');
+    expect(
+      world.props.map((prop) => prop.id),
+      isNot(contains('prop:3,10:2.3')),
+    );
+  });
+
+  test('a save prop outside owned parcels fails validation', () {
+    final world = town().copyWith(
+      props: [
+        PlacedProp(
+          id: 'prop:3,10:2.3',
+          catalogueId: 'pine-tree',
+          cell: const CellCoord(3, 10),
+          subtileX: 2,
+          subtileY: 3,
+          pricePaid: 0,
+          placedAtDay: 0,
+        ),
+      ],
+    );
+    expect(
+      () => validateParcelWorldState(world, content, terrain),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('outside owned parcels'),
+        ),
+      ),
+    );
+  });
 }

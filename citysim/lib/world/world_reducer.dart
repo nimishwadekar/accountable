@@ -363,10 +363,26 @@ ParcelWorldState purchaseAdjacentParcel(
     purchasedAtDay: state.constructionDay,
     terrain: quote.cells,
   );
+  // Nature materializes with the land: the parcel's terrain rows
+  // copy verbatim into the Props table — the same sprites the
+  // frontier drew, now the settlement's to pick up before building.
+  // Purchase is the only ownership path, so this is the one copy.
+  // The rows' models unlock with them: the trees were always there,
+  // so progression thresholds never gate inherited nature.
+  final nature = [
+    for (final row in terrainProvider.natureProps)
+      if (parcelForCell(row.cell, parcelSize: state.parcelSize) == coord)
+        placedPropFromTerrain(row),
+  ];
   return state.copyWith(
     coins: state.coins - quote.price,
     totalCoinsSpent: state.totalCoinsSpent + quote.price,
     parcels: [...state.parcels, parcel],
+    props: [...state.props, ...nature],
+    unlockedCatalogueIds: {
+      ...state.unlockedCatalogueIds,
+      for (final prop in nature) prop.catalogueId,
+    },
     events: [
       ...state.events,
       _event(

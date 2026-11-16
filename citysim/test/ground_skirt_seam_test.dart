@@ -74,6 +74,9 @@ class _AllGrass implements TerrainProvider {
   const _AllGrass();
 
   @override
+  List<TerrainProp> get natureProps => const [];
+
+  @override
   int get generatorVersion => 1;
 
   @override

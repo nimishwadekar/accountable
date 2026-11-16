@@ -95,6 +95,9 @@
       "id": "flower-garden",
       "jobs": 0,
       "kind": "decoration",
+      "legalTerrain": [
+        "land"
+      ],
       "name": "Flowers",
       "population": 0,
       "serviceCapacity": 0,
@@ -121,6 +124,9 @@
       "id": "pine-tree",
       "jobs": 0,
       "kind": "decoration",
+      "legalTerrain": [
+        "land"
+      ],
       "name": "Pine Tree",
       "population": 0,
       "serviceCapacity": 0,
@@ -146,6 +152,9 @@
       "id": "common-tree",
       "jobs": 0,
       "kind": "decoration",
+      "legalTerrain": [
+        "land"
+      ],
       "name": "Leafy Tree",
       "population": 0,
       "serviceCapacity": 0,
@@ -172,6 +181,9 @@
       "id": "tree-stump",
       "jobs": 0,
       "kind": "decoration",
+      "legalTerrain": [
+        "land"
+      ],
       "name": "Tree Stump",
       "population": 0,
       "serviceCapacity": 0,
@@ -199,6 +211,9 @@
       "id": "wild-grass",
       "jobs": 0,
       "kind": "decoration",
+      "legalTerrain": [
+        "land"
+      ],
       "name": "Wild Grass",
       "population": 0,
       "serviceCapacity": 0,
@@ -432,6 +447,9 @@
       "id": "rocks",
       "jobs": 0,
       "kind": "decoration",
+      "legalTerrain": [
+        "land"
+      ],
       "name": "Rocks",
       "population": 0,
       "serviceCapacity": 0,

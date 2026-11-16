@@ -427,10 +427,14 @@ direction-variant cycling — breaks assumptions in every layer:
 **Rules and reducers.** Prop placement keeps the owned-and-land
 requirement but drops vacancy: a prop may sit on grass, dirt, a road
 tile, or a bridge deck cell (deck cells count as reachable through
-their bridge), and never blocks anything — roads can be planned and
-funded under existing props, and props stack freely on the same cell.
-Buildings still require fully vacant cells, so a cell with a prop on
-it is closed to buildings until the prop is removed. New actions:
+their bridge), and props stack freely on the same cell. Props are
+physical, though — the roads-under-props allowance sketched here did
+not survive: buildings, road stretches, and bridge banks all refuse
+cells carrying a prop until it is picked up (`footprintIsVacant` and
+both placement checks include `propsByCell`; only the violation
+messages fail to name props). "Clear the land first" is the settled
+rule — and the one the nature-props design below stands on. New
+actions:
 toggle a prop's mirror, cycle a prop's variant through its model's
 `assetRoles`, and remove a prop (the small, reversible cousin of the
 deferred demolition decision). Intra-cell draw order is deterministic
@@ -507,6 +511,64 @@ resizing pass over the promoted props is planned by hand.
 cell; single and stacked), codec round-trip plus old-save migration,
 mirror and variant round-trips, mirror-aware mask picking, and a
 render smoke test with props standing on a bridge deck.
+
+### Nature props and the terrain brush
+
+Landed 2026-11-15. The land is nature's; the settlement transforms
+it by purchase and clearing.
+
+**Editor — brush and clear tool (map page).** terrain.json's sparse
+`props` section stores rows in the save's Props-table shape —
+catalogueId, x, y, subtileX, subtileY, and the rolled assetRole and
+facing (the codec's derived id needs no storing) — so purchase is a
+byte-identical row copy. The brush is a circle in grid space (the
+2:1 iso ellipse on screen, anchored at the hovered cell's centre)
+with tunable radius (0.5–8 cells) and per-click count N: each click
+samples N distinct subtiles uniformly in the disk —
+`sampleNatureBrush`, a pure function with an injected Random —
+then places only the legal
+ones (N is an upper bound; water/void/occupied/owned samples
+silently drop, so a click may place zero and pushes no undo step).
+Legality is content, not code — the `legalTerrain` field per
+catalogue entry (land today; shore or rocky later) — and the item
+list is the decorations carrying it (trees, flowers, rocks;
+clutter and streetside stay out). The brush refuses owned parcels
+and occupied cells through the world-usage snapshot and skips
+subtiles already carrying a row; the canvas paints rows as
+schematic dots (the game draws the sprites). Holding the pointer
+down repeats the action every 250 ms at the cell under it — the
+mode the pressed click ran, so a right-click hold erases — until
+release, tool switch, or teardown. The eraser — a toggle, as is
+right-click — removes every row of the *selected item* inside the
+brush disk, deterministically (other items and out-of-circle rows
+survive; the preview ellipse turns red while erasing), and a whole
+parcel clears from the inspector's button — each edit one undo
+step; the editor refuses every terrain kind change (water paint,
+eraser, re-type, parcel delete) on cells carrying rows, and parcel
+taps and `+` buttons go dead while a brush is out.
+
+**Game — one ownership path, materialize on purchase.** Queries
+merge at construction: `propChunks` (rendering, `propsInBounds`)
+carries the save's props plus `terrainProvider.natureProps` on
+unowned parcels, while `propsByCell`, `propsById`, and
+`propsByAnchor` stay save-only — wild props render but never
+interact, block nothing, and resolve by no id. Rows inside owned
+parcels are ignored (the save is the truth there, per-parcel
+`ownsCell`). Buying a parcel copies its rows verbatim into the
+Props table via `placedPropFromTerrain` (the codec's id scheme,
+pricePaid 0, placedAtDay 0 — nature is free to inherit and refunds
+nothing) and unlocks their models: the trees were always there, so
+progression thresholds never gate inherited nature. Purchase is
+the only ownership path — bridge plans stopped acquiring parcels
+long ago, and the planned zero-parcel start makes purchase cover
+founding too, so no creation-time copy exists or is needed.
+Players clear bought land with the existing pick-up flow, and
+placement already blocks on props everywhere (above). Save
+validation errors on props outside owned parcels (the invariant:
+nothing exists anywhere without an explicitly purchased parcel)
+and content validation checks terrain rows (known decoration,
+legalTerrain covers the resolved kind, land tile, authored parcel,
+subtile range, unique anchors, legalTerrain only on decorations).
 
 ### Check-in economy and settlement growth
 

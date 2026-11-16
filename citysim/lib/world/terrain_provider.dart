@@ -1,8 +1,9 @@
 import '../content/content_models.dart'
-    show GroundStyle, TerrainContent, TerrainKind;
+    show GroundStyle, TerrainContent, TerrainKind, TerrainProp;
 import 'coordinates.dart';
 
-export '../content/content_models.dart' show TerrainKind, GroundStyle;
+export '../content/content_models.dart'
+    show TerrainKind, GroundStyle, TerrainProp;
 
 /// One sampled world cell. `groundStyle` is always grass until the
 /// detail layers land; water cells ignore it.
@@ -27,6 +28,13 @@ abstract interface class TerrainProvider {
   int get generatorVersion;
 
   TerrainCell sample(CellCoord coord, int seed);
+
+  /// Authored nature props, raw from the terrain map. The provider
+  /// hands them over unfiltered: ownership is a save's business, so
+  /// queries drop rows on owned parcels (the save is the truth there)
+  /// and purchase materializes exactly these rows. Test providers
+  /// with no authored nature return an empty list.
+  List<TerrainProp> get natureProps;
 }
 
 /// Samples the authored `terrain.json` map. Authored parcels return
@@ -41,6 +49,9 @@ class ContentTerrainProvider implements TerrainProvider {
 
   @override
   int get generatorVersion => content.generatorVersion;
+
+  @override
+  List<TerrainProp> get natureProps => content.props;
 
   @override
   TerrainCell sample(CellCoord coord, int seed) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -23,20 +24,34 @@ import '../../world/coordinates.dart';
 ///   game's camera feel. Tapping a parcel selects it; the inspector
 ///   below re-types it with the terrain swatches or deletes it —
 ///   locked when the current save occupies its cells, when it is
-///   owned (delete only), or when it is the starter parcel. The `+`
-///   buttons on void-facing edges grow the map with same-kind
-///   neighbours.
+///   owned (delete only), when it is the starter parcel, or when it
+///   still carries nature props. The `+` buttons on void-facing
+///   edges grow the map with same-kind neighbours.
 /// * **Paint tiles**: dragging paints cells with the active swatch;
 ///   right-click (or the eraser) restores the parcel's base kind.
 ///   Panning while painting uses the middle button or holding space,
 ///   and the wheel still zooms. Cells occupied in the current save
-///   refuse paint — a water tile under a road would fail world
-///   validation on the next load — and painting a cell to its
-///   parcel's base erases the override, keeping the file sparse.
+///   or carrying nature props refuse paint — a water tile under a
+///   road would fail world validation on the next load, and a prop
+///   on a water tile would fail content validation — so clear the
+///   nature first. Painting a cell to its parcel's base erases the
+///   override, keeping the file sparse.
+/// * **Nature**: a circle brush that sprinkles the selected item —
+///   the catalogue's decorations carrying a legalTerrain tag — onto
+///   the map. Each click draws N distinct subtiles uniformly in the
+///   disk and places only the legal ones (land, unowned, unoccupied,
+///   subtile free): N is an upper bound, so clearings stay clear.
+///   Holding the pointer down repeats the placement every quarter
+///   second at the cell under it — hold and sweep to paint a
+///   forest. The eraser — a toggle, as is right-click — removes the
+///   selected item's props inside the circle, all of them,
+///   deterministically. Rows land in terrain.json's sparse `props`
+///   section — the map's pristine vegetation, materialized into a
+///   save when its parcel is purchased.
 ///
-/// Every edit — each paint stroke, kind change, delete, and map
-/// growth — is one undo step behind Ctrl/Cmd+Z and the toolbar's undo
-/// button.
+/// Every edit — each paint stroke, kind change, delete, map growth,
+/// nature click, and nature clear — is one undo step behind
+/// Ctrl/Cmd+Z and the toolbar's undo button.
 class MapPage extends StatefulWidget {
   const MapPage({
     required this.categories,
@@ -58,14 +73,15 @@ class MapPage extends StatefulWidget {
 
 /// What the canvas does with the pointer. One tool is active at a
 /// time; nothing doubles as both.
-enum _MapTool { select, paint }
+enum _MapTool { select, paint, nature }
 
 /// One undo step: the terrain maps as they were before an edit.
 class _TerrainSnapshot {
-  const _TerrainSnapshot(this.parcels, this.tiles);
+  const _TerrainSnapshot(this.parcels, this.tiles, this.props);
 
   final Map<String, Object?> parcels;
   final Map<String, Object?> tiles;
+  final List<Object?> props;
 }
 
 class _MapPageState extends State<MapPage> {
@@ -76,6 +92,23 @@ class _MapPageState extends State<MapPage> {
   /// The brush kind in paint mode; the eraser restores the base.
   String _brush = 'water';
   bool _erasing = false;
+
+  /// Nature brush state: the selected item (a catalogue id), the
+  /// disk radius in cells, the per-click draw count, and the eraser
+  /// toggle (right-click also clears).
+  String? _natureItem;
+  double _brushRadius = 2;
+  int _brushCount = 8;
+  bool _natureErasing = false;
+
+  /// The hold-to-paint loop: while the brush pointer stays down, the
+  /// placement (or erase) repeats every quarter second at the cell
+  /// under the pointer — hold and sweep to paint a forest.
+  Timer? _natureRepeatTimer;
+
+  /// The action the hold loop repeats: the mode the pressed click
+  /// ran (the toggle, or a right-click's erase).
+  bool _natureRepeatErasing = false;
 
   /// The cell under the pointer (paint mode) and the parcel under it
   /// (select mode), for hover feedback.
@@ -117,6 +150,7 @@ class _MapPageState extends State<MapPage> {
 
   @override
   void dispose() {
+    _stopNatureRepeat();
     HardwareKeyboard.instance.removeHandler(_onKey);
     if (kIsWeb) {
       BrowserContextMenu.enableContextMenu();
@@ -188,6 +222,63 @@ class _MapPageState extends State<MapPage> {
     return result;
   }
 
+  /// The map's authored nature rows, decoded like the pipeline would
+  /// (dynamic values). Each row is the save's Props-table shape with
+  /// named fields: catalogueId, x, y, subtileX, subtileY, and the
+  /// optional rolled variant fields.
+  List<Map<String, Object?>> get _natureRows {
+    final terrain = widget.categories['terrain.json'] as Map?;
+    final raw = terrain?['props'];
+    if (raw is! List) return const [];
+    return [
+      for (final row in raw)
+        if (row is Map) row.cast<String, Object?>(),
+    ];
+  }
+
+  /// The nature brush's palette: catalogue decorations carrying a
+  /// legalTerrain tag — the field is the vocabulary, so new nature
+  /// items are content, not code.
+  List<({String id, String name, List<String> roles})> get _natureItems {
+    final models = (widget.categories['catalogue.json'] as Map?)?['models'];
+    if (models is! List) return const [];
+    return [
+      for (final model in models)
+        if (model is Map &&
+            model['kind'] == 'decoration' &&
+            (model['legalTerrain'] as List?)?.isNotEmpty == true)
+          (
+            id: model['id']! as String,
+            name: model['name']! as String,
+            roles: [
+              for (final role in model['assetRoles']! as List) role as String,
+            ],
+          ),
+    ];
+  }
+
+  /// Whether a sprite role carries door facings — the brush rolls a
+  /// facing exactly like the reducer does, but only for sprites
+  /// that have them.
+  bool _roleHasFacings(String role) {
+    final sprites = widget.categories['sprites.json'] as Map?;
+    final sprite = sprites?[role];
+    return sprite is Map && sprite['facings'] != null;
+  }
+
+  /// Nature rows grouped by the cell they stand on — the paint and
+  /// kind-change refusals read this.
+  Map<CellCoord, List<Map<String, Object?>>> get _natureRowsByCell {
+    final result = <CellCoord, List<Map<String, Object?>>>{};
+    for (final row in _natureRows) {
+      final x = row['x'];
+      final y = row['y'];
+      if (x is! int || y is! int) continue;
+      result.putIfAbsent(CellCoord(x, y), () => []).add(row);
+    }
+    return result;
+  }
+
   Map<ParcelCoord, Set<CellCoord>> get _occupiedByParcel {
     final usage = _usage;
     if (usage == null) return const {};
@@ -213,9 +304,11 @@ class _MapPageState extends State<MapPage> {
     final terrain = widget.categories['terrain.json'] as Map? ?? const {};
     final parcels = terrain['parcels'] as Map? ?? const {};
     final tiles = terrain['tiles'] as Map? ?? const {};
+    final props = terrain['props'] as List? ?? const [];
     return _TerrainSnapshot(
       Map<String, Object?>.from(parcels),
       Map<String, Object?>.from(tiles),
+      List<Object?>.of(props),
     );
   }
 
@@ -235,6 +328,11 @@ class _MapPageState extends State<MapPage> {
         terrain.remove('tiles');
       } else {
         terrain['tiles'] = Map<String, Object?>.from(snapshot.tiles);
+      }
+      if (snapshot.props.isEmpty) {
+        terrain.remove('props');
+      } else {
+        terrain['props'] = List<Object?>.of(snapshot.props);
       }
     });
     setState(() {
@@ -275,12 +373,21 @@ class _MapPageState extends State<MapPage> {
 
   /// Paints one cell with the active stroke. Painting a cell to its
   /// parcel's base erases the override — the file stays sparse. Cells
-  /// occupied in the current save refuse paint.
+  /// occupied in the current save or carrying nature props refuse
+  /// paint (a prop on water fails content validation — clear the
+  /// nature first).
   void _paintCell(CellCoord cell) {
     final base = _parcels[parcelForCell(cell)];
     if (base == null) return;
     if (_usage?.occupiedCells.contains(cell) ?? false) {
       setState(() => _lockHint = 'Skipped locked cells — occupied in the save');
+      return;
+    }
+    if (_natureRowsByCell.containsKey(cell)) {
+      setState(
+        () => _lockHint =
+            'Skipped propped cells — clear their nature first (Nature tool)',
+      );
       return;
     }
     setState(() => _lockHint = null);
@@ -338,6 +445,221 @@ class _MapPageState extends State<MapPage> {
     return null;
   }
 
+  // -- Nature brush ----------------------------------------------------------
+
+  /// How many nature rows a parcel carries — the inspector's clear
+  /// button and lock reasons read this.
+  int _parcelNatureCount(ParcelCoord coord) {
+    final rows = _natureRows;
+    if (rows.isEmpty) return 0;
+    var count = 0;
+    for (final row in rows) {
+      final x = row['x'];
+      final y = row['y'];
+      if (x is int && y is int && parcelForCell(CellCoord(x, y)) == coord) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /// Whether a subtile accepts the selected item: authored land the
+  /// item's legalTerrain covers, in a parcel the save does not own,
+  /// without occupation, on a free subtile.
+  bool _natureSubtileLegal(
+    CellCoord cell,
+    int subtileX,
+    int subtileY,
+    Set<String> anchors,
+  ) {
+    final base = _parcels[parcelForCell(cell)];
+    if (base == null) return false;
+    if ((_tiles[cell] ?? base) != 'grass') return false;
+    if (_usage?.ownedParcels.contains(parcelForCell(cell)) ?? false) {
+      return false;
+    }
+    if (_usage?.occupiedCells.contains(cell) ?? false) return false;
+    return !anchors.contains('${cell.key}:$subtileX.$subtileY');
+  }
+
+  /// One click of the nature brush: draw [count] distinct subtiles
+  /// uniformly in the disk, keep the legal ones, and write their
+  /// rows — the variant rolled now and stored, so the game's
+  /// frontier render and the purchase copy draw the identical
+  /// sprite. A click that places nothing pushes no undo step.
+  void _sprinkleNature(CellCoord center) {
+    final items = _natureItems;
+    if (items.isEmpty) return;
+    final selected = _natureItem;
+    final item = selected == null || items.every((i) => i.id != selected)
+        ? items.first
+        : items.firstWhere((i) => i.id == selected);
+    if (_natureItem != item.id) setState(() => _natureItem = item.id);
+    final itemId = item.id;
+    final random = math.Random();
+    final anchors = <String>{
+      for (final row in _natureRows)
+        '${row['x']},${row['y']}:${row['subtileX']}.${row['subtileY']}',
+    };
+    final placements = sampleNatureBrush(
+      centerCol: center.column + 0.5,
+      centerRow: center.row + 0.5,
+      radiusCells: _brushRadius,
+      count: _brushCount,
+      legal: (cell, subtileX, subtileY) =>
+          _natureSubtileLegal(cell, subtileX, subtileY, anchors),
+      random: random,
+    );
+    if (placements.isEmpty) {
+      setState(
+        () => _lockHint =
+            'Nothing placed — the disk holds no legal subtile for $itemId',
+      );
+      return;
+    }
+    setState(() => _lockHint = null);
+    final newRows = <Map<String, Object?>>[];
+    for (final (cell, subtileX, subtileY) in placements) {
+      final role = item.roles[random.nextInt(item.roles.length)];
+      final facing = _roleHasFacings(role)
+          ? (random.nextBool() ? 'south' : 'east')
+          : null;
+      newRows.add({
+        'catalogueId': itemId,
+        'x': cell.column,
+        'y': cell.row,
+        'subtileX': subtileX,
+        'subtileY': subtileY,
+        'assetRole': role,
+        'facing': ?facing,
+      });
+    }
+    _pushUndo();
+    _editTerrain((terrain) {
+      var rows = terrain['props'];
+      if (rows is! List) {
+        rows = <Object?>[];
+        terrain['props'] = rows;
+      }
+      rows.addAll(newRows);
+    });
+  }
+
+  /// The eraser stroke: every row of the selected item inside the
+  /// brush disk goes — deterministic, the exact opposite of the
+  /// sprinkle's sample. Rows of other items, and rows of this item
+  /// outside the circle, stay untouched.
+  void _eraseNature(CellCoord center) {
+    final items = _natureItems;
+    if (items.isEmpty) return;
+    final selected = _natureItem;
+    final item = selected == null || items.every((i) => i.id != selected)
+        ? items.first
+        : items.firstWhere((i) => i.id == selected);
+    final rows = _natureRows;
+    final radiusSq = _brushRadius * _brushRadius;
+    final centerCol = center.column + 0.5;
+    final centerRow = center.row + 0.5;
+    final kept = <Map<String, Object?>>[];
+    for (final row in rows) {
+      final x = row['x'];
+      final y = row['y'];
+      if (x is int &&
+          y is int &&
+          row['catalogueId'] == item.id &&
+          x >= (centerCol - _brushRadius).floor() - 1 &&
+          x <= (centerCol + _brushRadius).ceil() + 1 &&
+          y >= (centerRow - _brushRadius).floor() - 1 &&
+          y <= (centerRow + _brushRadius).ceil() + 1) {
+        final col = x + (((row['subtileX'] as int?) ?? 0) + 0.5) / 8;
+        final gridRow = y + (((row['subtileY'] as int?) ?? 0) + 0.5) / 8;
+        final dCol = col - centerCol;
+        final dRow = gridRow - centerRow;
+        if (dCol * dCol + dRow * dRow <= radiusSq) {
+          continue; // Inside the disk: erased.
+        }
+      }
+      kept.add(row);
+    }
+    if (kept.length == rows.length) return;
+    _pushUndo();
+    _editTerrain(
+      (terrain) =>
+          kept.isEmpty ? terrain.remove('props') : terrain['props'] = kept,
+    );
+  }
+
+  /// Clears a whole parcel's nature rows, from the inspector — one
+  /// undo step, refused on owned parcels (their props live in the
+  /// save, not the map).
+  void _clearNatureParcel(ParcelCoord coord) {
+    if (_usage?.ownedParcels.contains(coord) ?? false) return;
+    final rows = _natureRows;
+    final kept = [
+      for (final row in rows)
+        if (row['x'] is int &&
+            row['y'] is int &&
+            parcelForCell(CellCoord(row['x'] as int, row['y'] as int)) != coord)
+          row,
+    ];
+    if (kept.length == rows.length) return;
+    _pushUndo();
+    _editTerrain(
+      (terrain) =>
+          kept.isEmpty ? terrain.remove('props') : terrain['props'] = kept,
+    );
+  }
+
+  /// Runs the brush's current action at a cell — placing or erasing
+  /// per [erasing] — shared by the press and the hold loop.
+  void _runNatureAction(CellCoord cell, {required bool erasing}) {
+    if (erasing) {
+      _eraseNature(cell);
+    } else {
+      _sprinkleNature(cell);
+    }
+  }
+
+  /// The hold loop: every quarter second while the pointer stays
+  /// down, the action repeats at the cell under it — the mode the
+  /// pressed click ran. Starts on press, stops on release, tool
+  /// switch, and teardown.
+  void _startNatureRepeat() {
+    _stopNatureRepeat();
+    _natureRepeatTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      if (!mounted) return;
+      final cell = _hoverCell;
+      if (cell != null) {
+        _runNatureAction(cell, erasing: _natureRepeatErasing);
+      }
+    });
+  }
+
+  void _stopNatureRepeat() {
+    _natureRepeatTimer?.cancel();
+    _natureRepeatTimer = null;
+  }
+
+  /// A cell's centre on the canvas — the nature brush's snapped
+  /// disk centre, where the ellipse preview anchors. [minLeft] and
+  /// [minTop] are the canvas offsets the parcel stack is laid out
+  /// with, padding already included (as `_cellAt` takes them).
+  Offset _cellCanvasCenter(CellCoord cell, double minLeft, double minTop) {
+    final parcel = parcelForCell(cell);
+    final cx = cell.column - parcel.x * 8;
+    final cy = cell.row - parcel.y * 8;
+    return Offset(
+      (parcel.x - parcel.y) * _parcelW / 2 -
+          minLeft +
+          _parcelW / 2 +
+          (cx - cy) * _cellW / 2,
+      (parcel.x + parcel.y) * _parcelH / 2 -
+          minTop +
+          _parcelH / 2 +
+          (cx + cy - 7) * _cellH / 2,
+    );
+  }
+
   // -- Camera ---------------------------------------------------------------
 
   /// Moves the content with the pointer while painting, where the
@@ -391,38 +713,22 @@ class _MapPageState extends State<MapPage> {
           children: [
             Text('Terrain map', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(width: 8),
-            Text(
-              '${parcels.length} parcel(s)'
-              '${_tiles.isEmpty ? '' : ' · ${_tiles.length} tile override(s)'}',
-              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            // The summary ellipsizes rather than pushing the status
+            // text out — the Row can never overflow, and the status
+            // never collapses to zero width (which, under the
+            // toolbar's unbounded height, wraps into a column that
+            // eats the canvas).
+            Flexible(
+              child: Text(
+                '${parcels.length} parcel(s)'
+                '${_tiles.isEmpty ? '' : ' · ${_tiles.length} tile override(s)'}'
+                '${_natureRows.isEmpty ? '' : ' · ${_natureRows.length} nature prop(s)'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, color: Colors.black54),
+              ),
             ),
             const Spacer(),
-            Flexible(
-              child: _lockHint != null
-                  ? Text(
-                      _lockHint!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.orange.shade900,
-                      ),
-                    )
-                  : _usage == null
-                  ? Text(
-                      'No world save loaded — locks unavailable',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.orange.shade900,
-                      ),
-                    )
-                  : Text(
-                      'World: ${_usage!.occupiedCells.length} occupied cell(s) · '
-                      '${_usage!.ownedParcels.length} owned parcel(s)',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black54,
-                      ),
-                    ),
-            ),
             IconButton(
               tooltip: 'Undo (Ctrl+Z)',
               onPressed: _undoStack.isEmpty ? null : _undo,
@@ -439,6 +745,25 @@ class _MapPageState extends State<MapPage> {
               icon: const Icon(Icons.refresh_rounded, size: 18),
             ),
           ],
+        ),
+        const SizedBox(height: 2),
+        // The lock hint and world summary take their own line at full
+        // width — bounded to two lines, so long messages wrap instead
+        // of exploding.
+        Text(
+          _lockHint ??
+              (_usage == null
+                  ? 'No world save loaded — locks unavailable'
+                  : 'World: ${_usage!.occupiedCells.length} occupied cell(s) · '
+                        '${_usage!.ownedParcels.length} owned parcel(s)'),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 12,
+            color: _lockHint == null && _usage != null
+                ? Colors.black54
+                : Colors.orange.shade900,
+          ),
         ),
         const SizedBox(height: 4),
         Wrap(
@@ -458,6 +783,11 @@ class _MapPageState extends State<MapPage> {
                   icon: Icon(Icons.brush_rounded, size: 16),
                   label: Text('Paint tiles'),
                 ),
+                ButtonSegment(
+                  value: _MapTool.nature,
+                  icon: Icon(Icons.forest_rounded, size: 16),
+                  label: Text('Nature'),
+                ),
               ],
               selected: {_tool},
               onSelectionChanged: (selection) => setState(() {
@@ -465,7 +795,8 @@ class _MapPageState extends State<MapPage> {
                 // One tool at a time: painting never reads as selecting.
                 _dragging = false;
                 _lockHint = null;
-                if (_tool == _MapTool.paint) {
+                _stopNatureRepeat();
+                if (_tool == _MapTool.paint || _tool == _MapTool.nature) {
                   _selected = null;
                   _hoverParcel = null;
                 } else {
@@ -484,12 +815,73 @@ class _MapPageState extends State<MapPage> {
               ),
               const SizedBox(width: 6),
               Tooltip(
-                message: 'Eraser — or right-click while painting',
+                message:
+                    'Eraser — or right-click while painting. '
+                    'Click again to paint',
                 child: IconButton.filledTonal(
-                  onPressed: _erasing
-                      ? null
-                      : () => setState(() => _erasing = true),
+                  onPressed: () => setState(() => _erasing = !_erasing),
                   isSelected: _erasing,
+                  icon: const Icon(Icons.auto_fix_high, size: 16),
+                ),
+              ),
+            ],
+            if (_tool == _MapTool.nature) ...[
+              _NatureItemPicker(
+                items: _natureItems,
+                selected: _natureItem ?? _natureItems.firstOrNull?.id,
+                onPick: (id) => setState(() {
+                  _natureItem = id;
+                  _natureErasing = false;
+                }),
+              ),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 168,
+                child: Row(
+                  children: [
+                    const Text('Radius', style: TextStyle(fontSize: 11)),
+                    Expanded(
+                      child: Slider(
+                        value: _brushRadius,
+                        min: 0.5,
+                        max: 8,
+                        divisions: 15,
+                        label: '${_brushRadius.toStringAsFixed(1)}c',
+                        onChanged: (value) =>
+                            setState(() => _brushRadius = value),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 168,
+                child: Row(
+                  children: [
+                    const Text('Per click', style: TextStyle(fontSize: 11)),
+                    Expanded(
+                      child: Slider(
+                        value: _brushCount.toDouble(),
+                        min: 1,
+                        max: 40,
+                        divisions: 39,
+                        label: '$_brushCount',
+                        onChanged: (value) =>
+                            setState(() => _brushCount = value.round()),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: _natureErasing
+                    ? 'Erasing — click again to place'
+                    : 'Erase the selected item in the circle — or right-click',
+                child: IconButton.filledTonal(
+                  onPressed: () =>
+                      setState(() => _natureErasing = !_natureErasing),
+                  isSelected: _natureErasing,
                   icon: const Icon(Icons.auto_fix_high, size: 16),
                 ),
               ),
@@ -502,6 +894,20 @@ class _MapPageState extends State<MapPage> {
             child: Text(
               'Drag to paint; middle-drag or space to pan; wheel zooms. '
               'Painting a cell back to its parcel\'s kind erases it.',
+              style: TextStyle(fontSize: 11, color: Colors.black54),
+            ),
+          ),
+        if (_tool == _MapTool.nature)
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Text(
+              'Click to sprinkle the item in the circle; N subtiles are '
+              'drawn and only the legal ones land (land, unowned, '
+              'unoccupied, free). Hold to keep placing every quarter '
+              'second — sweep while held to paint a forest. The eraser — '
+              'or right-click — removes the selected item\'s props inside '
+              'the circle, and toggles back to placing. Owned parcels and '
+              'occupied cells never take nature.',
               style: TextStyle(fontSize: 11, color: Colors.black54),
             ),
           ),
@@ -539,15 +945,30 @@ class _MapPageState extends State<MapPage> {
     final occupiedByParcel = _occupiedByParcel;
     final tiles = _tiles;
     final painting = _tool == _MapTool.paint;
+    final brushing = _tool == _MapTool.nature;
     final hoverLocked =
         _hoverCell != null &&
         (_usage?.occupiedCells.contains(_hoverCell) ?? false);
+    final natureRows = _natureRows;
+    final natureByParcel = <ParcelCoord, List<(CellCoord, int, int, String)>>{};
+    for (final row in natureRows) {
+      final x = row['x'];
+      final y = row['y'];
+      if (x is! int || y is! int) continue;
+      final cell = CellCoord(x, y);
+      natureByParcel.putIfAbsent(parcelForCell(cell), () => []).add((
+        cell,
+        row['subtileX'] as int? ?? 0,
+        row['subtileY'] as int? ?? 0,
+        row['catalogueId'] as String? ?? '',
+      ));
+    }
 
     CellCoord? cellAt(Offset local) =>
         _cellAt(local, parcels, canvasMinLeft, canvasMinTop);
 
     void updateHover(Offset local) {
-      if (painting) {
+      if (painting || brushing) {
         final cell = cellAt(local);
         if (cell != _hoverCell) setState(() => _hoverCell = cell);
       } else {
@@ -564,19 +985,39 @@ class _MapPageState extends State<MapPage> {
       boundaryMargin: const EdgeInsets.all(double.infinity),
       minScale: 0.15,
       maxScale: 4,
-      // Drag pans only in select mode — the game's camera feel. While
-      // painting, the drag belongs to the brush; panning moves to the
-      // middle button (or holding space) so the two can never fight.
-      panEnabled: !painting,
+      // Drag pans only in select mode — the game's camera feel.
+      // While a brush is out, the drag belongs to it; panning moves
+      // to the middle button (or holding space) so the two can
+      // never fight.
+      panEnabled: !painting && !brushing,
       child: SizedBox(
         width: width,
         height: height,
         child: Listener(
           key: const ValueKey('tile-brush-canvas'),
           onPointerDown: (event) {
-            if (painting && (event.buttons == kTertiaryButton || _spaceHeld)) {
+            if ((painting || brushing) &&
+                (event.buttons == kTertiaryButton || _spaceHeld)) {
               _panning = true;
               _panLast = event.position;
+              return;
+            }
+            if (brushing) {
+              final cell = cellAt(event.localPosition);
+              if (cell == null) return;
+              // The press anchors the hover (and the preview) even
+              // without a prior hover event; right-click erases
+              // regardless of the toggle, and the hold loop repeats
+              // whichever mode this press ran.
+              _hoverCell = cell;
+              _natureRepeatErasing =
+                  _natureErasing || (event.buttons & kSecondaryButton) != 0;
+              if (_natureRepeatErasing) {
+                _eraseNature(cell);
+              } else {
+                _sprinkleNature(cell);
+              }
+              _startNatureRepeat();
               return;
             }
             if (!painting) return;
@@ -605,10 +1046,12 @@ class _MapPageState extends State<MapPage> {
           onPointerUp: (_) {
             _dragging = false;
             _panning = false;
+            _stopNatureRepeat();
           },
           onPointerCancel: (_) {
             _dragging = false;
             _panning = false;
+            _stopNatureRepeat();
           },
           child: Stack(
             clipBehavior: Clip.none,
@@ -638,9 +1081,10 @@ class _MapPageState extends State<MapPage> {
                         if (parcelForCell(tile.key) == entry.key)
                           tile.key: tile.value,
                     },
+                    props: natureByParcel[entry.key] ?? const [],
                     hoverCell: _hoverCell,
                     hoverLocked: hoverLocked,
-                    addDirections: painting
+                    addDirections: painting || brushing
                         ? const []
                         : [
                             for (final dir in const [
@@ -657,10 +1101,33 @@ class _MapPageState extends State<MapPage> {
                               ))
                                 dir,
                           ],
-                    onSelect: painting
+                    onSelect: painting || brushing
                         ? null
                         : (coord) => setState(() => _selected = coord),
                     onAddNeighbor: _addNeighbor,
+                  ),
+                ),
+              // The nature brush's footprint: the disk's iso ellipse —
+              // semi-axes √2·R half-cells, the projection of the grid
+              // circle the sampler actually draws from — anchored at
+              // the hovered cell's centre, where clicks land. Green
+              // while placing, red while erasing.
+              if (brushing)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _NatureBrushPreview(
+                        center: _hoverCell == null
+                            ? null
+                            : _cellCanvasCenter(
+                                _hoverCell!,
+                                canvasMinLeft,
+                                canvasMinTop,
+                              ),
+                        radiusCells: _brushRadius,
+                        erasing: _natureErasing,
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -689,13 +1156,18 @@ class _MapPageState extends State<MapPage> {
     final occupied = _occupiedByParcel.containsKey(selected);
     final owned = _usage?.ownedParcels.contains(selected) ?? false;
     final isStarter = selected == const ParcelCoord(0, 0);
-    final kindLocked = occupied || isStarter;
-    final deleteLocked = occupied || owned || isStarter;
+    final natureCount = _parcelNatureCount(selected);
+    final natureLocked = natureCount > 0;
+    final kindLocked = occupied || isStarter || natureLocked;
+    final deleteLocked = occupied || owned || isStarter || natureLocked;
     final reason = isStarter
         ? 'The starter parcel must stay grass on the map.'
         : occupied
         ? 'This parcel has occupied cells in the current save — clear '
               'them in the game first.'
+        : natureLocked
+        ? 'This parcel carries $natureCount nature prop(s) — clear them '
+              'before re-typing or deleting it.'
         : owned
         ? 'You own this parcel — it cannot be deleted, only re-typed.'
         : 'Vacant — free to change or delete.';
@@ -710,7 +1182,12 @@ class _MapPageState extends State<MapPage> {
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
-          Row(
+          // The actions wrap and the reason takes its own line, so
+          // the panel stays compact however wide the buttons run.
+          Wrap(
+            spacing: 10,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _TerrainSwatches(
                 selected: kind,
@@ -718,25 +1195,28 @@ class _MapPageState extends State<MapPage> {
                     ? null
                     : (kind) => _changeKind(selected, kind),
               ),
-              const SizedBox(width: 10),
               OutlinedButton.icon(
                 onPressed: deleteLocked ? null : () => _deleteParcel(selected),
                 icon: const Icon(Icons.delete_outline_rounded, size: 18),
                 label: const Text('Delete parcel'),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  reason,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: kindLocked || deleteLocked
-                        ? Colors.orange.shade900
-                        : Colors.black54,
-                  ),
+              if (!owned && natureCount > 0)
+                OutlinedButton.icon(
+                  onPressed: () => _clearNatureParcel(selected),
+                  icon: const Icon(Icons.eco_outlined, size: 18),
+                  label: Text('Clear $natureCount nature prop(s)'),
                 ),
-              ),
             ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            reason,
+            style: TextStyle(
+              fontSize: 12,
+              color: kindLocked || deleteLocked
+                  ? Colors.orange.shade900
+                  : Colors.black54,
+            ),
           ),
         ],
       ),
@@ -791,6 +1271,7 @@ class _ParcelTile extends StatelessWidget {
     required this.selected,
     required this.hovered,
     required this.tileKinds,
+    required this.props,
     required this.hoverCell,
     required this.hoverLocked,
     required this.addDirections,
@@ -807,6 +1288,10 @@ class _ParcelTile extends StatelessWidget {
 
   /// Painted tile overrides within this parcel, by absolute cell.
   final Map<CellCoord, String> tileKinds;
+
+  /// Authored nature rows within this parcel — (cell, subtileX,
+  /// subtileY, catalogueId), one dot each on the schematic canvas.
+  final List<(CellCoord, int, int, String)> props;
 
   /// The cell under the pointer while painting, and whether it is
   /// locked — the brush footprint preview.
@@ -850,6 +1335,7 @@ class _ParcelTile extends StatelessWidget {
                 selected: selected,
                 hovered: hovered,
                 tileKinds: tileKinds,
+                props: props,
                 hoverCell: hoverCell,
                 hoverLocked: hoverLocked,
               ),
@@ -917,6 +1403,7 @@ class _ParcelPainter extends CustomPainter {
     required this.selected,
     required this.hovered,
     required this.tileKinds,
+    required this.props,
     required this.hoverCell,
     required this.hoverLocked,
   });
@@ -930,6 +1417,9 @@ class _ParcelPainter extends CustomPainter {
 
   /// Painted tile overrides within this parcel, by absolute cell.
   final Map<CellCoord, String> tileKinds;
+
+  /// Authored nature rows within this parcel, painted as dots.
+  final List<(CellCoord, int, int, String)> props;
 
   /// The brush footprint: the cell under the pointer while painting.
   final CellCoord? hoverCell;
@@ -1016,6 +1506,31 @@ class _ParcelPainter extends CustomPainter {
           ..strokeWidth = 2,
       );
     }
+    // Nature rows: one dot per prop at its subtile centre — the
+    // schematic language of this canvas; the game draws the sprites.
+    if (props.isNotEmpty) {
+      final dot = Paint()..style = PaintingStyle.fill;
+      for (final (cell, subtileX, subtileY, model) in props) {
+        final cx = cell.column - coord.x * 8;
+        final cy = cell.row - coord.y * 8;
+        if (cx < 0 || cx > 7 || cy < 0 || cy > 7) continue;
+        final cellCentre = Offset(
+          w / 2 + (cx - cy) * cellW / 2,
+          h / 2 + (cx + cy - 7) * cellH / 2,
+        );
+        final dCol = (subtileX + 0.5) / 8 - 0.5;
+        final dRow = (subtileY + 0.5) / 8 - 0.5;
+        dot.color = natureDotColor(model);
+        canvas.drawCircle(
+          cellCentre.translate(
+            (dCol - dRow) * cellW / 2,
+            (dCol + dRow) * cellH / 2,
+          ),
+          2.4,
+          dot,
+        );
+      }
+    }
     if (owned) {
       canvas.drawPath(
         diamond,
@@ -1064,7 +1579,19 @@ class _ParcelPainter extends CustomPainter {
       oldDelegate.hoverLocked != hoverLocked ||
       oldDelegate.coord != coord ||
       !setEquals(oldDelegate.occupiedCells, occupiedCells) ||
-      !_mapEquals(oldDelegate.tileKinds, tileKinds);
+      !_mapEquals(oldDelegate.tileKinds, tileKinds) ||
+      _propsDiffer(oldDelegate.props, props);
+}
+
+bool _propsDiffer(
+  List<(CellCoord, int, int, String)> a,
+  List<(CellCoord, int, int, String)> b,
+) {
+  if (a.length != b.length) return true;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return true;
+  }
+  return false;
 }
 
 bool setEquals(Set<CellCoord> a, Set<CellCoord> b) =>
@@ -1076,4 +1603,154 @@ bool _mapEquals(Map<CellCoord, String> a, Map<CellCoord, String> b) {
     if (b[entry.key] != entry.value) return false;
   }
   return true;
+}
+
+/// Schematic dot colour per nature model — the map canvas's stand-in
+/// for the sprite (the game draws the real art).
+Color natureDotColor(String catalogueId) => switch (catalogueId) {
+  'pine-tree' || 'common-tree' || 'tree-stump' => const Color(0xFF2F6B3A),
+  'flower-garden' || 'wild-grass' => const Color(0xFFB0568A),
+  'rocks' => const Color(0xFF8D8D84),
+  _ => const Color(0xFF6B5B45),
+};
+
+/// The nature brush's item picker: the catalogue's decorations
+/// carrying a legalTerrain tag. The field is the palette — new
+/// nature items are content, not code.
+class _NatureItemPicker extends StatelessWidget {
+  const _NatureItemPicker({
+    required this.items,
+    required this.selected,
+    required this.onPick,
+  });
+
+  final List<({String id, String name, List<String> roles})> items;
+  final String? selected;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return const Text(
+        'No brushable items — give a decoration a legalTerrain tag',
+        style: TextStyle(fontSize: 12, color: Colors.black54),
+      );
+    }
+    final value = selected != null && items.any((item) => item.id == selected)
+        ? selected
+        : items.first.id;
+    return DropdownButton<String>(
+      value: value,
+      borderRadius: BorderRadius.circular(8),
+      items: [
+        for (final item in items)
+          DropdownMenuItem(
+            value: item.id,
+            child: Text(item.name, style: const TextStyle(fontSize: 13)),
+          ),
+      ],
+      onChanged: (id) {
+        if (id != null) onPick(id);
+      },
+    );
+  }
+}
+
+/// The nature brush's footprint on the canvas: the projection of the
+/// sampling disk — a grid circle of [radiusCells] maps to an
+/// axis-aligned ellipse with semi-axes √2·R times the half-cell —
+/// anchored at the hovered cell's centre, where clicks land. Green
+/// while placing, red while the eraser is on. Null centre hides it.
+class _NatureBrushPreview extends CustomPainter {
+  const _NatureBrushPreview({
+    required this.center,
+    required this.radiusCells,
+    this.erasing = false,
+  });
+
+  final Offset? center;
+  final double radiusCells;
+  final bool erasing;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = this.center;
+    if (center == null) return;
+    final radius = Radius.elliptical(
+      _cellW / 2 * math.sqrt2 * radiusCells,
+      _cellH / 2 * math.sqrt2 * radiusCells,
+    );
+    final rect = Rect.fromCenter(
+      center: center,
+      width: radius.x * 2,
+      height: radius.y * 2,
+    );
+    canvas.drawOval(
+      rect,
+      Paint()
+        ..color = erasing ? const Color(0x2EB3261E) : const Color(0x2E00A95C),
+    );
+    canvas.drawOval(
+      rect,
+      Paint()
+        ..color = erasing ? const Color(0xCCB3261E) : const Color(0xCC00A95C)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _NatureBrushPreview oldDelegate) =>
+      oldDelegate.center != center ||
+      oldDelegate.radiusCells != radiusCells ||
+      oldDelegate.erasing != erasing;
+}
+
+/// The nature brush's sample: [count] distinct subtiles drawn
+/// uniformly from the grid disk of [radiusCells] around
+/// ([centerCol], [centerRow]) — the disk includes every subtile,
+/// legal or not, exactly as specified — then filtered by [legal], so
+/// N is an upper bound: clearings stay clear, owned parcels and
+/// water silently drop their draws, and a click may place nothing.
+/// Returns the (cell, subtileX, subtileY) anchors that landed.
+List<(CellCoord, int, int)> sampleNatureBrush({
+  required double centerCol,
+  required double centerRow,
+  required double radiusCells,
+  required int count,
+  required bool Function(CellCoord cell, int subtileX, int subtileY) legal,
+  math.Random? random,
+}) {
+  final rng = random ?? math.Random();
+  final candidates = <(CellCoord, int, int)>[];
+  final minCol = (centerCol - radiusCells).floor() - 1;
+  final maxCol = (centerCol + radiusCells).ceil() + 1;
+  final minRow = (centerRow - radiusCells).floor() - 1;
+  final maxRow = (centerRow + radiusCells).ceil() + 1;
+  for (var column = minCol; column <= maxCol; column++) {
+    for (var row = minRow; row <= maxRow; row++) {
+      final cell = CellCoord(column, row);
+      for (var subtileY = 0; subtileY < 8; subtileY++) {
+        for (var subtileX = 0; subtileX < 8; subtileX++) {
+          final col = column + (subtileX + 0.5) / 8;
+          final gridRow = row + (subtileY + 0.5) / 8;
+          final dCol = col - centerCol;
+          final dRow = gridRow - centerRow;
+          if (dCol * dCol + dRow * dRow <= radiusCells * radiusCells) {
+            candidates.add((cell, subtileX, subtileY));
+          }
+        }
+      }
+    }
+  }
+  // Draw without replacement — every subtile in the disk weighs the
+  // same, duplicates cannot waste a draw — then keep the legal ones.
+  final drawn = <(CellCoord, int, int)>[];
+  for (var i = 0; i < count && candidates.isNotEmpty; i++) {
+    drawn.add(candidates.removeAt(rng.nextInt(candidates.length)));
+  }
+  return [
+    for (final anchor in drawn)
+      if (legal(anchor.$1, anchor.$2, anchor.$3)) anchor,
+  ];
 }

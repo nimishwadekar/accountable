@@ -40,6 +40,9 @@ class _ShoreTerrain implements TerrainProvider {
   const _ShoreTerrain();
 
   @override
+  List<TerrainProp> get natureProps => const [];
+
+  @override
   int get generatorVersion => 1;
 
   @override

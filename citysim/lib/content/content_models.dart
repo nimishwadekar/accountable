@@ -46,6 +46,7 @@ class StructureDefinition {
     this.jobs = 0,
     this.serviceCategory,
     this.serviceCapacity = 0,
+    this.legalTerrain = const [],
   });
 
   final String id;
@@ -72,6 +73,14 @@ class StructureDefinition {
   /// Population this model contributes once completed. Derived from
   /// content at placement time and snapshotted onto the placed structure.
   final int population;
+
+  /// Terrain tags this model may stand on — the nature brush's
+  /// legality vocabulary. Today the only tag is `land` (grass); the
+  /// list is empty for models the brush must not offer (settlement
+  /// props like lamps and clutter) and non-empty for nature the map
+  /// may sprinkle (trees, flowers, rocks). Future tags (shore, rocky)
+  /// join here without code changes.
+  final List<String> legalTerrain;
 
   /// Population at which the model becomes unlocked. Zero means unlocked
   /// from the start.
@@ -152,6 +161,7 @@ class StructureDefinition {
     int? jobs,
     String? serviceCategory,
     int? serviceCapacity,
+    List<String>? legalTerrain,
   }) => StructureDefinition(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -172,6 +182,7 @@ class StructureDefinition {
     jobs: jobs ?? this.jobs,
     serviceCategory: serviceCategory ?? this.serviceCategory,
     serviceCapacity: serviceCapacity ?? this.serviceCapacity,
+    legalTerrain: legalTerrain ?? this.legalTerrain,
   );
 
   Map<String, Object?> toJson() => {
@@ -193,6 +204,7 @@ class StructureDefinition {
     'jobs': jobs,
     if (serviceCategory != null) 'serviceCategory': serviceCategory,
     'serviceCapacity': serviceCapacity,
+    if (legalTerrain.isNotEmpty) 'legalTerrain': legalTerrain,
   };
 
   static StructureDefinition fromJson(Map<String, Object?> json) =>
@@ -224,6 +236,10 @@ class StructureDefinition {
             ? null
             : json['serviceCategory'] as String?,
         serviceCapacity: json['serviceCapacity'] as int? ?? 0,
+        legalTerrain: [
+          for (final tag in json['legalTerrain'] as List? ?? const [])
+            tag as String,
+        ],
       );
 }
 
@@ -1083,11 +1099,59 @@ class AmbienceContent {
 /// what clears the fog — nothing in the save tracks it, because the
 /// fog is fully derived from the content. Cell-level detail layers
 /// will be added on top of this later.
+/// One authored nature prop on the terrain map — a row in the save's
+/// Props-table shape (the sheet's columns as named JSON fields), so
+/// purchasing its parcel is a byte-identical copy into the save. The
+/// id is derived, exactly like the codec derives it: nothing stored.
+/// Nature rows are the map's pristine vegetation: read-only in game,
+/// live for unowned parcels, and materialized into the save the
+/// moment their parcel is purchased.
+class TerrainProp {
+  const TerrainProp({
+    required this.catalogueId,
+    required this.cell,
+    required this.subtileX,
+    required this.subtileY,
+    this.assetRole,
+    this.facing,
+  });
+
+  final String catalogueId;
+  final CellCoord cell;
+  final int subtileX;
+  final int subtileY;
+
+  /// Rolled once by the brush at paint time and stored, so the game's
+  /// frontier render and the purchase copy draw the identical sprite.
+  final String? assetRole;
+  final String? facing;
+
+  Map<String, Object?> toJson() => {
+    'catalogueId': catalogueId,
+    'x': cell.column,
+    'y': cell.row,
+    'subtileX': subtileX,
+    'subtileY': subtileY,
+    if (assetRole != null) 'assetRole': assetRole,
+    if (facing != null) 'facing': facing,
+  };
+
+  static TerrainProp fromJson(Map<String, Object?> json) => TerrainProp(
+    catalogueId: json['catalogueId']! as String,
+    cell: CellCoord(json['x']! as int, json['y']! as int),
+    subtileX: json['subtileX']! as int,
+    subtileY: json['subtileY']! as int,
+    assetRole: json['assetRole'] as String?,
+    facing: json['facing'] as String?,
+  );
+}
+
 class TerrainContent {
   const TerrainContent({
     required this.generatorVersion,
     required this.parcels,
     this.tiles = const {},
+    this.props = const [],
   });
 
   final int generatorVersion;
@@ -1100,6 +1164,13 @@ class TerrainContent {
   /// grass and water are paintable: fog is a parcel-level kind, and
   /// other terrain types join the palette later.
   final Map<CellCoord, TerrainKind> tiles;
+
+  /// Authored nature props — the map's pristine vegetation, painted
+  /// by the editor's nature brush. The game shows them on unowned
+  /// parcels and copies them into the save when a parcel is
+  /// purchased; rows inside owned parcels are ignored (the save is
+  /// the truth there). See [TerrainProp] for the row shape.
+  final List<TerrainProp> props;
 
   /// Whether a parcel is authored on the map. Authored fog parcels
   /// are on the map but stay hidden — buying is gated by terrain
@@ -1117,11 +1188,13 @@ class TerrainContent {
         for (final entry in tiles.entries)
           '${entry.key.column},${entry.key.row}': entry.value.name,
       },
+    if (props.isNotEmpty) 'props': [for (final prop in props) prop.toJson()],
   };
 
   static TerrainContent fromJson(Map<String, Object?> json) {
     final raw = json['parcels']! as Map;
     final rawTiles = json['tiles'];
+    final rawProps = json['props'];
     return TerrainContent(
       generatorVersion: json['generatorVersion']! as int,
       parcels: {
@@ -1138,6 +1211,12 @@ class TerrainContent {
                 ),
             }
           : const {},
+      props: rawProps is List
+          ? [
+              for (final row in rawProps)
+                TerrainProp.fromJson((row as Map).cast<String, Object?>()),
+            ]
+          : const [],
     );
   }
 }
@@ -1284,6 +1363,75 @@ List<ContentIssue> validateContentData({
         'Tile ${entry.key.key} sits on an unauthored parcel — author '
         'the parcel before painting its tiles.',
       );
+    }
+  }
+
+  // Nature props: rows must name brushable decorations, stand on land
+  // their model's legalTerrain covers, and never share a subtile. The
+  // subtile lattice is the props' 8×8 grid (propSubtilesPerAxis lives
+  // in the world layer; content mirrors its range).
+  final modelsById = {for (final model in catalogue) model.id: model};
+  final natureAnchors = <String>{};
+  for (final prop in terrain.props) {
+    final model = modelsById[prop.catalogueId];
+    if (model == null) {
+      error(
+        'Nature prop at ${prop.cell.key} names unknown model '
+        '"${prop.catalogueId}".',
+      );
+      continue;
+    }
+    if (model.kind != StructureKind.decoration) {
+      error(
+        'Nature prop at ${prop.cell.key} names "${prop.catalogueId}" — '
+        'only decorations can be painted as nature.',
+      );
+    }
+    final parcel = terrain.parcels[parcelForCell(prop.cell)];
+    if (parcel == null) {
+      error(
+        'Nature prop at ${prop.cell.key} sits on an unauthored parcel — '
+        'author the parcel before painting nature on it.',
+      );
+      continue;
+    }
+    final resolved = terrain.tiles[prop.cell] ?? parcel;
+    if (!model.legalTerrain.contains('land') || resolved != TerrainKind.grass) {
+      error(
+        'Nature prop at ${prop.cell.key} cannot stand on '
+        '${resolved.name} — "${prop.catalogueId}" needs land.',
+      );
+    }
+    if (prop.subtileX < 0 ||
+        prop.subtileX > 7 ||
+        prop.subtileY < 0 ||
+        prop.subtileY > 7) {
+      error('Nature prop at ${prop.cell.key} has a subtile outside 0..7.');
+    }
+    if (!natureAnchors.add(
+      '${prop.cell.key}:${prop.subtileX}.${prop.subtileY}',
+    )) {
+      error(
+        'Two nature props share the subtile at ${prop.cell.key} '
+        '(${prop.subtileX}, ${prop.subtileY}).',
+      );
+    }
+  }
+  for (final model in catalogue) {
+    if (model.legalTerrain.isNotEmpty &&
+        model.kind != StructureKind.decoration) {
+      error(
+        '${model.id}: legalTerrain is the nature brush\'s vocabulary — '
+        'only decorations may carry it.',
+      );
+    }
+    for (final tag in model.legalTerrain) {
+      if (tag != 'land') {
+        error(
+          '${model.id}: unknown legalTerrain tag "$tag" — land is the '
+          'only tag today.',
+        );
+      }
     }
   }
 

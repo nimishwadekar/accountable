@@ -65,7 +65,14 @@ class WorldQueries {
         state.structures,
         (structure) => structure.footprint,
       ),
-      propChunks = _groupByChunks(state.props, (prop) => [prop.cell]),
+      // Rendering sees the whole scene: the save's props plus the
+      // map's wild nature on unowned parcels. Everything below —
+      // placement, picking, pick-up — works from the save alone, so
+      // wild props render but never interact.
+      propChunks = _groupByChunks([
+        ...state.props,
+        ..._wildNatureProps(state, terrainProvider),
+      ], (prop) => [prop.cell]),
       propsByCell = _groupByCell(state.props, (prop) => prop.cell),
       bridgeChunks = _groupByChunks(
         state.bridges,
@@ -376,6 +383,40 @@ class WorldQueries {
     required int top,
     required int bottom,
   }) => _itemsInBounds(parcelChunks, left, right, top, bottom);
+}
+
+/// The materialized form of a nature row: the save's prop shape with
+/// the codec's derived id, priced free — nature costs nothing to
+/// inherit and refunds nothing when picked up. Purchase copies
+/// exactly this, so the frontier render and the bought-land render
+/// draw the identical sprite.
+PlacedProp placedPropFromTerrain(TerrainProp row) => PlacedProp(
+  id: 'prop:${row.cell.key}:${row.subtileX}.${row.subtileY}',
+  catalogueId: row.catalogueId,
+  cell: row.cell,
+  subtileX: row.subtileX,
+  subtileY: row.subtileY,
+  pricePaid: 0,
+  placedAtDay: 0,
+  assetRole: row.assetRole,
+  facing: row.facing,
+);
+
+/// The map's nature rows a save does not own: rows on owned parcels
+/// are dropped — the save's Props table is the truth there — and the
+/// rest join the render-only half of the prop view.
+Iterable<PlacedProp> _wildNatureProps(
+  ParcelWorldState state,
+  TerrainProvider terrainProvider,
+) sync* {
+  for (final row in terrainProvider.natureProps) {
+    if (state.parcelsByCoord.containsKey(
+      parcelForCell(row.cell, parcelSize: state.parcelSize),
+    )) {
+      continue;
+    }
+    yield placedPropFromTerrain(row);
+  }
 }
 
 Map<WorldChunkCoord, List<T>> _groupByChunks<T>(

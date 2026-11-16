@@ -217,8 +217,13 @@ void main() {
       //    pushed at zoom-out. The fog's wisp sprites are the one
       //    per-cell-priced layer left (a third of the fog cells at
       //    zoom-out), which is what the ocean-era ceiling of 600 no
-      //    longer covers.
-      expect(panOut.meanTotalOps, lessThan(1000));
+      //    longer covers. Painted nature adds at most one actor draw
+      //    per authored row, so the ceiling scales with the map's
+      //    props section.
+      expect(
+        panOut.meanTotalOps,
+        lessThan(1000 + content.terrain.props.length),
+      );
       // 4. More chunks are visible zoomed out than zoomed in.
       expect(panOut.meanChunkDraws, greaterThan(panIn.meanChunkDraws));
       // 5. Chunk-granularity culling: drawn cells stay near the

@@ -78,14 +78,23 @@ authored parcel map in `terrain.json` (grass and water parcels on a
   land without having a connected road there.
 - The player pays for a parcel before developing it. New parcels contain no
   placed buildings, roads, or decorations.
+- Planned start change (noted 2026-11): a new game begins with **zero owned
+  parcels** — the player purchases the first parcel, and the starter parcel
+  retires (its (0,0)-grass content validation and editor lock retire with it).
+  Purchase then becomes the only path to ownership, which the planned
+  nature-props design relies on: terrain vegetation materializes into the
+  save exactly at parcel purchase, so no creation-time copy is ever needed —
+  and "new parcels contain no placed anything" gains that one exception:
+  copied nature props, cleared by the player before building on them.
 - Lakes can be routed around; the current rules do not allow bridging lakes or
   oceans. Rivers require a valid bridge where no land route exists. Decided
   direction: bridges will eventually span any water body — straight line,
   both ends on land, starting from a road — with cost as the limiter; see
   the implementation plan.
-- A bridge plan can quote and purchase needed crossing parcels as part of
-  committing that bridge plan; the bridge itself remains unfinished until its
-  cost is funded.
+- Parcels are only ever purchased explicitly and manually. Bridge plans have
+  not quoted or acquired crossing parcels for a long time (this page said
+  otherwise until 2026-11), and nothing at all can be done in a place before
+  its parcel is purchased.
 
 Current parcel prices are prototype values and may be retuned. A parcel costs
 a base price plus a per-population surcharge — expanding a settlement gets
@@ -180,6 +189,14 @@ documented with the rules code rather than treated as a permanent shop price.
   simulated days.
 - They require owned, vacant dry land but do not require road
   adjacency.
+- Placed props are physical: buildings, road stretches, and bridge banks refuse
+  cells carrying a prop until it is picked up (pick-up is free and instant) —
+  clear the land first.
+- Nature props are the map's, not the save's: the terrain editor's brush
+  sprinkles trees, flowers, and rocks onto unowned land, the game shows them on
+  the frontier, and buying a parcel makes its nature part of the save — the
+  settlement's to clear before building. Nothing can be done anywhere before
+  its parcel is purchased.
 
 ### Bridges
 

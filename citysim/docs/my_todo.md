@@ -2,6 +2,7 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 
 # New features
 
+- start new game with zero parcels.
 - Demolition.
 - fix progression unlocks.
 - composite sprite editor: create new sprite from existing sprites. Multi-tile roads as composites of single-tile roads.

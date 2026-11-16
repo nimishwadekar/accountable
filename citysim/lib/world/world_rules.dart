@@ -331,7 +331,8 @@ RoadProjectQuote quoteRoadStretch(
         queries.propsByCell.containsKey(cell) ||
         queries.reservedCells.contains(cell)) {
       throw const WorldRuleViolation(
-        'That road stretch overlaps an occupied tile.',
+        'That road stretch overlaps an occupied tile — a road, '
+        'structure, prop, or construction site. Clear the land first.',
       );
     }
     if (index > 0 && !cells[index - 1].neighbors.contains(cell)) {
@@ -433,7 +434,8 @@ StructurePlacementQuote quoteStructurePlacement(
   }
   if (!queries.footprintIsVacant(footprint)) {
     throw const WorldRuleViolation(
-      'That footprint overlaps a road, structure, or construction site.',
+      'That footprint overlaps a road, structure, prop, or '
+      'construction site. Clear the land first.',
     );
   }
   if (definition.kind == StructureKind.building &&
@@ -686,6 +688,17 @@ void validateParcelWorldState(
   // or completed deck) and never under a building or a pending
   // project. Roads and completed decks may carry props, so — unlike
   // buildings — props are not checked against the occupied set.
+  // The ownership invariant first: nothing exists anywhere without
+  // an explicitly purchased parcel — a prop outside owned parcels
+  // can only come from a hand-edited save.
+  for (final prop in state.props) {
+    if (!queries.ownsCell(prop.cell)) {
+      throw FormatException(
+        'A prop stands outside owned parcels at ${prop.cell.key} — '
+        'nothing exists without a purchased parcel.',
+      );
+    }
+  }
   final propAnchors = <String>{};
   for (final prop in state.props) {
     final definition = content.structure(prop.catalogueId);

@@ -42,6 +42,9 @@ class _BridgeTerrain implements TerrainProvider {
   const _BridgeTerrain();
 
   @override
+  List<TerrainProp> get natureProps => const [];
+
+  @override
   int get generatorVersion => 1;
 
   @override

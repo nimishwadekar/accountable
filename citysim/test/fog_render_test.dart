@@ -31,6 +31,9 @@ class _FogBeyondStarter implements TerrainProvider {
   int get generatorVersion => 1;
 
   @override
+  List<TerrainProp> get natureProps => const [];
+
+  @override
   TerrainCell sample(CellCoord coord, int seed) => TerrainCell(
     coord: coord,
     kind: parcelForCell(coord) == const ParcelCoord(0, 0)

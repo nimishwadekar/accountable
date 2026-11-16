@@ -727,4 +727,107 @@ void main() {
       isTrue,
     );
   });
+
+  test('terrain nature rows validate model, terrain, and anchors', () {
+    TerrainContent withProps(List<TerrainProp> props) => TerrainContent(
+      generatorVersion: content.terrain.generatorVersion,
+      parcels: content.terrain.parcels,
+      tiles: content.terrain.tiles,
+      props: props,
+    );
+
+    List<String> natureIssues(List<TerrainProp> props) => [
+      for (final issue in validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: withProps(props),
+      ))
+        if (issue.severity == 'error' && issue.message.contains('ature'))
+          issue.message,
+    ];
+
+    // A sound row on starter grass passes clean.
+    expect(
+      natureIssues(const [
+        TerrainProp(
+          catalogueId: 'pine-tree',
+          cell: CellCoord(2, 2),
+          subtileX: 3,
+          subtileY: 4,
+        ),
+      ]),
+      isEmpty,
+    );
+
+    // Water refuses the row — the model needs land.
+    expect(
+      natureIssues(const [
+        TerrainProp(
+          catalogueId: 'pine-tree',
+          cell: CellCoord(-6, 2),
+          subtileX: 0,
+          subtileY: 0,
+        ),
+      ]),
+      everyElement(contains('cannot stand on water')),
+    );
+
+    // Unknown models and non-decoration models refuse too.
+    expect(
+      natureIssues(const [
+        TerrainProp(
+          catalogueId: 'unknown-tree',
+          cell: CellCoord(2, 2),
+          subtileX: 0,
+          subtileY: 0,
+        ),
+      ]),
+      isNotEmpty,
+    );
+    expect(
+      natureIssues(const [
+        TerrainProp(
+          catalogueId: 'small-home',
+          cell: CellCoord(2, 2),
+          subtileX: 0,
+          subtileY: 0,
+        ),
+      ]),
+      isNotEmpty,
+    );
+
+    // Two rows never share a subtile.
+    expect(
+      natureIssues(const [
+        TerrainProp(
+          catalogueId: 'pine-tree',
+          cell: CellCoord(2, 2),
+          subtileX: 3,
+          subtileY: 4,
+        ),
+        TerrainProp(
+          catalogueId: 'rocks',
+          cell: CellCoord(2, 2),
+          subtileX: 3,
+          subtileY: 4,
+        ),
+      ]),
+      everyElement(contains('share the subtile')),
+    );
+
+    // Rows off the authored map refuse.
+    expect(
+      natureIssues(const [
+        TerrainProp(
+          catalogueId: 'pine-tree',
+          cell: CellCoord(400, 400),
+          subtileX: 0,
+          subtileY: 0,
+        ),
+      ]),
+      isNotEmpty,
+    );
+  });
 }
