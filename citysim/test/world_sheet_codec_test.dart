@@ -122,10 +122,19 @@ void main() {
     expect(world.lastCheckInDate, DateTime.utc(2026, 11, 2));
     expect(world.parcels, hasLength(3));
 
-    // The starter road is identified by its position at the parcel centre.
+    // Roads re-derive their ids and prices from position: the old
+    // starter-road special case is gone, and every road — the one at
+    // the parcel centre included — loads as an ordinary paid tile.
+    // (Cosmetic only: road prices feed no ledger or rule.)
     expect(
-      world.roads.firstWhere((road) => road.id == 'road-start').cell,
-      const CellCoord(4, 4),
+      world.roads.firstWhere((road) => road.cell == const CellCoord(4, 4)).id,
+      'road:4,4',
+    );
+    expect(
+      world.roads
+          .firstWhere((road) => road.cell == const CellCoord(4, 4))
+          .pricePaid,
+      content.economy.roadTileCostCoins,
     );
     expect(world.roads, hasLength(5));
 
@@ -236,6 +245,56 @@ void main() {
       (road) => road.cell == const CellCoord(5, 4),
     );
     expect(healed.projectId, isNull);
+    expect(
+      () => validateParcelWorldState(world, content, terrain),
+      returnsNormally,
+    );
+  });
+
+  test('a road project delivering through the parcel centre validates', () {
+    // The pre-founding era parked a free starter road at (4,4), and
+    // the loader re-derived any road there as free — which broke
+    // saves whose road project had delivered a PAID tile onto that
+    // cell mid-project (delivered project roads must carry the
+    // standard price). Every road now loads at the standard price,
+    // wherever it sits.
+    final world = sheetTablesToWorld(
+      SheetTables(
+        userData: const {
+          'seed': '7',
+          'coins': '3',
+          'coins_earned': '4',
+          'coins_spent': '1',
+          'simulated_date': '2026-11-02',
+          'high_water_date': '2026-11-02',
+          'last_checkin_date': '2026-11-02',
+          'checkin_count': '1',
+          'construction_day': '5',
+        },
+        ownedParcels: const [
+          ['0', '0'],
+        ],
+        tiles: const [
+          ['4', '4', 'road', 'complete', 'asphalt', '', '', '3'],
+          ['5', '4', 'road', 'planned', 'asphalt', '', '', '3'],
+        ],
+        projects: const [
+          ['3', 'road', 'asphalt', '', ''],
+        ],
+      ),
+      content: content,
+      terrainProvider: terrain,
+    );
+    expect(
+      world.roads
+          .singleWhere((road) => road.cell == const CellCoord(4, 4))
+          .pricePaid,
+      content.economy.roadTileCostCoins,
+    );
+    expect(world.constructions.single.roadCells, [
+      const CellCoord(4, 4),
+      const CellCoord(5, 4),
+    ]);
     expect(
       () => validateParcelWorldState(world, content, terrain),
       returnsNormally,

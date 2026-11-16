@@ -179,22 +179,22 @@ ParcelWorldState sheetTablesToWorld(
       tileRows[index] = healed;
     }
   }
-  final parcelCenter = CellCoord(
-    defaultParcelSize ~/ 2,
-    defaultParcelSize ~/ 2,
-  );
-
-  // Completed roads and bridge runs.
+  // Completed roads and bridge runs. Ids and prices are not stored
+  // in the tiles sheet — they re-derive on load: every road costs
+  // the standard tile price. (The pre-founding-era starter road at
+  // the map centre used to re-derive as a free `road-start`; that
+  // heuristic is gone — old saves' starter roads now load as
+  // ordinary paid-looking roads, which is cosmetic only: road
+  // prices feed no ledger or rule.)
   final roadsByCell = <CellCoord, RoadSegment>{};
   for (final row in tileRows) {
     if (row[2] != 'road' || row[3] != 'complete') continue;
     final cell = _cell(row[0], row[1]);
-    final isStarter = cell == parcelCenter;
     roadsByCell[cell] = RoadSegment(
-      id: isStarter ? 'road-start' : 'road:${cell.key}',
+      id: 'road:${cell.key}',
       cell: cell,
       style: _parseStyle(row[4]),
-      pricePaid: isStarter ? 0 : content.economy.roadTileCostCoins,
+      pricePaid: content.economy.roadTileCostCoins,
       completedAtDay: 0,
       projectId: _projectId(row[7]),
     );

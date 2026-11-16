@@ -374,12 +374,7 @@ void main() {
       ),
     ]);
     var world = town();
-    world = purchaseAdjacentParcel(
-      world,
-      content,
-      nature,
-      const ParcelCoord(0, 1),
-    );
+    world = purchaseParcel(world, content, nature, const ParcelCoord(0, 1));
     // The parcel's rows copy in with the codec's id scheme; the row
     // on already-owned land never joins (the save owns that truth).
     expect(

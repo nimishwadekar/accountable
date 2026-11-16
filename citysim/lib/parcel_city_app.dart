@@ -185,7 +185,6 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   ParcelWorldState _newWorld() => newParcelWorldState(
     content: _requireContent,
     seed: DateTime.now().microsecondsSinceEpoch & 0x7FFFFFFF,
-    terrainProvider: _terrain,
   );
 
   void _commit(ParcelWorldState next, {bool replace = false}) {
@@ -540,18 +539,28 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         _terrain,
         coord,
       );
+      final founding = world.parcels.isEmpty;
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Buy parcel ${coord.key}?'),
+          title: Text(
+            founding
+                ? 'Found parcel ${coord.key}?'
+                : 'Buy parcel ${coord.key}?',
+          ),
           content: Text(
-            '${quote.price} coins · ${quote.landCellCount} land cells and '
-            '${quote.cells.length - quote.landCellCount} water cells.\n\n'
-            '${quote.basePrice} base '
-            '+ ${quote.perPopulationCoins} × '
-            '${world.population} population. '
-            'The price grows as the settlement does.\n\n'
-            'Buildings and roads are not included.',
+            founding
+                ? 'Free — your founding parcel. '
+                      '${quote.landCellCount} land cells and '
+                      '${quote.cells.length - quote.landCellCount} water cells.'
+                      '\n\nBuildings and roads are not included.'
+                : '${quote.price} coins · ${quote.landCellCount} land cells and '
+                      '${quote.cells.length - quote.landCellCount} water cells.\n\n'
+                      '${quote.basePrice} base '
+                      '+ ${quote.perPopulationCoins} × '
+                      '${world.population} population. '
+                      'The price grows as the settlement does.\n\n'
+                      'Buildings and roads are not included.',
           ),
           actions: [
             TextButton(
@@ -560,15 +569,14 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Buy parcel'),
+              child: Text(founding ? 'Claim parcel' : 'Buy parcel'),
             ),
           ],
         ),
       );
       if (confirmed != true || !mounted) return;
       _runAction(
-        (state) =>
-            purchaseAdjacentParcel(state, _requireContent, _terrain, coord),
+        (state) => purchaseParcel(state, _requireContent, _terrain, coord),
       );
       setState(() => _selectedParcel = null);
     } on WorldRuleViolation catch (error) {
@@ -1001,20 +1009,31 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     ),
   );
 
-  String _mapHint(ParcelWorldState world) => switch (_tool) {
-    _WorldTool.inspect => 'Drag to pan · pinch to zoom · inspect any tile',
-    _WorldTool.parcel => 'Choose a highlighted neighboring parcel',
-    _WorldTool.road =>
-      world.constructions.any((job) => job.kind == WorldConstructionKind.road)
-          ? 'Select one planned road tile beside a finished road to fund it'
-          : 'Tap connected empty tiles to plan a road stretch; planning is free',
-    _WorldTool.building ||
-    _WorldTool.decor => 'Choose an empty tile for the selected footprint',
-    _WorldTool.bridge =>
-      _bridgeStartCell == null
-          ? 'Choose a connected road tile on the near river bank'
-          : 'Choose a dry landing cell on the far bank',
-  };
+  String _mapHint(ParcelWorldState world) {
+    // The founding nudge: before the first parcel, every tool's hint
+    // points at the one action that matters.
+    if (world.parcels.isEmpty) {
+      return switch (_tool) {
+        _WorldTool.parcel =>
+          'Your first parcel is free — tap one with at least 5 land cells',
+        _ => 'Open the Parcel tool to claim your free founding parcel',
+      };
+    }
+    return switch (_tool) {
+      _WorldTool.inspect => 'Drag to pan · pinch to zoom · inspect any tile',
+      _WorldTool.parcel => 'Choose a highlighted neighboring parcel',
+      _WorldTool.road =>
+        world.constructions.any((job) => job.kind == WorldConstructionKind.road)
+            ? 'Select one planned road tile beside a finished road to fund it'
+            : 'Tap connected empty tiles to plan a road stretch; planning is free',
+      _WorldTool.building ||
+      _WorldTool.decor => 'Choose an empty tile for the selected footprint',
+      _WorldTool.bridge =>
+        _bridgeStartCell == null
+            ? 'Choose a connected road tile on the near river bank'
+            : 'Choose a dry landing cell on the far bank',
+    };
+  }
 
   Widget _controlPanel(ParcelWorldState world) => Container(
     decoration: BoxDecoration(
@@ -1345,7 +1364,9 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       failure = error.message;
     }
     return _PanelCard(
-      title: 'Neighboring parcel ${parcel.key}',
+      title: world.parcels.isEmpty
+          ? 'Founding parcel ${parcel.key}'
+          : 'Neighboring parcel ${parcel.key}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1354,9 +1375,11 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
               '${quote.landCellCount} land cells · ${quote.cells.length - quote.landCellCount} water cells',
             ),
             Text(
-              '${quote.price} coins · ${quote.basePrice} base '
-              '+ ${quote.perPopulationCoins} × '
-              '${world.population} population.',
+              world.parcels.isEmpty
+                  ? 'Free — the first parcel costs nothing.'
+                  : '${quote.price} coins · ${quote.basePrice} base '
+                        '+ ${quote.perPopulationCoins} × '
+                        '${world.population} population.',
             ),
             if (world.coins < quote.price)
               Text('Save ${quote.price - world.coins} more coin(s).'),

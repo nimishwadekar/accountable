@@ -1,6 +1,13 @@
 const defaultParcelSize = 8;
 const worldRenderChunkSize = 16;
 
+/// Land cells a parcel needs before a new game may claim it as its
+/// free founding parcel — enough room for a first road and home, so
+/// the opening can never dead-end on water. A game rule, like
+/// [defaultParcelSize], not tunable content; the map must always
+/// offer at least one parcel that clears it (content validation).
+const foundingLandCells = 5;
+
 /// Physical ground size of one tile's edge, in metres. The world
 /// renders 64 px wide per tile with walkers 9 px tall at the seeded
 /// 0.6 sprite scale, so 12 m tiles read people at ~1.69 m — the

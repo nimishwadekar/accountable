@@ -280,7 +280,14 @@ ParcelPurchaseQuote quoteParcelPurchase(
   if (queries.ownsParcel(candidate)) {
     throw const WorldRuleViolation('You already own that parcel.');
   }
-  if (!candidate.neighbors.any(queries.ownsParcel)) {
+  // The founding purchase — a new game's first — is free and needs
+  // no neighbour, because nothing is owned yet. It still needs
+  // buildable ground: five or more land cells for the first road and
+  // home, so the opening can never dead-end on water. Every later
+  // purchase is normal: adjacent, and priced by the settlement's
+  // size.
+  final founding = state.parcels.isEmpty;
+  if (!founding && !candidate.neighbors.any(queries.ownsParcel)) {
     throw const WorldRuleViolation('Buy a neighboring parcel to expand there.');
   }
   // Buyable means charted terrain — grass or water alike. Fog is the
@@ -297,11 +304,18 @@ ParcelPurchaseQuote quoteParcelPurchase(
       .cells(state.parcelSize)
       .map((cell) => terrainProvider.sample(cell, state.seed))
       .toList();
+  if (founding &&
+      cells.where((cell) => cell.isLand).length < foundingLandCells) {
+    throw const WorldRuleViolation(
+      'Your founding parcel needs at least $foundingLandCells land '
+      'cells — pick somewhere you can build.',
+    );
+  }
   final base = content.economy.parcelBaseCoins;
   final perPopulation = content.economy.parcelPerPopulationCoins;
   return ParcelPurchaseQuote(
     coord: candidate,
-    price: base + perPopulation * state.population,
+    price: founding ? 0 : base + perPopulation * state.population,
     cells: cells,
     basePrice: base,
     perPopulationCoins: perPopulation,
@@ -571,9 +585,6 @@ void validateParcelWorldState(
       state.nextEventNumber < 1) {
     throw const FormatException('The parcel-world save has invalid counters.');
   }
-  if (!state.parcelsByCoord.containsKey(const ParcelCoord(0, 0))) {
-    throw const FormatException('The starting parcel is missing.');
-  }
   final ownedCellSet = <CellCoord>{};
   for (final parcel in state.parcels) {
     if (parcel.pricePaid < 0 ||
@@ -591,15 +602,6 @@ void validateParcelWorldState(
     }
   }
 
-  final startCell = CellCoord(state.parcelSize ~/ 2, state.parcelSize ~/ 2);
-  if (!state.roads.any(
-    (road) =>
-        road.id == 'road-start' &&
-        road.cell == startCell &&
-        road.pricePaid == 0,
-  )) {
-    throw const FormatException('The free starting road is missing.');
-  }
   if (!_unique(state.parcels.map((parcel) => parcel.coord.key)) ||
       !_unique(state.roads.map((road) => road.cell.key)) ||
       !_unique(state.roads.map((road) => road.id)) ||

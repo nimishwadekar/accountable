@@ -1187,6 +1187,20 @@ class TerrainContent {
   /// kind, not authorship.
   bool isOnMap(ParcelCoord coord) => parcels.containsKey(coord);
 
+  /// How many of the parcel's cells are land, tile overrides
+  /// included. The founding purchase needs a buildable parcel —
+  /// five or more land cells — and content validation uses the same
+  /// count to guarantee the authored map offers at least one.
+  int landCellCount(ParcelCoord coord) {
+    final base = parcels[coord];
+    if (base == null) return 0;
+    var land = 0;
+    for (final cell in coord.cells()) {
+      if ((tiles[cell] ?? base) == TerrainKind.grass) land++;
+    }
+    return land;
+  }
+
   Map<String, Object?> toJson() => {
     'generatorVersion': generatorVersion,
     'parcels': {
@@ -1349,8 +1363,16 @@ List<ContentIssue> validateContentData({
   if (terrain.parcels.isEmpty) {
     error('The terrain map needs at least one parcel.');
   }
-  if (terrain.parcels[const ParcelCoord(0, 0)] != TerrainKind.grass) {
-    error('The starter parcel (0,0) must be authored on the map as grass.');
+  // The founding purchase (a new game's first, free parcel) needs a
+  // parcel with five or more land cells, so the authored map must
+  // offer at least one — otherwise no new game can ever begin.
+  if (!terrain.parcels.keys.any(
+    (coord) => terrain.landCellCount(coord) >= foundingLandCells,
+  )) {
+    error(
+      'The terrain map needs at least one parcel with '
+      '$foundingLandCells or more land cells.',
+    );
   }
   for (final entry in terrain.parcels.entries) {
     if (entry.value == TerrainKind.fog) {
@@ -1454,6 +1476,12 @@ List<ContentIssue> validateContentData({
     if (!ids.add(model.id)) error('Duplicate model id "${model.id}".');
     if (model.costCoins < 0) {
       error('${model.id}: cost must not be negative.');
+    }
+    // Props are free by product rule: decorations are the one thing
+    // a brand-new settlement can spend on before its first road and
+    // home, so they can never drain the founding treasury.
+    if (model.kind == StructureKind.decoration && model.costCoins != 0) {
+      error('${model.id}: decorations are free — cost must be 0.');
     }
     if (model.population < 0) {
       error('${model.id}: population must not be negative.');

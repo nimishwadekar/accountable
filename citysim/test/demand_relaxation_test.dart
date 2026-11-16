@@ -1,5 +1,7 @@
 import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
+import 'package:citysim/storage/sheet_tables.dart';
+import 'package:citysim/storage/world_sheet_codec.dart';
 import 'package:citysim/world/coordinates.dart';
 import 'package:citysim/world/terrain_provider.dart';
 import 'package:citysim/world/world_reducer.dart';
@@ -21,11 +23,30 @@ void main() {
   });
 
   ParcelWorldState fresh() {
-    final world = newParcelWorldState(
+    // The settled start: parcel (0,0) owned with one road tile at
+    // its centre, assembled directly through the save codec so no
+    // coins, days, or events are spent reaching it.
+    final world = sheetTablesToWorld(
+      SheetTables(
+        userData: {
+          'seed': '123456',
+          'coins': '${content.economy.startingTreasuryCoins}',
+          'coins_earned': '${content.economy.startingTreasuryCoins}',
+          'coins_spent': '0',
+          'simulated_date': '2026-11-02',
+          'high_water_date': '2026-11-02',
+          'construction_day': '0',
+        },
+        ownedParcels: const [
+          ['0', '0'],
+        ],
+        tiles: const [
+          ['4', '4', 'road', 'complete', 'asphalt', '', '', ''],
+        ],
+        projects: const [],
+      ),
       content: content,
-      seed: 123456,
       terrainProvider: terrain,
-      today: DateTime.utc(2026, 11, 2),
     );
     return world.copyWith(
       unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'fruit-market'},

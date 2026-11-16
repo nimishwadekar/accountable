@@ -24,9 +24,9 @@ import '../../world/coordinates.dart';
 ///   game's camera feel. Tapping a parcel selects it; the inspector
 ///   below re-types it with the terrain swatches or deletes it —
 ///   locked when the current save occupies its cells, when it is
-///   owned (delete only), when it is the starter parcel, or when it
-///   still carries nature props. The `+` buttons on void-facing
-///   edges grow the map with same-kind neighbours.
+///   owned (delete only), or when it still carries nature props. The
+///   `+` buttons on void-facing edges grow the map with same-kind
+///   neighbours.
 /// * **Paint tiles**: dragging paints cells with the active swatch;
 ///   right-click (or the eraser) restores the parcel's base kind.
 ///   Panning while painting uses the middle button or holding space,
@@ -1155,14 +1155,11 @@ class _MapPageState extends State<MapPage> {
     final kind = _parcels[selected] ?? 'grass';
     final occupied = _occupiedByParcel.containsKey(selected);
     final owned = _usage?.ownedParcels.contains(selected) ?? false;
-    final isStarter = selected == const ParcelCoord(0, 0);
     final natureCount = _parcelNatureCount(selected);
     final natureLocked = natureCount > 0;
-    final kindLocked = occupied || isStarter || natureLocked;
-    final deleteLocked = occupied || owned || isStarter || natureLocked;
-    final reason = isStarter
-        ? 'The starter parcel must stay grass on the map.'
-        : occupied
+    final kindLocked = occupied || natureLocked;
+    final deleteLocked = occupied || owned || natureLocked;
+    final reason = occupied
         ? 'This parcel has occupied cells in the current save — clear '
               'them in the game first.'
         : natureLocked

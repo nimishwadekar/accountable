@@ -276,7 +276,12 @@ Today's geography is a code fixture: infinite featureless grass with three hardc
   rule extends to other content editors (a model's footprint cannot
   change while structures of that model are placed).
 - **Parcel-level map, ocean by default.** Terrain is a parcel → grass/water map in `terrain.json`; any parcel without an entry is open ocean — rendered as sea, unbuyable, unbridgeable. There are no water-body entities or water kinds; cell-level detail layers come later on top of parcel terrain.
-- **Starter-experience guarantees as editor validation.** The starter parcel (0,0) must be authored as grass — already enforced by content validation; the editor's map page hard-locks it.
+- **Starter-experience guarantees as editor validation.** Retired with the
+  starter parcel: new games found anywhere charted, so the map no longer
+  needs (0,0)-grass. The generalized guarantee is findability — content
+  validation requires at least one parcel with five or more land cells
+  (the founding purchase's buildability bar), so a new game can always
+  begin.
 
 Landed: the terrain content schema and provider-from-content (a
 49-parcel starter map with east and west water channels), the bridge
@@ -285,7 +290,7 @@ buyable water parcels with ownership decoupled from access, constant
 parcel pricing, and the editor MVP — the Map page: an isometric canvas
 of authored parcels with + growth on void-facing edges, kind
 re-typing and deletion with locks (occupied cells block both, ownership
-blocks deletion, the starter parcel is always locked), occupied-cell
+blocks deletion), occupied-cell
 grey-out from the current save (`/api/world/summary`, with structure
 footprints and bridge spans expanded), and save-time validation refusing
 terrain edits under occupied cells. The dashboard warns at startup to
@@ -388,10 +393,11 @@ funding:
   cells). Completed-road selection is informational.
 - **Building access.** Any adjacent completed ground road counts
   (bridge banks are roads; elevated decks are not — a door never opens
-  onto a bridge); connectivity to the starter road is no longer a
+  onto a bridge); connectivity to a starting road is no longer a
   placement requirement, and land reachability stops gating structures.
-  Pedestrians wander all completed roads. The starter road remains
-  as the world's initial tile. Follow-up discussion (deferred): how
+  Pedestrians wander all completed roads. There is no pre-built road
+  anymore — the first tile is the player's own purchase. Follow-up
+  discussion (deferred): how
   population arrives at the settlement and outside connections.
 
 Migration: the live CSV save's dirt road rows become asphalt; the
@@ -409,7 +415,7 @@ pull together) for facings sprites, and the sprites page edits the
 offset with a slider-plus-number field.
 
 Post-landed review (2026-11-06): completed bridges no longer require
-starter-road connectivity (a disconnected bridge's final coin used to
+starting-road connectivity (a disconnected bridge's final coin used to
 fail save validation); door-side and access checks share the same
 ground-roads rule; the codec orients single-tile bridge runs by their
 bank roads so vertical one-tile crossings reload correctly; road
@@ -561,9 +567,18 @@ pricePaid 0, placedAtDay 0 — nature is free to inherit and refunds
 nothing) and unlocks their models: the trees were always there, so
 progression thresholds never gate inherited nature. Purchase is
 the only ownership path — bridge plans stopped acquiring parcels
-long ago, and the planned zero-parcel start makes purchase cover
-founding too, so no creation-time copy exists or is needed.
-Players clear bought land with the existing pick-up flow, and
+long ago, and the zero-parcel start (2026-11-16) makes purchase
+cover founding too, so no creation-time copy exists or is needed.
+`newParcelWorldState` grants no parcel and no road; the founding
+purchase (`quoteParcelPurchase` with an empty parcel list) is free,
+needs no neighbour, and requires `foundingLandCells` (5) or more
+land cells; every later purchase is adjacent and priced
+base-plus-population. Save validation dropped its starter-parcel
+and starter-road requirements (old saves stay valid; the codec's
+free-`road-start` load heuristic is gone too, so a road project
+delivering through the map centre round-trips — road prices feed
+no ledger, making the change cosmetic for old saves). Players
+clear bought land with the existing pick-up flow, and
 placement already blocks on props everywhere (above). Save
 validation errors on props outside owned parcels (the invariant:
 nothing exists anywhere without an explicitly purchased parcel)

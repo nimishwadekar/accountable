@@ -34,8 +34,37 @@ void main() {
     content = await loadContentBundle(const AssetContentSource());
   });
 
+  /// A world one step into the game: parcel (0,0) founded (free) and
+  /// optionally a first road tile at its centre — assembled directly
+  /// through the save codec so no coins, days, or events are spent
+  /// reaching it.
+  ParcelWorldState foundedWorld({bool withRoad = true}) => sheetTablesToWorld(
+    SheetTables(
+      userData: {
+        'seed': '7',
+        'coins': '${content.economy.startingTreasuryCoins}',
+        'coins_earned': '${content.economy.startingTreasuryCoins}',
+        'coins_spent': '0',
+        'simulated_date': '2026-11-02',
+        'high_water_date': '2026-11-02',
+        'construction_day': '0',
+      },
+      ownedParcels: const [
+        ['0', '0'],
+      ],
+      tiles: withRoad
+          ? const [
+              ['4', '4', 'road', 'complete', 'asphalt', '', '', ''],
+            ]
+          : const [],
+      projects: const [],
+    ),
+    content: content,
+    terrainProvider: ContentTerrainProvider(content.terrain),
+  );
+
   testWidgets(
-    'parcel preview check-in and manual day controls render at mobile widths',
+    'founding, check-in, and manual day controls render at mobile widths',
     (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(390, 844);
@@ -51,20 +80,49 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 500)),
       );
       await tester.pump();
-      expect(
-        find.text('Check in · -1'),
-        findsOneWidget,
-        reason: 'the empty town nets the starter road upkeep',
-      );
-      expect(find.text('1 parcel · 0 structures'), findsOneWidget);
-      expect(find.text('Could not load the world artwork.'), findsNothing);
-      expect(store.state?.roads.single.cell.column, 4);
-      expect(store.state?.structures, isEmpty);
-      expect(tester.takeException(), isNull);
 
-      // The check-in is the town report: an empty town still pays the
-      // starter road's upkeep, and the report itemizes it.
-      await tester.tap(find.text('Check in · -1'));
+      // A brand-new game owns nothing, builds nothing, and the hint
+      // says where to begin.
+      expect(find.text('0 parcels · 0 structures'), findsOneWidget);
+      expect(
+        find.text('Open the Parcel tool to claim your free founding parcel'),
+        findsOneWidget,
+      );
+      expect(find.text('Could not load the world artwork.'), findsNothing);
+
+      // Found: the parcel tool, a tap on the charted parcel under the
+      // camera's centre, and the free claim.
+      await tester.tap(find.text('Parcels').first);
+      await tester.pump();
+      expect(
+        find.text(
+          'Your first parcel is free — tap one with at least 5 land cells',
+        ),
+        findsOneWidget,
+      );
+      final mapRect = tester.getRect(find.byType(ParcelWorldView));
+      await tester.tapAt(mapRect.center);
+      await tester.pump();
+      final review = find.text('Review parcel purchase');
+      await tester.ensureVisible(review);
+      await tester.pump();
+      await tester.tap(review);
+      await tester.pump();
+      await tester.tap(find.text('Claim parcel'));
+      await tester.pump();
+      expect(find.text('1 parcel · 0 structures'), findsOneWidget);
+      expect(store.state?.parcels.single.coord, const ParcelCoord(0, 0));
+      expect(store.state?.parcels.single.pricePaid, 0);
+      expect(store.state?.roads, isEmpty, reason: 'nothing is pre-built');
+      expect(
+        store.state?.coins,
+        content.economy.startingTreasuryCoins,
+        reason: 'the founding parcel is free',
+      );
+
+      // The check-in is the town report: a founded town with no
+      // roads yet owes nothing, and no coin moves.
+      await tester.tap(find.text('Check in · +0'));
       await tester.pump();
       expect(find.textContaining('Town report'), findsOneWidget);
       expect(find.textContaining('Upkeep paid'), findsOneWidget);
@@ -72,13 +130,21 @@ void main() {
       await tester.pump();
       expect(
         store.state?.coins,
-        content.economy.startingTreasuryCoins - 1,
-        reason: 'no coin grant; the starter road upkeep is paid',
+        content.economy.startingTreasuryCoins,
+        reason: 'an empty town nets zero',
       );
 
-      await tester.tap(find.text('Roads').first);
+      // The founding claim scrolled the panel down; the tool chips
+      // build lazily at its top, so scroll back up to reach them.
+      final roadsTool = find.text('Roads');
+      await tester.scrollUntilVisible(
+        roadsTool,
+        -200,
+        scrollable: find.byType(Scrollable).last,
+      );
       await tester.pump();
-      final mapRect = tester.getRect(find.byType(ParcelWorldView));
+      await tester.tap(roadsTool.first);
+      await tester.pump();
       // Two-click planning: the first click sets the start tile, the
       // second sets the end tile projected onto the closer axis.
       await tester.tapAt(mapRect.center + const Offset(32, 16));
@@ -96,7 +162,6 @@ void main() {
       expect(
         store.state?.coins,
         content.economy.startingTreasuryCoins -
-            1 -
             2 * content.economy.roadTileCostCoins,
         reason: 'the whole stretch is paid upfront',
       );
@@ -104,7 +169,7 @@ void main() {
         const CellCoord(5, 4),
         const CellCoord(6, 4),
       ]);
-      expect(store.state?.roads, hasLength(1));
+      expect(store.state?.roads, isEmpty, reason: 'nothing delivered yet');
 
       // Creep: a day passes, the check-in lays the first tile.
       final advanceButton = find.text('+1 day');
@@ -179,13 +244,13 @@ void main() {
 
   testWidgets('parcel mode selects parcels, not cells', (tester) async {
     tester.view.devicePixelRatio = 1;
-    // Wide enough that the unowned parcel south of the starter is
-    // tappable: the app caps the map view's width, so the phone
+    // Wide enough that the unowned parcel south of the founding one
+    // is tappable: the app caps the map view's width, so the phone
     // width cannot reach a parcel a full tile left of centre.
     tester.view.physicalSize = const Size(900, 900);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final store = _MemoryParcelStore();
+    final store = _MemoryParcelStore()..state = foundedWorld(withRoad: false);
 
     await tester.pumpWidget(ParcelCityApp(store: store, content: content));
     for (var i = 0; i < 50; i++) {
@@ -199,7 +264,7 @@ void main() {
     await tester.tap(find.text('Parcels').first);
     await tester.pump();
     final mapRect = tester.getRect(find.byType(ParcelWorldView));
-    // The starter parcel is owned: tapping it highlights nothing.
+    // The founding parcel is owned: tapping it highlights nothing.
     await tester.tapAt(mapRect.center + const Offset(16, 8));
     await tester.pump();
 
@@ -208,8 +273,8 @@ void main() {
     expect(view.selectedParcel, isNull, reason: 'owned parcels select nothing');
     expect(view.selectedCell, isNull);
 
-    // The parcel south of the starter is charted and unowned: the
-    // tap selects that whole parcel, at parcel granularity only.
+    // The parcel south of the founding one is charted and unowned:
+    // the tap selects that whole parcel, at parcel granularity only.
     // Its centre cell (4, 12) sits one parcel down-left of the
     // camera's start cell.
     await tester.tapAt(mapRect.center + const Offset(-256, 128));
@@ -228,7 +293,7 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final store = _MemoryParcelStore();
+    final store = _MemoryParcelStore()..state = foundedWorld();
 
     await tester.pumpWidget(ParcelCityApp(store: store, content: content));
     for (var i = 0; i < 50; i++) {
@@ -239,9 +304,9 @@ void main() {
     );
     await tester.pump();
 
-    // The default tool is inspect. The starter road runs through the
-    // camera's start cell (4, 4), at the map's centre: tapping it
-    // selects the road section.
+    // The default tool is inspect. The founded parcel's first road
+    // runs through the camera's start cell (4, 4), at the map's
+    // centre: tapping it selects the road section.
     final mapRect = tester.getRect(find.byType(ParcelWorldView));
     await tester.tapAt(mapRect.center);
     await tester.pump();

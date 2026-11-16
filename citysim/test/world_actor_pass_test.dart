@@ -201,4 +201,95 @@ void main() {
       );
     },
   );
+
+  testWidgets('wild nature decodes and draws before any purchase', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // The fresh, unfounded world — nothing owned, nothing placed, so
+    // nothing in the save requests nature art. The only variable is
+    // one wild pine on unowned land under the camera: with the
+    // loader requesting nature roles, the actor pass draws one more
+    // sprite once art settles; without it (the regression), the pine
+    // never decodes and the frontier renders bare.
+    final world = newParcelWorldState(
+      content: content,
+      seed: 123456,
+      today: DateTime.utc(2026, 11, 2),
+    );
+    ContentTerrainProvider terrainWith(List<TerrainProp> props) =>
+        ContentTerrainProvider(
+          TerrainContent(
+            generatorVersion: content.terrain.generatorVersion,
+            parcels: content.terrain.parcels,
+            tiles: content.terrain.tiles,
+            props: props,
+          ),
+        );
+
+    Widget app(ContentTerrainProvider terrain) => MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: ParcelWorldView(
+          state: world,
+          content: content,
+          terrainProvider: terrain,
+          onCellTap: (cell, structureId, subtileX, subtileY) {},
+        ),
+      ),
+    );
+
+    // Settle: decode art (real asset I/O only progresses inside
+    // runAsync windows) until frames pass with no chunk records and
+    // an unchanged actor count, then read that count.
+    Future<int> settledActorCount(ContentTerrainProvider terrain) async {
+      ParcelWorldProbe.recording = true;
+      ParcelWorldProbe.reset();
+      await tester.pumpWidget(app(terrain));
+      var settled = false;
+      var lastActors = -1;
+      var quietWindows = 0;
+      for (var attempt = 0; attempt < 25 && !settled; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 400)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        ParcelWorldProbe.reset();
+        for (var i = 0; i < 3; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        final frames = ParcelWorldProbe.samples;
+        final actors = frames.isEmpty ? -1 : frames.last.actorOps;
+        quietWindows = actors == lastActors ? quietWindows + 1 : 0;
+        settled =
+            frames.isNotEmpty &&
+            frames.every((s) => s.chunkRecords == 0) &&
+            quietWindows >= 2;
+        lastActors = actors;
+      }
+      expect(settled, isTrue, reason: 'the artwork should finish decoding');
+      return lastActors;
+    }
+
+    final bare = await settledActorCount(terrainWith(const []));
+    final wild = await settledActorCount(
+      terrainWith(const [
+        TerrainProp(
+          catalogueId: 'pine-tree',
+          cell: CellCoord(4, 3),
+          subtileX: 2,
+          subtileY: 2,
+        ),
+      ]),
+    );
+    expect(
+      wild,
+      greaterThan(bare),
+      reason: 'the wild pine must decode and draw on unowned land',
+    );
+  }, timeout: const Timeout(Duration(minutes: 3)));
 }

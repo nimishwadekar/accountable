@@ -40,7 +40,6 @@ void main() {
   ParcelWorldState newWorld() => newParcelWorldState(
     content: content,
     seed: 99,
-    terrainProvider: terrain,
     today: DateTime.utc(2026, 11, 2),
   );
 
@@ -56,29 +55,20 @@ void main() {
       api: api,
     );
 
-    // Play: check in, expand, buy a partly delivered road plan, then
-    // save and reload mid-project.
+    // Play: check in, found, expand, buy a partly delivered road
+    // plan, then save and reload mid-project.
     var world = grantWorldDebugCoins(
       checkInWorldForToday(newWorld(), content),
       300,
     );
-    world = purchaseAdjacentParcel(
-      world,
-      content,
-      terrain,
-      const ParcelCoord(1, 0),
-    );
-    world = purchaseAdjacentParcel(
-      world,
-      content,
-      terrain,
-      const ParcelCoord(2, 0),
-    );
+    world = purchaseParcel(world, content, terrain, const ParcelCoord(0, 0));
+    world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
+    world = purchaseParcel(world, content, terrain, const ParcelCoord(2, 0));
     world = planRoadStretch(
       world,
       content,
       terrain,
-      cells: [for (var column = 5; column <= 6; column++) CellCoord(column, 4)],
+      cells: [for (var column = 4; column <= 6; column++) CellCoord(column, 4)],
     );
     world = nextDay(world);
 
@@ -86,7 +76,7 @@ void main() {
     expect(reloaded, isNull, reason: 'no documents yet');
     await store.save(world);
     final midProject = (await store.load())!;
-    expect(midProject.constructions.single.roadCells, hasLength(2));
+    expect(midProject.constructions.single.roadCells, hasLength(3));
     expect(
       midProject.roads.where(
         (road) => road.projectId == midProject.constructions.single.id,
@@ -139,7 +129,11 @@ void main() {
 
     await store.save(played);
     final finalWorld = (await store.load())!;
-    expect(finalWorld.roads, hasLength(5), reason: 'starter + 3 + approach');
+    expect(
+      finalWorld.roads,
+      hasLength(5),
+      reason: '3 planned + 2 bridge banks',
+    );
     expect(finalWorld.structures.single.catalogueId, 'small-home');
     expect(finalWorld.bridges.single.nearBank, const CellCoord(7, 4));
     expect(finalWorld.bridges.single.farBank, const CellCoord(16, 4));
@@ -187,17 +181,13 @@ void main() {
       api: api,
     );
 
-    // Finish a road stretch east of the starter road.
+    // Finish a road stretch east of the founding parcel's road.
     var world = grantWorldDebugCoins(
       checkInWorldForToday(newWorld(), content),
       100,
     );
-    world = purchaseAdjacentParcel(
-      world,
-      content,
-      terrain,
-      const ParcelCoord(1, 0),
-    );
+    world = purchaseParcel(world, content, terrain, const ParcelCoord(0, 0));
+    world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
     world = planRoadStretch(
       world,
       content,
@@ -253,10 +243,6 @@ void main() {
       hasLength(1),
       reason: 'one tile delivered, one still creeping',
     );
-    expect(
-      second.roads,
-      hasLength(5),
-      reason: 'starter + 3 + 1 delivered tile',
-    );
+    expect(second.roads, hasLength(4), reason: '3 finished + 1 delivered tile');
   });
 }

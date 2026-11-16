@@ -96,9 +96,7 @@ void main() {
     expect(find.byKey(const ValueKey('add-0-0-1-0')), findsNothing);
   });
 
-  testWidgets('occupied, owned, and starter parcels lock with reasons', (
-    tester,
-  ) async {
+  testWidgets('occupied and owned parcels lock with reasons', (tester) async {
     final usage = WorldUsage(
       // A road tile inside the east water parcel (1,0).
       occupiedCells: {const CellCoord(10, 4)},
@@ -112,13 +110,11 @@ void main() {
     await tester.pumpWidget(_host(categories, usage));
     await tester.pump();
 
-    // The starter parcel is locked both ways.
+    // There is no starter parcel anymore: (0,0) is just another
+    // vacant parcel, free to re-type or delete.
     await tester.tap(find.byKey(const ValueKey('parcel-0-0')));
     await tester.pump();
-    expect(
-      find.textContaining('starter parcel must stay grass'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Vacant — free to change'), findsOneWidget);
 
     // Occupied: kind and delete both locked.
     await tester.tap(find.byKey(const ValueKey('parcel-1-0')));

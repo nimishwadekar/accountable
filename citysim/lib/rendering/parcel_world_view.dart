@@ -625,6 +625,13 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
             content.structure(structure.catalogueId)!.assetRoles.first,
       for (final prop in widget.state.props)
         prop.assetRole ?? content.structure(prop.catalogueId)!.assetRoles.first,
+      // Wild nature renders on unowned land from the first frame —
+      // before any purchase materializes rows into the save — so its
+      // roles decode with the initial load, not only when a purchase
+      // or selection happens to request them (a fresh world owns
+      // nothing, so nothing else would).
+      for (final row in widget.terrainProvider.natureProps)
+        row.assetRole ?? content.structure(row.catalogueId)!.assetRoles.first,
       for (final job in widget.state.constructions)
         if (job.kind == WorldConstructionKind.structure)
           job.assetRole ??

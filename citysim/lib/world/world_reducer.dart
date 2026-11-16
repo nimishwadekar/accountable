@@ -349,7 +349,11 @@ ParcelWorldState setWorldCalendarDate(ParcelWorldState state, DateTime date) {
 }
 
 /// Buys a neighboring parcel from the town treasury.
-ParcelWorldState purchaseAdjacentParcel(
+/// Claims a parcel. The first purchase of a new game is the founding
+/// — free, unbounded by adjacency, needing five or more land cells —
+/// and everything after is a normal adjacent purchase at the
+/// settlement-scaled price (see [quoteParcelPurchase]).
+ParcelWorldState purchaseParcel(
   ParcelWorldState state,
   ContentBundle content,
   TerrainProvider terrainProvider,
@@ -388,7 +392,9 @@ ParcelWorldState purchaseAdjacentParcel(
       _event(
         state,
         kind: 'parcel-purchase',
-        description: 'Parcel ${coord.key} purchased · −${quote.price} coins',
+        description: quote.price == 0
+            ? 'Parcel ${coord.key} claimed · the founding parcel, free'
+            : 'Parcel ${coord.key} purchased · −${quote.price} coins',
         payload: {
           'parcelX': coord.x,
           'parcelY': coord.y,

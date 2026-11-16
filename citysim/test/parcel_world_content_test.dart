@@ -295,6 +295,67 @@ void main() {
     );
   });
 
+  test('decorations are free by rule', () {
+    // Props are the one thing a brand-new settlement can spend on
+    // before its first road and home, so they can never drain the
+    // founding treasury. The shipped catalogue already prices every
+    // decoration at zero; a priced one is a validation error.
+    for (final model in content.catalogue) {
+      if (model.kind == StructureKind.decoration) {
+        expect(model.costCoins, 0, reason: model.id);
+      }
+    }
+    final priced = [
+      for (final model in content.catalogue)
+        if (model.id == 'street-lamp') model.copyWith(costCoins: 3) else model,
+    ];
+    expect(
+      validateContentData(
+        catalogue: priced,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: content.terrain,
+      ).any(
+        (issue) =>
+            issue.severity == 'error' &&
+            issue.message.contains('decorations are free'),
+      ),
+      isTrue,
+    );
+  });
+
+  test('the authored map can always be founded', () {
+    // The founding purchase needs a parcel with five or more land
+    // cells, so content validation requires the map to offer at
+    // least one — an all-water map could never start a new game.
+    expect(
+      content.terrain.parcels.keys.any(
+        (coord) => content.terrain.landCellCount(coord) >= foundingLandCells,
+      ),
+      isTrue,
+      reason: 'the shipped map has a findable founding parcel',
+    );
+    final unfoundable = TerrainContent(
+      generatorVersion: content.terrain.generatorVersion,
+      parcels: {const ParcelCoord(0, 0): TerrainKind.water},
+    );
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: unfoundable,
+      ).any(
+        (issue) =>
+            issue.severity == 'error' &&
+            issue.message.contains('$foundingLandCells or more land cells'),
+      ),
+      isTrue,
+    );
+  });
+
   test('content seed snapshot holds the seeded defaults', () {
     // Snapshot guard: these values are the seeded defaults the dashboard
     // starts from — the original nine models, the promoted Buggy

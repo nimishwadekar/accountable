@@ -22,11 +22,40 @@ void main() {
     terrain = ContentTerrainProvider(content.terrain);
   });
 
-  ParcelWorldState newWorld() => newParcelWorldState(
+  /// The untouched first minute of a new game: nothing owned, nothing
+  /// built — the player has yet to choose a founding parcel.
+  ParcelWorldState freshWorld() => newParcelWorldState(
     content: content,
     seed: 123456,
-    terrainProvider: terrain,
     today: DateTime.utc(2026, 11, 2),
+  );
+
+  /// A settled start: parcel (0,0) owned with one road tile at its
+  /// centre — the shape every town-building test begins from,
+  /// assembled directly through the save codec so no coins, days, or
+  /// events are spent reaching it. (The founding itself is covered
+  /// from [freshWorld] above.)
+  ParcelWorldState newWorld() => sheetTablesToWorld(
+    SheetTables(
+      userData: {
+        'seed': '123456',
+        'coins': '${content.economy.startingTreasuryCoins}',
+        'coins_earned': '${content.economy.startingTreasuryCoins}',
+        'coins_spent': '0',
+        'simulated_date': '2026-11-02',
+        'high_water_date': '2026-11-02',
+        'construction_day': '0',
+      },
+      ownedParcels: const [
+        ['0', '0'],
+      ],
+      tiles: const [
+        ['4', '4', 'road', 'complete', 'asphalt', '', '', ''],
+      ],
+      projects: const [],
+    ),
+    content: content,
+    terrainProvider: terrain,
   );
 
   /// The heartbeat: a simulated day passes and the town report runs
@@ -57,16 +86,15 @@ void main() {
   }
 
   group('parcel-world bootstrap and clocks', () {
-    test('starts empty with one free starter road in the first parcel', () {
-      final world = newWorld();
+    test('a new game owns nothing and builds nothing', () {
+      final world = freshWorld();
 
-      expect(world.parcels.single.coord, const ParcelCoord(0, 0));
+      expect(world.parcels, isEmpty);
+      expect(world.roads, isEmpty);
       expect(world.structures, isEmpty);
+      expect(world.props, isEmpty);
       expect(world.coins, content.economy.startingTreasuryCoins);
       expect(world.population, 0);
-      expect(world.roads.single.cell, const CellCoord(4, 4));
-      expect(world.roads.single.style, RoadStyle.asphalt);
-      expect(world.roads.single.pricePaid, 0);
       expect(world.builderCapacity, 1);
       expect(
         world.unlockedCatalogueIds,
@@ -79,6 +107,99 @@ void main() {
       expect(
         () => validateParcelWorldState(world, content, terrain),
         returnsNormally,
+        reason: 'a zero-parcel save is a valid save',
+      );
+    });
+
+    test('the founding parcel is free, anywhere charted, and needs land', () {
+      var world = freshWorld();
+
+      // Any charted parcel with room to build: free, no neighbour
+      // required — there is nothing to be adjacent to yet.
+      final quote = quoteParcelPurchase(
+        world,
+        content,
+        terrain,
+        const ParcelCoord(0, 0),
+      );
+      expect(quote.price, 0, reason: 'the founding parcel is free');
+      world = purchaseParcel(world, content, terrain, const ParcelCoord(0, 0));
+      expect(world.parcels.single.coord, const ParcelCoord(0, 0));
+      expect(world.parcels.single.pricePaid, 0);
+      expect(world.coins, content.economy.startingTreasuryCoins);
+      expect(
+        world.events.last.description,
+        'Parcel 0,0 claimed · the founding parcel, free',
+      );
+      expect(
+        () => validateParcelWorldState(world, content, terrain),
+        returnsNormally,
+      );
+
+      // The second parcel is a normal purchase: adjacent, priced by
+      // the settlement's size.
+      final second = quoteParcelPurchase(
+        world,
+        content,
+        terrain,
+        const ParcelCoord(1, 0),
+      );
+      expect(
+        second.price,
+        content.economy.parcelBaseCoins +
+            content.economy.parcelPerPopulationCoins * world.population,
+      );
+      expect(
+        () => quoteParcelPurchase(
+          world,
+          content,
+          terrain,
+          const ParcelCoord(4, 4),
+        ),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: 'a non-adjacent second parcel is refused',
+      );
+
+      // The founding needs buildable ground: five or more land
+      // cells. A water parcel would dead-end the opening — nothing
+      // to road, nothing to build, no income for a second parcel.
+      final waterParcel = content.terrain.parcels.entries
+          .firstWhere((entry) => entry.value == TerrainKind.water)
+          .key;
+      expect(
+        () => quoteParcelPurchase(world, content, terrain, waterParcel),
+        returnsNormally,
+        reason: 'paid purchases may still be water',
+      );
+      final fresh = freshWorld();
+      expect(
+        () => purchaseParcel(fresh, content, terrain, waterParcel),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: 'the founding parcel refuses open water',
+      );
+      // Not only open water: a mostly-drowned parcel with four land
+      // cells fails the same buildability bar. A synthetic map pins
+      // this regardless of what the authored terrain carries.
+      final sparseLand = ContentTerrainProvider(
+        TerrainContent(
+          generatorVersion: content.terrain.generatorVersion,
+          parcels: {const ParcelCoord(0, 0): TerrainKind.grass},
+          tiles: {
+            for (final cell in const ParcelCoord(0, 0).cells())
+              if (cell != const CellCoord(0, 0)) cell: TerrainKind.water,
+          },
+        ),
+      );
+      expect(
+        sparseLand.natureProps,
+        isEmpty,
+        reason: 'the synthetic map carries no nature',
+      );
+      expect(
+        () =>
+            purchaseParcel(fresh, content, sparseLand, const ParcelCoord(0, 0)),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: 'four land cells cannot found a settlement',
       );
     });
 
@@ -87,8 +208,8 @@ void main() {
       () {
         var world = newWorld();
         world = checkInWorldForToday(world, content);
-        // An empty town still pays the starter road's upkeep: the
-        // report is the whole economy now, and no coin is granted.
+        // An empty town still pays its one road's upkeep: the report
+        // is the whole economy now, and no coin is granted.
         expect(world.coins, content.economy.startingTreasuryCoins - 1);
         final report = world.events.lastWhere((e) => e.kind == 'check-in');
         expect(report.payload['taxes'], 0);
@@ -1059,12 +1180,7 @@ void main() {
         newWorld(),
         content.economy.parcelBaseCoins - content.economy.startingTreasuryCoins,
       );
-      world = purchaseAdjacentParcel(
-        world,
-        content,
-        terrain,
-        const ParcelCoord(1, 0),
-      );
+      world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
       expect(world.coins, 0);
 
       // Free home and café plans in a broke town: the starter road's
@@ -1184,21 +1300,11 @@ void main() {
     test('parcels are neighboring purchases and owning land is not access', () {
       var world = grantWorldDebugCoins(newWorld(), 100);
       // Authored water parcels are buyable like any other map parcel.
-      world = purchaseAdjacentParcel(
-        world,
-        content,
-        terrain,
-        const ParcelCoord(1, 0),
-      );
+      world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
       expect(world.parcels, hasLength(2));
       // So is the grass parcel across the water — adjacency is the only
       // purchase requirement now.
-      world = purchaseAdjacentParcel(
-        world,
-        content,
-        terrain,
-        const ParcelCoord(2, 0),
-      );
+      world = purchaseParcel(world, content, terrain, const ParcelCoord(2, 0));
       expect(world.parcels, hasLength(3));
       // Ownership is not access: nothing beyond the water is
       // reachable on foot until a bridge opens.
@@ -1238,12 +1344,7 @@ void main() {
       expect(atThree.price, base + 3 * perPopulation);
 
       // The purchase charges the scaled price and records it.
-      world = purchaseAdjacentParcel(
-        world,
-        content,
-        terrain,
-        const ParcelCoord(1, 0),
-      );
+      world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
       expect(world.parcels.last.pricePaid, base + 3 * perPopulation);
       expect(
         world.totalCoinsSpent,
@@ -1254,12 +1355,7 @@ void main() {
 
     test('water parcels are buyable but fog beyond the map is not', () {
       var world = grantWorldDebugCoins(newWorld(), 100);
-      world = purchaseAdjacentParcel(
-        world,
-        content,
-        terrain,
-        const ParcelCoord(-1, 0),
-      );
+      world = purchaseParcel(world, content, terrain, const ParcelCoord(-1, 0));
       final queries = WorldQueries(world, terrain);
       // Sample a cell the live tile overrides have not painted — live
       // content may carry any number of them.
@@ -1282,25 +1378,10 @@ void main() {
             'beyond it',
       );
       // Buy out to the authored edge, then the fog refuses.
-      world = purchaseAdjacentParcel(
-        world,
-        content,
-        terrain,
-        const ParcelCoord(-2, 0),
-      );
-      world = purchaseAdjacentParcel(
-        world,
-        content,
-        terrain,
-        const ParcelCoord(-3, 0),
-      );
+      world = purchaseParcel(world, content, terrain, const ParcelCoord(-2, 0));
+      world = purchaseParcel(world, content, terrain, const ParcelCoord(-3, 0));
       expect(
-        () => purchaseAdjacentParcel(
-          world,
-          content,
-          terrain,
-          const ParcelCoord(-4, 0),
-        ),
+        () => purchaseParcel(world, content, terrain, const ParcelCoord(-4, 0)),
         throwsA(isA<WorldRuleViolation>()),
         reason: 'beyond the authored map is fog — uncharted and unbuyable',
       );
@@ -1366,18 +1447,8 @@ void main() {
     var world = grantWorldDebugCoins(newWorld(), 200);
     // Everything under the bridge must be owned up front: the water
     // parcel and the far-bank parcel are bought before planning.
-    world = purchaseAdjacentParcel(
-      world,
-      content,
-      terrain,
-      const ParcelCoord(1, 0),
-    );
-    world = purchaseAdjacentParcel(
-      world,
-      content,
-      terrain,
-      const ParcelCoord(2, 0),
-    );
+    world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
+    world = purchaseParcel(world, content, terrain, const ParcelCoord(2, 0));
     // Roads stop one tile short: both bridge banks need vacant land.
     world = planAndSettleRoad(
       world,
@@ -1535,12 +1606,7 @@ void main() {
 
   test('active funded road project round-trips through the save', () {
     var world = grantWorldDebugCoins(newWorld(), 20);
-    world = purchaseAdjacentParcel(
-      world,
-      content,
-      terrain,
-      const ParcelCoord(1, 0),
-    );
+    world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
     world = planRoadStretch(
       world,
       content,

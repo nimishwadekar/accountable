@@ -429,26 +429,20 @@ class ParcelWorldState {
 String worldDateKey(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
+/// A fresh world: nothing is owned, nothing is built. The player
+/// claims a founding parcel — the first purchase, free — wherever
+/// they like on the charted map (see [quoteParcelPurchase]), so
+/// creation grants no parcel, no road, and samples no terrain.
 ParcelWorldState newParcelWorldState({
   required ContentBundle content,
   required int seed,
-  required TerrainProvider terrainProvider,
   DateTime? today,
 }) {
   final date = today ?? DateTime.now();
-  final parcelCoord = const ParcelCoord(0, 0);
-  final terrain = parcelCoord
-      .cells(defaultParcelSize)
-      .map((cell) => terrainProvider.sample(cell, seed))
-      .toList();
-  final startRoadCell = const CellCoord(
-    defaultParcelSize ~/ 2,
-    defaultParcelSize ~/ 2,
-  );
   return ParcelWorldState(
     worldId: 'parcel-world-$seed',
     seed: seed,
-    generatorVersion: terrainProvider.generatorVersion,
+    generatorVersion: content.terrain.generatorVersion,
     rulesVersion: parcelWorldRulesVersion,
     contentVersion: parcelWorldContentVersion,
     parcelSize: defaultParcelSize,
@@ -470,23 +464,8 @@ ParcelWorldState newParcelWorldState({
       for (final model in content.purchaseableModels)
         if (model.unlockAtPopulation == 0) model.id,
     },
-    parcels: [
-      OwnedParcel(
-        coord: parcelCoord,
-        pricePaid: 0,
-        purchasedAtDay: 0,
-        terrain: terrain,
-      ),
-    ],
-    roads: [
-      RoadSegment(
-        id: 'road-start',
-        cell: startRoadCell,
-        style: RoadStyle.asphalt,
-        pricePaid: 0,
-        completedAtDay: 0,
-      ),
-    ],
+    parcels: const [],
+    roads: const [],
     structures: const [],
     props: const [],
     bridges: const [],

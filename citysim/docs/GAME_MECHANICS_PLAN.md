@@ -29,25 +29,29 @@ volume, optimization, or constant attendance:
 
 ## 2. Current playable loop
 
-1. Explicitly check in for the current simulated date to earn one coin.
-2. Save coins or spend them on neighboring land, roads, buildings, bridges, or
-   decorations.
-3. Plan construction for free, assign a builder immediately, and contribute
-   saved coins when ready.
+1. Claim a founding parcel — the first purchase is free, anywhere
+   charted with room to build.
+2. Explicitly check in for the current simulated date to run the town
+   report: taxes from completed buildings, minus upkeep.
+3. Spend coins on neighboring land, roads, buildings, bridges, or
+   decorations (decorations are free).
 4. Expand connected roads and accessible land, then place more structures.
 5. Revisit the settlement as it grows; there is no penalty for taking a break.
 
-The starter world has one empty 8×8 parcel, one free dirt-road tile at its
-center, no buildings, and zero coins. Current geography is a deterministic
-authored parcel map in `terrain.json` (grass and water parcels on a
-  bounded map with open ocean beyond it); the map editor and finer
-  detail layers are future work.
+A new game owns nothing and builds nothing — no starter parcel, no pre-built
+road. The founding stake (`startingTreasuryCoins`) is the opening wallet.
+Current geography is a deterministic authored parcel map in `terrain.json`
+(grass and water parcels on a bounded map with open ocean beyond it), and
+content validation guarantees the map always offers at least one parcel
+with five or more land cells, so a new game can always be founded.
 
 ## 3. Coins, check-ins, and calendar
 
 ### Check-ins
 
-- One explicit check-in earns one coin for the current eligible simulated date.
+- One explicit check-in runs the town report for the current eligible
+  simulated date: taxes from completed buildings, minus upkeep owed by
+  buildings, roads, and bridge tiles. An empty town nets zero.
 - A date can be credited once. No backfill, streak multiplier, or missed-day
   penalty is used.
 - Advancing the calendar does not award coins; the player must check in
@@ -60,32 +64,36 @@ authored parcel map in `terrain.json` (grass and water parcels on a
 
 ### Spending and project funding
 
-- The wallet starts at zero. Coins come from explicit check-ins in normal play.
-- Parcel purchases and instant decorations are paid immediately.
-- Building, road-stretch, and bridge plans are free. Their costs are contributed
-  explicitly from the wallet; partial contributions persist.
-- A project completes immediately when its full cost is contributed. Calendar
-  advancement alone never changes its progress.
-- A player may save coins and contribute more than one coin at once. There is no
-  requirement to fund a project as soon as it is planned.
+- The wallet starts at the founding stake (`startingTreasuryCoins`, 20 in
+  the shipped economy). Coins come from the town report in normal play.
+- Parcel purchases and instant decorations are paid immediately
+  (decorations cost nothing by rule).
+- Road-stretch and bridge plans are bought upfront from the wallet; the
+  tiles then creep in one per check-in. Structure plans assign a builder
+  immediately and complete one stage per check-in.
+- Calendar advancement alone never completes a project.
 
 ## 4. Land and expansion
 
 - Parcels are adjacent grids of cells. The current parcel size is 8×8.
-- A normal parcel purchase must extend from accessible territory and contain at
-  least some land. Owning land across a river does not make that bank accessible.
+- **The founding purchase** (a new game's first) is free, needs no neighbour,
+  and requires five or more land cells — enough room for a first road and
+  home, so the opening can never dead-end on water. Every later purchase
+  is normal: it must neighbor owned land, and it may be any charted parcel,
+  grass or water alike. Owning land across a river does not make that bank
+  accessible.
 - Land connectivity and road connectivity are different: a player can reach dry
   land without having a connected road there.
 - The player pays for a parcel before developing it. New parcels contain no
   placed buildings, roads, or decorations.
-- Planned start change (noted 2026-11): a new game begins with **zero owned
-  parcels** — the player purchases the first parcel, and the starter parcel
-  retires (its (0,0)-grass content validation and editor lock retire with it).
-  Purchase then becomes the only path to ownership, which the planned
-  nature-props design relies on: terrain vegetation materializes into the
-  save exactly at parcel purchase, so no creation-time copy is ever needed —
-  and "new parcels contain no placed anything" gains that one exception:
-  copied nature props, cleared by the player before building on them.
+- Zero-owned-parcel start (2026-11-16): a new game begins with **zero owned
+  parcels** — the player claims the founding parcel, and the starter parcel
+  is retired (its (0,0)-grass content validation and editor lock retired
+  with it). Purchase is the only path to ownership, which the nature-props
+  design relies on: terrain vegetation materializes into the save exactly
+  at parcel purchase, so no creation-time copy exists — and "new parcels
+  contain no placed anything" keeps that one exception: copied nature
+  props, cleared by the player before building on them.
 - Lakes can be routed around; the current rules do not allow bridging lakes or
   oceans. Rivers require a valid bridge where no land route exists. Decided
   direction: bridges will eventually span any water body — straight line,
@@ -185,8 +193,10 @@ documented with the rules code rather than treated as a permanent shop price.
 
 ### Decorations
 
-- Decorations are paid and placed instantly, use no builder, and do not wait for
-  simulated days.
+- Decorations are free by rule and placed instantly, use no builder, and do
+  not wait for simulated days (content validation pins every decoration's
+  cost to zero — props are the one thing a new settlement can spend on
+  before its first road, so they can never drain the founding treasury).
 - They require owned, vacant dry land but do not require road
   adjacency.
 - Placed props are physical: buildings, road stretches, and bridge banks refuse
@@ -629,8 +639,9 @@ in the order the decisions force themselves:
 - **Founding mechanics.** How a second city starts on disconnected
   land: the lore above (boat colonization, splinter households)
   supplies the story; mechanically a founding action is needed —
-  claim a charted parcel, receive a starter road and perhaps a
-  founding stake. Design slowly; this is genuinely new gameplay.
+  claim a charted parcel and a founding stake, the same free-first
+  rule the game's own opening now uses. Design slowly; this is
+  genuinely new gameplay.
 - **Authoring weight.** The map is hand-authored; several cities
   wants a bigger canvas and camera/UX for jumping between them.
 
