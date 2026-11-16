@@ -19,6 +19,7 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 
 # Improvements
 
+- show fog on top of border items and make the boundary softer.
 - Game-like UI.
 - better editor.
 - make money amounts realistic order of magnitude.
