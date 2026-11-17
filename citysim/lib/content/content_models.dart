@@ -494,38 +494,15 @@ class SpriteDefinition {
 }
 
 // ---------------------------------------------------------------------------
-// Economy and progression
+// Economy
 // ---------------------------------------------------------------------------
-
-class BuilderProgressionStep {
-  const BuilderProgressionStep({
-    required this.atPopulation,
-    required this.capacity,
-  });
-
-  final int atPopulation;
-  final int capacity;
-
-  Map<String, Object?> toJson() => {
-    'atPopulation': atPopulation,
-    'capacity': capacity,
-  };
-
-  static BuilderProgressionStep fromJson(Map<String, Object?> json) =>
-      BuilderProgressionStep(
-        atPopulation: json['atPopulation']! as int,
-        capacity: json['capacity']! as int,
-      );
-}
 
 class EconomyContent {
   const EconomyContent({
     required this.startingTreasuryCoins,
-    required this.startingBuilderCapacity,
     required this.roadTileCostCoins,
     required this.bridgeTileCostCoins,
     required this.parcelBaseCoins,
-    required this.builderProgression,
     this.roadTaxCoinsPerTile = 0,
     this.roadUpkeepCoinsPerTile = 0,
     this.bridgeTaxCoinsPerTile = 0,
@@ -544,9 +521,6 @@ class EconomyContent {
   /// The single town treasury's opening balance for a brand-new
   /// world. Existing saves carry their wallet over as the treasury.
   final int startingTreasuryCoins;
-
-  /// Fixed at 1 by product rule; shown read-only in the dashboard.
-  final int startingBuilderCapacity;
 
   /// Upfront price of one road tile in a stretch plan — the whole
   /// stretch is paid at planning, then creeps one tile per check-in.
@@ -612,23 +586,9 @@ class EconomyContent {
   final int roadUpkeepCoinsPerTile;
   final int bridgeTaxCoinsPerTile;
   final int bridgeUpkeepCoinsPerTile;
-  final List<BuilderProgressionStep> builderProgression;
-
-  /// Builder capacity granted for a population (monotonic; the highest
-  /// crossed threshold wins, never below the starting capacity).
-  int builderCapacityForPopulation(int population) {
-    var capacity = startingBuilderCapacity;
-    for (final step in builderProgression) {
-      if (population >= step.atPopulation && step.capacity > capacity) {
-        capacity = step.capacity;
-      }
-    }
-    return capacity;
-  }
 
   Map<String, Object?> toJson() => {
     'startingTreasuryCoins': startingTreasuryCoins,
-    'startingBuilderCapacity': startingBuilderCapacity,
     'roadTileCostCoins': roadTileCostCoins,
     'bridgeCost': {'bridgeTileCostCoins': bridgeTileCostCoins},
     'roadTaxCoinsPerTile': roadTaxCoinsPerTile,
@@ -645,9 +605,6 @@ class EconomyContent {
     'contentmentFloorPercent': contentmentFloorPercent,
     'serviceRequirementPopulation': serviceRequirementPopulation,
     'requiredServiceCategories': requiredServiceCategories,
-    'builderProgression': builderProgression
-        .map((step) => step.toJson())
-        .toList(),
   };
 
   EconomyContent copyWith({
@@ -664,10 +621,8 @@ class EconomyContent {
     int? contentmentFloorPercent,
     int? serviceRequirementPopulation,
     List<String>? requiredServiceCategories,
-    List<BuilderProgressionStep>? builderProgression,
   }) => EconomyContent(
     startingTreasuryCoins: startingTreasuryCoins ?? this.startingTreasuryCoins,
-    startingBuilderCapacity: startingBuilderCapacity,
     roadTileCostCoins: roadTileCostCoins ?? this.roadTileCostCoins,
     bridgeTileCostCoins: bridgeTileCostCoins ?? this.bridgeTileCostCoins,
     parcelBaseCoins: parcelBaseCoins ?? this.parcelBaseCoins,
@@ -689,14 +644,12 @@ class EconomyContent {
         serviceRequirementPopulation ?? this.serviceRequirementPopulation,
     requiredServiceCategories:
         requiredServiceCategories ?? this.requiredServiceCategories,
-    builderProgression: builderProgression ?? this.builderProgression,
   );
 
   static EconomyContent fromJson(Map<String, Object?> json) {
     final bridge = json['bridgeCost'] as Map<String, Object?>;
     return EconomyContent(
       startingTreasuryCoins: json['startingTreasuryCoins']! as int,
-      startingBuilderCapacity: json['startingBuilderCapacity']! as int,
       roadTileCostCoins: json['roadTileCostCoins']! as int,
       bridgeTileCostCoins: bridge['bridgeTileCostCoins']! as int,
       roadTaxCoinsPerTile: json['roadTaxCoinsPerTile'] as int? ?? 0,
@@ -721,12 +674,6 @@ class EconomyContent {
         for (final category
             in json['requiredServiceCategories'] as List? ?? const [])
           category as String,
-      ],
-      builderProgression: [
-        for (final step in json['builderProgression']! as List)
-          BuilderProgressionStep.fromJson(
-            (step as Map).cast<String, Object?>(),
-          ),
       ],
     );
   }
@@ -1906,9 +1853,6 @@ List<ContentIssue> validateContentData({
   if (economy.startingTreasuryCoins < 0) {
     error('Starting treasury must not be negative.');
   }
-  if (economy.startingBuilderCapacity < 1) {
-    error('Starting builder capacity must be at least 1.');
-  }
   if (economy.roadTileCostCoins < 0) {
     error('Road tile cost must not be negative.');
   }
@@ -1967,23 +1911,6 @@ List<ContentIssue> validateContentData({
       'Infrastructure tax mints coins from paving — keep road and '
       'bridge tax at zero.',
     );
-  }
-  var lastPopulation = -1;
-  var lastCapacity = economy.startingBuilderCapacity;
-  for (final step in economy.builderProgression) {
-    if (step.atPopulation <= lastPopulation) {
-      error('Builder progression thresholds must strictly increase.');
-      break;
-    }
-    if (step.capacity <= lastCapacity) {
-      error(
-        'Builder progression capacities must strictly increase '
-        'above ${economy.startingBuilderCapacity}.',
-      );
-      break;
-    }
-    lastPopulation = step.atPopulation;
-    lastCapacity = step.capacity;
   }
 
   if (ambience.ambientTimeScale <= 0) {

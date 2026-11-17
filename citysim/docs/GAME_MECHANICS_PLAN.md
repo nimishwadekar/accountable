@@ -69,8 +69,8 @@ with five or more land cells, so a new game can always be founded.
 - Parcel purchases and instant decorations are paid immediately
   (decorations cost nothing by rule).
 - Road-stretch and bridge plans are bought upfront from the wallet; the
-  tiles then creep in one per check-in. Structure plans assign a builder
-  immediately and complete one stage per check-in.
+  tiles then creep in one per check-in. Structure plans complete one
+  stage per check-in.
 - Calendar advancement alone never completes a project.
 
 ## 4. Land and expansion
@@ -111,27 +111,12 @@ must pay for it. Population only ever rises (no demolition, no churn), so the
 price is monotonic and cannot be gamed by shrinking. The precise formula is
 documented with the rules code rather than treated as a permanent shop price.
 
-## 5. Roads and builders
-
-### Builders
-
-- The prototype starts with one builder; the starting capacity is fixed at
-  1 and is a product rule, not content.
-- Every planned building, road stretch, or bridge takes one available builder
-  immediately. Active planned places cannot exceed builder capacity.
-- A builder stays assigned until its project is fully funded and finished.
-- Builder capacity grows with the settlement's population: the content
-  defines a progression table of population thresholds and the capacity each
-  grants (monotonic; the highest crossed threshold wins). The table ships
-  empty for now — one builder forever — and becomes editable in the content
-  editor. Grants reconcile upward when a save loads, so editing progression
-  after the fact never short-changes an existing settlement.
-- There is no cancellation or refund mechanic in the current prototype.
+## 5. Roads and construction
 
 ### Road stretches
 
-- Planning a straight road stretch is free and reserves one builder for
-  that whole stretch. Roads place anywhere on owned, vacant, dry land —
+- Planning a straight road stretch is free and holds that
+  whole stretch. Roads place anywhere on owned, vacant, dry land —
   they no longer need to attach to the existing road network.
 - Planning is a two-click tool: the first click sets the start tile, the
   next click sets the end tile projected onto the closer axis (ties go
@@ -158,7 +143,7 @@ documented with the rules code rather than treated as a permanent shop price.
 - Select a catalogue model and a legal footprint beside a completed
   road. Every footprint cell must be owned, dry, vacant, and outside
   other reservations.
-- Planning is free and immediately reserves the footprint and a builder.
+- Planning is free and immediately reserves the footprint.
 - Each model lists several sprite variants (e.g. the cottage in yellow, blue,
   and red); one is rolled deterministically per placement and snapshotted onto
   the structure, so repeated builds of the same model look varied while
@@ -193,7 +178,7 @@ documented with the rules code rather than treated as a permanent shop price.
 
 ### Decorations
 
-- Decorations are free by rule and placed instantly, use no builder, and do
+- Decorations are free by rule and placed instantly, and do
   not wait for simulated days (content validation pins every decoration's
   cost to zero — props are the one thing a new settlement can spend on
   before its first road, so they can never drain the founding treasury).
@@ -217,7 +202,7 @@ documented with the rules code rather than treated as a permanent shop price.
 - Everything under a bridge must already be owned. Nothing is
   auto-acquired: water parcels are bought before bridging, like land.
   Spans cannot cross roads, buildings, or other bridges.
-- Planning is free and reserves a builder. Funding is per project,
+- Planning is free. Funding is per project,
   coin by coin: the near bank completes as a road tile first, then each
   span tile (flat per-tile price, content-tunable), then the far bank.
   Under-construction span tiles render as dirt ground; funded tiles
@@ -269,9 +254,7 @@ rather than re-deriving unlocks from population on every load. Population
 dips — however they one day arrive — cannot re-lock anything. Within a
 session the unlock set only ever grows (union, never replacement), and
 each newly reached milestone reports as one named event ("Village reached
-· 4 new model(s) placeable") instead of per-model unlock spam. Builder
-capacity is likewise persisted as a plain integer and only reconciles
-upward.
+· 4 new model(s) placeable") instead of per-model unlock spam.
 
 When content thresholds are lowered, saves gain any newly-expected
 unlocks on load (the load-time reconcile crosses what the population
@@ -338,7 +321,6 @@ These are candidates, not promises or requirements for the current prototype:
 - World map editor for authored terrain — the agreed next project (design and
   sequencing in the implementation plan) — with seeded regional generation
   beyond the authored map as a later phase.
-- Additional builders and the milestones/costs for increasing builder capacity.
 - More settlement regions, naming, historical snapshots, and a regional overview.
 - Additional building models, footprints, and progression milestones.
 - Google Sheets sync for game data: the four-sheet storage (CSV documents
@@ -403,9 +385,10 @@ collect taxes, net upkeep, advance every active construction one stage
 
 - **Labor builds the town.** Homes and ordinary buildings are planned
   without coins and advance one stage per check-in; stage counts are a
-  per-model content knob standing in for construction complexity.
-  Crew/concurrency limits gate how many projects can grow at once, and
-  population-gated capacity is the throughput curve.
+  per-model content knob standing in for construction complexity. There
+  is no concurrency cap (builders were removed 2026-11-16): any number
+  of projects may grow at once, so staged check-in time is the only
+  construction pacing.
 - **Taxes build the infrastructure.** Tax is X coins per building and
   upkeep is Y coins per building — both content fields, editable in
   the dashboard, netted each check-in. Civic services and
@@ -413,7 +396,7 @@ collect taxes, net upkeep, advance every active construction one stage
   tax 0, positive upkeep), so they are a real maintenance expense;
   homes and commerce carry the tax base (decided 2026-11-13: shops
   and offices net positive). The anti-compounding guard rests on
-  civic upkeep, infrastructure upkeep, and crew capacity, with the
+  civic upkeep and infrastructure upkeep, with the
   stage-2 occupancy design below — vacant commerce earns nothing and
   pays full upkeep — as the backstop against shop farming.
 - **Treasury purchases** are parcels, road stretch plans, and bridges
@@ -461,19 +444,18 @@ per completed building. The decisions:
 - **The daily coin is retired.** No 1-coin-per-check-in grant; the
   treasury starts at 20 coins (a placeholder — a more natural start
   is an open question below).
-- **Builders are concurrent slots.** Capacity caps how many projects
-  are in flight — planning holds a slot until completion — and every
-  in-flight project advances one stage per check-in. The planning day
-  itself advances nothing. Progression thresholds become
-  load-bearing: seed 10→2, 25→3, 50→4 (the live list is empty,
-  capacity 1 forever).
+- **Construction is check-in-paced.** Every in-flight project advances
+  one stage per check-in; the planning day itself advances nothing.
+  There is no builder or concurrency cap (removed 2026-11-16 after a
+  design review: with free buildings, coins and land already gate
+  throughput, and a second limiter only added refusal screens) —
+  planning is limited by coins, land, and staged time alone.
 - **Costs start on completion.** Construction sites pay no tax and no
   upkeep; road and bridge upkeep counts per tile as it appears.
 - **Bridges creep too.** Paid upfront, then the deck extends one tile
   per check-in — the existing incremental bridge rendering, driven by
   a delivered-tiles counter instead of coins funded (near ramp with
-  the first tile, far ramp with the last). Road creep is automatic
-  and consumes no builder.
+  the first tile, far ramp with the last). Road creep is automatic.
 - **One look while building.** Foundation slab plus construction-site
   appearance from planning to completion; per-stage art stays future
   work.
@@ -494,8 +476,8 @@ so upfront prices scale up alongside home taxes. Economy: starting
 treasury 20; road and bridge tax/upkeep 0/1 per tile;
 `parcelBaseCoins` 32 plus `parcelPerPopulationCoins` 2 per population,
 `roadTileCostCoins` 4, `bridgeTileCostCoins` 12 (a lighter 24/3/8
-alternative if the richer late game feels right);
-builder progression 10→2, 25→3, 50→4. Homes (tax/upkeep/stages):
+alternative if the richer late game feels right).
+Homes (tax/upkeep/stages):
 small 3/0/2, medium 5/0/3, large 6/0/3, mobile 2/0/2, apartments
 8/1/4. Commerce nets +2 to +4 (tax/upkeep/stages): cafe 4/2/2,
 ice-cream-shop 4/2/2, fruit-market 3/1/2, pizza-shop 5/3/3, autoshop
@@ -650,7 +632,7 @@ where distance-based pricing would tangle cities together. The lift,
 in the order the decisions force themselves:
 
 - **Settlement partition of the state.** Per-city treasury,
-  population, builder capacity, and unlock set; a settlement tag on
+  population, and unlock set; a settlement tag on
   every parcel. The five sheets grow a settlement dimension — the
   biggest schema change since the codec. The earned-minus-spent
   ledger invariant becomes per-city.
@@ -684,9 +666,9 @@ the new pacing.
 
 Before committing to additional mechanics, decide:
 
-1. ~~How and when should builder capacity increase, if at all?~~ Decided:
-   population-threshold grants, editable in the content editor, starting
-   capacity fixed at 1.
+1. ~~How and when should builder capacity increase, if at all?~~ Retired
+   (2026-11-16): builders removed from the game entirely — construction
+   is limited only by coins, land, and staged check-in time.
 2. ~~Are current parcel, building, and bridge prices sustainable over months and
    years of explicit check-ins?~~ Decided in direction: superseded by the
    check-in economy above — coin prices give way to taxes, upkeep, and

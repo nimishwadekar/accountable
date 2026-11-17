@@ -59,7 +59,6 @@ world state + terrain queries + sprite manifest → renderer
 Use typed records for parcels, roads, structures, bridges, active projects, events, and accounting. Validate:
 
 - unique entity/project IDs and non-overlapping footprints/reservations;
-- builder-slot range and uniqueness for active projects;
 - total/funded project costs and wallet accounting (`earned - spent = wallet`);
 - stable dates and road/bridge geometry and derived connectivity.
 
@@ -86,8 +85,7 @@ appear as nature are dead content).
 The save stores the progression high-water in UserData —
 `progression_milestone` (the reached milestone's stable id) and
 `progression_milestone_population` (its threshold when reached, the
-deleted-milestone fallback) — plus `builder_capacity` as a plain
-integer. The codec derives the unlock set through the reached
+deleted-milestone fallback). The codec derives the unlock set through the reached
 milestone, falling back to `reachedBy(population)` for legacy saves
 (exact: population has only ever grown) and writing the rows on the
 next save. `unlockedCatalogueIds` stays the in-session runtime set
@@ -104,9 +102,9 @@ Three semantics hold the design together:
 - **The high-water never regresses.** Check-in and the load-time
   `reconcileWorldProgression` share `_advanceProgression`: cross every
   milestone the population reaches beyond the stored one (one named
-  `milestone-reached` event each), union the derived set into the
-  state's (never replacement — nothing granted ever leaves), and grow
-  builder capacity to the table. A population dip crosses nothing.
+  `milestone-reached` event each) and union the derived set into the
+  state's (never replacement — nothing granted ever leaves). A
+  population dip crosses nothing.
 - **Content edits flow.** The derived set comes from the milestone,
   so models newly added to (or lowered into) reached milestones
   unlock at the next load or crossing.
@@ -226,7 +224,7 @@ storage, and the exact shape of the game's future Google Spreadsheet:
 
 Everything else derives on load: parcel terrain re-samples the codebase
 provider, road-plan order walks from the connected-road frontier, bridge
-runs regroup into spans, unlocks and builder capacity come from
+runs regroup into spans, unlocks come from
 population, and entity counters come from the rows. Purchase receipts and
 the dated check-in ledger are not reconstructible and not stored; the
 check-in rule (high-water date + last check-in date) reproduces
@@ -406,7 +404,7 @@ funding:
   Invalid cells (water, unowned, occupied) are marked in the preview
   and block assignment with a message. Every projected cell must be
   vacant — no merging with existing roads. Commit stays the
-  "Assign builder · plan free" button; switching tools or clearing
+  "Plan construction" button; switching tools or clearing
   resets the plan; no cancellation after assignment (demolition and
   cancellation are their own later feature).
 - **Bridges anywhere.** Banks must sit on non-water cells; the span
@@ -641,10 +639,9 @@ section 8 of the mechanics plan. The engineering shape as built:
   and per-tile road and bridge tax and upkeep. Purchase prices scale
   up with the new income (parcel base 32 plus 2 per population —
   added 2026-11-14 so expansion stays a progression as the town
-  grows; road tile 4; bridge tile 12) and `builderProgression` gets
-  seeded thresholds. The multi-city direction those parcel prices
-  were chosen to compose with is recorded in section 8 of the
-  mechanics plan. Editor support: a
+  grows; road tile 4; bridge tile 12). The multi-city direction those
+  parcel prices were chosen to compose with is recorded in section 8 of
+  the mechanics plan. Editor support: a
   net-per-report column in the structures palette; validation keeps
   tax and upkeep non-negative and infra tax at 0. Growth rules remain
   a future category — deterministic content, outcomes stored in the
@@ -654,9 +651,9 @@ section 8 of the mechanics plan. The engineering shape as built:
   order: collect taxes, net upkeep (the treasury floors at 0 and the
   shortfall is reported — it never blocks), then advance every
   in-flight construction one stage. Constructions move from coin
-  funding to stage progress under the concurrent-slot builder model:
-  capacity caps in-flight projects, planning holds a slot until
-  completion, and the planning day advances nothing. The 1-coin
+  funding to stage progress — the planning day advances nothing, and
+  there is no concurrency cap (the concurrent-slot builder model was
+  removed outright on 2026-11-16). The 1-coin
   check-in grant is removed; the wallet becomes the single town
   treasury. Tax and upkeep start on completion; road and bridge
   upkeep counts per tile as it appears. Nothing ever evaluates on
@@ -664,7 +661,7 @@ section 8 of the mechanics plan. The engineering shape as built:
   the world reacts instantly to player actions but only acts on its
   own during check-ins.
 - **Roads and bridges.** Both are upfront treasury purchases that
-  then deliver one tile per check-in — no builder slot, no per-tile
+  then deliver one tile per check-in — no per-tile
   funding. Bridges reuse the existing incremental bridge rendering
   with a delivered-tiles prefix instead of coins funded (near ramp
   with the first tile, far ramp with the last).
@@ -764,10 +761,11 @@ Scoping and constraints agreed 2026-11-14:
 - **Occupied demolition is a later slice**: population-scaled parcel
   prices and service coverage would become churn-exploitable (demolish
   homes, buy the cheaper parcel, rebuild for free). The old blocker —
-  unlocks and builder capacity re-deriving from population on load —
-  is fixed (2026-11-16): the progression high-water milestone and
-  builder capacity persist in UserData and never regress, so a
-  population dip can no longer re-lock models or shrink capacity.
+  unlocks re-deriving from population on load — is fixed (2026-11-16):
+  the progression high-water milestone persists in UserData and never
+  regresses, so a population dip can no longer re-lock models. (The
+  builder-capacity half of the old blocker disappeared the same day —
+  builders were removed from the game entirely.)
 
 ### Regression checks
 

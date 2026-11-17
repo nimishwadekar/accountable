@@ -2,7 +2,7 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 
 # New systems
 
-- Brainstorm builder system.
+- Multiple city system.
 - composite sprite editor: create new sprite from existing sprites. Multi-tile roads as composites of single-tile roads.
 - sheets and accountable integration.
 

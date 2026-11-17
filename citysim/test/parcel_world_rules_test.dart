@@ -95,7 +95,6 @@ void main() {
       expect(world.props, isEmpty);
       expect(world.coins, content.economy.startingTreasuryCoins);
       expect(world.population, 0);
-      expect(world.builderCapacity, 1);
       expect(
         world.unlockedCatalogueIds,
         content.progression.modelsUnlockedThrough(
@@ -234,11 +233,6 @@ void main() {
         containsAll(['medium-home', 'community-clinic']),
       );
       expect(world.unlockedCatalogueIds, isNot(contains('church')));
-      expect(
-        world.builderCapacity,
-        greaterThan(1),
-        reason: 'capacity reconciles upward with the table',
-      );
 
       // The population dips below both thresholds: nothing re-locks,
       // in the session and across a save round-trip — the reload
@@ -324,7 +318,7 @@ void main() {
     });
   });
 
-  group('builder projects and staged construction', () {
+  group('construction projects and staged work', () {
     test(
       'road plans are upfront purchases that creep one tile per check-in',
       () {
@@ -337,11 +331,6 @@ void main() {
         );
         final project = world.constructions.single;
         expect(project.kind, WorldConstructionKind.road);
-        expect(
-          project.builderSlot,
-          isNull,
-          reason: 'road creep uses no builder',
-        );
         expect(
           world.coins,
           5 +
@@ -409,22 +398,27 @@ void main() {
         );
         final project = world.constructions.single;
         expect(project.kind, WorldConstructionKind.structure);
-        expect(project.builderSlot, 0);
         expect(project.stagesDone, 0);
         expect(project.population, 1);
         expect(world.coins, content.economy.startingTreasuryCoins);
         expect(world.structures, isEmpty);
         expect(world.population, 0);
+        // Concurrency is unlimited (the builder cap was removed
+        // 2026-11-16): a second site plans fine while the first is
+        // still rising — coins, land, and staged time are the only
+        // limits. Planned on a throwaway state so the staged-count
+        // assertions below keep tracking the single cottage.
+        final withSecond = startStructureConstruction(
+          world,
+          content,
+          terrain,
+          catalogueId: 'small-home',
+          origin: const CellCoord(5, 4),
+        );
         expect(
-          () => startStructureConstruction(
-            world,
-            content,
-            terrain,
-            catalogueId: 'cafe',
-            origin: const CellCoord(4, 3),
-          ),
-          throwsA(isA<WorldRuleViolation>()),
-          reason: 'one builder holds one building site',
+          withSecond.constructions,
+          hasLength(2),
+          reason: 'any number of sites may rise at once',
         );
 
         world = advanceWorldDays(world, 14);
@@ -442,13 +436,13 @@ void main() {
         expect(
           world.constructions,
           isEmpty,
-          reason: 'completion frees the builder',
+          reason: 'completion settles the project',
         );
         validateParcelWorldState(world, content, terrain);
       },
     );
 
-    test('decorations place instantly, free, and use no builder', () {
+    test('decorations place instantly and free', () {
       var world = grantWorldDebugCoins(newWorld(), 2);
       world = startStructureConstruction(
         world,
@@ -510,7 +504,7 @@ void main() {
           reason: 'the rolled variant must be one of the model\'s roles',
         );
       }
-      // No builder project for any of them, and none costs a coin.
+      // No construction project for any of them, and none costs a coin.
       expect(world.constructions, isEmpty);
       expect(world.coins, 8 + content.economy.startingTreasuryCoins);
       validateParcelWorldState(world, content, terrain);
@@ -767,7 +761,7 @@ void main() {
       );
     });
 
-    test('population gates unlock models and grant builders', () {
+    test('population gates unlock models', () {
       // Content-driven progression: a town grown to six households
       // the real way — homes and jobs in balance — with the unlock
       // grants coming through load-time reconciliation.
@@ -804,7 +798,7 @@ void main() {
       validateParcelWorldState(reconciled, content, terrain);
     });
 
-    test('reconciliation grants unlocks and builders only upward', () {
+    test('reconciliation grants unlocks only upward', () {
       var world = grantWorldDebugCoins(newWorld(), 9);
       world = _buildCottage(
         world,
@@ -817,17 +811,14 @@ void main() {
       expect(world.population, 3);
 
       // Simulate lowered content thresholds: a hand-built variant of
-      // the bundle where the Hamlet milestone sits at population 2
-      // and a builder is granted at population 2.
+      // the bundle where the Hamlet milestone sits at population 2.
       final hamlet = content.progression.byId('hamlet')!;
       final lowered = ContentBundle(
         manifest: content.manifest,
         terrain: content.terrain,
         catalogue: content.catalogue,
         sprites: content.sprites,
-        economy: _economyWithProgression(content, [
-          const BuilderProgressionStep(atPopulation: 2, capacity: 2),
-        ]),
+        economy: content.economy,
         ambience: content.ambience,
         progression: ProgressionContent(
           milestones: [
@@ -846,14 +837,13 @@ void main() {
 
       final reconciled = reconcileWorldProgression(world, lowered);
       expect(reconciled.unlockedCatalogueIds, contains('medium-home'));
-      expect(reconciled.builderCapacity, 2);
       expect(reconciled.progressionMilestoneId, 'hamlet');
       expect(
         reconcileWorldProgression(reconciled, lowered),
         same(reconciled),
         reason: 'reconciliation is idempotent',
       );
-      // The original content still validates: capacity never goes down.
+      // The original content still validates: unlocks never go down.
       validateParcelWorldState(reconciled, content, terrain);
     });
   });
@@ -1316,7 +1306,7 @@ void main() {
       validateParcelWorldState(world, content, terrain);
     });
 
-    test('builders gate buildings only; creep rides alongside', () {
+    test('road and bridge creep ride alongside structure work', () {
       var world = grantWorldDebugCoins(newWorld(), 200);
       world = startStructureConstruction(
         world,
@@ -1325,19 +1315,9 @@ void main() {
         catalogueId: 'small-home',
         origin: const CellCoord(3, 4),
       );
-      expect(
-        () => startStructureConstruction(
-          world,
-          content,
-          terrain,
-          catalogueId: 'cafe',
-          origin: const CellCoord(4, 3),
-        ),
-        throwsA(isA<WorldRuleViolation>()),
-        reason: 'one builder holds one building site',
-      );
 
-      // Roads and bridges plan freely while the builder is busy.
+      // Roads and bridges plan freely while the home rises — every
+      // project kind advances together, one step per check-in.
       world = planRoadStretch(
         world,
         content,
@@ -1489,7 +1469,6 @@ void main() {
     expect(job.kind, WorldConstructionKind.bridge);
     expect(job.stagesDone, 0);
     expect(job.waterCells, const [CellCoord(6, 2)]);
-    expect(job.builderSlot, isNull, reason: 'bridge creep uses no builder');
     validateParcelWorldState(world, content, terrain);
 
     // The first check-in delivers the near bank as a road tile and
@@ -1895,18 +1874,6 @@ void main() {
     );
   });
 }
-
-EconomyContent _economyWithProgression(
-  ContentBundle content,
-  List<BuilderProgressionStep> progression,
-) => EconomyContent(
-  startingTreasuryCoins: content.economy.startingTreasuryCoins,
-  startingBuilderCapacity: content.economy.startingBuilderCapacity,
-  roadTileCostCoins: content.economy.roadTileCostCoins,
-  bridgeTileCostCoins: content.economy.bridgeTileCostCoins,
-  parcelBaseCoins: content.economy.parcelBaseCoins,
-  builderProgression: progression,
-);
 
 /// Plans a small home and lets the check-ins raise it to completion.
 ParcelWorldState _buildCottage(

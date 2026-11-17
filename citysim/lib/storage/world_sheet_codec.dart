@@ -4,7 +4,7 @@
 /// stages. Everything else is re-derived on load: parcel terrain is
 /// re-sampled from the (codebase) terrain provider, footprints come from
 /// the catalogue model, bridge spans come from their tile runs, road plan
-/// order comes from the connected-road frontier, unlocks and builder
+/// order comes from the connected-road frontier and unlocks
 /// capacity come from population, and entity counters come from the rows
 /// themselves. No versions are stored; a content edit is a live update.
 library;
@@ -37,11 +37,6 @@ const _constructionDayKey = 'construction_day';
 const _progressionMilestoneKey = 'progression_milestone';
 const _progressionMilestonePopulationKey = 'progression_milestone_population';
 
-/// Builder capacity, persisted as a plain integer: derived-from-
-/// population at load would shrink under any future population dip,
-/// possibly below in-use builder slots.
-const _builderCapacityKey = 'builder_capacity';
-
 /// Writes the world's player-visible facts into the five sheets.
 SheetTables worldToSheetTables(ParcelWorldState state) {
   final userData = <String, String>{
@@ -61,7 +56,6 @@ SheetTables worldToSheetTables(ParcelWorldState state) {
     _progressionMilestoneKey: ?state.progressionMilestoneId,
     _progressionMilestonePopulationKey:
         '${state.progressionMilestonePopulation}',
-    _builderCapacityKey: '${state.builderCapacity}',
   };
 
   final tiles = <List<String>>[
@@ -322,9 +316,6 @@ ParcelWorldState sheetTablesToWorld(
       ).compareTo(_parseInt(b[0], 'project id')),
     );
   final constructions = <WorldConstruction>[];
-  // Builder slots belong to structure jobs only — road and bridge
-  // creep consumes no builder — so slots count structures in order.
-  var structureSlot = 0;
   for (final row in projectRows) {
     final number = _parseInt(row[0], 'project id');
     final kind = row[1];
@@ -357,7 +348,6 @@ ParcelWorldState sheetTablesToWorld(
               quarterTurns: turns,
             ),
             stagesDone: funded,
-            builderSlot: structureSlot++,
             startedAtDay: 0,
             population: definition.population,
             assetRole: _orNull(tile[5]),
@@ -444,9 +434,6 @@ ParcelWorldState sheetTablesToWorld(
     rulesVersion: parcelWorldRulesVersion,
     contentVersion: parcelWorldContentVersion,
     parcelSize: defaultParcelSize,
-    builderCapacity: userData.containsKey(_builderCapacityKey)
-        ? _userInt(userData, _builderCapacityKey)
-        : content.economy.builderCapacityForPopulation(population),
     simulatedDate: simulatedDate,
     checkInHighWaterDate: highWaterDate,
     constructionDay: constructionDay,

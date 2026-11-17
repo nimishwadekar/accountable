@@ -165,17 +165,15 @@ void main() {
     expect(project.catalogueId, 'cafe');
     expect(project.origin, const CellCoord(6, 5));
     expect(project.stagesDone, 1);
-    expect(project.builderSlot, 0);
     expect(
       project.stagesDone,
       lessThan(content.structure('cafe')!.constructionStages),
       reason: 'the funded column stores stages done',
     );
 
-    // Unlocks and builder capacity derive from population.
+    // Unlocks derive from population.
     expect(world.population, 1);
     expect(world.unlockedCatalogueIds, contains('cafe'));
-    expect(world.builderCapacity, 1);
 
     expect(
       () => validateParcelWorldState(world, content, terrain),
@@ -301,17 +299,16 @@ void main() {
     );
   });
 
-  test('builder capacity and the progression high-water persist', () {
-    // A world whose stored capacity and reached milestone exceed what
-    // its population would derive: both survive the round-trip
-    // verbatim — a future population dip can shrink neither.
+  test('the progression high-water persists', () {
+    // A world whose stored reached milestone exceeds what its
+    // population would derive: it survives the round-trip
+    // verbatim — a future population dip can shrink nothing.
     final world =
         sheetTablesToWorld(
           handwrittenTables(),
           content: content,
           terrainProvider: terrain,
         ).copyWith(
-          builderCapacity: 4,
           population: 12,
           progressionMilestoneId: 'village',
           progressionMilestonePopulation: 10,
@@ -321,7 +318,6 @@ void main() {
       content: content,
       terrainProvider: terrain,
     );
-    expect(reloaded.builderCapacity, 4, reason: 'persisted, not re-derived');
     expect(reloaded.progressionMilestoneId, 'village');
     expect(reloaded.progressionMilestonePopulation, 10);
     expect(reloaded.unlockedCatalogueIds, contains('community-clinic'));

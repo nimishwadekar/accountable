@@ -153,7 +153,6 @@ class WorldConstruction {
     required this.kind,
     required this.startedAtDay,
     this.stagesDone = 0,
-    this.builderSlot,
     this.catalogueId,
     this.structureKind,
     this.origin,
@@ -191,11 +190,6 @@ class WorldConstruction {
   /// counter here: their delivered tiles are the road rows
   /// themselves, so delivery always agrees with the map.
   final int stagesDone;
-
-  /// Builder slot holding this project. Structures only — building
-  /// crews are the concurrency limit; road and bridge creep is
-  /// automatic and consumes no builder.
-  final int? builderSlot;
   final int startedAtDay;
 
   /// Population the finished building will contribute, snapshotted from
@@ -249,7 +243,6 @@ class ParcelWorldState {
     required this.rulesVersion,
     required this.contentVersion,
     required this.parcelSize,
-    required this.builderCapacity,
     required this.simulatedDate,
     required this.checkInHighWaterDate,
     required this.constructionDay,
@@ -288,7 +281,6 @@ class ParcelWorldState {
   final int rulesVersion;
   final int contentVersion;
   final int parcelSize;
-  final int builderCapacity;
   final DateTime simulatedDate;
   final DateTime checkInHighWaterDate;
   final int constructionDay;
@@ -387,7 +379,6 @@ class ParcelWorldState {
 
   ParcelWorldState copyWith({
     int? constructionDay,
-    int? builderCapacity,
     DateTime? simulatedDate,
     DateTime? checkInHighWaterDate,
     int? coins,
@@ -417,7 +408,6 @@ class ParcelWorldState {
     rulesVersion: rulesVersion,
     contentVersion: contentVersion,
     parcelSize: parcelSize,
-    builderCapacity: builderCapacity ?? this.builderCapacity,
     simulatedDate: simulatedDate ?? this.simulatedDate,
     checkInHighWaterDate: checkInHighWaterDate ?? this.checkInHighWaterDate,
     constructionDay: constructionDay ?? this.constructionDay,
@@ -472,7 +462,6 @@ ParcelWorldState newParcelWorldState({
     rulesVersion: parcelWorldRulesVersion,
     contentVersion: parcelWorldContentVersion,
     parcelSize: defaultParcelSize,
-    builderCapacity: content.economy.startingBuilderCapacity,
     simulatedDate: DateTime.utc(date.year, date.month, date.day),
     checkInHighWaterDate: DateTime.utc(date.year, date.month, date.day),
     constructionDay: 0,

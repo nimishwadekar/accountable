@@ -50,9 +50,8 @@ Future<void> main() async {
     'live save loads and validates: ${world.coins} coins, '
     '${world.structures.length} structures, ${world.roads.length} roads, '
     '${world.bridges.length} bridges, ${world.constructions.length} '
-    'projects, capacity ${world.builderCapacity}',
+    'projects',
   );
-
   final ledger = townLedger(world, content);
   stdout.writeln(
     'next report projection: taxes ${ledger.taxes} '

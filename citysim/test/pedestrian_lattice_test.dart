@@ -20,7 +20,6 @@ ParcelWorldState stateWith({
   rulesVersion: 1,
   contentVersion: 1,
   parcelSize: 8,
-  builderCapacity: 1,
   simulatedDate: DateTime(2026, 1, 1),
   checkInHighWaterDate: DateTime(2026, 1, 1),
   constructionDay: 0,

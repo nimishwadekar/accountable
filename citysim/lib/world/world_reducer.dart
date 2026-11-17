@@ -252,8 +252,7 @@ ParcelWorldState checkInWorldForToday(
   // The population milestone crossing, once, after every population
   // change of the day (completions and arrivals both): the high-water
   // advances to whatever the settlement now reaches — one named
-  // event per newly reached milestone — and builder capacity
-  // reconciles upward with the progression table. A population dip
+  // event per newly reached milestone. A population dip
   // crosses nothing; the unlock set follows the high-water, never
   // the current population.
   final progression = _advanceProgression(
@@ -294,7 +293,6 @@ ParcelWorldState checkInWorldForToday(
     unlockedCatalogueIds: progression.unlockedCatalogueIds,
     progressionMilestoneId: progression.milestoneId,
     progressionMilestonePopulation: progression.milestonePopulation,
-    builderCapacity: progression.builderCapacity,
     structures: structures,
     roads: roads,
     bridges: bridges,
@@ -380,8 +378,8 @@ ParcelWorldState purchaseParcel(
 }
 
 /// Buys a road stretch plan: the whole price is paid upfront from
-/// the treasury, then the tiles creep in one per check-in. No
-/// builder is assigned — road creep is automatic.
+/// the treasury, then the tiles creep in one per check-in. Road
+/// creep is automatic.
 ParcelWorldState planRoadStretch(
   ParcelWorldState state,
   ContentBundle content,
@@ -430,8 +428,8 @@ RoadSegment _detachProject(RoadSegment road) => RoadSegment(
   completedAtDay: road.completedAtDay,
 );
 
-/// Places a free construction plan and assigns a builder immediately.
-/// Decorations bypass builders and complete as an instant coin purchase.
+/// Places a free construction plan that starts work immediately.
+/// Decorations complete as an instant coin purchase.
 ParcelWorldState startStructureConstruction(
   ParcelWorldState state,
   ContentBundle content,
@@ -531,7 +529,6 @@ ParcelWorldState startStructureConstruction(
     );
   }
 
-  final builderSlot = quote.builderSlot!;
   final job = WorldConstruction(
     id: 'construction-${state.nextEntityNumber}',
     kind: WorldConstructionKind.structure,
@@ -541,7 +538,6 @@ ParcelWorldState startStructureConstruction(
     quarterTurns: quote.quarterTurns,
     footprint: quote.footprint,
     stagesDone: 0,
-    builderSlot: builderSlot,
     startedAtDay: state.constructionDay,
     population: definition.population,
     assetRole: chosenRole,
@@ -567,7 +563,6 @@ ParcelWorldState startStructureConstruction(
           'footprint': quote.footprint.map((cell) => cell.toJson()).toList(),
           'planningFeeCoins': quote.price,
           'stages': definition.constructionStages,
-          'builderSlot': builderSlot,
           'facing': facing,
         },
       ),
@@ -703,9 +698,9 @@ ParcelWorldState swapStructureFacing(
 /// Load-time reconciliation: advances the progression high-water to
 /// whatever the save's population already reaches under the *current*
 /// content (thresholds lowered in the editor, saves from older
-/// rules), re-derives the placement-unlock set through it, and grows
-/// builder capacity to the table — never shrinking either. A no-op
-/// (same instance) for already-consistent saves.
+/// rules) and re-derives the placement-unlock set through it —
+/// never shrinking anything. A no-op (same instance) for
+/// already-consistent saves.
 ParcelWorldState reconcileWorldProgression(
   ParcelWorldState state,
   ContentBundle content,
@@ -720,7 +715,6 @@ ParcelWorldState reconcileWorldProgression(
       pass.events.isEmpty &&
       pass.unlockedCatalogueIds.length == state.unlockedCatalogueIds.length &&
       pass.unlockedCatalogueIds.containsAll(state.unlockedCatalogueIds) &&
-      pass.builderCapacity == state.builderCapacity &&
       pass.milestoneId == state.progressionMilestoneId &&
       pass.milestonePopulation == state.progressionMilestonePopulation;
   if (settled) return state;
@@ -728,20 +722,18 @@ ParcelWorldState reconcileWorldProgression(
     unlockedCatalogueIds: pass.unlockedCatalogueIds,
     progressionMilestoneId: pass.milestoneId,
     progressionMilestonePopulation: pass.milestonePopulation,
-    builderCapacity: pass.builderCapacity,
     events: [...state.events, ...pass.events],
     nextEventNumber: pass.nextEventNumber,
   );
 }
 
 /// What a progression pass changed: the placement-unlock set, the
-/// high-water milestone, builder capacity, and the events it earned.
+/// high-water milestone, and the events it earned.
 class _ProgressionPass {
   const _ProgressionPass({
     required this.unlockedCatalogueIds,
     required this.milestoneId,
     required this.milestonePopulation,
-    required this.builderCapacity,
     required this.events,
     required this.nextEventNumber,
   });
@@ -749,19 +741,17 @@ class _ProgressionPass {
   final Set<String> unlockedCatalogueIds;
   final String? milestoneId;
   final int milestonePopulation;
-  final int builderCapacity;
   final List<WorldEvent> events;
   final int nextEventNumber;
 }
 
 /// Advances the progression high-water to whatever [population]
-/// reaches, extends the placement-unlock set with everything through
-/// it (newly crossed milestones and models newly added to
-/// already-reached ones alike), and grows builder capacity to the
-/// progression table — never shrinking either. Monotonic by
-/// construction: a population dip crosses nothing, and the set only
-/// ever grows, so unlocks cannot re-lock. Each newly reached
-/// milestone reports as one named event.
+/// reaches and extends the placement-unlock set with everything
+/// through it (newly crossed milestones and models newly added to
+/// already-reached ones alike). Monotonic by construction: a
+/// population dip crosses nothing, and the set only ever grows, so
+/// unlocks cannot re-lock. Each newly reached milestone reports as
+/// one named event.
 _ProgressionPass _advanceProgression(
   ParcelWorldState state,
   ContentBundle content,
@@ -820,23 +810,6 @@ _ProgressionPass _advanceProgression(
     );
     nextEvent++;
   }
-  var capacity = state.builderCapacity;
-  final expectedCapacity = content.economy.builderCapacityForPopulation(
-    population,
-  );
-  if (expectedCapacity > capacity) {
-    capacity = expectedCapacity;
-    events.add(
-      _event(
-        state,
-        kind: 'builder-granted',
-        description: 'Builder capacity grew to $capacity',
-        payload: {'capacity': capacity, 'population': population},
-        eventNumber: nextEvent,
-      ),
-    );
-    nextEvent++;
-  }
   return _ProgressionPass(
     // Union, never replacement: unlocks only ever grow. The
     // high-water decides what joins; nothing already granted leaves.
@@ -849,7 +822,6 @@ _ProgressionPass _advanceProgression(
     milestoneId: reached?.id ?? state.progressionMilestoneId,
     milestonePopulation:
         reached?.population ?? state.progressionMilestonePopulation,
-    builderCapacity: capacity,
     events: events,
     nextEventNumber: nextEvent,
   );
@@ -859,7 +831,7 @@ _ProgressionPass _advanceProgression(
 /// treasury, then the deck creeps one tile per check-in — near bank,
 /// span tiles, far bank. The span may cross water and land alike;
 /// everything under it must already be owned — bridges acquire
-/// nothing. No builder is assigned.
+/// nothing.
 ParcelWorldState startBridgeConstruction(
   ParcelWorldState state,
   ContentBundle content,
@@ -993,7 +965,6 @@ WorldConstruction _copyConstruction(
   nearBank: job.nearBank,
   farBank: job.farBank,
   stagesDone: stagesDone ?? job.stagesDone,
-  builderSlot: job.builderSlot,
   startedAtDay: job.startedAtDay,
   population: job.population,
   assetRole: job.assetRole,

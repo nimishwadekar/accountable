@@ -66,7 +66,6 @@ class StructurePlacementQuote {
     required this.quarterTurns,
     required this.footprint,
     required this.price,
-    this.builderSlot,
   });
 
   final String catalogueId;
@@ -74,7 +73,6 @@ class StructurePlacementQuote {
   final int quarterTurns;
   final List<CellCoord> footprint;
   final int price;
-  final int? builderSlot;
 }
 
 class BridgeQuote {
@@ -406,9 +404,6 @@ StructurePlacementQuote quoteStructurePlacement(
       !state.unlockedCatalogueIds.contains(catalogueId)) {
     throw const WorldRuleViolation('That model has not been unlocked.');
   }
-  final builderSlot = definition.kind == StructureKind.building
-      ? _freeBuilderSlot(state)
-      : null;
   final queries = WorldQueries(state, terrainProvider);
   if (definition.kind == StructureKind.decoration) {
     // Decorations place as props on the subtile lattice; the surface
@@ -462,7 +457,6 @@ StructurePlacementQuote quoteStructurePlacement(
     quarterTurns: turns % 4,
     footprint: footprint,
     price: definition.costCoins,
-    builderSlot: builderSlot,
   );
 }
 
@@ -537,21 +531,6 @@ BridgeQuote quoteBridge(
   );
 }
 
-/// Building crews are the concurrency limit — road and bridge creep
-/// consumes no builder — so slots count structure jobs only.
-int _freeBuilderSlot(ParcelWorldState state) {
-  final occupied = state.constructions
-      .where((job) => job.kind == WorldConstructionKind.structure)
-      .map((job) => job.builderSlot)
-      .toSet();
-  for (var slot = 0; slot < state.builderCapacity; slot++) {
-    if (!occupied.contains(slot)) return slot;
-  }
-  throw const WorldRuleViolation(
-    'All builders are assigned. Finish a project before planning another.',
-  );
-}
-
 void validateParcelWorldState(
   ParcelWorldState state,
   ContentBundle content,
@@ -562,15 +541,6 @@ void validateParcelWorldState(
       state.rulesVersion != parcelWorldRulesVersion ||
       state.contentVersion != parcelWorldContentVersion ||
       state.worldId.isEmpty ||
-      state.builderCapacity < 1 ||
-      // Progression grants reconcile upward on load; a capacity below the
-      // progression floor means the save was never reconciled.
-      state.builderCapacity <
-          content.economy.builderCapacityForPopulation(state.population) ||
-      state.constructions
-              .where((job) => job.kind == WorldConstructionKind.structure)
-              .length >
-          state.builderCapacity ||
       state.constructionDay < 0 ||
       worldDateKey(state.checkInHighWaterDate).compareTo(state.dateKey) < 0 ||
       state.coins < 0 ||
@@ -608,11 +578,6 @@ void validateParcelWorldState(
       !_unique(state.structures.map((structure) => structure.id)) ||
       !_unique(state.bridges.map((bridge) => bridge.id)) ||
       !_unique(state.constructions.map((job) => job.id)) ||
-      !_unique(
-        state.constructions
-            .where((job) => job.kind == WorldConstructionKind.structure)
-            .map((job) => '${job.builderSlot}'),
-      ) ||
       !_unique(state.events.map((event) => event.id))) {
     throw const FormatException('The parcel-world save has duplicate IDs.');
   }
@@ -777,9 +742,6 @@ void validateParcelWorldState(
           definition.kind != StructureKind.building ||
           job.structureKind != definition.kind ||
           job.stagesDone >= definition.constructionStages ||
-          job.builderSlot == null ||
-          job.builderSlot! < 0 ||
-          job.builderSlot! >= state.builderCapacity ||
           job.origin == null ||
           job.roadStyle != null ||
           job.roadCells.isNotEmpty ||
@@ -823,7 +785,6 @@ void validateParcelWorldState(
       if (job.catalogueId != null ||
           job.structureKind != null ||
           job.origin != null ||
-          job.builderSlot != null ||
           job.roadStyle == null ||
           job.footprint.isNotEmpty ||
           job.waterCells.isNotEmpty ||
@@ -869,7 +830,6 @@ void validateParcelWorldState(
       if (job.catalogueId != null ||
           job.structureKind != null ||
           job.origin != null ||
-          job.builderSlot != null ||
           job.quarterTurns != 0 ||
           job.footprint.isNotEmpty ||
           job.roadStyle != null ||

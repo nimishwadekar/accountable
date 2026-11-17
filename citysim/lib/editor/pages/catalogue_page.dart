@@ -159,7 +159,7 @@ class _CataloguePageState extends State<CataloguePage> {
                       ),
                       Text(
                         '$id · '
-                        '${isDecoration ? 'decoration · instant' : 'building · builder project'}'
+                        '${isDecoration ? 'decoration · instant' : 'building · construction project'}'
                         '${sprite == null ? ' · ⚠ missing sprite' : ''}',
                         style: const TextStyle(
                           fontSize: 11,
@@ -230,7 +230,7 @@ class _CataloguePageState extends State<CataloguePage> {
                     help:
                         'Population this model adds once completed. '
                         'Population is the progression metric: it gates '
-                        'model unlocks and builder-capacity grants.',
+                        'model unlocks.',
                     onChanged: (v) =>
                         _editModel(id, (model) => model['population'] = v),
                   ),

@@ -29,7 +29,7 @@ browser for unused pack art and debug live-reload) remains future work.
   render metadata (scale, anchors, sway).
 - No multi-user editing or authentication (localhost only).
 - No editing of product rules fixed by the mechanics doc (one coin per
-  check-in, starting builder capacity of 1, no timers, no passive income).
+  check-in, no timers, no passive income).
 
 ## 2. Where data lives today
 
@@ -38,7 +38,7 @@ browser for unused pack art and debug live-reload) remains future work.
 | Structure catalogue (ids, names, descriptions, kind, footprints, costs, population, unlock thresholds) | `world_content.dart` `structureCatalogue` | ✅ `catalogue.json` |
 | Sprite manifest (role → file or facings, scale, anchors, baseOffsetY, sway flag) | `world_content.dart` `spriteManifest` | ✅ `sprites.json` |
 | Road / bridge / parcel cost values | `world_content.dart` (`roadCost`, `bridgeCost`) | ✅ `economy.json` (parcel price is a flat value) |
-| Starting wallet, builder progression, starting unlocks | `world_state.dart` `newParcelWorldState` | ✅ `economy.json` + derived (see §4.5) |
+| Starting wallet, starting unlocks | `world_state.dart` `newParcelWorldState` | ✅ `economy.json` + derived (see §4.5) |
 | Ambient animation + camera tuning | `parcel_world_tuning.dart` | ✅ `ambience.json` (camera stays code — see §9) |
 | Terrain fixtures, parcel size, seed | `terrain_provider.dart`, `world_state.dart` | ❌ read-only |
 | Check-in coin amount (1) | `world_reducer.dart` | ❌ product rule, not content |
@@ -51,7 +51,7 @@ assets/content/            JSON source of truth (git-committed)
   manifest.json                    content format version
   catalogue.json                   structure models
   sprites.json                     sprite roles & render metadata
-  economy.json                     costs, wallet, builder progression
+  economy.json                     costs, wallet
   ambience.json                    animation tuning
         │
         ├──────────────► GAME (port 9101 preview)
@@ -170,14 +170,9 @@ tracked by git like any other source file.
 ```json
 {
   "startingWalletCoins": 0,
-  "startingBuilderCapacity": 1,
   "roadTileCostCoins": 1,
   "bridgeCost": { "baseCoins": 4, "perWaterTileCoins": 2 },
-  "parcelBaseCoins": 8,
-  "builderProgression": [
-    { "atPopulation": 12, "capacity": 2 },
-    { "atPopulation": 30, "capacity": 3 }
-  ]
+  "parcelBaseCoins": 8
 }
 ```
 
@@ -185,12 +180,9 @@ Formula *shapes* (e.g. how population steps into parcel price) stay in code;
 the numbers are content. If a shape change is ever wanted, that is a code
 change.
 
-`startingBuilderCapacity` is fixed at 1 — the dashboard shows it read-only,
-like the check-in coin rule. Builder *progression* is editable: whenever
-population crosses an `atPopulation` threshold, builder capacity rises to
-that entry's `capacity` (monotonic; the highest crossed threshold wins).
-An empty list means the settlement stays at one builder forever — which is
-exactly today's behaviour, so the seeded file ships an empty list.
+(Builders were removed from the game entirely on 2026-11-16 — construction
+is limited only by coins, land, and staged check-in time — so the economy
+carries no capacity fields.)
 
 ### Population (derived progression metric)
 
@@ -204,9 +196,8 @@ default to 0). It is recomputed whenever a building completes and drives:
   the seeded values replicate the current 5/10/20-building milestones by
   giving every building population 1 and using thresholds 5/10/20, so the
   switch is behaviour-identical until tuned in the editor.
-- **Builder capacity grants** — the `builderProgression` table above.
 - **UI** — the game header shows the population alongside coins, and
-  unlock/builder-grant events reference the population reached.
+  unlock events reference the population reached.
 
 Because population derives from placed structures plus current content, a
 save's population can shift when models' `population` values are edited
@@ -244,10 +235,8 @@ Layout: category sidebar + content pane + persistent validation bar.
   on the name field only.
 - **Economy & progression** — numeric fields with range validation and
   derived-value hints (e.g. bridge cost at spans 1–4, parcel price at a
-  sample population), plus the builder-progression table editor (population
-  thresholds → capacity, monotonic, starting capacity shown locked at 1)
-  and a warning when unlock thresholds are lowered below values existing
-  saves may already have passed.
+  sample population), and a warning when unlock thresholds are lowered
+  below values existing saves may already have passed.
 - **Ambience** — sliders with **live previews**: a frame-cycling character
   for walk rate, a rocking tree for sway angle/frequency, an animated water
   diamond for shimmer period/opacity, a pedestrian pacing strip for
@@ -304,16 +293,14 @@ the save format, exactly as today.
 2. **Derived starting unlocks** (decided) — every model with
    `unlockAtPopulation: 0` starts unlocked; the hardcoded list goes away.
 3. **Camera tuning stays code** (decided) — app feel, not game content.
-4. **Product rules stay code** (decided) — check-in = 1 coin, starting
-   builder capacity = 1. Both display read-only in the dashboard.
-5. **Builder grants must reconcile on load** — capacity is saved per world
-   and grants are event-driven, so an existing save whose population
-   already passes a newly added (or lowered) threshold would otherwise
-   never receive it. On load, effective capacity is reconciled *upward*
-   to what the progression table grants for the save's population — never
-   downward. Same for unlocks: expected-but-missing unlocks are granted at
-   load (recorded once, with an event), so lowering thresholds after the
-   fact cannot invalidate a save.
+4. **Product rules stay code** (decided) — check-in = 1 coin. Displayed
+   read-only in the dashboard.
+5. **Progression grants must reconcile on load** — expected-but-missing
+   unlocks are granted at load (recorded once, with an event), so
+   lowering thresholds after the fact cannot invalidate a save; the
+   grant direction is only ever upward. (This item originally covered
+   builder-capacity grants too — builders were removed from the game
+   entirely on 2026-11-16.)
 6. **Population edits shift old saves** — population derives from placed
    structures × current content, so editing per-model `population`
    retroactively changes a save's population. Safe by design with the
@@ -334,7 +321,7 @@ the save format, exactly as today.
     (workflow §7).
 11. **Validation before every save** — duplicate ids, unknown assetRole,
     missing files on disk, cost < 0, population < 0, footprint < 1,
-    unlock-threshold ordering, monotonic builder progression, at-least-one
+    unlock-threshold ordering, at-least-one
     unlocked model at start, anchor/scale sanity ranges. File-existence
     checks are server-side only (the game can't list assets).
 12. **Footprint vs. art mismatch** — not machine-validatable (art is
@@ -363,8 +350,8 @@ the save format, exactly as today.
   pre-content values; `ContentBundle` loader + `ContentSource`; validation;
   game/tests load the bundle; derived starting unlocks; the population
   metric with uniform `population: 1`, unlock thresholds seeded at 5/10/20
-  (replicating the current building-count milestones), an empty builder
-  progression, load-time unlock/capacity reconciliation, and a population
+  (replicating the current building-count milestones), load-time unlock
+  reconciliation, and a population
   readout in the game header.
 - **B. Editor server** — ✅ done. Port 9200, API, backups, atomic writes,
   pack image serving, `--root` argument for test isolation.

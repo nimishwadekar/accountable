@@ -4,20 +4,6 @@
   },
   "bridgeTaxCoinsPerTile": 0,
   "bridgeUpkeepCoinsPerTile": 1,
-  "builderProgression": [
-    {
-      "atPopulation": 10,
-      "capacity": 2
-    },
-    {
-      "atPopulation": 25,
-      "capacity": 3
-    },
-    {
-      "atPopulation": 50,
-      "capacity": 4
-    }
-  ],
   "contentmentFloorPercent": 30,
   "employmentPercentPerCheckIn": 5,
   "jobPullPercentPerCheckIn": 10,
@@ -33,7 +19,6 @@
   "roadTileCostCoins": 4,
   "roadUpkeepCoinsPerTile": 1,
   "serviceRequirementPopulation": 10,
-  "startingBuilderCapacity": 1,
   "startingTreasuryCoins": 20,
   "unemploymentTolerancePercent": 10,
   "waitingHouseholdsCapPercent": 10

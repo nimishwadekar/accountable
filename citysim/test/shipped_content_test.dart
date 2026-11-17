@@ -150,7 +150,6 @@ void main() {
     expect(byId['wild-grass']!.costCoins, 0);
 
     expect(content.economy.startingTreasuryCoins, 20);
-    expect(content.economy.startingBuilderCapacity, 1);
     expect(content.economy.roadTileCostCoins, 4);
     expect(content.economy.bridgeTileCostCoins, 12);
     expect(
@@ -188,12 +187,6 @@ void main() {
     expect(byId['community-clinic']!.serviceCapacity, 25);
     expect(byId['hospital']!.serviceCategory, 'health');
     expect(byId['water-tower']!.serviceCategory, isNull);
-    expect(content.economy.builderProgression, hasLength(3));
-    expect(
-      content.economy.builderCapacityForPopulation(1000),
-      4,
-      reason: 'the seeded progression tops out at four builders',
-    );
 
     expect(content.ambience.ambientTimeScale, 1.0);
     // 0.6 draws a person at ~1.8 m on the 0.2 m/px scale ruler.

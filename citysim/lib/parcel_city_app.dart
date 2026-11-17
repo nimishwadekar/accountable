@@ -240,7 +240,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         : null;
     if (_tool == _WorldTool.road) {
       // A tap on any creeping stretch's tiles selects that whole
-      // project. Road creep consumes no builder, so any number of
+      // project. Road creep is automatic, so any number of
       // stretches may creep at once and planning is always open.
       final roadProject = world.constructions
           .where((job) => job.kind == WorldConstructionKind.road)
@@ -614,7 +614,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                 ? quote.price > 0
                       ? '${quote.price} coins · placed immediately.'
                       : 'Free · placed immediately.'
-                : 'Free to plan. Your builder raises it over '
+                : 'Free to plan. It rises over '
                       '${definition.constructionStages} stages — one per '
                       'daily check-in. Once complete it pays '
                       '+${definition.taxCoins} tax and costs '
@@ -1058,14 +1058,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       padding: const EdgeInsets.all(14),
       children: [
         _ToolPicker(selected: _tool, onSelected: _selectTool),
-        Padding(
-          padding: const EdgeInsets.only(top: 4, bottom: 8),
-          child: Text(
-            '${world.builderCapacity - world.constructions.where((job) => job.kind == WorldConstructionKind.structure).length} of '
-            '${world.builderCapacity} builders available',
-            style: const TextStyle(fontSize: 12, color: Color(0xFF617267)),
-          ),
-        ),
+        const SizedBox(height: 12),
         if (_tool == _WorldTool.road) _roadControls(world),
         if (_tool == _WorldTool.parcel && _selectedParcel != null)
           _parcelAction(world, _selectedParcel!),
@@ -1213,8 +1206,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       );
 
   Widget _roadControls(ParcelWorldState world) {
-    // Creep cards for every in-flight stretch — roads consume no
-    // builder, so any number creep at once and planning stays open.
+    // Creep cards for every in-flight stretch — road creep is
+    // automatic, so any number creep at once and planning stays open.
     final creepCards = [
       for (final job in world.constructions)
         if (job.kind == WorldConstructionKind.road)
@@ -1331,17 +1324,12 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       progress = stages == 0 ? 0 : project.stagesDone / stages;
     }
     return _PanelCard(
-      title: isBridge ? title : '$title · Builder ${project.builderSlot! + 1}',
+      title: title,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(status),
           LinearProgressIndicator(value: progress),
-          if (!isBridge)
-            const Text(
-              'This builder stays assigned until the work is complete.',
-              style: TextStyle(fontSize: 11, color: Color(0xFF617267)),
-            ),
         ],
       ),
     );
