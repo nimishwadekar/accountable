@@ -529,6 +529,7 @@ class DailyMaintenanceService {
     }
 
     final rates = <ExchangeRate>[];
+    await _prefetchRatesForRange(startDate: startDate, endDate: endDate);
     for (
       var date = startDate;
       !date.isAfter(endDate);
@@ -617,6 +618,50 @@ class DailyMaintenanceService {
       ];
     }
     throw StateError('No Frankfurter rate available for ${_dateString(date)}.');
+  }
+
+  /// Fetches every provider quote for [startDate]–[endDate] with one
+  /// time-range request and seeds the per-date response cache, so a rebuild
+  /// issues a single HTTP call instead of one per calendar day. Days the range
+  /// response does not cover fall back to the per-date requests in
+  /// [_ratesForDate].
+  Future<void> _prefetchRatesForRange({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final start = _dateOnly(startDate);
+    final end = _dateOnly(endDate);
+    if (end.isBefore(start)) return;
+    final uri = Uri.parse(
+      'https://api.frankfurter.dev/v1/'
+      '${_dateString(start)}..${_dateString(end)}?base=USD',
+    );
+    final response = await _httpClient.get(uri).timeout(httpRequestTimeout);
+    if (response.statusCode != 200) return;
+    final body = jsonDecode(response.body);
+    if (body is! Map<String, dynamic>) return;
+    final rawRates = body['rates'];
+    if (rawRates is! Map<String, dynamic>) return;
+    final byDate = <DateTime, Map<String, dynamic>>{};
+    for (final entry in rawRates.entries) {
+      final value = entry.value;
+      if (value is! Map<String, dynamic>) continue;
+      final date = DateTime.tryParse(entry.key);
+      if (date == null) continue;
+      byDate[_dateOnly(date)] = value;
+    }
+    if (byDate.isEmpty) return;
+    final firstAvailable = byDate.keys.reduce((a, b) => a.isBefore(b) ? a : b);
+    Map<String, dynamic>? latest;
+    for (
+      var date = firstAvailable.isBefore(start) ? firstAvailable : start;
+      !date.isAfter(end);
+      date = date.add(const Duration(days: 1))
+    ) {
+      final entry = byDate[date];
+      if (entry != null) latest = entry;
+      if (latest != null) _rateResponsesByDate[date] = latest;
+    }
   }
 
   Decimal _rateToUsd(Map<String, dynamic> rates, String currencyId) {

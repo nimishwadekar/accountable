@@ -109,6 +109,8 @@ achievement start date.
 
 `source_rate_date` records the actual Frankfurter date used when the requested sequential rate date fell on a weekend or holiday. Legacy local data without this column is read compatibly by treating `rate_date` as the source date. Google Sheets serial-number dates are normalized to calendar dates before freshness checks and parsing.
 
+Rebuilds request the provider quotes for the entire history span with Frankfurter's time-range endpoint in a single call. Days the range response does not cover — non-business days are simply absent from it — fall back to the sequential per-date requests.
+
 For the template browser, add `is_favorite` as column N of the `TransactionTemplates` sheet, after `updated_at`. Set existing rows to `FALSE`; new favorites use `TRUE`. The app reads legacy A:M template rows as non-favorites during migration.
 
 The runtime data snapshot contains:

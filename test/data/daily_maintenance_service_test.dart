@@ -147,7 +147,11 @@ void main() {
           ),
         ),
       );
-      expect(requests, 31);
+      expect(
+        requests,
+        32,
+        reason: 'one range request plus the 31-day fallback',
+      );
       expect(client.replacedRanges, isEmpty);
     },
   );
@@ -448,16 +452,69 @@ void main() {
     await service.rebuild(yesterday: DateTime.utc(2026, 1, 4));
     expect(
       requests,
-      4,
-      reason: 'the successful Friday source response is reused',
+      5,
+      reason:
+          'the failed range request falls back to per-date fetching that '
+          'reuses the Friday response',
     );
     final rateRows =
         client.replacedRanges[GoogleSheetsRanges.dailyExchangeRates]!;
     expect(rateRows.skip(1).map((row) => row[4]), everyElement('2026-01-02'));
 
     await service.rebuild(yesterday: DateTime.utc(2026, 1, 4));
-    expect(requests, 8, reason: 'a separate full rebuild fetches fresh rates');
+    expect(requests, 10, reason: 'a separate full rebuild fetches fresh rates');
   });
+
+  test(
+    'rebuild fetches the full history range in one provider request',
+    () async {
+      final source = await AssetAppDataRepository().load();
+      final client = _FakeSheetsClient({});
+      var requests = 0;
+      final urls = <String>[];
+
+      await DailyMaintenanceService(
+        client: client,
+        data: source,
+        httpClient: MockClient((request) async {
+          requests++;
+          urls.add(request.url.toString());
+          return http.Response(
+            jsonEncode({
+              'amount': 1,
+              'base': 'USD',
+              'start_date': '2026-10-09',
+              'end_date': '2026-10-13',
+              'rates': {
+                '2026-10-09': {'INR': 90},
+                '2026-10-12': {'INR': 90},
+                '2026-10-13': {'INR': 96.4},
+              },
+            }),
+            200,
+          );
+        }),
+      ).rebuild(yesterday: DateTime.utc(2026, 10, 13));
+
+      expect(requests, 1, reason: 'the whole span is fetched in one request');
+      expect(
+        urls.single,
+        'https://api.frankfurter.dev/v1/2026-10-10..2026-10-13?base=USD',
+      );
+      final rateRows =
+          client.replacedRanges[GoogleSheetsRanges.dailyExchangeRates]!;
+      expect(rateRows.skip(1).map((row) => row[0]), [
+        '2026-10-10-INR',
+        '2026-10-10-USD',
+        '2026-10-13-INR',
+      ]);
+      expect(rateRows.skip(1).map((row) => row[4]), [
+        '2026-10-10',
+        '2026-10-10',
+        '2026-10-13',
+      ]);
+    },
+  );
 
   test('historical rate requests have a finite configurable timeout', () async {
     final source = await AssetAppDataRepository().load();

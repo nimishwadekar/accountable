@@ -54,6 +54,15 @@ void main() {
     );
     expect(find.text('View missing data'), findsOneWidget);
     expect(find.text('1M'), findsNWidgets(2));
+    // The default one-month window slides with today's date and may no longer
+    // overlap the fixture history; select all history on both charts so the
+    // chart assertions stay stable across run dates.
+    await tester.ensureVisible(find.text('MAX').first);
+    await tester.tap(find.text('MAX').first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('MAX').last);
+    await tester.tap(find.text('MAX').last);
+    await tester.pumpAndSettle();
     final charts = find.byType(LineChart);
     expect(charts, findsNWidgets(2));
     for (var index = 0; index < 2; index++) {
