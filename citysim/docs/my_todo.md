@@ -1,8 +1,7 @@
 This is my note-taking for my own memory. AI shouldn't modify this file.
 
-# New features
+# New systems
 
-- fix progression unlocks.
 - Brainstorm builder system.
 - composite sprite editor: create new sprite from existing sprites. Multi-tile roads as composites of single-tile roads.
 - sheets and accountable integration.
@@ -16,13 +15,16 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 - Could have rail later too.
 - Demolition.
 
-# Improvements
+# Content upgrades
 
-- show fog on top of border items and make the boundary softer.
-- Game-like UI.
-- better editor.
 - make money amounts realistic order of magnitude.
 - Tune money amounts.
 - Tune population amounts.
 - more terrain sprite tiles.
+
+# Visual upgrades
+
+- show fog on top of border items and make the boundary softer.
+- Game-like UI.
+- better editor.
 - Terrain boundaries. author by hand if necessary.
