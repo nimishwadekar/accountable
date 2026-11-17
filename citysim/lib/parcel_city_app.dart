@@ -68,13 +68,33 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   ParcelWorldStore? _store;
   ParcelWorldSaveCoordinator? _saveCoordinator;
 
-  /// The whole save — every city's blocks. `_world` is the active
-  /// city's state (the lowest id until switching gameplay exists);
-  /// the other blocks are only read, for the parcel-exclusivity set.
+  /// The whole save — every city's blocks. The focused city is
+  /// [`_activeCityId`]; all other cities render as passive worlds and
+  /// their parcels refuse purchase and founding.
   MultiCityTables? _cityTables;
   String? _activeCityId;
 
-  ParcelWorldState? _world;
+  /// Every city's live state, keyed by id. Switching focus is
+  /// session-level: instant, and each city's in-session event feed
+  /// survives round trips.
+  Map<String, ParcelWorldState> _cityStates = {};
+
+  /// The other cities on the shared map — stable instances so the
+  /// view's caches (which key on identity) never churn.
+  List<ParcelWorldState> _passiveStates = const [];
+
+  /// Parcels owned by the other cities — stable for the same reason.
+  Set<ParcelCoord> _foreignParcelSet = const {};
+
+  /// Where a camera reset centers: the focused city's owned-area
+  /// centroid when focus last switched, else the founding default.
+  CellCoord? _cameraFocusCell;
+
+  /// The focused city — every UI value, bar, purchase, placement,
+  /// and check-in acts on this state.
+  ParcelWorldState? get _world =>
+      _activeCityId == null ? null : _cityStates[_activeCityId];
+
   Object? _loadError;
   String? _saveError;
   bool _loading = true;
@@ -170,8 +190,9 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         if (!mounted) return;
         setState(() {
           _cityTables = loaded.tables;
+          _cityStates = loaded.states;
           _activeCityId = loaded.activeCityId;
-          _world = loaded.activeCity;
+          _recomputeCityViewSets();
           _loading = false;
         });
         return;
@@ -183,8 +204,9 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       if (!mounted) return;
       setState(() {
         _cityTables = tables;
+        _cityStates = {'city_1': initial};
         _activeCityId = 'city_1';
-        _world = initial;
+        _recomputeCityViewSets();
         _loading = false;
       });
     } catch (error) {
@@ -205,22 +227,44 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         tablesById: {cityId: worldToSheetTables(state)},
       );
 
-  /// Parcels held by every other city — the map is shared and
-  /// parcels are exclusive, so these refuse purchase and founding.
-  Set<ParcelCoord> _foreignParcels() {
-    final tables = _cityTables;
+  /// Recomputes the stable passive-city and foreign-parcel sets the
+  /// view's caches key on. Called wherever the city set or the focus
+  /// changes; foreign parcels only change when another city buys,
+  /// which cannot happen while one city is being played.
+  void _recomputeCityViewSets() {
     final active = _activeCityId;
-    if (tables == null || active == null) return const {};
+    _passiveStates = [
+      for (final entry in _cityStates.entries)
+        if (entry.key != active) entry.value,
+    ];
     final claimed = <ParcelCoord>{};
-    for (final entry in tables.tablesById.entries) {
-      if (entry.key == active) continue;
-      for (final row in entry.value.ownedParcels) {
-        final x = int.tryParse(row[0]);
-        final y = int.tryParse(row[1]);
-        if (x != null && y != null) claimed.add(ParcelCoord(x, y));
+    final tables = _cityTables;
+    if (tables != null) {
+      for (final entry in tables.tablesById.entries) {
+        if (entry.key == active) continue;
+        for (final row in entry.value.ownedParcels) {
+          final x = int.tryParse(row[0]);
+          final y = int.tryParse(row[1]);
+          if (x != null && y != null) claimed.add(ParcelCoord(x, y));
+        }
       }
     }
-    return claimed;
+    _foreignParcelSet = claimed;
+  }
+
+  /// Parcels held by every other city — the map is shared and
+  /// parcels are exclusive, so these refuse purchase and founding.
+  Set<ParcelCoord> _foreignParcels() => _foreignParcelSet;
+
+  /// The focused city's display name, from the index.
+  String get _focusedCityName {
+    final active = _activeCityId;
+    for (final record in _cityTables?.cities ?? const <CityRecord>[]) {
+      if (record.id == active) {
+        return record.name.isEmpty ? record.id : record.name;
+      }
+    }
+    return 'City';
   }
 
   ParcelWorldState _newWorld() => newParcelWorldState(
@@ -228,14 +272,220 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     seed: DateTime.now().microsecondsSinceEpoch & 0x7FFFFFFF,
   );
 
-  void _commit(ParcelWorldState next, {bool replace = false}) {
+  /// Clears the interaction surface — tool, selections, the road
+  /// plan — so nothing half-drawn for one city can commit into
+  /// another. The same reset the start-new-world path does.
+  void _resetInteractionSurface() {
+    _tool = _WorldTool.inspect;
+    _selectedCatalogueId = null;
+    _selectedCell = null;
+    _selectedSubtileX = propFrontSubtile;
+    _selectedSubtileY = propFrontSubtile;
+    _selectedPropId = null;
+    _selectedParcel = null;
+    _bridgeStartCell = null;
+    _bridgeEndCell = null;
+    _roadPlanCells = const [];
+    _roadStartCell = null;
+    _highlightCells = const {};
+    _facingOverride = null;
+  }
+
+  /// The centre of a city's owned area — where the camera lands on a
+  /// focus switch. Parcel-space average, mapped back to a cell.
+  CellCoord _ownedAreaCentre(ParcelWorldState state) {
+    var x = 0;
+    var y = 0;
+    for (final parcel in state.parcels) {
+      x += parcel.coord.x;
+      y += parcel.coord.y;
+    }
+    final count = state.parcels.length;
+    return CellCoord(
+      (x ~/ count) * state.parcelSize + state.parcelSize ~/ 2,
+      (y ~/ count) * state.parcelSize + state.parcelSize ~/ 2,
+    );
+  }
+
+  /// Switches focus to another city. Session-level only: the state
+  /// map already holds it, the interaction surface resets, and the
+  /// camera flies to its owned area. A city yet to found keeps the
+  /// camera — the player is about to pick a founding parcel
+  /// anywhere.
+  void _switchFocus(String cityId) {
+    final next = _cityStates[cityId];
+    if (next == null || cityId == _activeCityId) return;
     setState(() {
-      _world = next;
+      _activeCityId = cityId;
+      _resetInteractionSurface();
+      _recomputeCityViewSets();
+      if (next.parcels.isNotEmpty) {
+        _cameraFocusCell = _ownedAreaCentre(next);
+        _cameraResetToken++;
+      } else {
+        _cameraFocusCell = null;
+      }
+      _loadError = null;
+    });
+  }
+
+  /// Creates a new city in the backend — index row plus a fresh
+  /// block in one save — and focuses it. Founding is the same free
+  /// first-parcel loop as the game's opening.
+  Future<void> _startNewCity(String name) async {
+    final tables = _cityTables;
+    final coordinator = _saveCoordinator;
+    if (tables == null || coordinator == null) return;
+    final id = tables.nextCityId();
+    final fresh = _newWorld();
+    final record = CityRecord(id: id, name: name, founded: fresh.dateKey);
+    final next = tables
+        .withCityRecord(record)
+        .withCityTables(id, worldToSheetTables(fresh));
+    try {
+      await coordinator.save(next, id, fresh);
+    } catch (error) {
+      if (mounted) setState(() => _saveError = error.toString());
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _cityTables = next;
+      _cityStates = {..._cityStates, id: fresh};
+      _activeCityId = id;
+      _resetInteractionSurface();
+      _recomputeCityViewSets();
+      // Un-founded: the camera stays put.
+      _cameraFocusCell = null;
+      _saveError = null;
+    });
+  }
+
+  /// The city list — every city with its vitals, the focused one
+  /// marked, tap to switch — plus the start-a-new-city action.
+  Future<void> _showCityList() async {
+    final tables = _cityTables;
+    if (tables == null) return;
+    final chosen = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Cities'),
+        children: [
+          for (final record in tables.cities)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, record.id),
+              child: _cityListTile(record),
+            ),
+          const Divider(height: 24),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, '__new__'),
+            child: const Row(
+              children: [
+                Icon(Icons.add_location_alt_rounded, color: Color(0xFF1E6552)),
+                SizedBox(width: 10),
+                Text('Start a new city'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    if (chosen == '__new__') {
+      await _promptNewCityName();
+    } else {
+      _switchFocus(chosen);
+    }
+  }
+
+  Widget _cityListTile(CityRecord record) {
+    final state = _cityStates[record.id];
+    final focused = record.id == _activeCityId;
+    return Row(
+      children: [
+        Icon(
+          focused ? Icons.location_city_rounded : Icons.location_city_outlined,
+          color: focused ? const Color(0xFF1E6552) : const Color(0xFF617267),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                record.name.isEmpty ? record.id : record.name,
+                style: TextStyle(
+                  fontWeight: focused ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+              Text(
+                '${state?.population ?? 0} population · '
+                '${state?.parcels.length ?? 0} parcels · '
+                'founded ${record.founded}',
+                style: const TextStyle(fontSize: 11, color: Colors.black54),
+              ),
+            ],
+          ),
+        ),
+        if (focused)
+          const Text(
+            'FOCUSED',
+            style: TextStyle(
+              fontSize: 10,
+              letterSpacing: 1,
+              color: Color(0xFF1E6552),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Asks for the new city's name — defaulting to its minted number —
+  /// then creates it.
+  Future<void> _promptNewCityName() async {
+    final tables = _cityTables;
+    if (tables == null) return;
+    final defaultName = 'City ${cityIdNumber(tables.nextCityId())}';
+    final controller = TextEditingController(text: defaultName);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start a new city'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Name',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Found city'),
+          ),
+        ],
+      ),
+    );
+    final name = controller.text.trim();
+    controller.dispose();
+    if (confirmed != true || !mounted || name.isEmpty) return;
+    await _startNewCity(name);
+  }
+
+  void _commit(ParcelWorldState next, {bool replace = false}) {
+    final cityId = _activeCityId;
+    if (cityId == null) return;
+    setState(() {
+      _cityStates = {..._cityStates, cityId: next};
       _loadError = null;
     });
     final coordinator = _saveCoordinator;
-    final cityId = _activeCityId;
-    if (coordinator == null || cityId == null) return;
+    if (coordinator == null) return;
     // Splice the active city's block; other cities never change while
     // one is being played, so the in-memory tables stay current.
     final tables = (_cityTables ?? MultiCityTables()).withCityTables(
@@ -566,18 +816,13 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       if (!mounted) return;
       setState(() {
         _cityTables = tables;
+        _cityStates = {'city_1': fresh};
         _activeCityId = 'city_1';
-        _world = fresh;
+        _recomputeCityViewSets();
+        _cameraFocusCell = null;
+        _resetInteractionSurface();
         _loading = false;
         _saveError = null;
-        _roadPlanCells = const [];
-        _selectedCell = null;
-        _selectedPropId = null;
-        _selectedParcel = null;
-        _selectedCatalogueId = null;
-        _bridgeStartCell = null;
-        _facingOverride = null;
-        _tool = _WorldTool.inspect;
       });
     } catch (error) {
       if (mounted) setState(() => _loadError = error);
@@ -949,6 +1194,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             children: [
               _WorldHeader(
                 state: world,
+                cityName: _focusedCityName,
+                onSwitchCity: _showCityList,
                 saveError: _saveError,
                 nextReportNet: townLedger(world, _requireContent).net,
                 population: world.population,
@@ -998,6 +1245,9 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           child: ParcelWorldView(
             state: world,
             terrainProvider: _terrain,
+            passiveStates: _passiveStates,
+            foreignParcels: _foreignParcelSet,
+            cameraFocusCell: _cameraFocusCell,
             selectedCell: _selectedCell,
             selectedPropId: _selectedPropId,
             selectedSubtileX: _selectedSubtileX,
@@ -1745,6 +1995,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
 class _WorldHeader extends StatelessWidget {
   const _WorldHeader({
     required this.state,
+    required this.cityName,
+    required this.onSwitchCity,
     required this.saveError,
     required this.nextReportNet,
     required this.population,
@@ -1753,6 +2005,11 @@ class _WorldHeader extends StatelessWidget {
   });
 
   final ParcelWorldState state;
+
+  /// The focused city's display name; tapping the chip opens the
+  /// city list to switch focus or start a new city.
+  final String cityName;
+  final VoidCallback onSwitchCity;
   final String? saveError;
 
   /// Projected net of the next check-in's report: taxes minus
@@ -1804,6 +2061,27 @@ class _WorldHeader extends StatelessWidget {
       children: [
         Tooltip(
           message:
+              'The focused city. All values, purchases, and placements '
+              'act on it; tap to switch focus or start a new city.',
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: ActionChip(
+              avatar: const Icon(
+                Icons.location_city_rounded,
+                color: Color(0xFF35695A),
+              ),
+              label: Text(
+                cityName,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+              backgroundColor: const Color(0xFFE3F2EA),
+              onPressed: onSwitchCity,
+            ),
+          ),
+        ),
+        Tooltip(
+          message:
               'The town treasury. Each check-in collects taxes and '
               'pays upkeep; purchases draw from it.',
           child: Chip(
@@ -1843,7 +2121,9 @@ class _WorldHeader extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: brand),
-                actions,
+                // Flexible, not natural width: chips wrap to another
+                // line rather than overflowing the header.
+                Flexible(child: actions),
               ],
             ),
           if (saveError != null)

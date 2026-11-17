@@ -876,8 +876,102 @@ parameter on the founding and purchase quotes, directory-level
 exclusivity validation, the unioned map-editor usage summary, the
 retired `worldId` and version stamps, and the live save migrated to
 `city_1` by direct data edit. The game plays the lowest city id until
-switching exists. Remaining: the gameplay slice — city founding,
-switching, and naming UI.
+switching exists. The gameplay slice on top is specced in the next
+section.
+
+### Multi-city gameplay: focus, switching, founding (decided 2026-11-17)
+
+**Landed 2026-11-17.** The model is **focus**: one focused city, and
+every UI value, bar, purchase, placement, and check-in acts on it.
+Switching focus is session-level only — the reducer, rules, and
+validation stay single-city forever. The header carries the focused
+city's name on a chip that opens the city list (vitals, focused
+marked, tap to switch, "start a new city" with a name dialog
+defaulting to `City N`); other cities render fully visible but inert
+(passive actors in the one depth-sorted cache, passive roads in the
+road layer and neighbour masks, their props lifted through their own
+queries); the camera flies to the focused city's owned area on
+switch; the interaction surface resets on switch; foreign parcels
+shade with the claimed tint (`claimedLandWash` in ambience.json,
+editable on the Ambience page) and refuse with "Another city has
+claimed that parcel."; and every city's state stays live in memory
+so switches are instant and per-city event feeds survive.
+
+Still out of scope: rename UI, foreign-object inspection, foreign
+ambient life (walkers and cars simulate for the focused city only),
+the awaits-check-in badge on the switch chip, and any inter-city
+gameplay.
+
+Decisions:
+
+- **Other cities render fully visible** on the shared map — their
+  roads, buildings, and props draw like any other, with no dimming;
+  focus reads through the camera position and what is tappable.
+  Foreign-owned parcels get a claimed tint in parcel mode and are
+  neither buyable nor selectable (the refusal message exists).
+  First cut: foreign objects are not inspectable, and ambient life —
+  walkers and cars — simulates for the focused city only.
+- **Name at creation** (decided 2026-11-17): the start-new-city flow
+  asks for a name in a small dialog, defaulting to `City N`.
+  Renaming stays future work.
+- **The camera flies to the focused city's owned area** on switch; an
+  un-founded city keeps the camera, because the player is about to
+  pick a founding parcel anywhere.
+- A new city can be started any time, even before the current one
+  founds — un-founded cities are legal saves. Founding is the same
+  free-first rule per city: five or more land cells, charted, and now
+  *unclaimed* — the hint and dialog copy changes from "anywhere
+  charted" to "unclaimed". Founding beside another city is allowed.
+  "Start new world" stays the global wipe it already is (there is no
+  retiring cities).
+
+Session shape (`parcel_city_app`):
+
+- Keep every city's state in memory (`LoadedCitySave.states`, kept
+  live): switches are instant and each city's in-session event feed
+  survives switching back and forth. `_world` stays the focused
+  state; commits capture `(tables, cityId, state)` explicitly, so a
+  switch while a write is queued is safe by construction.
+- Switching resets the interaction surface — tool selection, cell,
+  parcel, and prop selection, the in-progress road plan, and the
+  catalogue pick — the same reset the "start new world" path does.
+- `_startNewCity(name)`: mint `nextCityId()`, build a fresh
+  `newParcelWorldState` with a new seed, add the
+  `CityRecord(id, name, founded: dateKey)`, splice record plus block
+  into the tables, and write it with one `saveCity` before focusing
+  it. No backend changes — the store already supports all of this.
+- UI: the header gains the focused city's name on a switch chip; the
+  chip opens the city list (name, population, parcels, founded; the
+  focused city marked; tap to switch) with a "start a new city"
+  action that opens the naming dialog.
+
+Rendering (`parcel_world_view`):
+
+- The view takes the focused state plus the other cities' states as
+  passive worlds. The static actor pass enumerates each state's
+  structures, props, and bridge pieces through per-state queries and
+  merges them into the one depth-sorted cache — the cache key gains
+  the passive states. Hit testing, selection, and x-ray stay
+  focused-only; the owned-region dashed outline stays focused-only.
+- Parcel mode's baked wash gains a third parcel state — foreign
+  claimed — beside owned and unowned, and the wash's cache inputs
+  gain the foreign set. Outside parcel mode, foreign parcels render
+  as terrain with their objects, like anywhere else on the map.
+
+Verification:
+
+- A widget test with two cities: switch focus, header values change,
+  a purchase lands in the focused city's block and leaves the other
+  city's untouched, and a half-drawn road plan dies on switch.
+- A creation test: the index row and fresh block are written in one
+  save, focus switches, and founding works — the free first parcel,
+  refusing the first city's parcels.
+- The parcel-mode foreign state: the wash and tint computation,
+  unit-tested.
+
+Out of scope for this slice: rename UI, foreign-object inspection,
+foreign ambient life, the awaits-check-in badge on the switch chip
+(worth adding soon after), and any inter-city gameplay.
 
 ### Regression checks
 

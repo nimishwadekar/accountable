@@ -29,6 +29,7 @@ class _AmbiencePageState extends State<AmbiencePage> {
     final pedestrians = subMap(ambience, 'pedestrians');
     final cars = subMap(ambience, 'cars');
     final wash = subMap(ambience, 'unownedLandWash');
+    final claimedWash = subMap(ambience, 'claimedLandWash');
     final tileGrid = subMap(ambience, 'tileGrid');
 
     return ListView(
@@ -364,6 +365,39 @@ class _AmbiencePageState extends State<AmbiencePage> {
           description:
               'Fades unowned land toward the map background once '
               'per composed cell.',
+        ),
+        _section(
+          'Claimed-land wash',
+          [
+            _RgbFields(
+              alpha: asInt(claimedWash['alpha'], 64),
+              rgb: ((claimedWash['colorRgb'] as List?) ?? const [130, 130, 145])
+                  .map((v) => asInt(v))
+                  .toList(),
+              onChangedAlpha: (v) => _edit((a) {
+                final map =
+                    (a['claimedLandWash'] ??= <String, Object?>{}) as Map;
+                map['alpha'] = v;
+              }),
+              onChangedRgb: (index, v) => _edit((a) {
+                final map =
+                    (a['claimedLandWash'] ??= <String, Object?>{
+                          'colorRgb': <int>[],
+                        })
+                        as Map;
+                map['colorRgb'] = [
+                  for (var i = 0; i < 3; i++)
+                    i == index
+                        ? v
+                        : asInt(((map['colorRgb'] as List? ?? const [])[i])),
+                ];
+              }),
+            ),
+          ],
+          description:
+              'Parcel-mode tint for land another city owns — the map '
+              'is shared and parcels are exclusive, so claimed land '
+              'reads differently from open land.',
         ),
         _section(
           'Tile grid',

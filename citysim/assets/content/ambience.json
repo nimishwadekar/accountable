@@ -266,6 +266,14 @@
       207
     ]
   },
+  "claimedLandWash": {
+    "alpha": 64,
+    "colorRgb": [
+      130,
+      130,
+      145
+    ]
+  },
   "vegetationSway": {
     "baseFrequency": 1.1,
     "frequencyStep": 0.13,

@@ -61,6 +61,10 @@ void main() {
     }
     // The sway gate: sway draws only at 0.75× camera scale and closer.
     expect(content.ambience.vegetationSway.minScale, 0.75);
+    // The parcel-mode claim tint: a muted slate, distinct from the
+    // unowned wash's green.
+    expect(content.ambience.claimedLandWash.alpha, 64);
+    expect(content.ambience.claimedLandWash.colorRgb, const [130, 130, 145]);
   });
 
   test('the shipped progression is a complete, ordered milestone ladder', () {

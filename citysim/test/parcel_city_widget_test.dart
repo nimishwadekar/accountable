@@ -11,6 +11,34 @@ import 'package:citysim/world/world_save_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// The world-space centre of a cell, matching the view's camera math
+/// (64×32 logical tiles): used to compute exact tap positions.
+Offset _cellWorld(CellCoord cell) =>
+    Offset((cell.column - cell.row) * 32.0, (cell.column + cell.row) * 16.0);
+
+/// A store holding a full multi-city save — the double for focus and
+/// attribution tests.
+class _MemoryCityStore implements ParcelWorldStore {
+  _MemoryCityStore(this.tables, this.states);
+
+  MultiCityTables tables;
+  Map<String, ParcelWorldState> states;
+
+  @override
+  Future<LoadedCitySave?> load() async =>
+      LoadedCitySave(tables: tables, states: states);
+
+  @override
+  Future<void> saveCity(
+    MultiCityTables tables,
+    String cityId,
+    ParcelWorldState state,
+  ) async {
+    this.tables = tables;
+    states = {...states, cityId: state};
+  }
+}
+
 class _MemoryParcelStore implements ParcelWorldStore {
   _MemoryParcelStore();
 
@@ -492,5 +520,193 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Could not load the world artwork.'), findsNothing);
+  });
+
+  testWidgets('focus switches cities and attributes play to the focused one', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1600, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // Two towns on the shared map: Alpha at (0,0), Beta at (2,0) —
+    // a charted grass parcel east of the channel.
+    final alpha = foundedWorld(withRoad: true);
+    final beta = sheetTablesToWorld(
+      SheetTables(
+        userData: {
+          'seed': '9',
+          'coins': '${content.economy.startingTreasuryCoins}',
+          'coins_earned': '${content.economy.startingTreasuryCoins}',
+          'coins_spent': '0',
+          'simulated_date': '2026-11-02',
+          'high_water_date': '2026-11-02',
+          'construction_day': '0',
+        },
+        ownedParcels: const [
+          ['2', '0'],
+        ],
+        tiles: const [
+          ['20', '4', 'road', 'complete', 'asphalt', '', '', ''],
+        ],
+        projects: const [],
+      ),
+      content: content,
+      terrainProvider: ContentTerrainProvider(content.terrain),
+    );
+    final store = _MemoryCityStore(
+      MultiCityTables(
+        cities: const [
+          CityRecord(id: 'city_1', name: 'Alpha', founded: '2026-11-01'),
+          CityRecord(id: 'city_2', name: 'Beta', founded: '2026-11-02'),
+        ],
+        tablesById: {
+          'city_1': worldToSheetTables(alpha),
+          'city_2': worldToSheetTables(beta),
+        },
+      ),
+      {'city_1': alpha, 'city_2': beta},
+    );
+
+    await tester.pumpWidget(ParcelCityApp(store: store, content: content));
+    for (var i = 0; i < 50; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+
+    // The lowest id is focused.
+    expect(find.text('Alpha'), findsOneWidget);
+    expect(find.text('1 parcel · 0 structures'), findsOneWidget);
+
+    // Switch focus to Beta through the city list.
+    await tester.tap(find.text('Alpha'));
+    await tester.pump();
+    await tester.tap(find.text('Beta'));
+    await tester.pump();
+    expect(find.text('Beta'), findsOneWidget);
+
+    // A road plan in Beta — attributed to Beta alone. The camera
+    // flew to Beta's owned area, so its parcel sits under the
+    // camera's centre; on foreign land the quote would refuse and
+    // no buy button could appear.
+    await tester.tap(find.text('Roads'));
+    await tester.pump();
+    final viewCenter = tester.getRect(find.byType(ParcelWorldView)).center;
+    Offset screenFor(CellCoord cell) =>
+        viewCenter + (_cellWorld(cell) - _cellWorld(const CellCoord(20, 4)));
+    await tester.tapAt(screenFor(const CellCoord(20, 5)));
+    await tester.pump();
+    await tester.tapAt(screenFor(const CellCoord(21, 5)));
+    await tester.pump();
+    expect(find.textContaining('Buy road plan'), findsOneWidget);
+    await tester.tap(find.textContaining('Buy road plan'));
+    await tester.pump();
+    // The purchase committed to Beta: the road tool shows the creep
+    // card for the new stretch.
+    expect(find.text('0/2 tiles laid · one more per check-in'), findsOneWidget);
+
+    // The save spliced Beta's block only.
+    expect(store.states['city_2']!.constructions, hasLength(1));
+    expect(store.states['city_1']!.constructions, isEmpty);
+    expect(store.tables.tablesById['city_1']!.projects, isEmpty);
+    expect(store.tables.tablesById['city_2']!.projects, hasLength(1));
+
+    // A half-drawn plan dies on focus switch.
+    await tester.tapAt(screenFor(const CellCoord(22, 5)));
+    await tester.pump();
+    await tester.tapAt(screenFor(const CellCoord(23, 5)));
+    await tester.pump();
+    expect(find.textContaining('Buy road plan'), findsOneWidget);
+    await tester.tap(find.text('Beta'));
+    await tester.pump();
+    await tester.tap(find.text('Alpha'));
+    await tester.pump();
+    expect(
+      find.textContaining('Buy road plan'),
+      findsNothing,
+      reason: 'the interaction surface resets with focus',
+    );
+    expect(find.text('1 parcel · 0 structures'), findsOneWidget);
+  });
+
+  testWidgets('starting a new city founds a second save block', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1600, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final alpha = foundedWorld(withRoad: true);
+    final store = _MemoryCityStore(
+      MultiCityTables(
+        cities: const [
+          CityRecord(id: 'city_1', name: 'Alpha', founded: '2026-11-01'),
+        ],
+        tablesById: {'city_1': worldToSheetTables(alpha)},
+      ),
+      {'city_1': alpha},
+    );
+
+    await tester.pumpWidget(ParcelCityApp(store: store, content: content));
+    for (var i = 0; i < 50; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+
+    // Start a new city through the list; the name dialog defaults to
+    // the minted number.
+    await tester.tap(find.text('Alpha'));
+    await tester.pump();
+    await tester.tap(find.text('Start a new city'));
+    await tester.pump();
+    expect(find.text('Found city'), findsOneWidget);
+    await tester.tap(find.text('Found city'));
+    await tester.pump();
+
+    // Focus switched to the fresh city: the founding loop restarts,
+    // and the index gained its record.
+    expect(find.text('City 2'), findsOneWidget);
+    expect(find.text('0 parcels · 0 structures'), findsOneWidget);
+    expect(
+      find.text('Open the Parcel tool to claim your free founding parcel'),
+      findsOneWidget,
+    );
+    expect(store.tables.cities.map((record) => record.id), [
+      'city_1',
+      'city_2',
+    ]);
+
+    // Founding cannot take city_1's parcel…
+    await tester.tap(find.text('Parcels'));
+    await tester.pump();
+    final viewCenter = tester.getRect(find.byType(ParcelWorldView)).center;
+    await tester.tapAt(viewCenter);
+    await tester.pump();
+    expect(find.text('Another city has claimed that parcel.'), findsOneWidget);
+    // …but charted unclaimed land founds free.
+    Offset screenFor(CellCoord cell) =>
+        viewCenter + (_cellWorld(cell) - _cellWorld(const CellCoord(4, 4)));
+    await tester.tapAt(screenFor(const CellCoord(20, 4)));
+    await tester.pump();
+    final review = find.text('Review parcel purchase');
+    await tester.ensureVisible(review);
+    await tester.pump();
+    await tester.tap(review);
+    await tester.pump();
+    await tester.tap(find.text('Claim parcel'));
+    await tester.pump();
+    expect(find.text('1 parcel · 0 structures'), findsOneWidget);
+
+    // The founding landed in city_2's block; Alpha's is untouched.
+    expect(store.states['city_2']!.parcels, hasLength(1));
+    expect(store.states['city_1']!.parcels, hasLength(1));
+    expect(store.tables.tablesById['city_2']!.ownedParcels, hasLength(1));
+    expect(store.tables.tablesById['city_1']!.ownedParcels, hasLength(1));
   });
 }

@@ -39,6 +39,9 @@ class ParcelWorldView extends StatefulWidget {
     required this.content,
     required this.terrainProvider,
     required this.onCellTap,
+    this.passiveStates = const [],
+    this.foreignParcels = const {},
+    this.cameraFocusCell,
     this.selectedCell,
     this.selectedParcel,
     this.selectedCatalogueId,
@@ -62,6 +65,27 @@ class ParcelWorldView extends StatefulWidget {
   final ParcelWorldState state;
   final ContentBundle content;
   final TerrainProvider terrainProvider;
+
+  /// The other cities on the shared map, rendered fully visible but
+  /// inert: their structures, props, roads, and bridges draw like any
+  /// other, but nothing about them is tappable, selectable, or
+  /// simulated — ambient life and interactions stay with the focused
+  /// city. The list instance should be stable across rebuilds (the
+  /// app recomputes it only when the city set or focus changes) so
+  /// the static-actor cache key, which compares by identity, does not
+  /// churn.
+  final List<ParcelWorldState> passiveStates;
+
+  /// Parcels owned by the passive cities — the map is shared and
+  /// parcels are exclusive, so in parcel mode these shade with the
+  /// claimed tint instead of the unowned wash. Also a stable
+  /// instance: the terrain chunk cache keys on it.
+  final Set<ParcelCoord> foreignParcels;
+
+  /// Where a camera reset centers. Null keeps the founding-area
+  /// default; the app passes the focused city's owned-area centroid
+  /// when switching focus between cities.
+  final CellCoord? cameraFocusCell;
 
   /// Called on every map tap with the resolved hit — a structure or
   /// prop id when sprite picking is on, else the ground cell — plus
@@ -175,6 +199,15 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     widget.state,
     widget.terrainProvider,
   );
+
+  /// Queries for the passive cities, in [ParcelWorldView.passiveStates]
+  /// order. Rebuilt only when the passive list instance changes, so
+  /// both the static-actor cache key and the road mask set stay
+  /// stable across ordinary rebuilds.
+  late List<WorldQueries> _passiveQueries = [
+    for (final state in widget.passiveStates)
+      WorldQueries(state, widget.terrainProvider),
+  ];
   late Future<void> _loading;
   final Map<int, Offset> _pointerDown = {};
   double _scale = 1.0;
@@ -270,6 +303,16 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
         oldWidget.terrainProvider != widget.terrainProvider) {
       _queries = WorldQueries(widget.state, widget.terrainProvider);
       _loading = _loadMissingImages();
+    }
+    // Identity, not deep equality: the app keeps one list instance
+    // per city-set/focus change, and the static-actor cache keys on
+    // this list — a fresh instance per rebuild would re-sort the
+    // world every frame.
+    if (!identical(oldWidget.passiveStates, widget.passiveStates)) {
+      _passiveQueries = [
+        for (final state in widget.passiveStates)
+          WorldQueries(state, widget.terrainProvider),
+      ];
     }
     if (oldWidget.selectedCatalogueId != widget.selectedCatalogueId) {
       _loading = _loadMissingImages();
@@ -402,6 +445,8 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   scale: _scale,
                   offset: _offset,
                   queries: _queries,
+                  passiveQueries: _passiveQueries,
+                  foreignParcels: widget.foreignParcels,
                   selectedCell: widget.selectedCell,
                   selectedParcel: widget.selectedParcel,
                   selectedCatalogueId: widget.selectedCatalogueId,
@@ -470,10 +515,9 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     if (_cameraInitialized || size.isEmpty) return;
     _cameraInitialized = true;
     _scale = 1.0;
-    final start = CellCoord(
-      widget.state.parcelSize ~/ 2,
-      widget.state.parcelSize ~/ 2,
-    );
+    final start =
+        widget.cameraFocusCell ??
+        CellCoord(widget.state.parcelSize ~/ 2, widget.state.parcelSize ~/ 2);
     final world = _cellWorldCenter(start);
     _offset = Offset(-world.dx * _scale, -world.dy * _scale);
     _clampCamera();
@@ -1283,6 +1327,8 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.state,
     required this.content,
     required this.queries,
+    required this.passiveQueries,
+    required this.foreignParcels,
     required this.images,
     required this.scale,
     required this.offset,
@@ -1320,6 +1366,19 @@ class _ParcelWorldPainter extends CustomPainter {
   final ParcelWorldState state;
   final ContentBundle content;
   final WorldQueries queries;
+
+  /// Queries of the passive cities, in widget order — the other
+  /// cities on the shared map, rendered fully visible but inert.
+  /// Their structures, props, and bridge pieces join the static
+  /// actor pass and their roads join the road layer and neighbour
+  /// masks; nothing about them is tappable or simulated.
+  final List<WorldQueries> passiveQueries;
+
+  /// Parcels owned by the passive cities — parcel mode shades them
+  /// with the claimed tint instead of the unowned wash. Keyed into
+  /// the terrain chunk cache by instance.
+  final Set<ParcelCoord> foreignParcels;
+
   final Map<String, ui.Image> images;
   final double scale;
   final Offset offset;
@@ -1497,6 +1556,7 @@ class _ParcelWorldPainter extends CustomPainter {
       state,
       groundPaths.where(images.containsKey).length,
       parcelMode,
+      foreignParcels,
     );
     terrainCache.setTextureFactor(_textureFactorFor(scale, pixelRatio));
     terrainCache.evictDistant();
@@ -1709,15 +1769,31 @@ class _ParcelWorldPainter extends CustomPainter {
   /// Unity sorting layers), and replaying the few dozen visible
   /// roads per frame is cheap next to the cached terrain.
   void _drawRoads(Canvas canvas, Size size, _CellBounds bounds) {
-    // Road neighbour masks read the road set around the view.
+    // Road neighbour masks read the road set around the view — every
+    // city's, so a junction against a passive city's road renders
+    // with the right connectors.
     final roadCells = <CellCoord>{
       ...queries.roadsByCell.keys,
       for (final bridge in state.bridges) ...bridge.waterCells,
+      for (final passive in passiveQueries) ...passive.roadsByCell.keys,
+      for (final passive in passiveQueries)
+        for (final bridge in _allByChunkScan(passive.bridgeChunks))
+          ...bridge.waterCells,
     };
+    RoadSegment? roadAt(CellCoord cell) {
+      final own = queries.roadsByCell[cell];
+      if (own != null) return own;
+      for (final passive in passiveQueries) {
+        final hit = passive.roadsByCell[cell];
+        if (hit != null) return hit;
+      }
+      return null;
+    }
+
     for (var row = bounds.top - 1; row <= bounds.bottom + 1; row++) {
       for (var column = bounds.left - 1; column <= bounds.right + 1; column++) {
         final cell = CellCoord(column, row);
-        final road = queries.roadsByCell[cell];
+        final road = roadAt(cell);
         if (road == null) continue;
         final mask = roadNeighborMask(cell, roadCells);
         // Approach tiles beside a junction paint their pelican
@@ -2158,14 +2234,23 @@ class _ParcelWorldPainter extends CustomPainter {
     // later cells' opaque skirts cannot punch un-washed fringes
     // through the tint. The unowned wash is a parcel-mode cue;
     // normal play shows unowned terrain as-is. Fog parcels never
-    // wash — they are unbuyable, and the cloud stays clean.
+    // wash — they are unbuyable, and the cloud stays clean. Parcels
+    // another city owns shade with the claimed tint instead: the map
+    // is shared and exclusive, so claimed land reads differently
+    // from open land.
     if (parcelMode) {
       for (final (cell, terrain, center) in cells) {
         if (queries.ownsCell(cell) || terrain.kind == TerrainKind.fog) {
           continue;
         }
         ParcelWorldProbe.countWash();
-        _drawWorldCellWash(canvas, center, content.ambience.unownedLandWash);
+        _drawWorldCellWash(
+          canvas,
+          center,
+          foreignParcels.contains(parcelForCell(cell, parcelSize: parcelSize))
+              ? content.ambience.claimedLandWash
+              : content.ambience.unownedLandWash,
+        );
       }
     }
 
@@ -2259,6 +2344,7 @@ class _ParcelWorldPainter extends CustomPainter {
     final statics = staticActors.obtain((
       world: state,
       queries: queries,
+      passives: passiveQueries,
       content: content,
       selectedCell: selectedCell,
       selectedPropId: selectedPropId,
@@ -2393,7 +2479,7 @@ class _ParcelWorldPainter extends CustomPainter {
             continue;
           }
           _drawStructure(canvas, size, structure, seconds, dimmed: dimmed);
-        case _PropActor(:final prop, :final dimmed):
+        case _PropActor(:final prop, :final dimmed, :final queries):
           final cell = prop.cell;
           if (cell.column < left ||
               cell.column > right ||
@@ -2401,7 +2487,14 @@ class _ParcelWorldPainter extends CustomPainter {
               cell.row > bottom) {
             continue;
           }
-          _drawProp(canvas, size, prop, seconds, dimmed: dimmed);
+          _drawProp(
+            canvas,
+            size,
+            prop,
+            seconds,
+            dimmed: dimmed,
+            queries: queries,
+          );
         case _BridgeActor(:final role, :final cell, :final surface):
           if (cell.column < left ||
               cell.column > right ||
@@ -2465,77 +2558,95 @@ class _ParcelWorldPainter extends CustomPainter {
       );
     }
 
-    for (final structure in _allByChunkScan(queries.structureChunks)) {
-      final depth = _structureDepth(structure).toDouble();
-      final isSelected = selectedStructure?.id == structure.id;
-      var dimmed = false;
-      if (xray != null && !isSelected) {
-        final definition = content.structure(structure.catalogueId)!;
-        final role = structure.assetRole ?? definition.assetRoles.first;
-        final assetPath = content.tryAssetPathFor(role, structure.facing);
-        final image = assetPath == null ? null : images[assetPath];
-        if (image != null) {
-          dimmed = _occludesSelection(
-            xray,
-            depth,
-            _worldRectToScreen(
-              _structureRect(image, definition, structure, content),
-              size,
-              scale,
-              offset,
-            ),
-            _maskFor(assetPath),
-          );
-        }
-      }
-      actors.add(
-        _StructureActor(depth: depth, structure: structure, dimmed: dimmed),
-      );
-    }
-    for (final prop in _allByChunkScan(queries.propChunks)) {
-      final depth = propDepth(prop);
-      var dimmed = false;
-      if (xray != null) {
-        final definition = content.structure(prop.catalogueId)!;
-        final role = prop.assetRole ?? definition.assetRoles.first;
-        final assetPath = content.tryAssetPathFor(role, prop.facing);
-        final image = assetPath == null ? null : images[assetPath];
-        final sprite = content.sprite(role);
-        if (image != null && sprite != null && assetPath != null) {
-          dimmed = _occludesSelection(
-            xray,
-            depth,
-            _worldRectToScreen(
-              _propRect(
-                image,
-                sprite,
-                prop,
-                surfaceLift: _surfaceLift(prop.cell, queries, content),
+    // One city's standing world. The focused city participates in
+    // the selection x-ray; passive cities enumerate with dimming
+    // off — they render fully visible but never interact.
+    void enumerate(WorldQueries cityQueries, {required bool xrayEligible}) {
+      for (final structure in _allByChunkScan(cityQueries.structureChunks)) {
+        final depth = _structureDepth(structure).toDouble();
+        final isSelected = selectedStructure?.id == structure.id;
+        var dimmed = false;
+        if (xrayEligible && xray != null && !isSelected) {
+          final definition = content.structure(structure.catalogueId)!;
+          final role = structure.assetRole ?? definition.assetRoles.first;
+          final assetPath = content.tryAssetPathFor(role, structure.facing);
+          final image = assetPath == null ? null : images[assetPath];
+          if (image != null) {
+            dimmed = _occludesSelection(
+              xray,
+              depth,
+              _worldRectToScreen(
+                _structureRect(image, definition, structure, content),
+                size,
+                scale,
+                offset,
               ),
-              size,
-              scale,
-              offset,
-            ),
-            _maskFor(assetPath),
-          );
+              _maskFor(assetPath),
+            );
+          }
         }
+        actors.add(
+          _StructureActor(depth: depth, structure: structure, dimmed: dimmed),
+        );
       }
-      actors.add(_PropActor(depth: depth, prop: prop, dimmed: dimmed));
-    }
-    for (final bridge in _allByChunkScan(queries.bridgeChunks)) {
-      final body = bridgeBodyRole(bridge.nearBank, bridge.farBank);
-      for (final cell in bridge.waterCells) {
-        bridgePieces(body, cell);
+      for (final prop in _allByChunkScan(cityQueries.propChunks)) {
+        final depth = propDepth(prop);
+        var dimmed = false;
+        if (xrayEligible && xray != null) {
+          final definition = content.structure(prop.catalogueId)!;
+          final role = prop.assetRole ?? definition.assetRoles.first;
+          final assetPath = content.tryAssetPathFor(role, prop.facing);
+          final image = assetPath == null ? null : images[assetPath];
+          final sprite = content.sprite(role);
+          if (image != null && sprite != null && assetPath != null) {
+            dimmed = _occludesSelection(
+              xray,
+              depth,
+              _worldRectToScreen(
+                _propRect(
+                  image,
+                  sprite,
+                  prop,
+                  surfaceLift: _surfaceLift(prop.cell, cityQueries, content),
+                ),
+                size,
+                scale,
+                offset,
+              ),
+              _maskFor(assetPath),
+            );
+          }
+        }
+        actors.add(
+          _PropActor(
+            depth: depth,
+            prop: prop,
+            dimmed: dimmed,
+            queries: cityQueries,
+          ),
+        );
       }
-      bridgePieces(
-        bridgeRampRole(bridge.nearBank, bridge.waterCells.first),
-        bridge.nearBank,
-      );
-      bridgePieces(
-        bridgeRampRole(bridge.farBank, bridge.waterCells.last),
-        bridge.farBank,
-      );
+      for (final bridge in _allByChunkScan(cityQueries.bridgeChunks)) {
+        final body = bridgeBodyRole(bridge.nearBank, bridge.farBank);
+        for (final cell in bridge.waterCells) {
+          bridgePieces(body, cell);
+        }
+        bridgePieces(
+          bridgeRampRole(bridge.nearBank, bridge.waterCells.first),
+          bridge.nearBank,
+        );
+        bridgePieces(
+          bridgeRampRole(bridge.farBank, bridge.waterCells.last),
+          bridge.farBank,
+        );
+      }
     }
+
+    enumerate(queries, xrayEligible: true);
+    for (final passive in passiveQueries) {
+      enumerate(passive, xrayEligible: false);
+    }
+
     // Bridges still under construction: the near ramp rises with the
     // first delivered cell (the near-bank road), then each delivered
     // span tile of the deck appears in order, rising out of the dirt
@@ -2786,6 +2897,7 @@ class _ParcelWorldPainter extends CustomPainter {
     PlacedProp prop,
     double seconds, {
     bool dimmed = false,
+    required WorldQueries queries,
   }) {
     final definition = content.structure(prop.catalogueId)!;
     final role = prop.assetRole ?? definition.assetRoles.first;
@@ -3881,11 +3993,7 @@ Rect _parcelWorldRect(ParcelCoord parcel, int parcelSize) {
 /// layered shore pieces fades exactly like plain ground instead of
 /// compounding per-sprite transparency (which made shorelines look
 /// darker than the surrounding grass).
-void _drawWorldCellWash(
-  Canvas canvas,
-  Offset center,
-  UnownedLandWashContent wash,
-) {
+void _drawWorldCellWash(Canvas canvas, Offset center, LandWashContent wash) {
   final halfWidth = _logicalTileWidth / 2;
   final halfHeight = _logicalTileHeight / 2;
   final path = Path()
@@ -4071,12 +4179,20 @@ final class _StructureActor extends _Actor {
 }
 
 /// A placed or wild prop, its x-ray dimming baked at cache-build
-/// time.
+/// time. Carries its owning city's queries so the draw lifts it
+/// through its own world — a passive city's prop on a passive bridge
+/// deck rises with that bridge, not the focused one's.
 final class _PropActor extends _Actor {
-  _PropActor({required super.depth, required this.prop, required this.dimmed});
+  _PropActor({
+    required super.depth,
+    required this.prop,
+    required this.dimmed,
+    required this.queries,
+  });
 
   final PlacedProp prop;
   final bool dimmed;
+  final WorldQueries queries;
 }
 
 /// One half of a bridge tile's split draw — posts or surface — at
@@ -4190,6 +4306,7 @@ List<T> _allByChunkScan<T>(Map<WorldChunkCoord, List<T>> chunks) {
 typedef _StaticActorKey = ({
   Object world,
   WorldQueries queries,
+  List<WorldQueries> passives,
   ContentBundle content,
   CellCoord? selectedCell,
   String? selectedPropId,
@@ -4311,6 +4428,10 @@ class _TerrainChunkCache {
   Object? worldKey;
   int groundImageCount = -1;
   bool parcelModeKey = false;
+
+  /// Identity of the foreign-parcel set — the claimed tint is baked
+  /// into chunk pictures, so a new set re-records the world.
+  Object? foreignKey;
   double textureFactor = 1;
   int generation = 0;
   int _stamp = 0;
@@ -4329,15 +4450,22 @@ class _TerrainChunkCache {
   /// Only ground art counts as a sprite change: chunk pictures
   /// sample terrain roles alone, so a late character, car, or prop
   /// decode must not re-record the world.
-  void resetFor(Object world, int groundImages, bool parcelMode) {
+  void resetFor(
+    Object world,
+    int groundImages,
+    bool parcelMode,
+    Object foreign,
+  ) {
     if (worldKey == world &&
         groundImageCount == groundImages &&
-        parcelModeKey == parcelMode) {
+        parcelModeKey == parcelMode &&
+        foreignKey == foreign) {
       return;
     }
     worldKey = world;
     groundImageCount = groundImages;
     parcelModeKey = parcelMode;
+    foreignKey = foreign;
     generation++;
     for (final chunk in chunks.values) {
       chunk.dispose();

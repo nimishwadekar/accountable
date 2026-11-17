@@ -11,3 +11,17 @@ city_1,population,51
 city_1,seed,7
 city_1,simulated_date,2026-11-07
 city_1,waiting_households,1
+city_2,checkin_count,3
+city_2,coins,11
+city_2,coins_earned,20
+city_2,coins_spent,9
+city_2,construction_day,2
+city_2,employed_population,0
+city_2,high_water_date,2026-11-19
+city_2,last_checkin_date,2026-11-19
+city_2,population,0
+city_2,progression_milestone,homestead
+city_2,progression_milestone_population,0
+city_2,seed,1413012752
+city_2,simulated_date,2026-11-19
+city_2,waiting_households,1

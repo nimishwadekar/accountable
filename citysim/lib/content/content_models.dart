@@ -941,16 +941,51 @@ class CarContent {
   );
 }
 
-class UnownedLandWashContent {
+/// A parcel-mode ground tint: alpha plus colour. The unowned and
+/// claimed washes share the shape.
+abstract interface class LandWashContent {
+  int get alpha;
+  List<int> get colorRgb;
+}
+
+class UnownedLandWashContent implements LandWashContent {
   const UnownedLandWashContent({required this.alpha, required this.colorRgb});
 
+  @override
   final int alpha;
+  @override
   final List<int> colorRgb;
 
   Map<String, Object?> toJson() => {'alpha': alpha, 'colorRgb': colorRgb};
 
   static UnownedLandWashContent fromJson(Map<String, Object?> json) =>
       UnownedLandWashContent(
+        alpha: json['alpha']! as int,
+        colorRgb: [for (final value in json['colorRgb']! as List) value as int],
+      );
+}
+
+/// Parcel-mode tint for land another city owns — the map is shared
+/// and parcels are exclusive, so claimed land must read differently
+/// from merely unowned land. Optional: absent content keeps the
+/// default slate.
+class ClaimedLandWashContent implements LandWashContent {
+  const ClaimedLandWashContent({required this.alpha, required this.colorRgb});
+
+  static const ClaimedLandWashContent defaults = ClaimedLandWashContent(
+    alpha: 64,
+    colorRgb: [130, 130, 145],
+  );
+
+  @override
+  final int alpha;
+  @override
+  final List<int> colorRgb;
+
+  Map<String, Object?> toJson() => {'alpha': alpha, 'colorRgb': colorRgb};
+
+  static ClaimedLandWashContent fromJson(Map<String, Object?> json) =>
+      ClaimedLandWashContent(
         alpha: json['alpha']! as int,
         colorRgb: [for (final value in json['colorRgb']! as List) value as int],
       );
@@ -995,6 +1030,7 @@ class AmbienceContent {
     required this.pedestrians,
     required this.cars,
     required this.unownedLandWash,
+    this.claimedLandWash = ClaimedLandWashContent.defaults,
     required this.tileGrid,
   });
 
@@ -1003,6 +1039,7 @@ class AmbienceContent {
   final PedestrianContent pedestrians;
   final CarContent cars;
   final UnownedLandWashContent unownedLandWash;
+  final ClaimedLandWashContent claimedLandWash;
   final TileGridContent tileGrid;
 
   Map<String, Object?> toJson() => {
@@ -1011,6 +1048,7 @@ class AmbienceContent {
     'pedestrians': pedestrians.toJson(),
     'cars': cars.toJson(),
     'unownedLandWash': unownedLandWash.toJson(),
+    'claimedLandWash': claimedLandWash.toJson(),
     'tileGrid': tileGrid.toJson(),
   };
 
@@ -1027,6 +1065,11 @@ class AmbienceContent {
     ),
     unownedLandWash: UnownedLandWashContent.fromJson(
       json['unownedLandWash']! as Map<String, Object?>,
+    ),
+    claimedLandWash: ClaimedLandWashContent.fromJson(
+      ((json['claimedLandWash'] as Map?)?.cast<String, Object?>() ??
+              ClaimedLandWashContent.defaults.toJson())
+          .cast<String, Object?>(),
     ),
     tileGrid: TileGridContent.fromJson(
       (json['tileGrid'] as Map?)?.cast<String, Object?>() ?? const {},
