@@ -8,6 +8,7 @@ import 'pages/map_page.dart';
 import 'pages/catalogue_page.dart';
 import 'pages/economy_page.dart';
 import 'pages/overview_page.dart';
+import 'pages/progression_page.dart';
 import 'pages/sprites_page.dart';
 import 'pages/vehicles_page.dart';
 
@@ -80,6 +81,7 @@ class _EditorShellState extends State<EditorShell> {
     null,
     'terrain.json',
     'catalogue.json',
+    'progression.json',
     'sprites.json',
     'economy.json',
     'ambience.json',
@@ -373,6 +375,14 @@ class _EditorShellState extends State<EditorShell> {
         ),
       ),
       (
+        'Progression',
+        ProgressionPage(
+          key: ValueKey('progression-$_rebuildToken'),
+          categories: _categories,
+          onChanged: _mutate,
+        ),
+      ),
+      (
         'Sprites',
         SpritesPage(
           key: ValueKey('sprites-$_rebuildToken'),
@@ -429,6 +439,11 @@ class _EditorShellState extends State<EditorShell> {
                 icon: Icon(Icons.home_work_outlined),
                 selectedIcon: Icon(Icons.home_work_rounded),
                 label: Text('Catalogue'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.flag_outlined),
+                selectedIcon: Icon(Icons.flag_rounded),
+                label: Text('Progression'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.image_outlined),

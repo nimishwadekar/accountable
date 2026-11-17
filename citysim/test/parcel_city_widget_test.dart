@@ -223,13 +223,14 @@ void main() {
       await tester.tap(find.text('Buildings').first);
       await tester.pump();
       // Model names are dashboard-editable content, so the tile is located
-      // through the loaded bundle instead of a hardcoded display name.
+      // through the loaded bundle instead of a hardcoded display name —
+      // the first building the from-start milestone unlocks.
       final cottageName = content.catalogue
           .firstWhere(
             (model) =>
                 model.kind == StructureKind.building &&
                 model.enabled &&
-                model.unlockAtPopulation == 0,
+                content.progression.sorted.first.models.contains(model.id),
           )
           .name;
       final cottage = find.text(cottageName);
@@ -339,6 +340,7 @@ void main() {
       sprites: content.sprites,
       economy: content.economy,
       ambience: content.ambience,
+      progression: content.progression,
       terrain: TerrainContent(
         generatorVersion: 1,
         parcels: {

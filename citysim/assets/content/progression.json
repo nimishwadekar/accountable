@@ -1,0 +1,80 @@
+{
+  "milestones": [
+    {
+      "id": "homestead",
+      "name": "Homestead",
+      "population": 0,
+      "models": [
+        "small-home",
+        "cafe",
+        "ice-cream-shop",
+        "construction-site",
+        "flower-garden",
+        "pine-tree",
+        "common-tree",
+        "tree-stump",
+        "wild-grass",
+        "street-lamp",
+        "traffic-light",
+        "stop-sign",
+        "caution-sign",
+        "wood-fence",
+        "wire-fence",
+        "trash-can",
+        "trash-bags",
+        "rocks",
+        "cardboard-boxes",
+        "drop-box",
+        "scattered-papers",
+        "tires"
+      ]
+    },
+    {
+      "id": "hamlet",
+      "name": "Hamlet",
+      "population": 5,
+      "models": [
+        "medium-home",
+        "fruit-market",
+        "autoshop",
+        "pizza-shop",
+        "mobile-home"
+      ]
+    },
+    {
+      "id": "village",
+      "name": "Village",
+      "population": 10,
+      "models": [
+        "community-clinic",
+        "large-home",
+        "small-office",
+        "water-tower"
+      ]
+    },
+    {
+      "id": "town",
+      "name": "Town",
+      "population": 15,
+      "models": ["church", "gas-station", "warehouse"]
+    },
+    {
+      "id": "city",
+      "name": "City",
+      "population": 20,
+      "models": ["apartments", "city-office", "police-station", "fire-station"]
+    },
+    {
+      "id": "metropolis",
+      "name": "Metropolis",
+      "population": 25,
+      "models": ["tall-office"]
+    },
+    {
+      "id": "regional-capital",
+      "name": "Regional Capital",
+      "population": 30,
+      "models": ["hospital"]
+    }
+  ]
+}

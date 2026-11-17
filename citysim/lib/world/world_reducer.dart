@@ -38,8 +38,6 @@ ParcelWorldState checkInWorldForToday(
   var roads = [...state.roads];
   var bridges = [...state.bridges];
   var constructions = <WorldConstruction>[];
-  var unlocked = {...state.unlockedCatalogueIds};
-  var capacity = state.builderCapacity;
   var nextEntity = state.nextEntityNumber;
   final completions = <String>[];
   final events = <WorldEvent>[];
@@ -86,44 +84,6 @@ ParcelWorldState checkInWorldForToday(
           ),
         );
         nextEvent++;
-        // Population gates: unlock models whose threshold the
-        // settlement now reaches, then reconcile builder capacity
-        // with the progression table.
-        final population = state.population;
-        for (final candidate in content.purchaseableModels) {
-          if (population >= candidate.unlockAtPopulation &&
-              unlocked.add(candidate.id)) {
-            events.add(
-              _event(
-                state,
-                kind: 'model-unlocked',
-                description: '${candidate.name} model unlocked',
-                payload: {
-                  'catalogueId': candidate.id,
-                  'population': population,
-                },
-                eventNumber: nextEvent,
-              ),
-            );
-            nextEvent++;
-          }
-        }
-        final expectedCapacity = content.economy.builderCapacityForPopulation(
-          population,
-        );
-        if (expectedCapacity > capacity) {
-          capacity = expectedCapacity;
-          events.add(
-            _event(
-              state,
-              kind: 'builder-granted',
-              description: 'Builder capacity grew to $capacity',
-              payload: {'capacity': capacity, 'population': population},
-              eventNumber: nextEvent,
-            ),
-          );
-          nextEvent++;
-        }
       case WorldConstructionKind.road:
         // Delivery is the road rows themselves: the next planned
         // tile without a row is the one this check-in lays.
@@ -289,6 +249,20 @@ ParcelWorldState checkInWorldForToday(
     waiting = (waiting + migrationBudget).clamp(0, cap);
   }
 
+  // The population milestone crossing, once, after every population
+  // change of the day (completions and arrivals both): the high-water
+  // advances to whatever the settlement now reaches — one named
+  // event per newly reached milestone — and builder capacity
+  // reconciles upward with the progression table. A population dip
+  // crosses nothing; the unlock set follows the high-water, never
+  // the current population.
+  final progression = _advanceProgression(
+    state,
+    content,
+    population,
+    nextEvent,
+  );
+
   final report = _event(
     state,
     kind: 'check-in',
@@ -317,14 +291,16 @@ ParcelWorldState checkInWorldForToday(
     population: population,
     employedPopulation: employed,
     nextEntityNumber: nextEntity,
-    unlockedCatalogueIds: unlocked,
-    builderCapacity: capacity,
+    unlockedCatalogueIds: progression.unlockedCatalogueIds,
+    progressionMilestoneId: progression.milestoneId,
+    progressionMilestonePopulation: progression.milestonePopulation,
+    builderCapacity: progression.builderCapacity,
     structures: structures,
     roads: roads,
     bridges: bridges,
     constructions: constructions,
-    events: [...state.events, report, ...events],
-    nextEventNumber: nextEvent,
+    events: [...state.events, report, ...events, ...progression.events],
+    nextEventNumber: progression.nextEventNumber,
   );
 }
 
@@ -371,8 +347,9 @@ ParcelWorldState purchaseParcel(
   // copy verbatim into the Props table — the same sprites the
   // frontier drew, now the settlement's to pick up before building.
   // Purchase is the only ownership path, so this is the one copy.
-  // The rows' models unlock with them: the trees were always there,
-  // so progression thresholds never gate inherited nature.
+  // The rows' models do NOT unlock with them: possession is never
+  // gated, but placing new ones stays behind their milestone — an
+  // exotic grove is a strategic purchase, not a catalogue grant.
   final nature = [
     for (final row in terrainProvider.natureProps)
       if (parcelForCell(row.cell, parcelSize: state.parcelSize) == coord)
@@ -383,10 +360,6 @@ ParcelWorldState purchaseParcel(
     totalCoinsSpent: state.totalCoinsSpent + quote.price,
     parcels: [...state.parcels, parcel],
     props: [...state.props, ...nature],
-    unlockedCatalogueIds: {
-      ...state.unlockedCatalogueIds,
-      for (final prop in nature) prop.catalogueId,
-    },
     events: [
       ...state.events,
       _event(
@@ -727,39 +700,127 @@ ParcelWorldState swapStructureFacing(
   );
 }
 
-/// Load-time reconciliation: grants any population-gated model unlocks and
-/// builder-capacity steps an existing save already qualifies for under the
-/// *current* content — for example after thresholds were lowered in the
-/// editor. Only ever moves upward, records each grant as an event exactly
-/// once, and is a no-op for already-consistent saves.
+/// Load-time reconciliation: advances the progression high-water to
+/// whatever the save's population already reaches under the *current*
+/// content (thresholds lowered in the editor, saves from older
+/// rules), re-derives the placement-unlock set through it, and grows
+/// builder capacity to the table — never shrinking either. A no-op
+/// (same instance) for already-consistent saves.
 ParcelWorldState reconcileWorldProgression(
   ParcelWorldState state,
   ContentBundle content,
 ) {
-  var unlocked = {...state.unlockedCatalogueIds};
-  var capacity = state.builderCapacity;
-  final population = state.population;
-  final events = <WorldEvent>[];
-  var nextEvent = state.nextEventNumber;
-  for (final candidate in content.purchaseableModels) {
-    if (population >= candidate.unlockAtPopulation &&
-        unlocked.add(candidate.id)) {
-      events.add(
-        _event(
-          state,
-          kind: 'model-unlocked',
-          description: '${candidate.name} model unlocked',
-          payload: {
-            'catalogueId': candidate.id,
-            'population': population,
-            'reconciled': true,
-          },
-          eventNumber: nextEvent,
-        ),
-      );
-      nextEvent++;
+  final pass = _advanceProgression(
+    state,
+    content,
+    state.population,
+    state.nextEventNumber,
+  );
+  final settled =
+      pass.events.isEmpty &&
+      pass.unlockedCatalogueIds.length == state.unlockedCatalogueIds.length &&
+      pass.unlockedCatalogueIds.containsAll(state.unlockedCatalogueIds) &&
+      pass.builderCapacity == state.builderCapacity &&
+      pass.milestoneId == state.progressionMilestoneId &&
+      pass.milestonePopulation == state.progressionMilestonePopulation;
+  if (settled) return state;
+  return state.copyWith(
+    unlockedCatalogueIds: pass.unlockedCatalogueIds,
+    progressionMilestoneId: pass.milestoneId,
+    progressionMilestonePopulation: pass.milestonePopulation,
+    builderCapacity: pass.builderCapacity,
+    events: [...state.events, ...pass.events],
+    nextEventNumber: pass.nextEventNumber,
+  );
+}
+
+/// What a progression pass changed: the placement-unlock set, the
+/// high-water milestone, builder capacity, and the events it earned.
+class _ProgressionPass {
+  const _ProgressionPass({
+    required this.unlockedCatalogueIds,
+    required this.milestoneId,
+    required this.milestonePopulation,
+    required this.builderCapacity,
+    required this.events,
+    required this.nextEventNumber,
+  });
+
+  final Set<String> unlockedCatalogueIds;
+  final String? milestoneId;
+  final int milestonePopulation;
+  final int builderCapacity;
+  final List<WorldEvent> events;
+  final int nextEventNumber;
+}
+
+/// Advances the progression high-water to whatever [population]
+/// reaches, extends the placement-unlock set with everything through
+/// it (newly crossed milestones and models newly added to
+/// already-reached ones alike), and grows builder capacity to the
+/// progression table — never shrinking either. Monotonic by
+/// construction: a population dip crosses nothing, and the set only
+/// ever grows, so unlocks cannot re-lock. Each newly reached
+/// milestone reports as one named event.
+_ProgressionPass _advanceProgression(
+  ParcelWorldState state,
+  ContentBundle content,
+  int population,
+  int nextEvent,
+) {
+  final order = content.progression.sorted;
+  // Where the high-water sits now: the stored milestone if it still
+  // exists in content, else the furthest milestone the shadow
+  // threshold covers (deleted-milestone fallback).
+  var reachedIndex = -1;
+  final stored = state.progressionMilestoneId == null
+      ? null
+      : content.progression.byId(state.progressionMilestoneId!);
+  if (stored != null) {
+    reachedIndex = order.indexOf(stored);
+  } else {
+    for (var index = 0; index < order.length; index++) {
+      if (state.progressionMilestonePopulation >= order[index].population) {
+        reachedIndex = index;
+      }
     }
   }
+  // Cross every milestone the population reaches beyond the
+  // high-water — never backward.
+  var furthest = reachedIndex;
+  for (var index = reachedIndex + 1; index < order.length; index++) {
+    if (population < order[index].population) break;
+    furthest = index;
+  }
+  final reached = furthest < 0 ? null : order[furthest];
+  final events = <WorldEvent>[];
+  for (var index = reachedIndex + 1; index <= furthest; index++) {
+    final milestone = order[index];
+    final newlyUnlocked = [
+      for (final model in milestone.models)
+        if (!state.unlockedCatalogueIds.contains(model)) model,
+    ];
+    events.add(
+      _event(
+        state,
+        kind: 'milestone-reached',
+        description: newlyUnlocked.isEmpty
+            ? '${milestone.name} reached'
+            : '${milestone.name} reached · '
+                  '${newlyUnlocked.length} new model(s) placeable',
+        payload: {
+          'milestoneId': milestone.id,
+          'milestoneName': milestone.name,
+          'population': milestone.population,
+          'models': milestone.models,
+          'newlyUnlocked': newlyUnlocked,
+        },
+        eventNumber: nextEvent,
+      ),
+    );
+    nextEvent++;
+  }
+  var capacity = state.builderCapacity;
   final expectedCapacity = content.economy.builderCapacityForPopulation(
     population,
   );
@@ -770,21 +831,26 @@ ParcelWorldState reconcileWorldProgression(
         state,
         kind: 'builder-granted',
         description: 'Builder capacity grew to $capacity',
-        payload: {
-          'capacity': capacity,
-          'population': population,
-          'reconciled': true,
-        },
+        payload: {'capacity': capacity, 'population': population},
         eventNumber: nextEvent,
       ),
     );
     nextEvent++;
   }
-  if (events.isEmpty) return state;
-  return state.copyWith(
-    unlockedCatalogueIds: unlocked,
+  return _ProgressionPass(
+    // Union, never replacement: unlocks only ever grow. The
+    // high-water decides what joins; nothing already granted leaves.
+    unlockedCatalogueIds: reached == null
+        ? {...state.unlockedCatalogueIds}
+        : {
+            ...state.unlockedCatalogueIds,
+            ...content.progression.modelsUnlockedThrough(reached),
+          },
+    milestoneId: reached?.id ?? state.progressionMilestoneId,
+    milestonePopulation:
+        reached?.population ?? state.progressionMilestonePopulation,
     builderCapacity: capacity,
-    events: [...state.events, ...events],
+    events: events,
     nextEventNumber: nextEvent,
   );
 }

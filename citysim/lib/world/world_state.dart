@@ -259,6 +259,8 @@ class ParcelWorldState {
     this.waitingHouseholds = 0,
     this.population = 0,
     this.employedPopulation = 0,
+    this.progressionMilestoneId,
+    this.progressionMilestonePopulation = 0,
     required this.nextEntityNumber,
     required this.nextEventNumber,
     required this.lastCheckInDate,
@@ -308,6 +310,18 @@ class ParcelWorldState {
   /// Households holding jobs. Staffing raises it while unemployment
   /// and job vacancies exist; never above population.
   final int employedPopulation;
+
+  /// The progression high-water: the id of the last milestone reached.
+  /// Stored rather than re-derived from population, so a population
+  /// dip can never re-lock models (unlocks gate placement, never
+  /// possession). Null before the first milestone — a fresh world
+  /// seeds the population-0 milestone directly.
+  final String? progressionMilestoneId;
+
+  /// The reached milestone's population threshold *as it was when
+  /// reached* — the fallback if the milestone is later deleted from
+  /// content: everything at or below this threshold stays unlocked.
+  final int progressionMilestonePopulation;
   final int nextEntityNumber;
   final int nextEventNumber;
 
@@ -382,6 +396,8 @@ class ParcelWorldState {
     int? waitingHouseholds,
     int? population,
     int? employedPopulation,
+    String? progressionMilestoneId,
+    int? progressionMilestonePopulation,
     int? nextEntityNumber,
     int? nextEventNumber,
     DateTime? lastCheckInDate,
@@ -411,6 +427,10 @@ class ParcelWorldState {
     waitingHouseholds: waitingHouseholds ?? this.waitingHouseholds,
     population: population ?? this.population,
     employedPopulation: employedPopulation ?? this.employedPopulation,
+    progressionMilestoneId:
+        progressionMilestoneId ?? this.progressionMilestoneId,
+    progressionMilestonePopulation:
+        progressionMilestonePopulation ?? this.progressionMilestonePopulation,
     nextEntityNumber: nextEntityNumber ?? this.nextEntityNumber,
     nextEventNumber: nextEventNumber ?? this.nextEventNumber,
     lastCheckInDate: lastCheckInDate ?? this.lastCheckInDate,
@@ -439,6 +459,12 @@ ParcelWorldState newParcelWorldState({
   DateTime? today,
 }) {
   final date = today ?? DateTime.now();
+  // The from-start milestone: everything it (and any earlier
+  // milestone — there is none) unlocks is placeable from minute one.
+  final progression = content.progression.sorted;
+  final fromStart = progression.isEmpty || progression.first.population > 0
+      ? null
+      : progression.first;
   return ParcelWorldState(
     worldId: 'parcel-world-$seed',
     seed: seed,
@@ -459,11 +485,12 @@ ParcelWorldState newParcelWorldState({
     nextEventNumber: 1,
     lastCheckInDate: null,
     checkInCount: 0,
-    // Derived: every enabled model that unlocks at population 0.
-    unlockedCatalogueIds: {
-      for (final model in content.purchaseableModels)
-        if (model.unlockAtPopulation == 0) model.id,
-    },
+    progressionMilestoneId: fromStart?.id,
+    progressionMilestonePopulation: fromStart?.population ?? 0,
+    // Derived: everything the from-start milestone unlocks.
+    unlockedCatalogueIds: fromStart == null
+        ? const {}
+        : content.progression.modelsUnlockedThrough(fromStart),
     parcels: const [],
     roads: const [],
     structures: const [],

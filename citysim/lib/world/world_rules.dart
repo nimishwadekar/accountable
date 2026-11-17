@@ -663,7 +663,6 @@ void validateParcelWorldState(
         structure.completedAtDay > state.constructionDay ||
         structure.quarterTurns < 0 ||
         structure.quarterTurns > 3 ||
-        !state.unlockedCatalogueIds.contains(structure.catalogueId) ||
         !facingMatchesSprite(
           structure.facing,
           structure.assetRole ?? definition.assetRoles.first,
@@ -713,7 +712,6 @@ void validateParcelWorldState(
         prop.subtileX >= propSubtilesPerAxis ||
         prop.subtileY < 0 ||
         prop.subtileY >= propSubtilesPerAxis ||
-        !state.unlockedCatalogueIds.contains(prop.catalogueId) ||
         (prop.assetRole != null &&
             !definition.assetRoles.contains(prop.assetRole)) ||
         !facingMatchesSprite(
@@ -897,15 +895,12 @@ void validateParcelWorldState(
       }
     }
   }
-  // Population gates: enabled models whose unlock threshold the settlement's
-  // derived population has reached must be unlocked. Disabled models stay
-  // valid in the unlock set (disable-not-delete keeps old saves loadable).
-  final expectedUnlocks = content.purchaseableModels
-      .where((model) => state.population >= model.unlockAtPopulation)
-      .map((model) => model.id)
-      .toSet();
-  if (!state.unlockedCatalogueIds.containsAll(expectedUnlocks) ||
-      state.unlockedCatalogueIds.any((id) => content.structure(id) == null)) {
+  // The unlock set gates *placement*, never possession: saves may
+  // legally hold items above the reached milestone (nature exotics,
+  // re-tiered content), so only garbage ids are invalid here.
+  // Disabled models stay valid in the set (disable-not-delete keeps
+  // old saves loadable).
+  if (state.unlockedCatalogueIds.any((id) => content.structure(id) == null)) {
     throw const FormatException('The parcel-world model unlocks are invalid.');
   }
 

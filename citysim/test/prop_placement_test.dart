@@ -398,6 +398,87 @@ void main() {
     );
   });
 
+  test('nature exotics stay locked but remain valid possessions', () {
+    // A strategic grove: pines re-tiered into a late milestone. The
+    // fresh world buys the parcel — the trees are the settlement's,
+    // the placement rights are not, and the save stays valid: unlocks
+    // gate placement, never possession.
+    final exotic = ContentBundle(
+      manifest: content.manifest,
+      terrain: content.terrain,
+      catalogue: content.catalogue,
+      sprites: content.sprites,
+      economy: content.economy,
+      ambience: content.ambience,
+      progression: ProgressionContent(
+        milestones: [
+          for (final milestone in content.progression.milestones)
+            if (milestone.id == 'homestead')
+              MilestoneDefinition(
+                id: milestone.id,
+                name: milestone.name,
+                population: milestone.population,
+                models: [
+                  for (final model in milestone.models)
+                    if (model != 'pine-tree') model,
+                ],
+              )
+            else if (milestone.id == 'city')
+              MilestoneDefinition(
+                id: milestone.id,
+                name: milestone.name,
+                population: milestone.population,
+                models: [...milestone.models, 'pine-tree'],
+              )
+            else
+              milestone,
+        ],
+      ),
+    );
+    final nature = natureWith(const [
+      TerrainProp(
+        catalogueId: 'pine-tree',
+        cell: CellCoord(3, 10),
+        subtileX: 2,
+        subtileY: 3,
+      ),
+    ]);
+    // The town is settled under the exotic bundle's ladder: the pines
+    // sit in the late milestone, so the placement set lacks them.
+    var world = town().copyWith(
+      unlockedCatalogueIds: {
+        for (final id in town().unlockedCatalogueIds)
+          if (id != 'pine-tree') id,
+      },
+    );
+    world = purchaseParcel(world, exotic, nature, const ParcelCoord(0, 1));
+
+    // The trees materialized; the model did not unlock with them.
+    expect(world.props.map((prop) => prop.id), contains('prop:3,10:2.3'));
+    expect(world.unlockedCatalogueIds, isNot(contains('pine-tree')));
+    // Possession is valid at any milestone; placement is refused.
+    expect(
+      () => validateParcelWorldState(world, exotic, nature),
+      returnsNormally,
+    );
+    expect(
+      () => startStructureConstruction(
+        world,
+        exotic,
+        nature,
+        catalogueId: 'pine-tree',
+        origin: const CellCoord(4, 12),
+      ),
+      throwsA(
+        isA<WorldRuleViolation>().having(
+          (error) => error.message,
+          'message',
+          contains('not been unlocked'),
+        ),
+      ),
+    );
+  });
+
   test('a save prop outside owned parcels fails validation', () {
     final world = town().copyWith(
       props: [

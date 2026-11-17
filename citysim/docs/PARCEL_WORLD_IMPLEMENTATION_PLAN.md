@@ -68,6 +68,49 @@ kinds, structured payloads, and readable descriptions, but they are not
 persisted — storage is state (IDs, coordinates, construction stages), not
 history. Do not emit an event per render or clock tick.
 
+### Progression: milestones, the high-water, and possession (2026-11-16)
+
+`progression.json` is the milestone layer above the catalogue:
+`MilestoneDefinition` (stable `id`, display `name`, `population`
+threshold, `models`) inside `ProgressionContent`. The catalogue's
+per-model `unlockAtPopulation` is retired — models never decide their
+own tier; the editor's Progression tab re-tiers them by drag-and-drop
+between milestone rows, and models in no milestone are the
+"not part of progression" bucket. Content validation: structural rules
+are errors (unique non-empty ids, strictly increasing thresholds,
+known enabled models, no double assignment); balance rules are
+warnings pinned by the shipped-content test suite (a residential
+model at the population-0 milestone; unassigned models that cannot
+appear as nature are dead content).
+
+The save stores the progression high-water in UserData —
+`progression_milestone` (the reached milestone's stable id) and
+`progression_milestone_population` (its threshold when reached, the
+deleted-milestone fallback) — plus `builder_capacity` as a plain
+integer. The codec derives the unlock set through the reached
+milestone, falling back to `reachedBy(population)` for legacy saves
+(exact: population has only ever grown) and writing the rows on the
+next save. `unlockedCatalogueIds` stays the in-session runtime set
+with all placement checks unchanged.
+
+Three semantics hold the design together:
+
+- **Possession is never gated.** Save validation no longer checks
+  unlocks on structures or props — only that ids resolve. Buying a
+  parcel materializes its nature without unlocking the models (the
+  exotic strategic-parcel rule), and re-tiered content cannot brick a
+  save holding the moved items. The unlock set's only validation is
+  against garbage ids.
+- **The high-water never regresses.** Check-in and the load-time
+  `reconcileWorldProgression` share `_advanceProgression`: cross every
+  milestone the population reaches beyond the stored one (one named
+  `milestone-reached` event each), union the derived set into the
+  state's (never replacement — nothing granted ever leaves), and grow
+  builder capacity to the table. A population dip crosses nothing.
+- **Content edits flow.** The derived set comes from the milestone,
+  so models newly added to (or lowered into) reached milestones
+  unlock at the next load or crossing.
+
 ## 4. Terrain and derived queries
 
 Terrain is authored content: `terrain.json` maps every parcel on the map
@@ -718,13 +761,13 @@ Scoping and constraints agreed 2026-11-14:
   dead end immediately.
 - **Affordable at zero.** Demolition must be free or labor-priced; a
   coin price reintroduces the dead end it exists to remove.
-- **Occupied demolition is a later slice** and needs population
-  high-water guards first: unlocks and builder capacity re-derive
-  from population on load (so evictions would re-lock models and
-  shrink capacity, breaking the reconcile-upward promise), and
-  population-scaled parcel prices and service coverage would become
-  churn-exploitable (demolish homes, buy the cheaper parcel, rebuild
-  for free).
+- **Occupied demolition is a later slice**: population-scaled parcel
+  prices and service coverage would become churn-exploitable (demolish
+  homes, buy the cheaper parcel, rebuild for free). The old blocker —
+  unlocks and builder capacity re-deriving from population on load —
+  is fixed (2026-11-16): the progression high-water milestone and
+  builder capacity persist in UserData and never regress, so a
+  population dip can no longer re-lock models or shrink capacity.
 
 ### Regression checks
 
@@ -740,5 +783,11 @@ flutter analyze
 flutter test
 flutter build web
 ```
+
+The test suites split along the code/data seam (2026-11-16):
+`shipped_content_test.dart` pins what the shipped content JSONs carry —
+seeded defaults, findable maps, free decorations, the milestone ladder —
+and fails when data drifts; validation *rule* tests (synthetic bad
+content) live with the game code in `parcel_world_content_test.dart`.
 
 Also verify negative-coordinate conversion; atomic quote/reducer behavior; wallet receipt reconciliation; JSON/store round-trips for funded projects and reservations; visible failure for unsupported schemas; stable road/bridge connectivity; camera gestures that do not trigger purchases; desktop/mobile hit testing; and city-sim preview isolation from port 9000.

@@ -15,25 +15,6 @@ void main() {
     content = await loadContentBundle(const AssetContentSource());
   });
 
-  test(
-    'all logical catalogue and road-mask roles resolve to supplied art',
-    () async {
-      final roles = <String>{
-        ...content.catalogue.expand((definition) => definition.assetRoles),
-        for (var mask = 0; mask < 16; mask++) roadSpriteRole(mask),
-        ...requiredSpriteRoles,
-      };
-      for (final role in roles) {
-        final definition = content.sprite(role);
-        expect(definition, isNotNull, reason: role);
-        // Every door facing of the sprite must bundle as a loadable asset.
-        for (final path in content.allAssetPaths(role)) {
-          expect(await rootBundle.load(path), isNotNull, reason: path);
-        }
-      }
-    },
-  );
-
   test('sprite side shifts validate within half the sprite width', () {
     // The seeded sprites carry no side shifts at all.
     final seeded = validateContentData(
@@ -42,6 +23,7 @@ void main() {
       economy: content.economy,
       ambience: content.ambience,
       terrain: content.terrain,
+      progression: content.progression,
     );
     expect(
       seeded.where((issue) => issue.message.contains('side shift')),
@@ -64,6 +46,7 @@ void main() {
         economy: content.economy,
         ambience: content.ambience,
         terrain: content.terrain,
+        progression: content.progression,
       ).any(
         (issue) =>
             issue.severity == 'error' && issue.message.contains('side shift'),
@@ -81,6 +64,7 @@ void main() {
         economy: content.economy,
         ambience: content.ambience,
         terrain: content.terrain,
+        progression: content.progression,
       ).any(
         (issue) =>
             issue.severity == 'error' &&
@@ -101,6 +85,7 @@ void main() {
         economy: content.economy,
         ambience: content.ambience,
         terrain: content.terrain,
+        progression: content.progression,
       ).where((issue) => issue.message.contains('side shift')),
       isEmpty,
     );
@@ -149,6 +134,7 @@ void main() {
         economy: content.economy,
         ambience: content.ambience,
         terrain: content.terrain,
+        progression: content.progression,
       ).where((issue) => issue.message.contains('walkable')),
       isEmpty,
     );
@@ -170,6 +156,7 @@ void main() {
       economy: content.economy,
       ambience: content.ambience,
       terrain: content.terrain,
+      progression: content.progression,
     );
     expect(
       issues.any(
@@ -223,6 +210,7 @@ void main() {
         economy: content.economy,
         ambience: content.ambience,
         terrain: content.terrain,
+        progression: content.progression,
       ).any(
         (issue) =>
             issue.severity == 'error' && issue.message.contains('surfaceLift'),
@@ -247,6 +235,7 @@ void main() {
         economy: content.economy,
         ambience: bad,
         terrain: content.terrain,
+        progression: content.progression,
       ).any(
         (issue) =>
             issue.severity == 'error' && issue.message.contains('Tile grid'),
@@ -286,6 +275,7 @@ void main() {
         economy: content.economy,
         ambience: bad,
         terrain: content.terrain,
+        progression: content.progression,
       ).any(
         (issue) =>
             issue.severity == 'error' &&
@@ -298,13 +288,9 @@ void main() {
   test('decorations are free by rule', () {
     // Props are the one thing a brand-new settlement can spend on
     // before its first road and home, so they can never drain the
-    // founding treasury. The shipped catalogue already prices every
-    // decoration at zero; a priced one is a validation error.
-    for (final model in content.catalogue) {
-      if (model.kind == StructureKind.decoration) {
-        expect(model.costCoins, 0, reason: model.id);
-      }
-    }
+    // founding treasury. A priced one is a validation error; the
+    // shipped catalogue's own zero prices are pinned in
+    // shipped_content_test.dart.
     final priced = [
       for (final model in content.catalogue)
         if (model.id == 'street-lamp') model.copyWith(costCoins: 3) else model,
@@ -316,6 +302,7 @@ void main() {
         economy: content.economy,
         ambience: content.ambience,
         terrain: content.terrain,
+        progression: content.progression,
       ).any(
         (issue) =>
             issue.severity == 'error' &&
@@ -329,13 +316,8 @@ void main() {
     // The founding purchase needs a parcel with five or more land
     // cells, so content validation requires the map to offer at
     // least one — an all-water map could never start a new game.
-    expect(
-      content.terrain.parcels.keys.any(
-        (coord) => content.terrain.landCellCount(coord) >= foundingLandCells,
-      ),
-      isTrue,
-      reason: 'the shipped map has a findable founding parcel',
-    );
+    // (The shipped map's own findability is pinned in
+    // shipped_content_test.dart.)
     final unfoundable = TerrainContent(
       generatorVersion: content.terrain.generatorVersion,
       parcels: {const ParcelCoord(0, 0): TerrainKind.water},
@@ -347,6 +329,7 @@ void main() {
         economy: content.economy,
         ambience: content.ambience,
         terrain: unfoundable,
+        progression: content.progression,
       ).any(
         (issue) =>
             issue.severity == 'error' &&
@@ -356,175 +339,143 @@ void main() {
     );
   });
 
-  test('content seed snapshot holds the seeded defaults', () {
-    // Snapshot guard: these values are the seeded defaults the dashboard
-    // starts from — the original nine models, the promoted Buggy
-    // Studio pack art, and the promoted props. Editing them in the
-    // editor is expected; editing them by accident in the JSON is not.
-    expect(content.catalogue, hasLength(40));
-    final byId = {for (final model in content.catalogue) model.id: model};
-    expect(byId['small-home']!.costCoins, 0);
-    expect(byId['small-home']!.taxCoins, 3);
-    expect(byId['small-home']!.upkeepCoins, 0);
-    expect(byId['small-home']!.constructionStages, 2);
-    expect(byId['small-home']!.population, 1);
-    expect(byId['small-home']!.unlockAtPopulation, 0);
-    expect(byId['cafe']!.costCoins, 0);
-    expect(byId['cafe']!.netCoinsPerCheckIn, 2);
-    expect(byId['flower-garden']!.costCoins, 0);
-    expect(byId['flower-garden']!.kind, StructureKind.decoration);
-    expect(byId['flower-garden']!.population, 0);
-    expect(byId['pine-tree']!.costCoins, 0);
-    expect(byId['medium-home']!.costCoins, 0);
-    expect(byId['medium-home']!.unlockAtPopulation, 5);
-    expect(byId['fruit-market']!.costCoins, 0);
-    expect(byId['community-clinic']!.costCoins, 0);
-    expect(byId['community-clinic']!.upkeepCoins, 4);
-    expect(byId['community-clinic']!.unlockAtPopulation, 10);
-    expect(byId['apartments']!.costCoins, 0);
-    expect(byId['apartments']!.taxCoins, 8);
-    expect(byId['apartments']!.footprintColumns, 2);
-    expect(byId['apartments']!.footprintRows, 2);
-    expect(byId['apartments']!.unlockAtPopulation, 20);
-    expect(byId['city-office']!.costCoins, 0);
+  test('progression milestones validate structure and floors', () {
+    ProgressionContent withMilestones(List<Map<String, Object?>> raw) =>
+        ProgressionContent.fromJson({'milestones': raw});
 
-    // Promoted pack art: representative snapshot of the new models.
-    expect(byId['small-home']!.assetRoles, hasLength(6));
-    expect(byId['medium-home']!.assetRoles, hasLength(5));
-    expect(byId['city-office']!.assetRoles, hasLength(5));
-    expect(byId['ice-cream-shop']!.unlockAtPopulation, 0);
-    expect(byId['large-home']!.costCoins, 0);
-    expect(byId['large-home']!.assetRoles, hasLength(6));
-    expect(byId['large-home']!.unlockAtPopulation, 10);
-    expect(byId['warehouse']!.footprintColumns, 2);
-    expect(byId['warehouse']!.subcategory, 'industrial');
-    expect(byId['construction-site']!.kind, StructureKind.building);
-    expect(byId['construction-site']!.population, 0);
-    expect(byId['hospital']!.unlockAtPopulation, 30);
-
-    // Promoted props: representative snapshot of the decoration batch.
-    expect(byId['common-tree']!.kind, StructureKind.decoration);
-    expect(byId['common-tree']!.costCoins, 0);
-    expect(byId['common-tree']!.assetRoles, hasLength(2));
-    expect(byId['street-lamp']!.costCoins, 0);
-    expect(byId['street-lamp']!.subcategory, 'streetside');
-    expect(byId['traffic-light']!.costCoins, 0);
-    expect(byId['rocks']!.assetRoles, hasLength(6));
-    expect(byId['rocks']!.subcategory, 'rocks');
-    expect(byId['tires']!.subcategory, 'clutter');
-    expect(byId['wild-grass']!.costCoins, 0);
-
-    expect(content.economy.startingTreasuryCoins, 20);
-    expect(content.economy.startingBuilderCapacity, 1);
-    expect(content.economy.roadTileCostCoins, 4);
-    expect(content.economy.bridgeTileCostCoins, 12);
+    // Structural errors: duplicate ids, non-increasing thresholds,
+    // unknown and disabled models, a model in two milestones.
     expect(
-      content.economy.parcelBaseCoins,
-      32,
-      reason:
-          'the flat part of the parcel price, before the population '
-          'surcharge',
-    );
-    expect(content.economy.parcelPerPopulationCoins, 2);
-    expect(content.economy.roadUpkeepCoinsPerTile, 1);
-    expect(content.economy.bridgeUpkeepCoinsPerTile, 1);
-    expect(content.economy.roadTaxCoinsPerTile, 0);
-    expect(content.economy.bridgeTaxCoinsPerTile, 0);
-    // Stage-2.1 seeds: waiting-list demand and contentment.
-    expect(content.economy.migrationPercentPerCheckIn, 2);
-    expect(content.economy.employmentPercentPerCheckIn, 5);
-    expect(content.economy.waitingHouseholdsCapPercent, 10);
-    expect(content.economy.unemploymentTolerancePercent, 10);
-    expect(content.economy.jobPullPercentPerCheckIn, 10);
-    expect(content.economy.contentmentFloorPercent, 30);
-    expect(content.economy.serviceRequirementPopulation, 10);
-    expect(content.economy.requiredServiceCategories, [
-      'fire',
-      'police',
-      'health',
-    ]);
-    expect(byId['small-home']!.households, 1);
-    expect(byId['apartments']!.households, 1);
-    expect(byId['cafe']!.jobs, 4);
-    expect(byId['tall-office']!.jobs, 5);
-    expect(byId['fire-station']!.serviceCategory, 'fire');
-    expect(byId['fire-station']!.serviceCapacity, 50);
-    expect(byId['community-clinic']!.serviceCategory, 'health');
-    expect(byId['community-clinic']!.serviceCapacity, 25);
-    expect(byId['hospital']!.serviceCategory, 'health');
-    expect(byId['water-tower']!.serviceCategory, isNull);
-    expect(content.economy.builderProgression, hasLength(3));
-    expect(
-      content.economy.builderCapacityForPopulation(1000),
-      4,
-      reason: 'the seeded progression tops out at four builders',
-    );
-
-    expect(content.ambience.ambientTimeScale, 1.0);
-    // 0.6 draws a person at ~1.8 m on the 0.2 m/px scale ruler.
-    expect(content.ambience.pedestrians.spriteScale, closeTo(0.6, 0.001));
-    // Street life follows population: 20% of the live save's 51 is
-    // the ten walkers the old road-based formula happened to show.
-    expect(content.ambience.pedestrians.populationPercent, 20);
-    // Traffic follows population too: ten types, percents summing
-    // to one hundred, a sedan-heavy civilian mix, and colour
-    // variants rolled per trip.
-    expect(content.ambience.cars.populationPercent, 10);
-    expect(content.ambience.cars.minTripCells, 10);
-    expect(content.ambience.cars.types, hasLength(9));
-    expect(
-      content.ambience.cars.types.fold(0, (sum, type) => sum + type.percent),
-      100,
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: content.terrain,
+        progression: withMilestones([
+          {
+            'id': 'a',
+            'name': 'A',
+            'population': 0,
+            'models': ['small-home'],
+          },
+          {'id': 'a', 'name': 'Again', 'population': 5, 'models': const []},
+        ]),
+      ).any((issue) => issue.message.contains('Duplicate milestone')),
+      isTrue,
     );
     expect(
-      content.ambience.cars.types
-          .firstWhere((type) => type.id == 'sedan')
-          .variants,
-      const ['blue', 'white', 'red'],
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: content.terrain,
+        progression: withMilestones([
+          {
+            'id': 'a',
+            'name': 'A',
+            'population': 5,
+            'models': ['small-home'],
+          },
+          {'id': 'b', 'name': 'B', 'population': 5, 'models': const []},
+        ]),
+      ).any((issue) => issue.message.contains('strictly above')),
+      isTrue,
     );
-    // The E-W straight carries the painted traffic lanes (editor,
-    // 2026-11): right-hand drive — eastbound rows 4-5, westbound
-    // rows 2-3, and nothing painted for the cross directions.
-    expect(content.sprite('road.straight.se')!.lanes['east-1'], const [
-      0,
-      0,
-      0,
-      0,
-      255,
-      255,
-      0,
-      0,
-    ]);
-    expect(content.sprite('road.straight.se')!.lanes['west-1'], const [
-      0,
-      0,
-      255,
-      255,
-      0,
-      0,
-      0,
-      0,
-    ]);
-    expect(content.sprite('road.straight.se')!.lanes['north-1'], isNull);
-    // Render tuning is authored on the Vehicles page (2026-11),
-    // so it grows with tuning; the invariant is that every entry
-    // names a real type with in-range, well-named anchors.
-    for (final entry in content.ambience.cars.render.entries) {
-      expect(
-        content.ambience.cars.types.any((type) => type.id == entry.key),
-        isTrue,
-        reason: 'render tuning "${entry.key}" names a vehicle type',
-      );
-      for (final anchor in entry.value.anchor.entries) {
-        expect(
-          const ['NE', 'NW', 'SE', 'SW'].contains(anchor.key),
-          isTrue,
-          reason: 'anchor direction "${anchor.key}" is valid',
-        );
-        expect(anchor.value.$1, inInclusiveRange(-0.5, 1.5));
-        expect(anchor.value.$2, inInclusiveRange(-0.5, 1.5));
-      }
-    }
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: content.terrain,
+        progression: withMilestones([
+          {
+            'id': 'a',
+            'name': 'A',
+            'population': 0,
+            'models': ['not-a-model'],
+          },
+        ]),
+      ).any((issue) => issue.message.contains('unknown model')),
+      isTrue,
+    );
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: content.terrain,
+        progression: withMilestones([
+          {
+            'id': 'a',
+            'name': 'A',
+            'population': 0,
+            'models': ['small-home'],
+          },
+          {
+            'id': 'b',
+            'name': 'B',
+            'population': 5,
+            'models': ['small-home'],
+          },
+        ]),
+      ).any((issue) => issue.message.contains('two milestones')),
+      isTrue,
+    );
+
+    // Balance warnings, not errors: no home at the population-0
+    // milestone is a dead new game (warned, pinned on the shipped
+    // content by the content suite); a building in no milestone is
+    // dead content, while a nature-capable decoration in none is
+    // the legitimate not-part-of-progression bucket.
+    final issues = validateContentData(
+      catalogue: content.catalogue,
+      sprites: content.sprites,
+      economy: content.economy,
+      ambience: content.ambience,
+      terrain: content.terrain,
+      progression: withMilestones([
+        {
+          'id': 'a',
+          'name': 'A',
+          'population': 0,
+          'models': ['cafe'],
+        },
+      ]),
+    );
+    expect(
+      issues.any(
+        (issue) =>
+            issue.severity == 'warning' &&
+            issue.message.contains('residential model unlocks'),
+      ),
+      isTrue,
+    );
+    expect(
+      issues
+          .where((issue) => issue.severity == 'error')
+          .any((issue) => issue.message.contains('milestone')),
+      isFalse,
+      reason: 'the missing starter home warns, it does not error',
+    );
+    expect(
+      issues.any(
+        (issue) =>
+            issue.severity == 'warning' &&
+            issue.message.contains('small-home') &&
+            issue.message.contains('never placeable'),
+      ),
+      isTrue,
+      reason: 'an unassigned building is dead content',
+    );
+    expect(
+      issues.any((issue) => issue.message.contains('pine-tree')),
+      isFalse,
+      reason: 'an unassigned nature-capable decoration is legitimate',
+    );
   });
 
   test('negative cell coordinates map to the correct neighboring parcels', () {
@@ -756,6 +707,7 @@ void main() {
       economy: content.economy,
       ambience: content.ambience,
       terrain: terrain,
+      progression: content.progression,
     );
     expect(
       strayIssues.where((issue) => issue.message.contains('unauthored parcel')),
@@ -773,6 +725,7 @@ void main() {
           'parcels': {'0,0': 'grass'},
           'tiles': {'3,4': 'water', '5,1': 'fog', '40,40': 'water'},
         }),
+        progression: content.progression,
       ).where((issue) => issue.message.contains('cannot be fog')),
       isNotEmpty,
       reason: 'fog is not a tile-level kind',
@@ -788,6 +741,7 @@ void main() {
           'parcels': {'0,0': 'grass', '1,0': 'water'},
           'tiles': {'3,4': 'water', '12,2': 'grass'},
         }),
+        progression: content.progression,
       ).where((issue) => issue.message.startsWith('Tile ')),
       isEmpty,
       reason: 'grass and water overrides inside authored parcels pass',
@@ -820,6 +774,7 @@ void main() {
         economy: content.economy,
         ambience: content.ambience,
         terrain: terrain,
+        progression: content.progression,
       ).any(
         (issue) =>
             issue.severity == 'error' &&
@@ -844,6 +799,7 @@ void main() {
         economy: content.economy,
         ambience: content.ambience,
         terrain: withProps(props),
+        progression: content.progression,
       ))
         if (issue.severity == 'error' && issue.message.contains('ature'))
           issue.message,

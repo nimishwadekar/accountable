@@ -352,6 +352,7 @@ class TextFieldBox extends StatelessWidget {
     required this.onChanged,
     this.maxLines = 1,
     this.help,
+    this.readOnly = false,
     super.key,
   });
 
@@ -363,9 +364,14 @@ class TextFieldBox extends StatelessWidget {
   /// One-sentence explanation shown by the trailing help icon.
   final String? help;
 
+  /// Read-only display: the field shows the value but refuses edits —
+  /// for derived badges (e.g. which milestone owns a model).
+  final bool readOnly;
+
   @override
   Widget build(BuildContext context) => TextFormField(
     initialValue: value,
+    readOnly: readOnly,
     decoration: InputDecoration(
       labelText: label,
       border: const OutlineInputBorder(),

@@ -251,6 +251,7 @@ void main() {
       sprites: content.sprites,
       economy: content.economy.copyWith(jobPullPercentPerCheckIn: 50),
       ambience: content.ambience,
+      progression: content.progression,
     );
     final withPull = checkInWorldForToday(
       advanceWorldDays(settled, 1),

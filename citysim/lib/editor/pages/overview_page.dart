@@ -82,63 +82,96 @@ class OverviewPage extends StatelessWidget {
 
   List<Widget> _progressionRows(
     List<Map<String, Object?>> models,
-    Iterable<Map> progression,
+    Iterable<Map> builderProgression,
   ) {
-    final ordered = [...models]
-      ..sort(
-        (a, b) =>
-            asInt(a['unlockAtPopulation'])
-                .compareTo(asInt(b['unlockAtPopulation'])),
-      );
+    // The milestone layer owns the order: rows follow progression.json,
+    // each header naming the milestone and the builder capacity the
+    // economy grants at (or below) its population. Models in no
+    // milestone close the list as nature-only.
+    final milestones =
+        ((categories['progression.json'] as Map?)?['milestones'] as List?)
+            ?.cast<Map>() ??
+        const [];
+    final byId = {for (final model in models) '${model['id']}': model};
     final rows = <Widget>[];
-    var lastThreshold = -1;
-    for (final model in ordered) {
-      final threshold = asInt(model['unlockAtPopulation']);
-      if (threshold != lastThreshold) {
-        final grants = progression
-            .where((step) => asInt(step['atPopulation']) == threshold)
-            .toList();
-        rows.add(
-          _thresholdHeader(
-            threshold,
-            grants.isEmpty
-                ? null
-                : 'builder capacity → ${asInt(grants.first['capacity'])}',
-          ),
-        );
-        lastThreshold = threshold;
+    var lastCapacity = 1;
+    for (final milestone in milestones) {
+      final threshold = asInt(milestone['population']);
+      final grants = builderProgression
+          .where((step) => asInt(step['atPopulation']) <= threshold)
+          .toList();
+      if (grants.isNotEmpty) {
+        lastCapacity = asInt(grants.last['capacity']);
       }
-      rows.add(_modelRow(model));
+      rows.add(
+        _thresholdHeader(
+          threshold,
+          'builder capacity → $lastCapacity',
+          '${milestone['name'] ?? milestone['id']}',
+        ),
+      );
+      for (final modelId in (milestone['models'] as List?) ?? const []) {
+        final model = byId['$modelId'];
+        if (model != null) rows.add(_modelRow(model));
+      }
+    }
+    final assigned = <String>{
+      for (final milestone in milestones)
+        for (final modelId in (milestone['models'] as List?) ?? const [])
+          '$modelId',
+    };
+    final natureOnly = [
+      for (final model in models)
+        if (!assigned.contains('${model['id']}')) model,
+    ];
+    if (natureOnly.isNotEmpty) {
+      rows.add(_thresholdHeader(-1, null, 'Not part of progression'));
+      for (final model in natureOnly) {
+        rows.add(_modelRow(model));
+      }
     }
     return rows;
   }
 
-  Widget _thresholdHeader(int threshold, String? grant) => Container(
-    margin: const EdgeInsets.only(top: 10, bottom: 4),
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-    decoration: BoxDecoration(
-      color: threshold == 0 ? Colors.green.shade100 : Colors.teal.shade50,
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Row(
-      children: [
-        Icon(
-          threshold == 0 ? Icons.flag_rounded : Icons.groups_rounded,
-          size: 16,
-          color: Colors.green.shade800,
+  Widget _thresholdHeader(int threshold, String? grant, String label) =>
+      Container(
+        margin: const EdgeInsets.only(top: 10, bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: threshold == 0
+              ? Colors.green.shade100
+              : threshold < 0
+              ? Colors.brown.shade50
+              : Colors.teal.shade50,
+          borderRadius: BorderRadius.circular(8),
         ),
-        const SizedBox(width: 6),
-        Text(
-          threshold == 0 ? 'Available from the start' : 'Population $threshold',
-          style: const TextStyle(fontWeight: FontWeight.w700),
+        child: Row(
+          children: [
+            Icon(
+              threshold == 0
+                  ? Icons.flag_rounded
+                  : threshold < 0
+                  ? Icons.park_rounded
+                  : Icons.groups_rounded,
+              size: 16,
+              color: Colors.green.shade800,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              threshold == 0
+                  ? '$label — from the start'
+                  : threshold < 0
+                  ? label
+                  : '$label — population $threshold',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            if (grant != null) ...[
+              const SizedBox(width: 8),
+              Text(grant, style: TextStyle(color: Colors.teal.shade800)),
+            ],
+          ],
         ),
-        if (grant != null) ...[
-          const SizedBox(width: 8),
-          Text(grant, style: TextStyle(color: Colors.teal.shade800)),
-        ],
-      ],
-    ),
-  );
+      );
 
   Widget _modelRow(Map<String, Object?> model) {
     final roles = (model['assetRoles'] as List?)?.cast<String>() ?? const [];

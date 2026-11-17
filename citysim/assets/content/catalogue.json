@@ -26,7 +26,6 @@
       "serviceCapacity": 0,
       "subcategory": "houses",
       "taxCoins": 3,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -50,7 +49,6 @@
       "serviceCapacity": 0,
       "subcategory": "commerce",
       "taxCoins": 4,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 2
     },
     {
@@ -74,7 +72,6 @@
       "serviceCapacity": 0,
       "subcategory": "commerce",
       "taxCoins": 4,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 2
     },
     {
@@ -103,7 +100,6 @@
       "serviceCapacity": 0,
       "subcategory": "flowers",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -132,7 +128,6 @@
       "serviceCapacity": 0,
       "subcategory": "trees",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -160,7 +155,6 @@
       "serviceCapacity": 0,
       "subcategory": "trees",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -189,7 +183,6 @@
       "serviceCapacity": 0,
       "subcategory": "trees",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -219,7 +212,6 @@
       "serviceCapacity": 0,
       "subcategory": "flowers",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -244,7 +236,6 @@
       "serviceCapacity": 0,
       "subcategory": "streetside",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -270,7 +261,6 @@
       "serviceCapacity": 0,
       "subcategory": "streetside",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -295,7 +285,6 @@
       "serviceCapacity": 0,
       "subcategory": "streetside",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -320,7 +309,6 @@
       "serviceCapacity": 0,
       "subcategory": "streetside",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -345,7 +333,6 @@
       "serviceCapacity": 0,
       "subcategory": "streetside",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -369,7 +356,6 @@
       "serviceCapacity": 0,
       "subcategory": "streetside",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -396,7 +382,6 @@
       "serviceCapacity": 0,
       "subcategory": "streetside",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -423,7 +408,6 @@
       "serviceCapacity": 0,
       "subcategory": "streetside",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -455,7 +439,6 @@
       "serviceCapacity": 0,
       "subcategory": "rocks",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -480,7 +463,6 @@
       "serviceCapacity": 0,
       "subcategory": "clutter",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -505,7 +487,6 @@
       "serviceCapacity": 0,
       "subcategory": "clutter",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -531,7 +512,6 @@
       "serviceCapacity": 0,
       "subcategory": "clutter",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -558,7 +538,6 @@
       "serviceCapacity": 0,
       "subcategory": "clutter",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -582,7 +561,6 @@
       "serviceCapacity": 0,
       "subcategory": "sites",
       "taxCoins": 0,
-      "unlockAtPopulation": 0,
       "upkeepCoins": 0
     },
     {
@@ -610,7 +588,6 @@
       "serviceCapacity": 0,
       "subcategory": "houses",
       "taxCoins": 5,
-      "unlockAtPopulation": 5,
       "upkeepCoins": 0
     },
     {
@@ -634,7 +611,6 @@
       "serviceCapacity": 0,
       "subcategory": "commerce",
       "taxCoins": 3,
-      "unlockAtPopulation": 5,
       "upkeepCoins": 1
     },
     {
@@ -658,7 +634,6 @@
       "serviceCapacity": 0,
       "subcategory": "commerce",
       "taxCoins": 5,
-      "unlockAtPopulation": 5,
       "upkeepCoins": 3
     },
     {
@@ -682,7 +657,6 @@
       "serviceCapacity": 0,
       "subcategory": "commerce",
       "taxCoins": 5,
-      "unlockAtPopulation": 5,
       "upkeepCoins": 3
     },
     {
@@ -707,7 +681,6 @@
       "serviceCapacity": 0,
       "subcategory": "houses",
       "taxCoins": 2,
-      "unlockAtPopulation": 5,
       "upkeepCoins": 0
     },
     {
@@ -732,7 +705,6 @@
       "serviceCategory": "health",
       "subcategory": "civic",
       "taxCoins": 0,
-      "unlockAtPopulation": 10,
       "upkeepCoins": 4
     },
     {
@@ -761,7 +733,6 @@
       "serviceCapacity": 0,
       "subcategory": "houses",
       "taxCoins": 6,
-      "unlockAtPopulation": 10,
       "upkeepCoins": 0
     },
     {
@@ -788,7 +759,6 @@
       "serviceCapacity": 0,
       "subcategory": "offices",
       "taxCoins": 6,
-      "unlockAtPopulation": 10,
       "upkeepCoins": 3
     },
     {
@@ -812,7 +782,6 @@
       "serviceCapacity": 0,
       "subcategory": "civic",
       "taxCoins": 0,
-      "unlockAtPopulation": 10,
       "upkeepCoins": 2
     },
     {
@@ -836,7 +805,6 @@
       "serviceCapacity": 0,
       "subcategory": "civic",
       "taxCoins": 0,
-      "unlockAtPopulation": 15,
       "upkeepCoins": 3
     },
     {
@@ -860,7 +828,6 @@
       "serviceCapacity": 0,
       "subcategory": "commerce",
       "taxCoins": 6,
-      "unlockAtPopulation": 15,
       "upkeepCoins": 4
     },
     {
@@ -886,7 +853,6 @@
       "serviceCapacity": 0,
       "subcategory": "industrial",
       "taxCoins": 5,
-      "unlockAtPopulation": 15,
       "upkeepCoins": 3
     },
     {
@@ -911,7 +877,6 @@
       "serviceCapacity": 0,
       "subcategory": "apartments",
       "taxCoins": 8,
-      "unlockAtPopulation": 20,
       "upkeepCoins": 1
     },
     {
@@ -939,7 +904,6 @@
       "serviceCapacity": 0,
       "subcategory": "offices",
       "taxCoins": 9,
-      "unlockAtPopulation": 20,
       "upkeepCoins": 6
     },
     {
@@ -964,7 +928,6 @@
       "serviceCategory": "police",
       "subcategory": "civic",
       "taxCoins": 0,
-      "unlockAtPopulation": 20,
       "upkeepCoins": 4
     },
     {
@@ -989,7 +952,6 @@
       "serviceCategory": "fire",
       "subcategory": "civic",
       "taxCoins": 0,
-      "unlockAtPopulation": 20,
       "upkeepCoins": 4
     },
     {
@@ -1015,7 +977,6 @@
       "serviceCapacity": 0,
       "subcategory": "offices",
       "taxCoins": 9,
-      "unlockAtPopulation": 25,
       "upkeepCoins": 5
     },
     {
@@ -1040,7 +1001,6 @@
       "serviceCategory": "health",
       "subcategory": "civic",
       "taxCoins": 0,
-      "unlockAtPopulation": 30,
       "upkeepCoins": 6
     }
   ]

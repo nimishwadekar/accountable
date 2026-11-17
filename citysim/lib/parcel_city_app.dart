@@ -680,13 +680,25 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     final prop = world.props.where((prop) => prop.id == propId).firstOrNull;
     if (prop == null) return;
     final definition = _requireContent.structure(prop.catalogueId)!;
+    // Possession is never gated, but placement is: a prop whose model
+    // the settlement has not unlocked (a nature exotic, re-tiered
+    // content) cannot be placed again once picked up.
+    final milestone = _requireContent.progression.milestoneForModel(
+      prop.catalogueId,
+    );
+    final locked =
+        milestone != null &&
+        !world.unlockedCatalogueIds.contains(prop.catalogueId);
+    final natureOnly = milestone == null;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Pick up ${definition.name.toLowerCase()}?'),
-        content: const Text(
+        content: Text(
           'Free — no coins are refunded. The tile and subtile become '
-          'placeable again.',
+          'placeable again.'
+          '${locked ? '\n\nThis one is beyond your progression — you will not be able to place it again until ${milestone.name}.' : ''}'
+          '${natureOnly ? '\n\nThis one is not part of the progression — it cannot be placed again.' : ''}',
         ),
         actions: [
           TextButton(
@@ -1539,6 +1551,13 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                 final unlocked = world.unlockedCatalogueIds.contains(
                   definition.id,
                 );
+                // The milestone layer owns unlock copy: locked models
+                // name the milestone, and models in no milestone are
+                // not part of the progression — never placeable.
+                final milestone = _requireContent.progression.milestoneForModel(
+                  definition.id,
+                );
+                final natureOnly = milestone == null;
                 return Material(
                   color: Colors.transparent,
                   child: ListTile(
@@ -1552,12 +1571,16 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                     ),
                     title: Text(definition.name),
                     subtitle: Text(
-                      unlocked
+                      natureOnly
+                          ? 'Not part of progression'
+                          : unlocked
                           ? '${definition.costLabel} · '
                                 '${definition.kind == StructureKind.decoration ? 'instant placement' : 'coin-funded project'}'
-                          : 'Unlocks at ${definition.unlockAtPopulation} population',
+                          : 'Unlocks at ${milestone.name}',
                     ),
-                    trailing: unlocked
+                    trailing: natureOnly
+                        ? const Icon(Icons.park_rounded)
+                        : unlocked
                         ? (_selectedCatalogueId == definition.id
                               ? const Icon(Icons.check_circle_rounded)
                               : const Icon(Icons.chevron_right_rounded))

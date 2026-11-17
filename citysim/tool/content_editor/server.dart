@@ -35,6 +35,7 @@ const categoryFiles = [
   'terrain.json',
   'economy.json',
   'ambience.json',
+  'progression.json',
 ];
 
 Future<void> main(List<String> args) async {
@@ -325,6 +326,7 @@ Map<String, Object?> _validateBundleMaps(
     final terrain = _asMap(body, 'terrain.json');
     final economy = _asMap(body, 'economy.json');
     final ambience = _asMap(body, 'ambience.json');
+    final progression = _asMap(body, 'progression.json');
     final bundle = parseContentBundle(
       manifest: manifest,
       catalogue: catalogue,
@@ -332,6 +334,7 @@ Map<String, Object?> _validateBundleMaps(
       economy: economy,
       ambience: ambience,
       terrain: terrain,
+      progression: progression,
     );
     final issues =
         validateContentData(
@@ -340,6 +343,7 @@ Map<String, Object?> _validateBundleMaps(
             economy: bundle.economy,
             ambience: bundle.ambience,
             terrain: bundle.terrain,
+            progression: bundle.progression,
           ).map((issue) => issue.toString()).toList()
           ..addAll(
             checkSpriteFiles(sprites: bundle.sprites, packDirectory: assetsDir),

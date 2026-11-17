@@ -22,6 +22,7 @@ Future<void> main() async {
     economy: await readCategory('economy.json'),
     ambience: await readCategory('ambience.json'),
     terrain: await readCategory('terrain.json'),
+    progression: await readCategory('progression.json'),
   );
   stdout.writeln(
     'content parses; treasury start '

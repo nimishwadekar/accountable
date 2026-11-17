@@ -37,7 +37,6 @@ class StructureDefinition {
     required this.footprintRows,
     required this.costCoins,
     required this.population,
-    required this.unlockAtPopulation,
     required this.enabled,
     this.taxCoins = 0,
     this.upkeepCoins = 0,
@@ -81,10 +80,6 @@ class StructureDefinition {
   /// may sprinkle (trees, flowers, rocks). Future tags (shore, rocky)
   /// join here without code changes.
   final List<String> legalTerrain;
-
-  /// Population at which the model becomes unlocked. Zero means unlocked
-  /// from the start.
-  final int unlockAtPopulation;
 
   /// Tax this building pays into the treasury at each check-in once
   /// complete. Construction sites pay nothing — tax starts on
@@ -152,7 +147,6 @@ class StructureDefinition {
     int? footprintRows,
     int? costCoins,
     int? population,
-    int? unlockAtPopulation,
     bool? enabled,
     int? taxCoins,
     int? upkeepCoins,
@@ -173,7 +167,6 @@ class StructureDefinition {
     footprintRows: footprintRows ?? this.footprintRows,
     costCoins: costCoins ?? this.costCoins,
     population: population ?? this.population,
-    unlockAtPopulation: unlockAtPopulation ?? this.unlockAtPopulation,
     enabled: enabled ?? this.enabled,
     taxCoins: taxCoins ?? this.taxCoins,
     upkeepCoins: upkeepCoins ?? this.upkeepCoins,
@@ -195,7 +188,6 @@ class StructureDefinition {
     'footprint': {'columns': footprintColumns, 'rows': footprintRows},
     'costCoins': costCoins,
     'population': population,
-    'unlockAtPopulation': unlockAtPopulation,
     'enabled': enabled,
     'taxCoins': taxCoins,
     'upkeepCoins': upkeepCoins,
@@ -225,7 +217,6 @@ class StructureDefinition {
             (json['footprint'] as Map<String, Object?>)['rows']! as int,
         costCoins: json['costCoins']! as int,
         population: json['population'] as int? ?? 0,
-        unlockAtPopulation: json['unlockAtPopulation'] as int? ?? 0,
         enabled: json['enabled'] as bool? ?? true,
         taxCoins: json['taxCoins'] as int? ?? 0,
         upkeepCoins: json['upkeepCoins'] as int? ?? 0,
@@ -1245,6 +1236,125 @@ class TerrainContent {
   }
 }
 
+/// One population milestone: every model it lists unlocks for
+/// placement when the settlement's population high-water reaches it.
+/// Milestones are a layer *above* the catalogue — models do not know
+/// which milestone they belong to — and a model in no milestone is
+/// legal too: not part of the progression, placeable never, and (for
+/// nature-capable decorations) existing purely as authored terrain
+/// vegetation.
+class MilestoneDefinition {
+  const MilestoneDefinition({
+    required this.id,
+    required this.name,
+    required this.population,
+    required this.models,
+  });
+
+  /// Stable identity, saved in UserData as the progression high-water.
+  /// Never changes after creation (renames touch [name] only), so
+  /// reordering, retuning thresholds, and renaming cannot shift what
+  /// a save has reached.
+  final String id;
+
+  /// Display label.
+  final String name;
+
+  /// Population at which the milestone is reached.
+  final int population;
+
+  /// Catalogue model ids that unlock for placement here.
+  final List<String> models;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'population': population,
+    'models': models,
+  };
+
+  static MilestoneDefinition fromJson(Map<String, Object?> json) =>
+      MilestoneDefinition(
+        id: json['id']! as String,
+        name: json['name']! as String,
+        population: json['population']! as int,
+        models: [for (final model in json['models']! as List) model as String],
+      );
+}
+
+/// The progression layer: ordered milestones deciding when the player
+/// gains *placement* access to catalogue models. Possession is never
+/// gated — saves may legally hold items above the reached milestone
+/// (nature exotics, re-tiered content); only new placement checks the
+/// unlock set.
+class ProgressionContent {
+  const ProgressionContent({required this.milestones});
+
+  final List<MilestoneDefinition> milestones;
+
+  /// Milestones ordered by population threshold, ties by list order.
+  List<MilestoneDefinition> get sorted {
+    final order = [...milestones];
+    order.sort((a, b) {
+      final byPopulation = a.population.compareTo(b.population);
+      return byPopulation != 0
+          ? byPopulation
+          : milestones.indexOf(a).compareTo(milestones.indexOf(b));
+    });
+    return order;
+  }
+
+  MilestoneDefinition? byId(String id) {
+    for (final milestone in milestones) {
+      if (milestone.id == id) return milestone;
+    }
+    return null;
+  }
+
+  /// The milestone a population reaches: the last in [sorted] whose
+  /// threshold it meets, or none before the first.
+  MilestoneDefinition? reachedBy(int population) {
+    MilestoneDefinition? reached;
+    for (final milestone in sorted) {
+      if (population >= milestone.population) reached = milestone;
+    }
+    return reached;
+  }
+
+  /// Every model unlocked through [milestone], inclusive.
+  Set<String> modelsUnlockedThrough(MilestoneDefinition milestone) {
+    final models = <String>{};
+    for (final entry in sorted) {
+      models.addAll(entry.models);
+      if (entry.id == milestone.id) break;
+    }
+    return models;
+  }
+
+  /// The milestone a model belongs to, or null when found-in-nature
+  /// only (or unassigned dead content, which validation warns about).
+  MilestoneDefinition? milestoneForModel(String modelId) {
+    for (final milestone in milestones) {
+      if (milestone.models.contains(modelId)) return milestone;
+    }
+    return null;
+  }
+
+  Map<String, Object?> toJson() => {
+    'milestones': [for (final milestone in milestones) milestone.toJson()],
+  };
+
+  static ProgressionContent fromJson(Map<String, Object?> json) =>
+      ProgressionContent(
+        milestones: [
+          for (final milestone in json['milestones']! as List)
+            MilestoneDefinition.fromJson(
+              (milestone as Map).cast<String, Object?>(),
+            ),
+        ],
+      );
+}
+
 ParcelCoord _parcelCoord(String key) {
   final parts = key.split(',');
   if (parts.length != 2) {
@@ -1352,6 +1462,7 @@ List<ContentIssue> validateContentData({
   required EconomyContent economy,
   required AmbienceContent ambience,
   required TerrainContent terrain,
+  required ProgressionContent progression,
 }) {
   final issues = <ContentIssue>[];
   void error(String message) => issues.add(ContentIssue('error', message));
@@ -1519,9 +1630,6 @@ List<ContentIssue> validateContentData({
     if (model.serviceCategory == null && model.serviceCapacity > 0) {
       error('${model.id}: service capacity without a service category.');
     }
-    if (model.unlockAtPopulation < 0) {
-      error('${model.id}: unlock threshold must not be negative.');
-    }
     if (model.footprintColumns < 1 || model.footprintRows < 1) {
       error('${model.id}: footprint must be at least 1×1.');
     }
@@ -1561,19 +1669,86 @@ List<ContentIssue> validateContentData({
       }
     }
   }
-  final startingModels = catalogue
-      .where((model) => model.enabled && model.unlockAtPopulation == 0)
-      .length;
-  if (startingModels == 0) {
-    error('At least one enabled model must unlock at population 0.');
+
+  // The progression layer: milestones are the single authority over
+  // when models unlock for placement. Structural rules are errors —
+  // the derivation and the editor tab rely on them; the balance
+  // rules are warnings, pinned on the shipped content by the content
+  // test suite instead.
+  final milestoneIds = <String>{};
+  final milestoneOrder = progression.sorted;
+  var previousThreshold = -1;
+  for (final milestone in milestoneOrder) {
+    if (milestone.id.isEmpty) {
+      error('A milestone has an empty id.');
+    }
+    if (!milestoneIds.add(milestone.id)) {
+      error('Duplicate milestone id "${milestone.id}".');
+    }
+    if (milestone.name.isEmpty) {
+      error('Milestone "${milestone.id}" has an empty name.');
+    }
+    if (milestone.population < 0) {
+      error('Milestone "${milestone.id}" needs a non-negative population.');
+    }
+    if (milestone.population <= previousThreshold) {
+      error(
+        'Milestone "${milestone.id}" (${milestone.population}) must sort '
+        'strictly above the previous milestone ($previousThreshold).',
+      );
+    }
+    previousThreshold = milestone.population;
+    for (final modelId in milestone.models) {
+      final model = modelsById[modelId];
+      if (model == null) {
+        error('Milestone "${milestone.id}" unlocks unknown model "$modelId".');
+      } else if (!model.enabled) {
+        error(
+          'Milestone "${milestone.id}" unlocks disabled model "$modelId" '
+          '— milestones govern placement, so a disabled model has none.',
+        );
+      }
+    }
   }
-  final disabledInUse = catalogue
-      .where((model) => !model.enabled && model.unlockAtPopulation == 0)
-      .length;
-  if (disabledInUse > 0) {
+  // A model may belong to at most one milestone; models in none are
+  // not part of the progression — legitimate for nature-capable
+  // decorations (the brush can still sprinkle them), dead content
+  // for anything else (warning, not error: balance is the content
+  // suite's job).
+  final assigned = <String>{};
+  for (final milestone in milestoneOrder) {
+    for (final modelId in milestone.models) {
+      if (!assigned.add(modelId)) {
+        error('Model "$modelId" belongs to two milestones.');
+      }
+    }
+  }
+  for (final model in catalogue) {
+    if (assigned.contains(model.id)) continue;
+    final natureOnly =
+        model.kind == StructureKind.decoration && model.legalTerrain.isNotEmpty;
+    if (!natureOnly) {
+      warning(
+        '${model.id} belongs to no milestone and cannot appear as '
+        'nature — it is never placeable.',
+      );
+    }
+  }
+  // The fresh-game floor: without a home reachable at start, a new
+  // game can found and road but never gain population — a hard lock.
+  final fromStart = milestoneOrder.isEmpty
+      ? const <String>[]
+      : milestoneOrder.first.population == 0
+      ? milestoneOrder.first.models
+      : const <String>[];
+  final hasStarterHome = fromStart.any((modelId) {
+    final model = modelsById[modelId];
+    return model != null && model.enabled && model.isResidential;
+  });
+  if (!hasStarterHome) {
     warning(
-      '$disabledInUse start-unlocked model(s) are disabled; new '
-      'worlds will not offer them.',
+      'No residential model unlocks at the population-0 milestone — '
+      'a new game can never gain population.',
     );
   }
 

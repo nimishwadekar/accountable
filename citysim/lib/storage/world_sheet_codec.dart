@@ -29,6 +29,19 @@ const _lastCheckInDateKey = 'last_checkin_date';
 const _checkInCountKey = 'checkin_count';
 const _constructionDayKey = 'construction_day';
 
+/// The progression high-water: the last milestone reached, by id, plus
+/// the population threshold it had when reached (the fallback when the
+/// milestone is later deleted from content). Absent on legacy saves —
+/// derived once from current population, which is exact because
+/// population has only ever grown.
+const _progressionMilestoneKey = 'progression_milestone';
+const _progressionMilestonePopulationKey = 'progression_milestone_population';
+
+/// Builder capacity, persisted as a plain integer: derived-from-
+/// population at load would shrink under any future population dip,
+/// possibly below in-use builder slots.
+const _builderCapacityKey = 'builder_capacity';
+
 /// Writes the world's player-visible facts into the five sheets.
 SheetTables worldToSheetTables(ParcelWorldState state) {
   final userData = <String, String>{
@@ -45,6 +58,10 @@ SheetTables worldToSheetTables(ParcelWorldState state) {
       _lastCheckInDateKey: worldDateKey(state.lastCheckInDate!),
     _checkInCountKey: '${state.checkInCount}',
     _constructionDayKey: '${state.constructionDay}',
+    _progressionMilestoneKey: ?state.progressionMilestoneId,
+    _progressionMilestonePopulationKey:
+        '${state.progressionMilestonePopulation}',
+    _builderCapacityKey: '${state.builderCapacity}',
   };
 
   final tiles = <List<String>>[
@@ -397,6 +414,29 @@ ParcelWorldState sheetTablesToWorld(
     }
   }
 
+  // The progression high-water. Stored as the reached milestone's id
+  // plus the threshold it had when reached; a legacy save with no row
+  // derives once from current population (exact — population has only
+  // ever grown). Unlocks gate placement, never possession: the set is
+  // derived from the milestone, so a population dip cannot re-lock.
+  final progression = content.progression;
+  final storedMilestoneId = userData[_progressionMilestoneKey];
+  final storedMilestonePopulation =
+      userData.containsKey(_progressionMilestonePopulationKey)
+      ? _userInt(userData, _progressionMilestonePopulationKey)
+      : null;
+  MilestoneDefinition? reached;
+  if (storedMilestoneId != null && storedMilestoneId.isNotEmpty) {
+    reached = progression.byId(storedMilestoneId);
+  }
+  if (reached == null) {
+    // Deleted milestone or legacy save: fall back to the shadow
+    // threshold (or current population, for legacy saves — the two
+    // agree historically).
+    final threshold = storedMilestonePopulation ?? population;
+    reached = progression.reachedBy(threshold);
+  }
+
   return ParcelWorldState(
     worldId: 'parcel-world-$seed',
     seed: seed,
@@ -404,13 +444,18 @@ ParcelWorldState sheetTablesToWorld(
     rulesVersion: parcelWorldRulesVersion,
     contentVersion: parcelWorldContentVersion,
     parcelSize: defaultParcelSize,
-    builderCapacity: content.economy.builderCapacityForPopulation(population),
+    builderCapacity: userData.containsKey(_builderCapacityKey)
+        ? _userInt(userData, _builderCapacityKey)
+        : content.economy.builderCapacityForPopulation(population),
     simulatedDate: simulatedDate,
     checkInHighWaterDate: highWaterDate,
     constructionDay: constructionDay,
     waitingHouseholds: waitingHouseholds,
     population: population,
     employedPopulation: employedPopulation,
+    progressionMilestoneId: reached?.id,
+    progressionMilestonePopulation:
+        reached?.population ?? storedMilestonePopulation ?? 0,
     coins: _userInt(userData, _coinsKey),
     totalCoinsEarned: _userInt(userData, _coinsEarnedKey),
     totalCoinsSpent: _userInt(userData, _coinsSpentKey),
@@ -422,10 +467,9 @@ ParcelWorldState sheetTablesToWorld(
         ? null
         : _userDate(userData, _lastCheckInDateKey),
     checkInCount: checkInCount,
-    unlockedCatalogueIds: {
-      for (final model in content.purchaseableModels)
-        if (model.unlockAtPopulation <= population) model.id,
-    },
+    unlockedCatalogueIds: reached == null
+        ? const {}
+        : progression.modelsUnlockedThrough(reached),
     parcels: parcels,
     roads: roadsByCell.values.toList(),
     structures: structures,

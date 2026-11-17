@@ -29,6 +29,23 @@ class _CataloguePageState extends State<CataloguePage> {
   /// subcategory is expanded at a time.
   String? _expandedKey;
 
+  /// Read-only badge text: which progression milestone owns a model.
+  /// The catalogue never decides its own tier — the Progression page
+  /// does — so this is derived for display only.
+  String _milestoneLabel(String modelId) {
+    final milestones =
+        ((widget.categories['progression.json'] as Map?)?['milestones']
+            as List?) ??
+        const [];
+    for (final milestone in milestones.cast<Map>()) {
+      final models = (milestone['models'] as List?) ?? const [];
+      if (models.contains(modelId)) {
+        return '${milestone['name']} (${milestone['population']} pop.)';
+      }
+    }
+    return 'Not part of progression';
+  }
+
   @override
   Widget build(BuildContext context) {
     final models = modelList(widget.categories);
@@ -325,19 +342,19 @@ class _CataloguePageState extends State<CataloguePage> {
                   ),
                 ],
                 SizedBox(
-                  width: 150,
-                  child: IntField(
-                    label: 'Unlock at pop.',
-                    value: asInt(model['unlockAtPopulation']),
-                    min: 0,
+                  width: 190,
+                  child: TextFieldBox(
+                    label: 'Unlocks via',
+                    value: _milestoneLabel('${model['id']}'),
+                    readOnly: true,
                     help:
-                        'Population the settlement must reach before this '
-                        'model can be planned. 0 means available from the '
-                        'start.',
-                    onChanged: (v) => _editModel(
-                      id,
-                      (model) => model['unlockAtPopulation'] = v,
-                    ),
+                        'The progression milestone that unlocks this model '
+                        'for placement — edit it on the Progression page by '
+                        'dragging items between milestones. Models not part '
+                        'of the progression are never placeable; when they '
+                        'are nature-capable, the brush can still sprinkle '
+                        'them as terrain vegetation.',
+                    onChanged: (_) {},
                   ),
                 ),
                 SizedBox(

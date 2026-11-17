@@ -301,6 +301,59 @@ void main() {
     );
   });
 
+  test('builder capacity and the progression high-water persist', () {
+    // A world whose stored capacity and reached milestone exceed what
+    // its population would derive: both survive the round-trip
+    // verbatim — a future population dip can shrink neither.
+    final world =
+        sheetTablesToWorld(
+          handwrittenTables(),
+          content: content,
+          terrainProvider: terrain,
+        ).copyWith(
+          builderCapacity: 4,
+          population: 12,
+          progressionMilestoneId: 'village',
+          progressionMilestonePopulation: 10,
+        );
+    final reloaded = sheetTablesToWorld(
+      worldToSheetTables(world),
+      content: content,
+      terrainProvider: terrain,
+    );
+    expect(reloaded.builderCapacity, 4, reason: 'persisted, not re-derived');
+    expect(reloaded.progressionMilestoneId, 'village');
+    expect(reloaded.progressionMilestonePopulation, 10);
+    expect(reloaded.unlockedCatalogueIds, contains('community-clinic'));
+
+    // Legacy saves with no milestone row derive once from their
+    // stored population — exact, because population has only ever
+    // grown — and write the row on their first save under the new
+    // rules.
+    expect(
+      handwrittenTables().userData.containsKey('progression_milestone'),
+      isFalse,
+      reason: 'the handwritten tables are a pre-migration save',
+    );
+    final legacyTables = SheetTables(
+      userData: {...handwrittenTables().userData, 'population': '12'},
+      ownedParcels: handwrittenTables().ownedParcels,
+      tiles: handwrittenTables().tiles,
+      projects: handwrittenTables().projects,
+    );
+    final migrated = sheetTablesToWorld(
+      legacyTables,
+      content: content,
+      terrainProvider: terrain,
+    );
+    expect(migrated.progressionMilestoneId, 'village');
+    expect(
+      worldToSheetTables(migrated).userData['progression_milestone'],
+      'village',
+      reason: 'the first save after migration writes the row',
+    );
+  });
+
   test('planned road tiles with dead project references still fail', () {
     final base = handwrittenTables();
     expect(

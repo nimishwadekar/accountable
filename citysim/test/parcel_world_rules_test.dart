@@ -98,12 +98,12 @@ void main() {
       expect(world.builderCapacity, 1);
       expect(
         world.unlockedCatalogueIds,
-        content.purchaseableModels
-            .where((model) => model.unlockAtPopulation == 0)
-            .map((model) => model.id)
-            .toSet(),
-        reason: 'starting unlocks are derived from the catalogue',
+        content.progression.modelsUnlockedThrough(
+          content.progression.sorted.first,
+        ),
+        reason: 'starting unlocks are the from-start milestone',
       );
+      expect(world.progressionMilestoneId, content.progression.sorted.first.id);
       expect(
         () => validateParcelWorldState(world, content, terrain),
         returnsNormally,
@@ -200,6 +200,76 @@ void main() {
             purchaseParcel(fresh, content, sparseLand, const ParcelCoord(0, 0)),
         throwsA(isA<WorldRuleViolation>()),
         reason: 'four land cells cannot found a settlement',
+      );
+    });
+
+    test('milestones cross once per check-in, named, and never re-lock', () {
+      // A founded town with one home, then a population jump through
+      // two milestones in one step — both cross together, each with
+      // one named event.
+      var world = grantWorldDebugCoins(newWorld(), 30);
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(3, 4),
+        nextDay,
+      );
+      world = world.copyWith(population: 12, employedPopulation: 12);
+      // The cottage's settling check-ins consumed the founding day;
+      // cross on the next one.
+      world = nextDay(world);
+      final crossed = world.events
+          .where((event) => event.kind == 'milestone-reached')
+          .toList();
+      expect(crossed.map((event) => event.payload['milestoneId']), [
+        'hamlet',
+        'village',
+      ], reason: 'both crossed milestones report, in order');
+      expect(crossed.first.description, contains('Hamlet reached'));
+      expect(world.progressionMilestoneId, 'village');
+      expect(world.progressionMilestonePopulation, 10);
+      expect(
+        world.unlockedCatalogueIds,
+        containsAll(['medium-home', 'community-clinic']),
+      );
+      expect(world.unlockedCatalogueIds, isNot(contains('church')));
+      expect(
+        world.builderCapacity,
+        greaterThan(1),
+        reason: 'capacity reconciles upward with the table',
+      );
+
+      // The population dips below both thresholds: nothing re-locks,
+      // in the session and across a save round-trip — the reload
+      // reads the stored high-water milestone, never raw population.
+      world = world.copyWith(population: 3, employedPopulation: 3);
+      expect(world.unlockedCatalogueIds, contains('community-clinic'));
+      final reloaded = sheetTablesToWorld(
+        worldToSheetTables(world),
+        content: content,
+        terrainProvider: terrain,
+      );
+      expect(reloaded.progressionMilestoneId, 'village');
+      expect(
+        reloaded.unlockedCatalogueIds,
+        contains('community-clinic'),
+        reason: 'a reload keeps the high-water, not the population',
+      );
+      expect(
+        () => validateParcelWorldState(reloaded, content, terrain),
+        returnsNormally,
+      );
+      // A further check-in at the dipped population crosses nothing.
+      final afterDip = checkInWorldForToday(
+        advanceWorldDays(reloaded, 1),
+        content,
+      );
+      expect(
+        afterDip.events
+            .where((event) => event.kind == 'milestone-reached')
+            .isEmpty,
+        isTrue,
       );
     });
 
@@ -746,28 +816,38 @@ void main() {
       world = world.copyWith(population: 3, employedPopulation: 3);
       expect(world.population, 3);
 
-      // Simulate lowered content thresholds: a hand-built variant of the
-      // bundle where medium-home unlocks at population 2 and a builder is
-      // granted at population 2.
+      // Simulate lowered content thresholds: a hand-built variant of
+      // the bundle where the Hamlet milestone sits at population 2
+      // and a builder is granted at population 2.
+      final hamlet = content.progression.byId('hamlet')!;
       final lowered = ContentBundle(
         manifest: content.manifest,
         terrain: content.terrain,
-        catalogue: [
-          for (final model in content.catalogue)
-            model.id == 'medium-home'
-                ? model.copyWith(unlockAtPopulation: 2)
-                : model,
-        ],
+        catalogue: content.catalogue,
         sprites: content.sprites,
         economy: _economyWithProgression(content, [
           const BuilderProgressionStep(atPopulation: 2, capacity: 2),
         ]),
         ambience: content.ambience,
+        progression: ProgressionContent(
+          milestones: [
+            for (final milestone in content.progression.milestones)
+              milestone.id == hamlet.id
+                  ? MilestoneDefinition(
+                      id: milestone.id,
+                      name: milestone.name,
+                      population: 2,
+                      models: milestone.models,
+                    )
+                  : milestone,
+          ],
+        ),
       );
 
       final reconciled = reconcileWorldProgression(world, lowered);
       expect(reconciled.unlockedCatalogueIds, contains('medium-home'));
       expect(reconciled.builderCapacity, 2);
+      expect(reconciled.progressionMilestoneId, 'hamlet');
       expect(
         reconcileWorldProgression(reconciled, lowered),
         same(reconciled),
@@ -958,6 +1038,7 @@ void main() {
         sprites: content.sprites,
         economy: content.economy.copyWith(serviceRequirementPopulation: 2),
         ambience: content.ambience,
+        progression: content.progression,
       );
       var world = newWorld();
       world = _buildCottage(

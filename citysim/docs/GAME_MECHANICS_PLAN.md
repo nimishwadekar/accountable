@@ -232,7 +232,7 @@ rewards.
 
 ## 7. Catalogue progression and features
 
-### Population and model unlocks
+### Population milestones and unlocks
 
 **Population** is the settlement's progression metric: the sum of each
 completed building's population value (decorations contribute 0 by
@@ -240,19 +240,45 @@ default). It is derived from placed structures — never stored — and only
 completed, fully funded buildings count. The game header shows it alongside
 coins.
 
-Building models unlock at population thresholds: a model becomes available
-once the settlement's population reaches its unlock value. The current
-seed uses uniform population 1 per building with thresholds at 5, 10, and
-20, replicating the earlier completed-building milestones exactly; both
-per-model population and unlock thresholds are content values tuned in the
-editor. A completed project can unlock models; an active, partially funded
-project cannot.
+**Milestones** are the progression layer above the catalogue
+(`progression.json`): named population thresholds, each carrying the models
+that unlock for *placement* when reached. The catalogue no longer knows its
+own tier — models are a layer below milestones, re-tired by dragging them
+between milestone rows in the editor's Progression tab. A model in no
+milestone is legal and meaningful: not part of the progression, placeable
+never — and, for nature-capable decorations, existing purely as authored
+terrain vegetation (the extreme of the exotic
+strategic-parcel idea — buying land for what grows on it, not what you can
+plant). The shipped ladder is Homestead 0, Hamlet 5, Village 10, Town 15,
+City 20, Metropolis 25, Regional Capital 30. The fresh-game floor is
+content-checked as a warning plus a shipped-content test: at least one
+residential model must unlock at the population-0 milestone, or a new game
+can never gain population.
 
-Unlocking a model does not upgrade or replace existing buildings and does not
-award coins. When content thresholds are lowered, saves gain any
-newly-expected unlocks on load (recorded once); unlocks are never removed
-retroactively. A dedicated building-upgrade system remains out of scope for
-the current slice.
+**Unlocks gate placement, never possession.** Saves may legally hold items
+above the reached milestone — nature exotics materialized by purchase,
+models re-tiered by content edits — and validation never rejects them;
+only new placement checks the unlock set. Picking up a locked prop is
+allowed (clearing land is sacred) but it cannot be placed again until its
+milestone, which the pick-up dialog says.
+
+**The high-water milestone never regresses.** The save stores the last
+milestone reached (stable id, plus the population threshold it had when
+reached — the fallback if the milestone is later deleted from content)
+rather than re-deriving unlocks from population on every load. Population
+dips — however they one day arrive — cannot re-lock anything. Within a
+session the unlock set only ever grows (union, never replacement), and
+each newly reached milestone reports as one named event ("Village reached
+· 4 new model(s) placeable") instead of per-model unlock spam. Builder
+capacity is likewise persisted as a plain integer and only reconciles
+upward.
+
+When content thresholds are lowered, saves gain any newly-expected
+unlocks on load (the load-time reconcile crosses what the population
+already reaches, and the derived set flows content edits in reached
+milestones into play). Unlocking a model does not upgrade or replace
+existing buildings and does not award coins. A dedicated
+building-upgrade system remains out of scope for the current slice.
 
 ### Features currently present
 

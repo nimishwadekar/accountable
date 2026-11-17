@@ -26,6 +26,7 @@ class ContentBundle {
     required this.economy,
     required this.ambience,
     required this.terrain,
+    required this.progression,
   });
 
   final ContentManifest manifest;
@@ -34,6 +35,9 @@ class ContentBundle {
   final EconomyContent economy;
   final AmbienceContent ambience;
   final TerrainContent terrain;
+
+  /// The milestone layer deciding when models unlock for placement.
+  final ProgressionContent progression;
 
   /// Root that sprite paths are resolved against.
   static const packRoot = 'assets';
@@ -73,16 +77,6 @@ class ContentBundle {
 
   int roadTileCost() => economy.roadTileCostCoins;
 
-  /// Population-sorted model list for progression previews.
-  List<StructureDefinition> get progressionOrder {
-    final models = [...catalogue];
-    models.sort((a, b) {
-      final byUnlock = a.unlockAtPopulation.compareTo(b.unlockAtPopulation);
-      return byUnlock != 0 ? byUnlock : a.id.compareTo(b.id);
-    });
-    return models;
-  }
-
   Map<String, Object?> toRawJson() => {
     'manifest': manifest.toJson(),
     'catalogue': {
@@ -96,6 +90,7 @@ class ContentBundle {
     'economy': economy.toJson(),
     'ambience': ambience.toJson(),
     'terrain': terrain.toJson(),
+    'progression': progression.toJson(),
   };
 }
 
@@ -109,6 +104,7 @@ ContentBundle parseContentBundle({
   required Map<String, Object?> economy,
   required Map<String, Object?> ambience,
   required Map<String, Object?> terrain,
+  required Map<String, Object?> progression,
 }) {
   final bundle = ContentBundle(
     manifest: ContentManifest.fromJson(manifest),
@@ -125,6 +121,7 @@ ContentBundle parseContentBundle({
     economy: EconomyContent.fromJson(economy),
     ambience: AmbienceContent.fromJson(ambience),
     terrain: TerrainContent.fromJson(terrain),
+    progression: ProgressionContent.fromJson(progression),
   );
   final issues = validateContentData(
     catalogue: bundle.catalogue,
@@ -132,6 +129,7 @@ ContentBundle parseContentBundle({
     economy: bundle.economy,
     ambience: bundle.ambience,
     terrain: bundle.terrain,
+    progression: bundle.progression,
   );
   final errors = issues.where((issue) => issue.severity == 'error').toList();
   if (errors.isNotEmpty) {
@@ -148,6 +146,7 @@ Future<ContentBundle> loadContentBundle(ContentSource source) async {
   final economy = await source.readCategory('economy.json');
   final ambience = await source.readCategory('ambience.json');
   final terrain = await source.readCategory('terrain.json');
+  final progression = await source.readCategory('progression.json');
   return parseContentBundle(
     manifest: manifest,
     catalogue: catalogue,
@@ -155,6 +154,7 @@ Future<ContentBundle> loadContentBundle(ContentSource source) async {
     economy: economy,
     ambience: ambience,
     terrain: terrain,
+    progression: progression,
   );
 }
 

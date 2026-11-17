@@ -410,6 +410,7 @@ void main() {
         tileGrid: content.ambience.tileGrid,
       ),
       terrain: content.terrain,
+      progression: content.progression,
     );
 
     final boundaryKey = GlobalKey();
@@ -557,6 +558,7 @@ void main() {
         unownedLandWash: content.ambience.unownedLandWash,
         tileGrid: const TileGridContent(alpha: 55, colorRgb: [30, 101, 82]),
       ),
+      progression: content.progression,
       terrain: content.terrain,
     );
     ParcelWorldProbe.recording = true;
@@ -833,6 +835,7 @@ void main() {
       sprites: content.sprites,
       economy: content.economy,
       ambience: content.ambience,
+      progression: content.progression,
       terrain: terrain,
     );
     final world = _anchorWorld(modified);
