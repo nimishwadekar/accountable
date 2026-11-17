@@ -1,25 +1,25 @@
 {
   "bridgeCost": {
-    "bridgeTileCostCoins": 12
+    "bridgeTileCostCoins": 50000
   },
   "bridgeTaxCoinsPerTile": 0,
-  "bridgeUpkeepCoinsPerTile": 1,
+  "bridgeUpkeepCoinsPerTile": 300,
   "contentmentFloorPercent": 30,
   "employmentPercentPerCheckIn": 5,
   "jobPullPercentPerCheckIn": 10,
   "migrationPercentPerCheckIn": 2,
-  "parcelBaseCoins": 32,
-  "parcelPerPopulationCoins": 2,
+  "parcelBaseCoins": 15000,
+  "parcelPerPopulationCoins": 150,
   "requiredServiceCategories": [
     "fire",
     "police",
     "health"
   ],
   "roadTaxCoinsPerTile": 0,
-  "roadTileCostCoins": 4,
-  "roadUpkeepCoinsPerTile": 1,
-  "serviceRequirementPopulation": 10,
-  "startingTreasuryCoins": 20,
+  "roadTileCostCoins": 2500,
+  "roadUpkeepCoinsPerTile": 10,
+  "serviceRequirementPopulation": 250,
+  "startingTreasuryCoins": 100000,
   "unemploymentTolerancePercent": 10,
-  "waitingHouseholdsCapPercent": 10
+  "waitingPopulationCapPercent": 10
 }

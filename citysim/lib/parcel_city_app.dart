@@ -855,10 +855,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                       '${quote.landCellCount} land cells and '
                       '${quote.cells.length - quote.landCellCount} water cells.'
                       '\n\nBuildings and roads are not included.'
-                : '${quote.price} coins · ${quote.landCellCount} land cells and '
+                : '${formatCoins(quote.price)} coins · ${quote.landCellCount} land cells and '
                       '${quote.cells.length - quote.landCellCount} water cells.\n\n'
-                      '${quote.basePrice} base '
-                      '+ ${quote.perPopulationCoins} × '
+                      '${formatCoins(quote.basePrice)} base '
+                      '+ ${formatCoins(quote.perPopulationCoins)} × '
                       '${world.population} population. '
                       'The price grows as the settlement does.\n\n'
                       'Buildings and roads are not included.',
@@ -919,19 +919,20 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           content: Text(
             definition.kind == StructureKind.decoration
                 ? quote.price > 0
-                      ? '${quote.price} coins · placed immediately.'
+                      ? '${formatCoins(quote.price)} coins · placed immediately.'
                       : 'Free · placed immediately.'
                 : 'Free to plan. It rises over '
                       '${definition.constructionStages} stages — one per '
                       'daily check-in. Once complete it pays '
-                      '+${definition.taxCoins} tax and costs '
-                      '−${definition.upkeepCoins} upkeep at each report. '
+                      '+${formatCoins(definition.taxCoins)} tax and costs '
+                      '−${formatCoins(definition.upkeepCoins)} upkeep at each '
+                      'report. '
                       '${definition.isResidential
-                          ? 'A household moves in while the town wants homes.'
+                          ? 'Citizens move in while the town wants homes.'
+                          : definition.isService
+                          ? 'It covers a population of ${definition.serviceCapacity} with ${definition.serviceCategory} service.'
                           : definition.isCommerce
                           ? 'Positions staff as demand for its ${definition.jobs} jobs appears.'
-                          : definition.isService
-                          ? 'It covers ${definition.serviceCapacity} households of ${definition.serviceCategory} service.'
                           : ''}',
           ),
           actions: [
@@ -1128,11 +1129,11 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Taxes collected   +$taxes'),
-            Text('Upkeep paid        −$paid'),
+            Text('Taxes collected   +${formatCoins(taxes)}'),
+            Text('Upkeep paid        −${formatCoins(paid)}'),
             if (shortfall > 0)
               Text(
-                'Upkeep unpaid     $shortfall — the treasury is empty',
+                'Upkeep unpaid     ${formatCoins(shortfall)} — the treasury is empty',
                 style: const TextStyle(color: Color(0xFF9A5B2B)),
               ),
             Text(
@@ -1140,7 +1141,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
               '${(contentment / 100).toStringAsFixed(2)}',
             ),
             Text(
-              'Net                 ${net >= 0 ? '+' : ''}$net',
+              'Net                 ${net >= 0 ? '+' : ''}${formatCoins(net)}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -1398,7 +1399,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             ),
           ),
           onDebugGrant: () =>
-              _runAction((state) => grantWorldDebugCoins(state, 10)),
+              _runAction((state) => grantWorldDebugCoins(state, 10000)),
           onCheckIn: _checkIn,
           canCheckIn: canCheckInWorldToday(world),
         ),
@@ -1429,10 +1430,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     final economy = _requireContent.economy;
     // The bars' scales: the waiting list's cap and the population.
     final resiBarMax =
-        (world.population * economy.waitingHouseholdsCapPercent / 100).floor() <
+        (world.population * economy.waitingPopulationCapPercent / 100).floor() <
             1
         ? 1
-        : (world.population * economy.waitingHouseholdsCapPercent / 100)
+        : (world.population * economy.waitingPopulationCapPercent / 100)
               .floor();
     final employmentBarMax = world.population < 1 ? 1 : world.population;
     // Physical scale: 12 m tiles turn the tile counts into km².
@@ -1456,9 +1457,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           ),
           if (ledger.coverage.isEmpty)
             Text(
-              'No services demanded yet — they matter from '
-              '${economy.serviceRequirementPopulation} '
-              'households.',
+              'No services demanded yet — they matter from a '
+              'population of ${economy.serviceRequirementPopulation}.',
               style: const TextStyle(fontSize: 11, color: Color(0xFF617267)),
             )
           else
@@ -1473,7 +1473,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             'Residential demand',
             ledger.residentialDemand,
             resiBarMax,
-            'households waiting to move in',
+            'population waiting to move in',
           ),
           _demandRow(
             'Employment demand',
@@ -1482,8 +1482,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             'citizens needing jobs',
           ),
           Text(
-            '${world.population} households · ${world.employedPopulation} '
-            'employed · ${ledger.residentialVacancy} vacant homes · '
+            'Population ${world.population} · ${world.employedPopulation} '
+            'employed · room for ${ledger.residentialVacancy} more · '
             '${ledger.jobVacancy} open jobs',
             style: const TextStyle(fontSize: 11, color: Color(0xFF617267)),
           ),
@@ -1556,12 +1556,12 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                     ? 'Start at ${_roadStartCell!.key}. Now click an end tile.'
                     : failure ??
                           '${_roadPlanCells.length} road tiles · '
-                              '${quote!.price} coins, paid upfront. The '
+                              '${formatCoins(quote!.price)} coins, paid upfront. The '
                               'stretch then builds one tile per check-in.',
               ),
               if (quote != null && world.coins < quote.price)
                 Text(
-                  'Save ${quote.price - world.coins} more coin(s) for this '
+                  'Save ${formatCoins(quote.price - world.coins)} more coin(s) for this '
                   'road plan.',
                 ),
               if (_roadStartCell != null)
@@ -1581,7 +1581,9 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                         onPressed: world.coins >= quote.price
                             ? _startRoadProject
                             : null,
-                        child: Text('Buy road plan · ${quote.price} coins'),
+                        child: Text(
+                          'Buy road plan · ${formatCoins(quote.price)} coins',
+                        ),
                       ),
                   ],
                 ),
@@ -1647,22 +1649,22 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     );
   }
 
-  /// Occupancy text for the inspector: households for homes,
-  /// staffed positions for commerce, nothing for civic.
   /// Capacity text for the inspector — occupancy itself is a town
-  /// aggregate, so a building shows what it offers.
+  /// aggregate, so a building shows what it offers: housed
+  /// population for homes, service coverage for civic services,
+  /// staffed positions for commerce.
   String? _capacityLabel(PlacedStructure structure) {
     final model = _requireContent.structure(structure.catalogueId);
     if (model == null) return null;
     if (model.isResidential) {
-      return 'Houses up to ${model.households} household(s)';
+      return 'Houses a population of up to ${model.population}';
+    }
+    if (model.isService) {
+      return 'Covers a population of ${model.serviceCapacity} for '
+          '${model.serviceCategory} service';
     }
     if (model.isCommerce) {
       return 'Offers ${model.jobs} job(s)';
-    }
-    if (model.isService) {
-      return 'Covers ${model.serviceCapacity} households of '
-          '${model.serviceCategory} service';
     }
     return null;
   }
@@ -1695,12 +1697,14 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             Text(
               world.parcels.isEmpty
                   ? 'Free — the first parcel costs nothing.'
-                  : '${quote.price} coins · ${quote.basePrice} base '
-                        '+ ${quote.perPopulationCoins} × '
+                  : '${formatCoins(quote.price)} coins · ${formatCoins(quote.basePrice)} base '
+                        '+ ${formatCoins(quote.perPopulationCoins)} × '
                         '${world.population} population.',
             ),
             if (world.coins < quote.price)
-              Text('Save ${quote.price - world.coins} more coin(s).'),
+              Text(
+                'Save ${formatCoins(quote.price - world.coins)} more coin(s).',
+              ),
             const SizedBox(height: 6),
             FilledButton(
               onPressed: world.coins >= quote.price
@@ -1746,7 +1750,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           const SizedBox(height: 4),
           Text(
             '${definition.footprintColumns}×${definition.footprintRows} footprint · '
-            '${definition.kind == StructureKind.decoration ? 'free · placed instantly' : 'free to plan · ${definition.constructionStages} stages · ${definition.netCoinsPerCheckIn >= 0 ? '+' : ''}${definition.netCoinsPerCheckIn} coins per report'}',
+            '${definition.kind == StructureKind.decoration ? 'free · placed instantly' : 'free to plan · ${definition.constructionStages} stages · ${definition.netCoinsPerCheckIn >= 0 ? '+' : ''}${formatCoins(definition.netCoinsPerCheckIn)} coins per report'}',
           ),
           const SizedBox(height: 6),
           Text(
@@ -1757,7 +1761,9 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           if (quote != null &&
               definition.kind == StructureKind.decoration &&
               world.coins < quote.price)
-            Text('Save ${quote.price - world.coins} more coin(s).'),
+            Text(
+              'Save ${formatCoins(quote.price - world.coins)} more coin(s).',
+            ),
           if (quote != null)
             FilledButton(
               onPressed:
@@ -1808,7 +1814,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                 : failure ??
                       '${quote!.spanCells.length} span '
                           '${quote.spanCells.length == 1 ? 'tile' : 'tiles'} · '
-                          '${quote.bridgeCost} coins, paid upfront. The deck '
+                          '${formatCoins(quote.bridgeCost)} coins, paid upfront. The deck '
                           'builds one tile per check-in. Spans may cross '
                           'water and land; everything under the bridge must '
                           'be owned.',
@@ -1830,7 +1836,9 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                     onPressed: world.coins >= quote.bridgeCost
                         ? _startBridgeProject
                         : null,
-                    child: Text('Buy bridge plan · ${quote.bridgeCost} coins'),
+                    child: Text(
+                      'Buy bridge plan · ${formatCoins(quote.bridgeCost)} coins',
+                    ),
                   ),
               ],
             ),
@@ -2016,7 +2024,7 @@ class _WorldHeader extends StatelessWidget {
   /// upkeep, before the zero floor.
   final int nextReportNet;
 
-  /// Occupied households — the settlement's population.
+  /// The settlement's population — occupied housing, in people.
   final int population;
   final bool canCheckIn;
   final VoidCallback onCheckIn;
@@ -2086,7 +2094,7 @@ class _WorldHeader extends StatelessWidget {
               'pays upkeep; purchases draw from it.',
           child: Chip(
             avatar: const Icon(Icons.toll_rounded, color: Color(0xFFAC7C20)),
-            label: Text('${state.coins} coins'),
+            label: Text('${formatCoins(state.coins)} coins'),
             backgroundColor: const Color(0xFFFFF8DA),
           ),
         ),
@@ -2104,7 +2112,7 @@ class _WorldHeader extends StatelessWidget {
             checkedIn
                 ? 'Checked in'
                 : canCheckIn
-                ? 'Check in · ${nextReportNet >= 0 ? '+' : ''}$nextReportNet'
+                ? 'Check in · ${nextReportNet >= 0 ? '+' : ''}${formatCoins(nextReportNet)}'
                 : 'Past day',
           ),
         ),
@@ -2252,7 +2260,7 @@ class _ClockControls extends StatelessWidget {
         ),
         OutlinedButton(
           onPressed: onDebugGrant,
-          child: const Text('Grant +10 test coins'),
+          child: const Text('Grant +10,000 test coins'),
         ),
       ],
     ),

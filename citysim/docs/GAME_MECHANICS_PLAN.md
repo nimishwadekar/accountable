@@ -64,14 +64,62 @@ with five or more land cells, so a new game can always be founded.
 
 ### Spending and project funding
 
-- The wallet starts at the founding stake (`startingTreasuryCoins`, 20 in
-  the shipped economy). Coins come from the town report in normal play.
-- Parcel purchases and instant decorations are paid immediately
-  (decorations cost nothing by rule).
-- Road-stretch and bridge plans are bought upfront from the wallet; the
-  tiles then creep in one per check-in. Structure plans complete one
-  stage per check-in.
+- The wallet starts at the founding grant (`startingTreasuryCoins`, 100,000
+  in the shipped economy — a development grant covering the opening years).
+  Coins come from the town report in normal play.
+- **Construction is free by rule** (pinned in content validation since
+  2026-11-17): buildings are gated by land, road access, and staged time —
+  never by money. Coins buy parcels, roads, and bridges; nothing else.
+  Decorations always were free; the pin now covers every model.
+- Parcel purchases are paid immediately. Road-stretch and bridge plans are
+  bought upfront from the wallet; the tiles then creep in one per check-in.
+  Structure plans complete one stage per check-in.
 - Calendar advancement alone never completes a project.
+
+### The realistic economy (decided 2026-11-17)
+
+Money was rescaled to real-world magnitudes — 1 coin = $1 — with the
+free-construction rule intact. Capacities count people, not households:
+
+- **Population is people.** A small home houses 3, a large home 5, the
+  apartments 40; shops offer real workplace counts (café 8, tall office
+  300). The `households` field is gone; `population` on a model *is* its
+  residential capacity, snapshotted per placed structure as before. The
+  save key `waiting_households` became `waiting_population` (absent keys
+  default to zero, so old saves load and simply reset their list).
+- **Taxes are a per-capita levy** at report time: ≈ $170 per housed
+  resident and $250 per job per check-in in the shipped content (civic
+  buildings pay nothing — services are pure cost, which is the contentment
+  trade-off). The rate is the one pacing dial: realistic annual property
+  rates (~1.2%/yr) would recoup a building in decades, so the levy runs at
+  per-report scale and a blended town roughly doubles its invested value
+  monthly.
+- **Land, roads, bridges**: parcels $15,000 base + $150 per population;
+  roads $2,500/tile ($10/tile upkeep); bridges $50,000/tile ($300/tile
+  upkeep). Because the parcel price escalates with population while tax
+  income scales with population, the parcel cadence stays roughly constant:
+  weekly in the founding era, about one per check-in late game.
+- **Services**: fire/police/health coverage is demanded from a population
+  of 250 (`serviceRequirementPopulation`); one clinic covers 400 people, a
+  fire station 1,200, a hospital 3,000. Coverage is deliberately tighter
+  than census reality so services stay a live constraint.
+- **Milestones** rescaled to people: 0 / 15 / 50 / 120 / 300 / 800 / 2,000
+  — Hamlet in ~5 weeks of daily check-ins, Regional Capital in about a
+  year. All rates (migration 2%, employment ramp 5%, job pull 10%,
+  tolerances 10%) are percentages and unchanged.
+- Coin values render with thousands separators (a `formatCoins` helper);
+  the clock panel's debug grant is now +10,000.
+- The pre-existing cities were hand-migrated to the new scale the same
+  day (the sanctioned path — saves are data, never code): city_1 kept its
+  fully-occupied, ~96%-employed character (population 254 = its 51 homes'
+  new capacities; 244 employed of 966 jobs), a treasury at
+  purchasing-power parity with the old one (100,000 ≈ 1.8 parcels then
+  and now), and a lifetime earned/spent ledger reconstructed from its
+  parcels, roads, and bridge tiles at new prices. Its missing milestone
+  row derives 'town' (120) from the migrated population on first load —
+  models above town that it already owns stay valid possessions, and
+  re-crossing 300 (city) re-unlocks placing them. city_2 was reset to
+  the new founding grant minus its two road tiles.
 
 ## 4. Land and expansion
 
@@ -471,7 +519,8 @@ per completed building. The decisions:
   field — nothing decided here conflicts with that.
 
 **Stage 1 seed values (first pass; everything is dashboard-tunable
-afterward).** The old prices were sized for a +1-coin-per-day income,
+afterward; superseded 2026-11-17 by the realistic economy above).**
+The old prices were sized for a +1-coin-per-day income,
 so upfront prices scale up alongside home taxes. Economy: starting
 treasury 20; road and bridge tax/upkeep 0/1 per tile;
 `parcelBaseCoins` 32 plus `parcelPerPopulationCoins` 2 per population,
@@ -490,7 +539,9 @@ town (51 homes, 12 commerce, 6 civic, 109 road tiles + 17 bridge
 tiles): roughly +85 per check-in; an early five-home town roughly +3.
 
 **Stage 2 — demand, occupancy, and contentment (designed
-2026-11-14, implemented 2026-11-14).** The growth-rules stage: demand
+2026-11-14, implemented 2026-11-14; population units rescaled to
+people 2026-11-17 — see the realistic economy above).** The
+growth-rules stage: demand
 does not gate building, it drives occupancy. Anything can always be
 planned and built, but homes sit vacant and shops stay shuttered
 until demand exists for them — vacant buildings pay no tax and full

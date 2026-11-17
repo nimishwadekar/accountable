@@ -109,7 +109,7 @@ void main() {
   test('saving a valid change writes the file and backs up', () async {
     final content = await _decode(await _get('/api/content'));
     final models = (content['catalogue.json'] as Map)['models'] as List;
-    (models.first as Map)['costCoins'] = 99;
+    (models.first as Map)['taxCoins'] = 510;
     final response = await _post('/api/content', content);
     expect(response.statusCode, 200);
     final body = await _decode(response);
@@ -117,7 +117,7 @@ void main() {
 
     final fresh = await _decode(await _get('/api/content'));
     final freshModels = (fresh['catalogue.json'] as Map)['models'] as List;
-    expect((freshModels.first as Map)['costCoins'], 99);
+    expect((freshModels.first as Map)['taxCoins'], 510);
 
     final backups = await _decode(await _get('/api/backups'));
     expect((backups['backups'] as List), isNotEmpty);

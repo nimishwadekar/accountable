@@ -3,7 +3,7 @@
   "cars": {
     "dwellSeconds": 2.5,
     "minTripCells": 10,
-    "populationPercent": 10,
+    "populationPercent": 2,
     "render": {
       "bus_school": {
         "anchor": {
@@ -240,6 +240,14 @@
       }
     }
   },
+  "claimedLandWash": {
+    "alpha": 64,
+    "colorRgb": [
+      130,
+      130,
+      145
+    ]
+  },
   "pedestrians": {
     "lateralWanderX": 3,
     "lateralWanderY": 2,
@@ -264,14 +272,6 @@
       181,
       220,
       207
-    ]
-  },
-  "claimedLandWash": {
-    "alpha": 64,
-    "colorRgb": [
-      130,
-      130,
-      145
     ]
   },
   "vegetationSway": {

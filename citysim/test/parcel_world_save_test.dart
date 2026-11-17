@@ -72,7 +72,7 @@ void main() {
     // plan, then save and reload mid-project.
     var world = grantWorldDebugCoins(
       checkInWorldForToday(newWorld(), content),
-      300,
+      350000,
     );
     world = purchaseParcel(world, content, terrain, const ParcelCoord(0, 0));
     world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));

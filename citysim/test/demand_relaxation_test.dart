@@ -119,13 +119,13 @@ void main() {
       b = nextDay(b);
     }
 
-    expect(a.population, 2);
+    expect(a.population, 5);
     expect(
       b.population,
-      2,
-      reason: 'both homes fill regardless of build order',
+      5,
+      reason: 'the town converges regardless of build order',
     );
-    expect(b.employedPopulation, 2);
+    expect(b.employedPopulation, 4);
     validateParcelWorldState(b, content, terrain);
   });
 
@@ -143,7 +143,7 @@ void main() {
     expect(world.population, 1);
     expect(world.employedPopulation, 0);
     expect(
-      world.waitingHouseholds,
+      world.waitingPopulation,
       1,
       reason:
           'tolerance floors at one, so one jobless family '
@@ -168,7 +168,7 @@ void main() {
     world = nextDay(world);
     world = nextDay(world);
     expect(world.population, 1);
-    expect(world.waitingHouseholds, 1);
+    expect(world.waitingPopulation, 1);
 
     world = startStructureConstruction(
       world,
@@ -189,19 +189,19 @@ void main() {
     world = nextDay(world);
     world = nextDay(world);
     expect(world.population, 2);
-    expect(world.waitingHouseholds, 0);
+    expect(world.waitingPopulation, 0);
     expect(world.unemployment, 2);
     final ledger = townLedger(world, content);
-    expect(ledger.residentialVacancy, 1);
+    expect(ledger.residentialVacancy, 7);
     expect(ledger.employmentDemand, 2);
   });
 
   test('surplus jobs pull migration faster', () {
-    // A market row along an eastward road: nine fruit-markets, 27
-    // job capacity, and a scaled town of 24 households all
-    // employed. The three surplus positions boost the migration
+    // A market row along an eastward road: nine fruit-markets, 54
+    // job capacity, and a scaled town of 40 citizens all
+    // employed. The fourteen surplus positions boost the migration
     // budget — with the pull at 50% the list refills to its cap of
-    // 2; with the seeded 10% (floor of 0.3) it refills to 1.
+    // 4; with the seeded 10% it refills to 2.
     var world = fresh();
     world = planRoadStretch(
       world,
@@ -236,9 +236,9 @@ void main() {
 
     final settled = reconcileWorldProgression(
       world.copyWith(
-        population: 24,
-        employedPopulation: 24,
-        waitingHouseholds: 0,
+        population: 40,
+        employedPopulation: 40,
+        waitingPopulation: 0,
       ),
       content,
     );
@@ -262,14 +262,14 @@ void main() {
       content,
     );
     expect(
-      withPull.waitingHouseholds,
-      2,
+      withPull.waitingPopulation,
+      4,
       reason: 'the pull-boosted budget refills the list to its cap',
     );
     expect(
-      withoutPull.waitingHouseholds,
-      1,
-      reason: 'the base budget alone refills one',
+      withoutPull.waitingPopulation,
+      2,
+      reason: 'the base budget alone refills two',
     );
   });
 }

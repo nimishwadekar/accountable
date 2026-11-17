@@ -129,11 +129,11 @@ class TownLedger {
   /// floor.
   final int contentment;
 
-  /// The residential waiting list: households that want in but
+  /// The residential waiting list: population that wants in but
   /// cannot (no housing).
   final int residentialDemand;
 
-  /// Unemployed citizens: households living in town without a job.
+  /// Unemployed citizens: people living in town without a job.
   final int employmentDemand;
 
   /// Vacant home capacity and vacant job positions. Negative
@@ -156,7 +156,7 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
   // employment rate over residential capacity, commerce taxes by
   // the staffing rate over job capacity — every home pays the
   // average rate, so unemployment reads as a town condition, not a
-  // named household's. Civic buildings are always active. Upkeep
+  // named citizen's. Civic buildings are always active. Upkeep
   // is always owed in full, vacant or not.
   var residentialCapacity = 0;
   var jobCapacity = 0;
@@ -168,7 +168,7 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
     final model = content.structure(structure.catalogueId);
     if (model == null) continue;
     if (model.isResidential) {
-      residentialCapacity += model.households;
+      residentialCapacity += model.population;
       homeTax += model.taxCoins;
     } else if (model.isCommerce) {
       jobCapacity += model.jobs;
@@ -235,7 +235,7 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
     taxes: taxes,
     upkeep: upkeep,
     contentment: contentment,
-    residentialDemand: state.waitingHouseholds,
+    residentialDemand: state.waitingPopulation,
     employmentDemand: state.unemployment,
     residentialVacancy: residentialCapacity - population,
     jobVacancy: jobCapacity - employed,
@@ -550,7 +550,7 @@ void validateParcelWorldState(
       state.coins < 0 ||
       state.totalCoinsEarned < 0 ||
       state.totalCoinsSpent < 0 ||
-      state.waitingHouseholds < 0 ||
+      state.waitingPopulation < 0 ||
       state.population < 0 ||
       state.employedPopulation < 0 ||
       state.employedPopulation > state.population ||

@@ -33,8 +33,8 @@ void main() {
     SheetTables(
       userData: const {
         'seed': '7',
-        'coins': '50',
-        'coins_earned': '50',
+        'coins': '50000',
+        'coins_earned': '50000',
         'coins_spent': '0',
         'simulated_date': '2026-11-02',
         'high_water_date': '2026-11-02',
@@ -91,7 +91,7 @@ void main() {
     expect(prop.subtileX, 2);
     expect(prop.subtileY, 3);
     expect(prop.pricePaid, 0, reason: 'props are free in the staged economy');
-    expect(world.coins, 50);
+    expect(world.coins, 50000);
     expect(
       world.structures.every(
         (structure) => structure.kind == StructureKind.building,

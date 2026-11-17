@@ -51,7 +51,7 @@ RoadSegment roadAt(String id, int column, int row) => RoadSegment(
 );
 
 /// A one-tile building; population marks it residential the way
-/// placed structures carry their households.
+/// placed structures carry their housed population.
 PlacedStructure building(
   String id,
   int column,

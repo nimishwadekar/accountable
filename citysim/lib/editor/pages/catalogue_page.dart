@@ -228,9 +228,11 @@ class _CataloguePageState extends State<CataloguePage> {
                     value: asInt(model['population']),
                     min: 0,
                     help:
-                        'Population this model adds once completed. '
-                        'Population is the progression metric: it gates '
-                        'model unlocks.',
+                        'Population this model houses once completed — '
+                        "a residential model's occupancy capacity in "
+                        'people. Population is also the progression '
+                        'metric: it gates model unlocks. Zero on '
+                        'non-residential models.',
                     onChanged: (v) =>
                         _editModel(id, (model) => model['population'] = v),
                   ),
@@ -280,21 +282,6 @@ class _CataloguePageState extends State<CataloguePage> {
                 ),
                 if (!isDecoration) ...[
                   SizedBox(
-                    width: 110,
-                    child: IntField(
-                      label: 'Households',
-                      value: asInt(model['households']),
-                      min: 0,
-                      help:
-                          'Households this home can hold — its '
-                          'occupancy capacity, filled family by family '
-                          'at check-ins while residential demand exists. '
-                          'Zero on non-residential models.',
-                      onChanged: (v) =>
-                          _editModel(id, (model) => model['households'] = v),
-                    ),
-                  ),
-                  SizedBox(
                     width: 90,
                     child: IntField(
                       label: 'Jobs',
@@ -316,7 +303,7 @@ class _CataloguePageState extends State<CataloguePage> {
                       value: asInt(model['serviceCapacity']),
                       min: 0,
                       help:
-                          'Households one completed service building '
+                          'Population one completed service building '
                           'of this model covers. Needs a service '
                           'category.',
                       onChanged: (v) => _editModel(

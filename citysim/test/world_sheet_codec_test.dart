@@ -32,7 +32,7 @@ void main() {
       'seed': '7',
       'population': '1',
       'employed_population': '1',
-      'waiting_households': '0',
+      'waiting_population': '0',
       'coins': '3',
       'coins_earned': '4',
       'coins_spent': '1',
@@ -154,12 +154,12 @@ void main() {
     expect(cottage.assetRole, 'home-small-yellow');
     expect(cottage.facing, 'east');
     expect(cottage.footprint, [const CellCoord(3, 4)]);
-    expect(cottage.population, 1);
+    expect(cottage.population, 3);
 
     // The aggregate counters round-trip through UserData.
     expect(world.population, 1);
     expect(world.employedPopulation, 1);
-    expect(world.waitingHouseholds, 0);
+    expect(world.waitingPopulation, 0);
 
     final project = world.constructions.single;
     expect(project.catalogueId, 'cafe');
@@ -461,9 +461,9 @@ void main() {
           content: content,
           terrainProvider: terrain,
         ).copyWith(
-          population: 12,
+          population: 60,
           progressionMilestoneId: 'village',
-          progressionMilestonePopulation: 10,
+          progressionMilestonePopulation: 50,
         );
     final reloaded = sheetTablesToWorld(
       worldToSheetTables(world),
@@ -471,7 +471,7 @@ void main() {
       terrainProvider: terrain,
     );
     expect(reloaded.progressionMilestoneId, 'village');
-    expect(reloaded.progressionMilestonePopulation, 10);
+    expect(reloaded.progressionMilestonePopulation, 50);
     expect(reloaded.unlockedCatalogueIds, contains('community-clinic'));
 
     // Legacy saves with no milestone row derive once from their
@@ -484,7 +484,7 @@ void main() {
       reason: 'the handwritten tables are a pre-migration save',
     );
     final legacyTables = SheetTables(
-      userData: {...handwrittenTables().userData, 'population': '12'},
+      userData: {...handwrittenTables().userData, 'population': '60'},
       ownedParcels: handwrittenTables().ownedParcels,
       tiles: handwrittenTables().tiles,
       projects: handwrittenTables().projects,

@@ -25,6 +25,11 @@ enum GroundStyle { grass, grassPuddle, dirt, asphalt, concrete }
 // Catalogue
 // ---------------------------------------------------------------------------
 
+/// Coins render with thousands separators — the economy runs to six
+/// and seven figures.
+String formatCoins(int coins) =>
+    coins.toString().replaceAll(RegExp(r'\B(?=(\d{3})+(?!\d))'), ',');
+
 class StructureDefinition {
   const StructureDefinition({
     required this.id,
@@ -41,7 +46,6 @@ class StructureDefinition {
     this.taxCoins = 0,
     this.upkeepCoins = 0,
     this.constructionStages = 1,
-    this.households = 0,
     this.jobs = 0,
     this.serviceCategory,
     this.serviceCapacity = 0,
@@ -69,8 +73,10 @@ class StructureDefinition {
   final int footprintRows;
   final int costCoins;
 
-  /// Population this model contributes once completed. Derived from
-  /// content at placement time and snapshotted onto the placed structure.
+  /// Population this model houses once completed — a residential
+  /// model's occupancy capacity in people, filled at check-ins
+  /// while residential demand exists, and snapshotted onto the
+  /// placed structure at completion. Zero on non-residential models.
   final int population;
 
   /// Terrain tags this model may stand on — the nature brush's
@@ -98,11 +104,6 @@ class StructureDefinition {
   /// Net treasury effect of one completed building per check-in.
   int get netCoinsPerCheckIn => taxCoins - upkeepCoins;
 
-  /// Households this home can hold — its occupancy capacity. A
-  /// residential model: filled family by family at check-ins while
-  /// residential demand exists. Zero on non-residential models.
-  final int households;
-
   /// Job positions this commerce building offers — its occupancy
   /// capacity, staffed one position per check-in while commercial
   /// demand exists. Zero on non-commerce models.
@@ -112,14 +113,14 @@ class StructureDefinition {
   /// or null on non-service models.
   final String? serviceCategory;
 
-  /// Households one completed service building of this model covers.
+  /// Population one completed service building of this model covers.
   final int serviceCapacity;
 
   /// The occupancy-flavoured classification: a model is what it
-  /// offers. Households make it residential, jobs make it commerce,
+  /// offers. Population makes it residential, jobs make it commerce,
   /// a service category makes it a service building; anything else
   /// is plain civic (upkeep drain, no coverage).
-  bool get isResidential => households > 0;
+  bool get isResidential => population > 0;
   bool get isCommerce => jobs > 0;
   bool get isService => serviceCategory != null;
 
@@ -134,7 +135,7 @@ class StructureDefinition {
   String get spriteCategory =>
       kind == StructureKind.building ? 'buildings' : 'props';
 
-  String get costLabel => '$costCoins ${costCoins == 1 ? 'coin' : 'coins'}';
+  String get costLabel => '${formatCoins(costCoins)} coins';
 
   StructureDefinition copyWith({
     String? id,
@@ -151,7 +152,6 @@ class StructureDefinition {
     int? taxCoins,
     int? upkeepCoins,
     int? constructionStages,
-    int? households,
     int? jobs,
     String? serviceCategory,
     int? serviceCapacity,
@@ -171,7 +171,6 @@ class StructureDefinition {
     taxCoins: taxCoins ?? this.taxCoins,
     upkeepCoins: upkeepCoins ?? this.upkeepCoins,
     constructionStages: constructionStages ?? this.constructionStages,
-    households: households ?? this.households,
     jobs: jobs ?? this.jobs,
     serviceCategory: serviceCategory ?? this.serviceCategory,
     serviceCapacity: serviceCapacity ?? this.serviceCapacity,
@@ -192,7 +191,6 @@ class StructureDefinition {
     'taxCoins': taxCoins,
     'upkeepCoins': upkeepCoins,
     'constructionStages': constructionStages,
-    'households': households,
     'jobs': jobs,
     if (serviceCategory != null) 'serviceCategory': serviceCategory,
     'serviceCapacity': serviceCapacity,
@@ -221,7 +219,6 @@ class StructureDefinition {
         taxCoins: json['taxCoins'] as int? ?? 0,
         upkeepCoins: json['upkeepCoins'] as int? ?? 0,
         constructionStages: json['constructionStages'] as int? ?? 1,
-        households: json['households'] as int? ?? 0,
         jobs: json['jobs'] as int? ?? 0,
         serviceCategory: (json['serviceCategory'] as String?)?.isEmpty == true
             ? null
@@ -510,7 +507,7 @@ class EconomyContent {
     this.parcelPerPopulationCoins = 0,
     this.migrationPercentPerCheckIn = 2,
     this.employmentPercentPerCheckIn = 5,
-    this.waitingHouseholdsCapPercent = 10,
+    this.waitingPopulationCapPercent = 10,
     this.unemploymentTolerancePercent = 10,
     this.jobPullPercentPerCheckIn = 10,
     this.contentmentFloorPercent = 0,
@@ -539,7 +536,7 @@ class EconomyContent {
   /// the buyer's size rather than the land's distance.
   final int parcelPerPopulationCoins;
 
-  /// Households that may move in per check-in, as a percentage of
+  /// Citizens that may move in per check-in, as a percentage of
   /// population (floored at one). Also the waiting list's refill
   /// rate — growth costs check-ins, not money.
   final int migrationPercentPerCheckIn;
@@ -551,10 +548,10 @@ class EconomyContent {
 
   /// The waiting list's cap, as a percentage of population (floored
   /// at one) — the residential demand bar's scale.
-  final int waitingHouseholdsCapPercent;
+  final int waitingPopulationCapPercent;
 
   /// Unemployment up to this percentage of population (floored at
-  /// one household) does not stop the waiting list from refilling —
+  /// one citizen) does not stop the waiting list from refilling —
   /// frontier towns tolerate some joblessness. Above it, migration
   /// pauses until staffing catches up.
   final int unemploymentTolerancePercent;
@@ -599,7 +596,7 @@ class EconomyContent {
     'parcelPerPopulationCoins': parcelPerPopulationCoins,
     'migrationPercentPerCheckIn': migrationPercentPerCheckIn,
     'employmentPercentPerCheckIn': employmentPercentPerCheckIn,
-    'waitingHouseholdsCapPercent': waitingHouseholdsCapPercent,
+    'waitingPopulationCapPercent': waitingPopulationCapPercent,
     'unemploymentTolerancePercent': unemploymentTolerancePercent,
     'jobPullPercentPerCheckIn': jobPullPercentPerCheckIn,
     'contentmentFloorPercent': contentmentFloorPercent,
@@ -615,7 +612,7 @@ class EconomyContent {
     int? parcelPerPopulationCoins,
     int? migrationPercentPerCheckIn,
     int? employmentPercentPerCheckIn,
-    int? waitingHouseholdsCapPercent,
+    int? waitingPopulationCapPercent,
     int? unemploymentTolerancePercent,
     int? jobPullPercentPerCheckIn,
     int? contentmentFloorPercent,
@@ -632,8 +629,8 @@ class EconomyContent {
         migrationPercentPerCheckIn ?? this.migrationPercentPerCheckIn,
     employmentPercentPerCheckIn:
         employmentPercentPerCheckIn ?? this.employmentPercentPerCheckIn,
-    waitingHouseholdsCapPercent:
-        waitingHouseholdsCapPercent ?? this.waitingHouseholdsCapPercent,
+    waitingPopulationCapPercent:
+        waitingPopulationCapPercent ?? this.waitingPopulationCapPercent,
     unemploymentTolerancePercent:
         unemploymentTolerancePercent ?? this.unemploymentTolerancePercent,
     jobPullPercentPerCheckIn:
@@ -662,8 +659,8 @@ class EconomyContent {
           json['migrationPercentPerCheckIn'] as int? ?? 2,
       employmentPercentPerCheckIn:
           json['employmentPercentPerCheckIn'] as int? ?? 5,
-      waitingHouseholdsCapPercent:
-          json['waitingHouseholdsCapPercent'] as int? ?? 10,
+      waitingPopulationCapPercent:
+          json['waitingPopulationCapPercent'] as int? ?? 10,
       unemploymentTolerancePercent:
           json['unemploymentTolerancePercent'] as int? ?? 10,
       jobPullPercentPerCheckIn: json['jobPullPercentPerCheckIn'] as int? ?? 10,
@@ -1578,11 +1575,11 @@ List<ContentIssue> validateContentData({
     if (model.costCoins < 0) {
       error('${model.id}: cost must not be negative.');
     }
-    // Props are free by product rule: decorations are the one thing
-    // a brand-new settlement can spend on before its first road and
-    // home, so they can never drain the founding treasury.
-    if (model.kind == StructureKind.decoration && model.costCoins != 0) {
-      error('${model.id}: decorations are free — cost must be 0.');
+    // Construction is free by product rule: buildings are gated by
+    // land, road access, and staged time — never by money. Coins buy
+    // parcels, roads, and bridges; nothing else.
+    if (model.costCoins != 0) {
+      error('${model.id}: construction is free — cost must be 0.');
     }
     if (model.population < 0) {
       error('${model.id}: population must not be negative.');
@@ -1596,15 +1593,12 @@ List<ContentIssue> validateContentData({
     if (model.constructionStages < 1) {
       error('${model.id}: construction needs at least one stage.');
     }
-    if (model.households < 0) {
-      error('${model.id}: households must not be negative.');
-    }
     if (model.jobs < 0) {
       error('${model.id}: jobs must not be negative.');
     }
-    if (model.households > 0 && model.jobs > 0) {
+    if (model.population > 0 && model.jobs > 0) {
       error(
-        '${model.id}: a model cannot be both residential (households) '
+        '${model.id}: a model cannot be both residential (population) '
         'and commercial (jobs).',
       );
     }
@@ -1614,7 +1608,7 @@ List<ContentIssue> validateContentData({
     if (model.serviceCategory != null && model.serviceCapacity < 1) {
       error(
         '${model.id}: service category "${model.serviceCategory}" needs '
-        'a capacity of at least one household.',
+        'a service capacity of at least 1.',
       );
     }
     if (model.serviceCategory == null && model.serviceCapacity > 0) {
@@ -1910,7 +1904,7 @@ List<ContentIssue> validateContentData({
   }
   if (economy.migrationPercentPerCheckIn < 0 ||
       economy.employmentPercentPerCheckIn < 0 ||
-      economy.waitingHouseholdsCapPercent < 0 ||
+      economy.waitingPopulationCapPercent < 0 ||
       economy.unemploymentTolerancePercent < 0 ||
       economy.jobPullPercentPerCheckIn < 0) {
     error('Demand percentages must not be negative.');

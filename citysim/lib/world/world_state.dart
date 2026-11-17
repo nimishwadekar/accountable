@@ -244,7 +244,7 @@ class ParcelWorldState {
     required this.coins,
     required this.totalCoinsEarned,
     required this.totalCoinsSpent,
-    this.waitingHouseholds = 0,
+    this.waitingPopulation = 0,
     this.population = 0,
     this.employedPopulation = 0,
     this.progressionMilestoneId,
@@ -280,18 +280,18 @@ class ParcelWorldState {
   final int totalCoinsEarned;
   final int totalCoinsSpent;
 
-  /// Households that want to move in but cannot (no housing) — the
-  /// residential waiting list. Stored: it accumulates across
-  /// check-ins.
-  final int waitingHouseholds;
+  /// Population that wants to move in but cannot (no housing) — the
+  /// residential waiting list, in people. Stored: it accumulates
+  /// across check-ins.
+  final int waitingPopulation;
 
-  /// Households living in town. Stored as the single aggregate —
+  /// Citizens living in town. Stored as the single aggregate —
   /// the distribution across buildings is never read. A population
   /// above the current residential capacity grandfathers (content
   /// edits shrink capacity; arrivals pause until it recovers).
   final int population;
 
-  /// Households holding jobs. Staffing raises it while unemployment
+  /// Citizens holding jobs. Staffing raises it while unemployment
   /// and job vacancies exist; never above population.
   final int employedPopulation;
 
@@ -376,7 +376,7 @@ class ParcelWorldState {
     int? coins,
     int? totalCoinsEarned,
     int? totalCoinsSpent,
-    int? waitingHouseholds,
+    int? waitingPopulation,
     int? population,
     int? employedPopulation,
     String? progressionMilestoneId,
@@ -403,7 +403,7 @@ class ParcelWorldState {
     coins: coins ?? this.coins,
     totalCoinsEarned: totalCoinsEarned ?? this.totalCoinsEarned,
     totalCoinsSpent: totalCoinsSpent ?? this.totalCoinsSpent,
-    waitingHouseholds: waitingHouseholds ?? this.waitingHouseholds,
+    waitingPopulation: waitingPopulation ?? this.waitingPopulation,
     population: population ?? this.population,
     employedPopulation: employedPopulation ?? this.employedPopulation,
     progressionMilestoneId:

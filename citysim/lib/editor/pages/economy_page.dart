@@ -110,7 +110,7 @@ class _EconomyPageState extends State<EconomyPage> {
                 value: asInt(economy['migrationPercentPerCheckIn'], 2),
                 min: 0,
                 help:
-                    'Households that may move in per check-in, as a '
+                    'Citizens that may move in per check-in, as a '
                     'percentage of population (floored at one). Also '
                     "the waiting list's refill rate — growth costs "
                     'check-ins, not money.',
@@ -136,14 +136,14 @@ class _EconomyPageState extends State<EconomyPage> {
               width: 170,
               child: IntField(
                 label: 'Waiting list cap %',
-                value: asInt(economy['waitingHouseholdsCapPercent'], 10),
+                value: asInt(economy['waitingPopulationCapPercent'], 10),
                 min: 0,
                 help:
                     "The residential waiting list's cap, as a "
                     'percentage of population (floored at one) — the '
                     "residential demand bar's scale.",
                 onChanged: (v) =>
-                    _edit((e) => e['waitingHouseholdsCapPercent'] = v),
+                    _edit((e) => e['waitingPopulationCapPercent'] = v),
               ),
             ),
             SizedBox(
@@ -154,7 +154,7 @@ class _EconomyPageState extends State<EconomyPage> {
                 min: 0,
                 help:
                     'Unemployment up to this percentage of population '
-                    '(floored at one household) does not stop the '
+                    '(floored at one citizen) does not stop the '
                     'waiting list from refilling — frontier towns '
                     'tolerate some joblessness. Above it, migration '
                     'pauses until staffing catches up.',

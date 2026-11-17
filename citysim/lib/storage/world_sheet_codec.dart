@@ -19,7 +19,7 @@ import 'sheet_tables.dart';
 const _seedKey = 'seed';
 const _populationKey = 'population';
 const _employedPopulationKey = 'employed_population';
-const _waitingHouseholdsKey = 'waiting_households';
+const _waitingPopulationKey = 'waiting_population';
 const _coinsKey = 'coins';
 const _coinsEarnedKey = 'coins_earned';
 const _coinsSpentKey = 'coins_spent';
@@ -43,7 +43,7 @@ SheetTables worldToSheetTables(ParcelWorldState state) {
     _seedKey: '${state.seed}',
     _populationKey: '${state.population}',
     _employedPopulationKey: '${state.employedPopulation}',
-    _waitingHouseholdsKey: '${state.waitingHouseholds}',
+    _waitingPopulationKey: '${state.waitingPopulation}',
     _coinsKey: '${state.coins}',
     _coinsEarnedKey: '${state.totalCoinsEarned}',
     _coinsSpentKey: '${state.totalCoinsSpent}',
@@ -133,7 +133,7 @@ ParcelWorldState sheetTablesToWorld(
       userData.containsKey(key) ? _userInt(userData, key) : 0;
   final population = counter(_populationKey);
   final employedPopulation = counter(_employedPopulationKey);
-  final waitingHouseholds = counter(_waitingHouseholdsKey);
+  final waitingPopulation = counter(_waitingPopulationKey);
   final simulatedDate = _userDate(userData, _simulatedDateKey);
   final highWaterDate = _userDate(userData, _highWaterDateKey);
   final lastCheckInKey = userData[_lastCheckInDateKey];
@@ -434,7 +434,7 @@ ParcelWorldState sheetTablesToWorld(
     simulatedDate: simulatedDate,
     checkInHighWaterDate: highWaterDate,
     constructionDay: constructionDay,
-    waitingHouseholds: waitingHouseholds,
+    waitingPopulation: waitingPopulation,
     population: population,
     employedPopulation: employedPopulation,
     progressionMilestoneId: reached?.id,

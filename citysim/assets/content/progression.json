@@ -2,8 +2,6 @@
   "milestones": [
     {
       "id": "homestead",
-      "name": "Homestead",
-      "population": 0,
       "models": [
         "small-home",
         "cafe",
@@ -27,54 +25,69 @@
         "drop-box",
         "scattered-papers",
         "tires"
-      ]
+      ],
+      "name": "Homestead",
+      "population": 0
     },
     {
       "id": "hamlet",
-      "name": "Hamlet",
-      "population": 5,
       "models": [
         "medium-home",
         "fruit-market",
         "autoshop",
         "pizza-shop",
         "mobile-home"
-      ]
+      ],
+      "name": "Hamlet",
+      "population": 15
     },
     {
       "id": "village",
-      "name": "Village",
-      "population": 10,
       "models": [
         "community-clinic",
         "large-home",
         "small-office",
         "water-tower"
-      ]
+      ],
+      "name": "Village",
+      "population": 50
     },
     {
       "id": "town",
+      "models": [
+        "church",
+        "gas-station",
+        "warehouse"
+      ],
       "name": "Town",
-      "population": 15,
-      "models": ["church", "gas-station", "warehouse"]
+      "population": 120
     },
     {
       "id": "city",
+      "models": [
+        "apartments",
+        "city-office",
+        "police-station",
+        "fire-station"
+      ],
       "name": "City",
-      "population": 20,
-      "models": ["apartments", "city-office", "police-station", "fire-station"]
+      "population": 300
     },
     {
       "id": "metropolis",
+      "models": [
+        "tall-office"
+      ],
       "name": "Metropolis",
-      "population": 25,
-      "models": ["tall-office"]
+      "population": 800
     },
     {
       "id": "regional-capital",
+      "models": [
+        "hospital"
+      ],
       "name": "Regional Capital",
-      "population": 30,
-      "models": ["hospital"]
+      "population": 2000
     }
   ]
 }

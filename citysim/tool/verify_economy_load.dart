@@ -79,7 +79,7 @@ void _reportCity(
   );
   stdout.writeln(
     'vitality: population ${world.population}, employed '
-    '${world.employedPopulation}, waiting ${world.waitingHouseholds}, '
+    '${world.employedPopulation}, waiting ${world.waitingPopulation}, '
     'unemployed ${ledger.employmentDemand}, vacant homes '
     '${ledger.residentialVacancy}, open jobs ${ledger.jobVacancy}',
   );

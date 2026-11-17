@@ -72,7 +72,7 @@ void main() {
     expect(milestones, hasLength(7));
     expect(
       [for (final milestone in milestones) milestone.population],
-      [0, 5, 10, 15, 20, 25, 30],
+      [0, 15, 50, 120, 300, 800, 2000],
     );
     // The ladder is complete: every enabled model belongs to a
     // milestone or is legitimately nature-only (none are today).
@@ -92,35 +92,41 @@ void main() {
     expect(content.catalogue, hasLength(40));
     final byId = {for (final model in content.catalogue) model.id: model};
     expect(byId['small-home']!.costCoins, 0);
-    expect(byId['small-home']!.taxCoins, 3);
-    expect(byId['small-home']!.upkeepCoins, 0);
+    expect(byId['small-home']!.taxCoins, 500);
+    expect(byId['small-home']!.upkeepCoins, 100);
     expect(byId['small-home']!.constructionStages, 2);
-    expect(byId['small-home']!.population, 1);
+    expect(byId['small-home']!.population, 3);
     expect(
       content.progression.milestoneForModel('small-home')!.id,
       'homestead',
       reason: 'the cottage unlocks from the start',
     );
     expect(byId['cafe']!.costCoins, 0);
-    expect(byId['cafe']!.netCoinsPerCheckIn, 2);
+    expect(byId['cafe']!.netCoinsPerCheckIn, 1550);
     expect(byId['flower-garden']!.costCoins, 0);
     expect(byId['flower-garden']!.kind, StructureKind.decoration);
     expect(byId['flower-garden']!.population, 0);
     expect(byId['pine-tree']!.costCoins, 0);
     expect(byId['medium-home']!.costCoins, 0);
-    expect(content.progression.milestoneForModel('medium-home')!.population, 5);
+    expect(
+      content.progression.milestoneForModel('medium-home')!.population,
+      15,
+    );
     expect(byId['fruit-market']!.costCoins, 0);
     expect(byId['community-clinic']!.costCoins, 0);
-    expect(byId['community-clinic']!.upkeepCoins, 4);
+    expect(byId['community-clinic']!.upkeepCoins, 1500);
     expect(
       content.progression.milestoneForModel('community-clinic')!.population,
-      10,
+      50,
     );
     expect(byId['apartments']!.costCoins, 0);
-    expect(byId['apartments']!.taxCoins, 8);
+    expect(byId['apartments']!.taxCoins, 6800);
     expect(byId['apartments']!.footprintColumns, 2);
     expect(byId['apartments']!.footprintRows, 2);
-    expect(content.progression.milestoneForModel('apartments')!.population, 20);
+    expect(
+      content.progression.milestoneForModel('apartments')!.population,
+      300,
+    );
     expect(byId['city-office']!.costCoins, 0);
 
     // Promoted pack art: representative snapshot of the new models.
@@ -134,12 +140,12 @@ void main() {
     );
     expect(byId['large-home']!.costCoins, 0);
     expect(byId['large-home']!.assetRoles, hasLength(6));
-    expect(content.progression.milestoneForModel('large-home')!.population, 10);
+    expect(content.progression.milestoneForModel('large-home')!.population, 50);
     expect(byId['warehouse']!.footprintColumns, 2);
     expect(byId['warehouse']!.subcategory, 'industrial');
     expect(byId['construction-site']!.kind, StructureKind.building);
     expect(byId['construction-site']!.population, 0);
-    expect(content.progression.milestoneForModel('hospital')!.population, 30);
+    expect(content.progression.milestoneForModel('hospital')!.population, 2000);
 
     // Promoted props: representative snapshot of the decoration batch.
     expect(byId['common-tree']!.kind, StructureKind.decoration);
@@ -153,42 +159,42 @@ void main() {
     expect(byId['tires']!.subcategory, 'clutter');
     expect(byId['wild-grass']!.costCoins, 0);
 
-    expect(content.economy.startingTreasuryCoins, 20);
-    expect(content.economy.roadTileCostCoins, 4);
-    expect(content.economy.bridgeTileCostCoins, 12);
+    expect(content.economy.startingTreasuryCoins, 100000);
+    expect(content.economy.roadTileCostCoins, 2500);
+    expect(content.economy.bridgeTileCostCoins, 50000);
     expect(
       content.economy.parcelBaseCoins,
-      32,
+      15000,
       reason:
           'the flat part of the parcel price, before the population '
           'surcharge',
     );
-    expect(content.economy.parcelPerPopulationCoins, 2);
-    expect(content.economy.roadUpkeepCoinsPerTile, 1);
-    expect(content.economy.bridgeUpkeepCoinsPerTile, 1);
+    expect(content.economy.parcelPerPopulationCoins, 150);
+    expect(content.economy.roadUpkeepCoinsPerTile, 10);
+    expect(content.economy.bridgeUpkeepCoinsPerTile, 300);
     expect(content.economy.roadTaxCoinsPerTile, 0);
     expect(content.economy.bridgeTaxCoinsPerTile, 0);
     // Stage-2.1 seeds: waiting-list demand and contentment.
     expect(content.economy.migrationPercentPerCheckIn, 2);
     expect(content.economy.employmentPercentPerCheckIn, 5);
-    expect(content.economy.waitingHouseholdsCapPercent, 10);
+    expect(content.economy.waitingPopulationCapPercent, 10);
     expect(content.economy.unemploymentTolerancePercent, 10);
     expect(content.economy.jobPullPercentPerCheckIn, 10);
     expect(content.economy.contentmentFloorPercent, 30);
-    expect(content.economy.serviceRequirementPopulation, 10);
+    expect(content.economy.serviceRequirementPopulation, 250);
     expect(content.economy.requiredServiceCategories, [
       'fire',
       'police',
       'health',
     ]);
-    expect(byId['small-home']!.households, 1);
-    expect(byId['apartments']!.households, 1);
-    expect(byId['cafe']!.jobs, 4);
-    expect(byId['tall-office']!.jobs, 5);
+    expect(byId['small-home']!.population, 3);
+    expect(byId['apartments']!.population, 40);
+    expect(byId['cafe']!.jobs, 8);
+    expect(byId['tall-office']!.jobs, 300);
     expect(byId['fire-station']!.serviceCategory, 'fire');
-    expect(byId['fire-station']!.serviceCapacity, 50);
+    expect(byId['fire-station']!.serviceCapacity, 1200);
     expect(byId['community-clinic']!.serviceCategory, 'health');
-    expect(byId['community-clinic']!.serviceCapacity, 25);
+    expect(byId['community-clinic']!.serviceCapacity, 400);
     expect(byId['hospital']!.serviceCategory, 'health');
     expect(byId['water-tower']!.serviceCategory, isNull);
 

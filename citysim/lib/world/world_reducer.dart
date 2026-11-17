@@ -186,7 +186,7 @@ ParcelWorldState checkInWorldForToday(
   // completing this very check-in counts as capacity today.
   var population = state.population;
   var employed = state.employedPopulation;
-  var waiting = state.waitingHouseholds;
+  var waiting = state.waitingPopulation;
   final economy = content.economy;
   var residentialCapacity = 0;
   var jobCapacity = 0;
@@ -194,7 +194,7 @@ ParcelWorldState checkInWorldForToday(
     final model = content.structure(structure.catalogueId);
     if (model == null) continue;
     if (model.isResidential) {
-      residentialCapacity += model.households;
+      residentialCapacity += model.population;
     } else if (model.isCommerce) {
       jobCapacity += model.jobs;
     }
@@ -213,16 +213,16 @@ ParcelWorldState checkInWorldForToday(
       .floor();
   final migrationBudget = budget(economy.migrationPercentPerCheckIn) + pullJobs;
 
-  // Households move in while the waiting list and vacant homes both
+  // Citizens move in while the waiting list and vacant housing both
   // exist — regardless of unemployment.
-  final vacantHomes = residentialCapacity - population;
-  final householdsArrived =
+  final vacantHousing = residentialCapacity - population;
+  final populationArrived =
       (waiting < migrationBudget ? waiting : migrationBudget).clamp(
         0,
-        vacantHomes < 0 ? 0 : vacantHomes,
+        vacantHousing < 0 ? 0 : vacantHousing,
       );
-  population += householdsArrived;
-  waiting -= householdsArrived;
+  population += populationArrived;
+  waiting -= populationArrived;
 
   // Positions staff while citizens are unemployed and jobs vacant.
   final employmentBudget = budget(economy.employmentPercentPerCheckIn);
@@ -245,7 +245,7 @@ ParcelWorldState checkInWorldForToday(
       .floor()
       .clamp(1, 1 << 30);
   if (population - employed <= tolerated) {
-    final cap = budget(economy.waitingHouseholdsCapPercent);
+    final cap = budget(economy.waitingPopulationCapPercent);
     waiting = (waiting + migrationBudget).clamp(0, cap);
   }
 
@@ -276,7 +276,7 @@ ParcelWorldState checkInWorldForToday(
       'contentment': ledger.contentment,
       'stagesAdvanced': advanced,
       'completions': completions,
-      'householdsArrived': householdsArrived,
+      'populationArrived': populationArrived,
       'positionsStaffed': positionsStaffed,
     },
   );
@@ -286,7 +286,7 @@ ParcelWorldState checkInWorldForToday(
     totalCoinsSpent: state.totalCoinsSpent + paid,
     lastCheckInDate: state.simulatedDate,
     checkInCount: state.checkInCount + 1,
-    waitingHouseholds: waiting,
+    waitingPopulation: waiting,
     population: population,
     employedPopulation: employed,
     nextEntityNumber: nextEntity,

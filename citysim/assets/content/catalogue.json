@@ -17,16 +17,15 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 1,
       "id": "small-home",
       "jobs": 0,
       "kind": "building",
       "name": "Small House",
-      "population": 1,
+      "population": 3,
       "serviceCapacity": 0,
       "subcategory": "houses",
-      "taxCoins": 3,
-      "upkeepCoins": 0
+      "taxCoins": 500,
+      "upkeepCoins": 100
     },
     {
       "assetRoles": [
@@ -40,16 +39,15 @@
         "columns": 2,
         "rows": 1
       },
-      "households": 0,
       "id": "cafe",
-      "jobs": 4,
+      "jobs": 8,
       "kind": "building",
       "name": "Café",
-      "population": 1,
+      "population": 0,
       "serviceCapacity": 0,
       "subcategory": "commerce",
-      "taxCoins": 4,
-      "upkeepCoins": 2
+      "taxCoins": 2000,
+      "upkeepCoins": 450
     },
     {
       "assetRoles": [
@@ -63,16 +61,15 @@
         "columns": 2,
         "rows": 1
       },
-      "households": 0,
       "id": "ice-cream-shop",
-      "jobs": 3,
+      "jobs": 6,
       "kind": "building",
       "name": "Ice Cream Shop",
-      "population": 1,
+      "population": 0,
       "serviceCapacity": 0,
       "subcategory": "commerce",
-      "taxCoins": 4,
-      "upkeepCoins": 2
+      "taxCoins": 1500,
+      "upkeepCoins": 350
     },
     {
       "assetRoles": [
@@ -88,7 +85,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "flower-garden",
       "jobs": 0,
       "kind": "decoration",
@@ -116,7 +112,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "pine-tree",
       "jobs": 0,
       "kind": "decoration",
@@ -143,7 +138,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "common-tree",
       "jobs": 0,
       "kind": "decoration",
@@ -171,7 +165,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "tree-stump",
       "jobs": 0,
       "kind": "decoration",
@@ -200,7 +193,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "wild-grass",
       "jobs": 0,
       "kind": "decoration",
@@ -227,7 +219,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "street-lamp",
       "jobs": 0,
       "kind": "decoration",
@@ -252,7 +243,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "traffic-light",
       "jobs": 0,
       "kind": "decoration",
@@ -276,7 +266,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "stop-sign",
       "jobs": 0,
       "kind": "decoration",
@@ -300,7 +289,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "caution-sign",
       "jobs": 0,
       "kind": "decoration",
@@ -324,7 +312,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "wood-fence",
       "jobs": 0,
       "kind": "decoration",
@@ -347,7 +334,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "wire-fence",
       "jobs": 0,
       "kind": "decoration",
@@ -373,7 +359,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "trash-can",
       "jobs": 0,
       "kind": "decoration",
@@ -399,7 +384,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "trash-bags",
       "jobs": 0,
       "kind": "decoration",
@@ -427,7 +411,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "rocks",
       "jobs": 0,
       "kind": "decoration",
@@ -454,7 +437,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "cardboard-boxes",
       "jobs": 0,
       "kind": "decoration",
@@ -478,7 +460,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "drop-box",
       "jobs": 0,
       "kind": "decoration",
@@ -503,7 +484,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "scattered-papers",
       "jobs": 0,
       "kind": "decoration",
@@ -529,7 +509,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "tires",
       "jobs": 0,
       "kind": "decoration",
@@ -552,7 +531,6 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "construction-site",
       "jobs": 0,
       "kind": "building",
@@ -579,16 +557,15 @@
         "columns": 2,
         "rows": 1
       },
-      "households": 1,
       "id": "medium-home",
       "jobs": 0,
       "kind": "building",
       "name": "Medium House",
-      "population": 1,
+      "population": 4,
       "serviceCapacity": 0,
       "subcategory": "houses",
-      "taxCoins": 5,
-      "upkeepCoins": 0
+      "taxCoins": 700,
+      "upkeepCoins": 120
     },
     {
       "assetRoles": [
@@ -602,16 +579,15 @@
         "columns": 1,
         "rows": 1
       },
-      "households": 0,
       "id": "fruit-market",
-      "jobs": 3,
+      "jobs": 6,
       "kind": "building",
       "name": "Fruit Market",
-      "population": 1,
+      "population": 0,
       "serviceCapacity": 0,
       "subcategory": "commerce",
-      "taxCoins": 3,
-      "upkeepCoins": 1
+      "taxCoins": 1500,
+      "upkeepCoins": 350
     },
     {
       "assetRoles": [
@@ -625,16 +601,15 @@
         "columns": 2,
         "rows": 1
       },
-      "households": 0,
       "id": "autoshop",
-      "jobs": 4,
+      "jobs": 6,
       "kind": "building",
       "name": "Auto Shop",
-      "population": 1,
+      "population": 0,
       "serviceCapacity": 0,
       "subcategory": "commerce",
-      "taxCoins": 5,
-      "upkeepCoins": 3
+      "taxCoins": 1500,
+      "upkeepCoins": 400
     },
     {
       "assetRoles": [
@@ -648,16 +623,15 @@
         "columns": 2,
         "rows": 1
       },
-      "households": 0,
       "id": "pizza-shop",
-      "jobs": 4,
+      "jobs": 8,
       "kind": "building",
       "name": "Pizza Place",
-      "population": 1,
+      "population": 0,
       "serviceCapacity": 0,
       "subcategory": "commerce",
-      "taxCoins": 5,
-      "upkeepCoins": 3
+      "taxCoins": 2000,
+      "upkeepCoins": 450
     },
     {
       "assetRoles": [
@@ -672,16 +646,15 @@
         "columns": 2,
         "rows": 2
       },
-      "households": 1,
       "id": "mobile-home",
       "jobs": 0,
       "kind": "building",
       "name": "Mobile Home",
-      "population": 1,
+      "population": 3,
       "serviceCapacity": 0,
       "subcategory": "houses",
-      "taxCoins": 2,
-      "upkeepCoins": 0
+      "taxCoins": 500,
+      "upkeepCoins": 60
     },
     {
       "assetRoles": [
@@ -695,17 +668,16 @@
         "columns": 2,
         "rows": 1
       },
-      "households": 0,
       "id": "community-clinic",
-      "jobs": 0,
+      "jobs": 15,
       "kind": "building",
       "name": "Community Clinic",
-      "population": 1,
-      "serviceCapacity": 25,
+      "population": 0,
+      "serviceCapacity": 400,
       "serviceCategory": "health",
       "subcategory": "civic",
       "taxCoins": 0,
-      "upkeepCoins": 4
+      "upkeepCoins": 1500
     },
     {
       "assetRoles": [
@@ -724,16 +696,15 @@
         "columns": 2,
         "rows": 1
       },
-      "households": 1,
       "id": "large-home",
       "jobs": 0,
       "kind": "building",
       "name": "Large House",
-      "population": 1,
+      "population": 5,
       "serviceCapacity": 0,
       "subcategory": "houses",
-      "taxCoins": 6,
-      "upkeepCoins": 0
+      "taxCoins": 850,
+      "upkeepCoins": 140
     },
     {
       "assetRoles": [
@@ -750,16 +721,15 @@
         "columns": 2,
         "rows": 2
       },
-      "households": 0,
       "id": "small-office",
-      "jobs": 4,
+      "jobs": 40,
       "kind": "building",
       "name": "Small Office",
-      "population": 1,
+      "population": 0,
       "serviceCapacity": 0,
       "subcategory": "offices",
-      "taxCoins": 6,
-      "upkeepCoins": 3
+      "taxCoins": 10000,
+      "upkeepCoins": 2000
     },
     {
       "assetRoles": [
@@ -773,16 +743,15 @@
         "columns": 2,
         "rows": 2
       },
-      "households": 0,
       "id": "water-tower",
       "jobs": 0,
       "kind": "building",
       "name": "Water Tower",
-      "population": 1,
+      "population": 0,
       "serviceCapacity": 0,
       "subcategory": "civic",
       "taxCoins": 0,
-      "upkeepCoins": 2
+      "upkeepCoins": 400
     },
     {
       "assetRoles": [
@@ -796,16 +765,15 @@
         "columns": 2,
         "rows": 2
       },
-      "households": 0,
       "id": "church",
-      "jobs": 0,
+      "jobs": 2,
       "kind": "building",
       "name": "Church",
-      "population": 1,
+      "population": 0,
       "serviceCapacity": 0,
       "subcategory": "civic",
       "taxCoins": 0,
-      "upkeepCoins": 3
+      "upkeepCoins": 800
     },
     {
       "assetRoles": [
@@ -819,16 +787,15 @@
         "columns": 2,
         "rows": 2
       },
-      "households": 0,
       "id": "gas-station",
-      "jobs": 4,
+      "jobs": 10,
       "kind": "building",
       "name": "Gas Station",
-      "population": 1,
+      "population": 0,
       "serviceCapacity": 0,
       "subcategory": "commerce",
-      "taxCoins": 6,
-      "upkeepCoins": 4
+      "taxCoins": 2500,
+      "upkeepCoins": 700
     },
     {
       "assetRoles": [
@@ -844,16 +811,15 @@
         "columns": 2,
         "rows": 2
       },
-      "households": 0,
       "id": "warehouse",
-      "jobs": 4,
+      "jobs": 15,
       "kind": "building",
       "name": "Warehouse",
-      "population": 1,
+      "population": 0,
       "serviceCapacity": 0,
       "subcategory": "industrial",
-      "taxCoins": 5,
-      "upkeepCoins": 3
+      "taxCoins": 3800,
+      "upkeepCoins": 800
     },
     {
       "assetRoles": [
@@ -868,16 +834,15 @@
         "columns": 2,
         "rows": 2
       },
-      "households": 1,
       "id": "apartments",
       "jobs": 0,
       "kind": "building",
       "name": "Brick Apartment Building",
-      "population": 1,
+      "population": 40,
       "serviceCapacity": 0,
       "subcategory": "apartments",
-      "taxCoins": 8,
-      "upkeepCoins": 1
+      "taxCoins": 6800,
+      "upkeepCoins": 1000
     },
     {
       "assetRoles": [
@@ -895,16 +860,15 @@
         "columns": 2,
         "rows": 2
       },
-      "households": 0,
       "id": "city-office",
-      "jobs": 5,
+      "jobs": 70,
       "kind": "building",
       "name": "Medium Office Building",
-      "population": 1,
+      "population": 0,
       "serviceCapacity": 0,
       "subcategory": "offices",
-      "taxCoins": 9,
-      "upkeepCoins": 6
+      "taxCoins": 17500,
+      "upkeepCoins": 3500
     },
     {
       "assetRoles": [
@@ -918,17 +882,16 @@
         "columns": 2,
         "rows": 2
       },
-      "households": 0,
       "id": "police-station",
-      "jobs": 0,
+      "jobs": 25,
       "kind": "building",
       "name": "Police Station",
-      "population": 1,
-      "serviceCapacity": 50,
+      "population": 0,
+      "serviceCapacity": 1000,
       "serviceCategory": "police",
       "subcategory": "civic",
       "taxCoins": 0,
-      "upkeepCoins": 4
+      "upkeepCoins": 2500
     },
     {
       "assetRoles": [
@@ -942,17 +905,16 @@
         "columns": 2,
         "rows": 2
       },
-      "households": 0,
       "id": "fire-station",
-      "jobs": 0,
+      "jobs": 20,
       "kind": "building",
       "name": "Fire Station",
-      "population": 1,
-      "serviceCapacity": 50,
+      "population": 0,
+      "serviceCapacity": 1200,
       "serviceCategory": "fire",
       "subcategory": "civic",
       "taxCoins": 0,
-      "upkeepCoins": 4
+      "upkeepCoins": 3000
     },
     {
       "assetRoles": [
@@ -968,16 +930,15 @@
         "columns": 2,
         "rows": 2
       },
-      "households": 0,
       "id": "tall-office",
-      "jobs": 5,
+      "jobs": 300,
       "kind": "building",
       "name": "Tall Office",
-      "population": 1,
+      "population": 0,
       "serviceCapacity": 0,
       "subcategory": "offices",
-      "taxCoins": 9,
-      "upkeepCoins": 5
+      "taxCoins": 75000,
+      "upkeepCoins": 15000
     },
     {
       "assetRoles": [
@@ -991,17 +952,16 @@
         "columns": 2,
         "rows": 2
       },
-      "households": 0,
       "id": "hospital",
-      "jobs": 0,
+      "jobs": 120,
       "kind": "building",
       "name": "Hospital",
-      "population": 1,
-      "serviceCapacity": 50,
+      "population": 0,
+      "serviceCapacity": 3000,
       "serviceCategory": "health",
       "subcategory": "civic",
       "taxCoins": 0,
-      "upkeepCoins": 6
+      "upkeepCoins": 20000
     }
   ]
 }

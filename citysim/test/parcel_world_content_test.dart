@@ -285,11 +285,11 @@ void main() {
     );
   });
 
-  test('decorations are free by rule', () {
-    // Props are the one thing a brand-new settlement can spend on
-    // before its first road and home, so they can never drain the
-    // founding treasury. A priced one is a validation error; the
-    // shipped catalogue's own zero prices are pinned in
+  test('construction is free by rule', () {
+    // Buildings are gated by land, road access, and staged time —
+    // never by money; coins buy parcels, roads, and bridges. A
+    // priced model of any kind is a validation error; the shipped
+    // catalogue's own zero prices are pinned in
     // shipped_content_test.dart.
     final priced = [
       for (final model in content.catalogue)
@@ -306,7 +306,7 @@ void main() {
       ).any(
         (issue) =>
             issue.severity == 'error' &&
-            issue.message.contains('decorations are free'),
+            issue.message.contains('construction is free'),
       ),
       isTrue,
     );
