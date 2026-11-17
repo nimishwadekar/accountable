@@ -196,7 +196,7 @@ the stable provider API; keep shores independent of ownership order.
 
 ## 7. Persistence and storage design
 
-Game data lives in four sheets — the analogue of the main app's table
+Game data lives in five sheets — the analogue of the main app's table
 storage, and the exact shape of the game's future Google Spreadsheet:
 
 - **`UserData`** (`key,value`): seed, coins, coins_earned, coins_spent,
@@ -218,6 +218,9 @@ storage, and the exact shape of the game's future Google Spreadsheet:
   order; a finished stretch drops the reference when its project row is
   deleted (project numbers restart once no project is active, so a stale
   reference would collide with a later project's number).
+- **`Props`** (`x,y,subtile_x,subtile_y,model,variant,facing`): placed
+  decorations on the subtile lattice, one row per prop — the variant
+  is the rolled sprite role, snapshotted at placement.
 - **`Parcels`** (`x,y`): owned parcel coordinates.
 - **`Projects`** (`id,kind,detail,target,funded`): active projects only —
   rows are deleted as projects finish.
@@ -237,7 +240,7 @@ fails loudly: the codec rejects unknown kinds/statuses, duplicate cells,
 and orphan planned tiles before any derivation runs.
 
 Current wiring: `ServerSheetParcelWorldStore` holds the world in
-memory and reads/writes the four CSV documents through the editor
+memory and reads/writes the five CSV documents through the editor
 server (`GET/PUT /api/world`, selected by `assets/config.json`'s
 `citysim.dataSource` and `citysim.serverUrl`). The server writes
 `assets/test_sheets/*.csv`, which are the save and the crash-recovery
@@ -251,6 +254,104 @@ documents; only the transport changes.
   generation token prevents stale queued writes from undoing reset.
 - Save after state transitions, not render frames. Surface quota/write
   errors and allow retry.
+
+### Multi-city storage — schema decided 2026-11-16; gameplay later
+
+Storage first: this section pins how the save represents several
+cities. Founding flow, switching, naming, and any interaction between
+cities are later gameplay built on top — for now, a city is an
+independent game. The decisions:
+
+- **One shared map, exclusive parcels.** Exactly one map and one
+  parcel coordinate space; a parcel belongs to at most one city. The
+  founding and parcel-purchase quotes gain a `claimedParcels` set
+  (default empty) — a parcel another city holds refuses with
+  "Another city has claimed that parcel" — and the session computes
+  the set from the directory. Single-city callers pass nothing and
+  behave exactly as today.
+- **A city column, not per-city sheets.** Every sheet gains a leading
+  `city_id` column, and rows stay **city-major** (grouped by ascending
+  city id, stable within a city), so each city is one contiguous
+  block: the future Google Sheets store can read and write a city as
+  a single range, and the sheets stay hand-editable. Per-city tabs
+  were rejected — the ~200-tab workbook limit caps that design at 40
+  cities, and the stated ambition is 50. Grid hygiene (deleting unused
+  columns in the sheet) is manual.
+- **Per-city everything.** Treasury and coin ledger, the clock
+  (simulated date, high-water, last check-in, check-in count),
+  population and demand, contentment and services, the progression
+  high-water and unlock set, the seed, entity/event counters, and all
+  row data; the earned-minus-spent invariant stays per-city.
+  **Per-city check-ins** (decided 2026-11-16, replacing the
+  one-heartbeat sketch in the mechanics plan): each city carries its
+  own clock and checks in independently — the player visits every
+  city each day, which is the point.
+- **Per-city treasuries** (decided 2026-11-16): every new city
+  replays the founding arc, population-scaled parcel pricing cannot be
+  subsidised across cities, and one city's upkeep crisis never taxes
+  another. Inter-city transfers, when inter-city gameplay arrives, are
+  designed features — visible, rule-governed actions — never an
+  implicit shared pool.
+- **Identity.** `city_1`, `city_2`, … minted from the index (max + 1;
+  cities are never deleted or retired, so the derivation is stable).
+  "city" is the schema term and says nothing about size — a village is
+  a city; display names are mutable data in the index. The derived,
+  never-persisted `worldId` retires: the city id is the identity.
+- **No versions and no migration code, ever.** The game reads exactly
+  one schema, the strict loader fails visibly on any other shape, and
+  saves are converted by hand when the schema changes. The vestigial
+  `rulesVersion`/`contentVersion` stamps — never persisted, compared
+  only against themselves — retire in this pass. `generatorVersion`
+  stays: it identifies terrain content, not a save format.
+
+Schema:
+
+- **`Cities`** (new, sixth document): `city_id,name,founded` — the
+  index and the only account-level data.
+- **`UserData`** becomes triples: `city_id,key,value`.
+- **`Tiles`, `Props`, `Parcels`, `Projects`** gain the leading
+  `city_id` column; existing columns are unchanged after it.
+
+Codec and store seams:
+
+- `ParcelWorldState` stays city-agnostic — the city id is a
+  storage-layer concept, carried by the session's directory
+  (`city_id → state`), never a state field. The reducer, rules, and
+  per-city validation are untouched by partitioning.
+- A multi-city codec layer wraps the unchanged per-city functions:
+  documents → (Cities rows, per-city `SheetTables`). Each document
+  parses once; rows partition on the leading column; the per-city
+  decode consumes parsed rows (the `decodeSheetTables` seam moves
+  from CSV strings to parsed tables).
+- Saving a city is fetch → splice that city's block → put (the local
+  HTTP store). Founding writes one index row plus the fresh city's
+  block in the same put.
+- Directory-level validation at load: a parcel owned by two cities
+  fails visibly, the same class of structural corruption as duplicate
+  cells. The map-editor usage summary unions every city's cells and
+  parcels — terrain under any city's use is locked.
+
+Migration is manual — there is no code for it. The live save becomes
+`city_1` by hand: add the Cities row, stamp the leading `city_id`
+column into every row of the five sheets, and turn UserData pairs
+into `city_1` triples. Order of operations: land the code, migrate
+the sheet, then play — until the sheet is migrated the loader
+refuses the old shape, which is the intended visible failure.
+Decided (2026-11-16): the suite keeps reading the live save
+(`assets/test_sheets` stays dual-use — server save and test input),
+so it runs red from the code landing until the one-time migration
+and green after; the migration itself is a direct data edit made
+once implementation finishes. The Dart-side fixtures (the handwritten
+tables) move to the new shape inside the code change. Until the
+switching gameplay exists, the game loads the lowest city id present
+and plays exactly as today — strictly storage, no UI.
+
+Verification: a two-city round-trip in which city A's rows never
+decode into city B; stable block ordering and directory parsing;
+next-id derivation; founding and purchase quotes refusing
+foreign-claimed parcels; duplicate cross-city ownership failing
+visibly; the existing suite green with the defaulted `claimedParcels`
+parameter.
 
 ## 8. Development and preview isolation
 
@@ -767,9 +868,20 @@ Scoping and constraints agreed 2026-11-14:
   builder-capacity half of the old blocker disappeared the same day —
   builders were removed from the game entirely.)
 
+### Multi-city storage
+
+**Landed 2026-11-16** (schema in §7): the multi-city codec layer, the
+city-scoped store and session directory, the `claimedParcels`
+parameter on the founding and purchase quotes, directory-level
+exclusivity validation, the unioned map-editor usage summary, the
+retired `worldId` and version stamps, and the live save migrated to
+`city_1` by direct data edit. The game plays the lowest city id until
+switching exists. Remaining: the gameplay slice — city founding,
+switching, and naming UI.
+
 ### Regression checks
 
-Maintain pure rule/reducer coverage, persistence tests, and responsive widget checks — for the check-in economy, pin the fixed order (taxes, upkeep, stages), the zero floor with stages advancing anyway, concurrent-slot capacity, per-tile creep, and completion-start of tax and upkeep. Keep scenario/pacing tools synthetic and separate from the production finance app.
+Maintain pure rule/reducer coverage, persistence tests, and responsive widget checks — for the check-in economy, pin the fixed order (taxes, upkeep, stages), the zero floor with stages advancing anyway, per-tile creep, and completion-start of tax and upkeep. Keep scenario/pacing tools synthetic and separate from the production finance app.
 
 ## 10. Required verification
 

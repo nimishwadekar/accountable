@@ -11,7 +11,7 @@ import '../world/world_state.dart';
 import 'sheet_tables.dart';
 import 'world_sheet_codec.dart';
 
-/// Reads and writes the four sheet documents over HTTP — the CSV-mode
+/// Reads and writes the six sheet documents over HTTP — the CSV-mode
 /// transport to the local editor server, and the seam the Google Sheets
 /// store later replaces.
 abstract interface class WorldDocumentsApi {
@@ -63,10 +63,12 @@ class HttpWorldDocumentsApi implements WorldDocumentsApi {
   }
 }
 
-/// Stores the parcel world as the four sheet documents held by the game
-/// server: the world lives in memory, every save writes the documents
-/// through, and `assets/test_sheets/` on the server's disk is the save —
-/// loading from an empty document set starts a fresh world.
+/// Stores the city directory as the six sheet documents held by the
+/// game server: the save lives in memory, every save writes the
+/// documents through, and `assets/test_sheets/` on the server's disk
+/// is the save — loading from an empty document set starts a fresh
+/// world. Every city is decoded, reconciled, and validated on load;
+/// saving splices one city's block and writes the whole save.
 class ServerSheetParcelWorldStore implements ParcelWorldStore {
   ServerSheetParcelWorldStore({
     required this.content,
@@ -79,7 +81,7 @@ class ServerSheetParcelWorldStore implements ParcelWorldStore {
   final WorldDocumentsApi api;
 
   @override
-  Future<ParcelWorldState?> load() async {
+  Future<LoadedCitySave?> load() async {
     final Map<String, String>? documents;
     try {
       documents = await api.fetchDocuments();
@@ -90,7 +92,8 @@ class ServerSheetParcelWorldStore implements ParcelWorldStore {
         '($error)',
       );
     }
-    final tables = decodeSheetTables(
+    final tables = decodeMultiCityTables(
+      cities: documents?[citiesSheetName] ?? '',
       userData: documents?[userDataSheetName] ?? '',
       tiles: documents?[tilesSheetName] ?? '',
       props: documents?[propsSheetName] ?? '',
@@ -98,22 +101,33 @@ class ServerSheetParcelWorldStore implements ParcelWorldStore {
       projects: documents?[projectsSheetName] ?? '',
     );
     if (tables.isEmpty) return null;
-    final state = sheetTablesToWorld(
-      tables,
-      content: content,
-      terrainProvider: terrainProvider,
-    );
-    // Progression derives from population on every load, so
-    // reconciliation is a no-op for consistent tables — it stays as a
-    // safety net for hand-edited ones.
-    final reconciled = reconcileWorldProgression(state, content);
-    validateParcelWorldState(reconciled, content, terrainProvider);
-    return reconciled;
+    final states = <String, ParcelWorldState>{};
+    for (final record in tables.cities) {
+      final cityTables = tables.tablesById[record.id];
+      if (cityTables == null) continue;
+      final state = sheetTablesToWorld(
+        cityTables,
+        content: content,
+        terrainProvider: terrainProvider,
+      );
+      // Progression derives from population on every load, so
+      // reconciliation is a no-op for consistent tables — it stays as
+      // a safety net for hand-edited ones.
+      final reconciled = reconcileWorldProgression(state, content);
+      validateParcelWorldState(reconciled, content, terrainProvider);
+      states[record.id] = reconciled;
+    }
+    return LoadedCitySave(tables: tables, states: states);
   }
 
   @override
-  Future<void> save(ParcelWorldState state) async {
+  Future<void> saveCity(
+    MultiCityTables tables,
+    String cityId,
+    ParcelWorldState state,
+  ) async {
     validateParcelWorldState(state, content, terrainProvider);
-    await api.putDocuments(encodeSheetTables(worldToSheetTables(state)));
+    final spliced = tables.withCityTables(cityId, worldToSheetTables(state));
+    await api.putDocuments(encodeMultiCityTables(spliced));
   }
 }

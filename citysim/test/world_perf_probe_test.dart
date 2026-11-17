@@ -40,17 +40,35 @@ class _MemoryParcelStore implements ParcelWorldStore {
   ParcelWorldState? state;
 
   @override
-  Future<ParcelWorldState?> load() async => state;
+  Future<LoadedCitySave?> load() async {
+    final state = this.state;
+    if (state == null) return null;
+    return LoadedCitySave(
+      tables: MultiCityTables(
+        cities: [
+          CityRecord(id: 'city_1', name: 'City 1', founded: state.dateKey),
+        ],
+        tablesById: {'city_1': worldToSheetTables(state)},
+      ),
+      states: {'city_1': state},
+    );
+  }
 
   @override
-  Future<void> save(ParcelWorldState state) async => this.state = state;
+  Future<void> saveCity(
+    MultiCityTables tables,
+    String cityId,
+    ParcelWorldState state,
+  ) async => this.state = state;
 }
 
-/// The bundled sample town, decoded from the live CSV save.
+/// The bundled sample town, decoded from the live CSV save — the
+/// lowest-id city (the one the game plays).
 Future<ParcelWorldState> _loadSampleTown(ContentBundle content) async {
   Future<String> sheet(String name) =>
       rootBundle.loadString('assets/test_sheets/$name.csv');
-  final tables = decodeSheetTables(
+  final tables = decodeMultiCityTables(
+    cities: await sheet('Cities'),
     userData: await sheet('UserData'),
     tiles: await sheet('Tiles'),
     props: await sheet('Props'),
@@ -58,7 +76,9 @@ Future<ParcelWorldState> _loadSampleTown(ContentBundle content) async {
     projects: await sheet('Projects'),
   );
   return sheetTablesToWorld(
-    tables,
+    // Cities decode in ascending id order; first is the one the game
+    // plays.
+    tables.tablesById[tables.cities.first.id]!,
     content: content,
     terrainProvider: ContentTerrainProvider(content.terrain),
   );

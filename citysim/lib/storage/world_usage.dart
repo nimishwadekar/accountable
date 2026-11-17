@@ -97,3 +97,20 @@ CellCoord? _cell(String? x, String? y) {
   if (column == null || row == null) return null;
   return CellCoord(column, row);
 }
+
+/// Usage across every city in the save, unioned. The map is shared,
+/// so the editor's locks span all cities: terrain under any city's
+/// use is locked.
+WorldUsage computeAllCitiesUsage(
+  MultiCityTables tables,
+  ContentBundle content,
+) {
+  final occupied = <CellCoord>{};
+  final parcels = <ParcelCoord>{};
+  for (final cityTables in tables.tablesById.values) {
+    final usage = computeWorldUsage(cityTables, content);
+    occupied.addAll(usage.occupiedCells);
+    parcels.addAll(usage.ownedParcels);
+  }
+  return WorldUsage(occupiedCells: occupied, ownedParcels: parcels);
+}

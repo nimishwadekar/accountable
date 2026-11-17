@@ -6,6 +6,7 @@ import 'package:citysim/storage/world_sheet_codec.dart';
 import 'package:citysim/world/coordinates.dart';
 import 'package:citysim/world/terrain_provider.dart';
 import 'package:citysim/world/world_reducer.dart';
+import 'package:citysim/world/world_rules.dart';
 import 'package:citysim/world/world_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,6 +44,18 @@ void main() {
     today: DateTime.utc(2026, 11, 2),
   );
 
+  /// A one-city save around a state — the shape the app's fresh-world
+  /// path writes.
+  MultiCityTables citySave(ParcelWorldState world) => MultiCityTables(
+    cities: [CityRecord(id: 'city_1', name: 'City 1', founded: world.dateKey)],
+    tablesById: {'city_1': worldToSheetTables(world)},
+  );
+
+  Future<void> save(
+    ServerSheetParcelWorldStore store,
+    ParcelWorldState world,
+  ) => store.saveCity(citySave(world), 'city_1', world);
+
   /// The heartbeat: a day passes and the town report runs.
   ParcelWorldState nextDay(ParcelWorldState world) =>
       checkInWorldForToday(advanceWorldDays(world, 1), content);
@@ -74,8 +87,8 @@ void main() {
 
     final reloaded = await store.load();
     expect(reloaded, isNull, reason: 'no documents yet');
-    await store.save(world);
-    final midProject = (await store.load())!;
+    await save(store, world);
+    final midProject = (await store.load())!.activeCity;
     expect(midProject.constructions.single.roadCells, hasLength(3));
     expect(
       midProject.roads.where(
@@ -127,8 +140,8 @@ void main() {
       origin: const CellCoord(6, 5),
     );
 
-    await store.save(played);
-    final finalWorld = (await store.load())!;
+    await save(store, played);
+    final finalWorld = (await store.load())!.activeCity;
     expect(
       finalWorld.roads,
       hasLength(5),
@@ -141,8 +154,8 @@ void main() {
 
     // Saving the reloaded world produces the same documents again.
     expect(
-      encodeSheetTables(worldToSheetTables(finalWorld)),
-      encodeSheetTables(worldToSheetTables(played)),
+      encodeMultiCityTables(citySave(finalWorld)),
+      encodeMultiCityTables(citySave(played)),
     );
   });
 
@@ -205,13 +218,14 @@ void main() {
       reason: 'finished roads no longer name their project',
     );
 
-    await store.save(world);
-    final saved = decodeSheetTables(
+    await save(store, world);
+    final saved = decodeMultiCityTables(
+      cities: api.documents![citiesSheetName] ?? '',
       userData: api.documents![userDataSheetName] ?? '',
       tiles: api.documents![tilesSheetName] ?? '',
       ownedParcels: api.documents![ownedParcelsSheetName] ?? '',
       projects: api.documents![projectsSheetName] ?? '',
-    );
+    ).tablesById['city_1']!;
     expect(
       saved.tiles.where((row) => row[2] == 'road' && row[7].isNotEmpty),
       isEmpty,
@@ -222,7 +236,7 @@ void main() {
     // stretch reuses the finished project's id. The two must not
     // collide: the reload has to rebuild the new project from its own
     // tiles only.
-    final reloaded = (await store.load())!;
+    final reloaded = (await store.load())!.activeCity;
     expect(reloaded.nextEntityNumber, 1);
     var played = planRoadStretch(
       reloaded,
@@ -233,8 +247,8 @@ void main() {
     expect(played.constructions.single.id, finishedId);
     played = nextDay(played);
 
-    await store.save(played);
-    final second = (await store.load())!;
+    await save(store, played);
+    final second = (await store.load())!.activeCity;
     expect(second.constructions.single.roadCells, hasLength(2));
     expect(
       second.roads.where(
@@ -244,5 +258,75 @@ void main() {
       reason: 'one tile delivered, one still creeping',
     );
     expect(second.roads, hasLength(4), reason: '3 finished + 1 delivered tile');
+  });
+
+  test('saving one city splices only its block', () async {
+    final api = _FakeDocumentsApi();
+    final store = ServerSheetParcelWorldStore(
+      content: content,
+      terrainProvider: terrain,
+      api: api,
+    );
+
+    // Two cities: city_1 founded and expanded; city_2 fresh, not yet
+    // founded (a valid save state — founding is gameplay, not
+    // storage).
+    var first = grantWorldDebugCoins(
+      checkInWorldForToday(newWorld(), content),
+      100,
+    );
+    first = purchaseParcel(first, content, terrain, const ParcelCoord(0, 0));
+    final second = newWorld();
+    final tables = MultiCityTables(
+      cities: [
+        CityRecord(id: 'city_1', name: 'Alpha', founded: first.dateKey),
+        CityRecord(id: 'city_2', name: 'Beta', founded: second.dateKey),
+      ],
+      tablesById: {
+        'city_1': worldToSheetTables(first),
+        'city_2': worldToSheetTables(second),
+      },
+    );
+    await store.saveCity(tables, 'city_2', second);
+
+    final loaded = (await store.load())!;
+    expect(loaded.states.keys, {'city_1', 'city_2'});
+    expect(loaded.activeCityId, 'city_1', reason: 'the lowest id plays');
+    expect(
+      loaded.states['city_1']!.parcels.single.coord,
+      const ParcelCoord(0, 0),
+    );
+    expect(loaded.states['city_2']!.parcels, isEmpty);
+
+    // Saving city_1 leaves city_2's block untouched — cities are
+    // independent games.
+    var played = loaded.states['city_1']!;
+    played = purchaseParcel(played, content, terrain, const ParcelCoord(1, 0));
+    await store.saveCity(loaded.tables, 'city_1', played);
+    final reloaded = (await store.load())!;
+    expect(reloaded.states['city_1']!.parcels, hasLength(2));
+    expect(reloaded.states['city_2']!.parcels, isEmpty);
+
+    // And city_2 cannot take what city_1 now holds: the claim set is
+    // every other city's parcels.
+    final claimed = {
+      for (final parcel in reloaded.states['city_1']!.parcels) parcel.coord,
+    };
+    expect(
+      () => purchaseParcel(
+        reloaded.states['city_2']!,
+        content,
+        terrain,
+        const ParcelCoord(1, 0),
+        claimedParcels: claimed,
+      ),
+      throwsA(
+        isA<WorldRuleViolation>().having(
+          (error) => error.message,
+          'message',
+          contains('Another city has claimed'),
+        ),
+      ),
+    );
   });
 }

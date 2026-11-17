@@ -39,14 +39,16 @@ void main() {
 
     String sheet(String name) =>
         File('assets/test_sheets/$name.csv').readAsStringSync();
+    final tables = decodeMultiCityTables(
+      cities: sheet('Cities'),
+      userData: sheet('UserData'),
+      tiles: sheet('Tiles'),
+      props: sheet('Props'),
+      ownedParcels: sheet('OwnedParcels'),
+      projects: sheet('Projects'),
+    );
     final world = sheetTablesToWorld(
-      decodeSheetTables(
-        userData: sheet('UserData'),
-        tiles: sheet('Tiles'),
-        props: sheet('Props'),
-        ownedParcels: sheet('OwnedParcels'),
-        projects: sheet('Projects'),
-      ),
+      tables.tablesById[tables.cities.first.id]!,
       content: content,
       terrainProvider: terrain,
     );

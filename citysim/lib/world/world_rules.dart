@@ -269,6 +269,7 @@ ParcelPurchaseQuote quoteParcelPurchase(
   TerrainProvider terrainProvider,
   ParcelCoord candidate, {
   WorldRules rules = const WorldRules(),
+  Set<ParcelCoord> claimedParcels = const {},
 }) {
   if (candidate.x.abs() > rules.maximumCoordinate ||
       candidate.y.abs() > rules.maximumCoordinate) {
@@ -277,6 +278,12 @@ ParcelPurchaseQuote quoteParcelPurchase(
   final queries = WorldQueries(state, terrainProvider);
   if (queries.ownsParcel(candidate)) {
     throw const WorldRuleViolation('You already own that parcel.');
+  }
+  // One map, exclusive parcels: another city's claim is as final as
+  // this city's ownership. The session passes the union of every
+  // other city's parcels.
+  if (claimedParcels.contains(candidate)) {
+    throw const WorldRuleViolation('Another city has claimed that parcel.');
   }
   // The founding purchase — a new game's first — is free and needs
   // no neighbour, because nothing is owned yet. It still needs
@@ -538,9 +545,6 @@ void validateParcelWorldState(
 ) {
   if (state.parcelSize != defaultParcelSize ||
       state.generatorVersion != terrainProvider.generatorVersion ||
-      state.rulesVersion != parcelWorldRulesVersion ||
-      state.contentVersion != parcelWorldContentVersion ||
-      state.worldId.isEmpty ||
       state.constructionDay < 0 ||
       worldDateKey(state.checkInHighWaterDate).compareTo(state.dateKey) < 0 ||
       state.coins < 0 ||

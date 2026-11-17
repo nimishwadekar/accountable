@@ -428,11 +428,8 @@ ParcelWorldState sheetTablesToWorld(
   }
 
   return ParcelWorldState(
-    worldId: 'parcel-world-$seed',
     seed: seed,
     generatorVersion: terrainProvider.generatorVersion,
-    rulesVersion: parcelWorldRulesVersion,
-    contentVersion: parcelWorldContentVersion,
     parcelSize: defaultParcelSize,
     simulatedDate: simulatedDate,
     checkInHighWaterDate: highWaterDate,

@@ -125,10 +125,11 @@ void main() {
 
   test('world documents round-trip through the server', () async {
     final response = await _put('/api/world', {
-      'UserData': 'key,value\nseed,7\n',
-      'Tiles': 'x,y,kind,status,detail,variant,facing,project\n',
-      'OwnedParcels': 'x,y\n',
-      'Projects': 'id,kind,detail,target,funded\n',
+      'Cities': 'city_id,name,founded\ncity_1,City 1,2026-11-02\n',
+      'UserData': 'city_id,key,value\ncity_1,seed,7\n',
+      'Tiles': 'city_id,x,y,kind,status,detail,variant,facing,project\n',
+      'OwnedParcels': 'city_id,x,y\n',
+      'Projects': 'city_id,id,kind,detail,target,funded\n',
     });
     expect(response.statusCode, 200);
     final documents = await _decode(await _get('/api/world'));
@@ -137,15 +138,16 @@ void main() {
 
   test('world summary expands footprints and bridge spans', () async {
     await _put('/api/world', {
-      'UserData': 'key,value\nseed,7\n',
+      'Cities': 'city_id,name,founded\ncity_1,City 1,2026-11-02\n',
+      'UserData': 'city_id,key,value\ncity_1,seed,7\n',
       'Tiles':
-          'x,y,kind,status,detail,variant,facing,project\n'
-          '3,4,structure,complete,apartments,,,\n'
-          '5,6,road,complete,dirt,,,\n',
-      'OwnedParcels': 'x,y\n0,0\n',
+          'city_id,x,y,kind,status,detail,variant,facing,project\n'
+          'city_1,3,4,structure,complete,apartments,,,\n'
+          'city_1,5,6,road,complete,dirt,,,\n',
+      'OwnedParcels': 'city_id,x,y\ncity_1,0,0\n',
       'Projects':
-          'id,kind,detail,target,funded\n'
-          '1,bridge,,7:4:16:4,0\n',
+          'city_id,id,kind,detail,target,funded\n'
+          'city_1,1,bridge,,7:4:16:4,0\n',
     });
     final summary = await _decode(await _get('/api/world/summary'));
     final occupied = {
@@ -165,12 +167,13 @@ void main() {
 
   test('terrain edits under occupied cells are rejected', () async {
     await _put('/api/world', {
-      'UserData': 'key,value\nseed,7\n',
+      'Cities': 'city_id,name,founded\ncity_1,City 1,2026-11-02\n',
+      'UserData': 'city_id,key,value\ncity_1,seed,7\n',
       'Tiles':
-          'x,y,kind,status,detail,variant,facing,project\n'
-          '10,4,road,complete,dirt,,,\n',
-      'OwnedParcels': 'x,y\n0,0\n',
-      'Projects': 'id,kind,detail,target,funded\n',
+          'city_id,x,y,kind,status,detail,variant,facing,project\n'
+          'city_1,10,4,road,complete,dirt,,,\n',
+      'OwnedParcels': 'city_id,x,y\ncity_1,0,0\n',
+      'Projects': 'city_id,id,kind,detail,target,funded\n',
     });
     final content = await _decode(await _get('/api/content'));
     // Re-type the occupied east water parcel (the road at (10,4) sits

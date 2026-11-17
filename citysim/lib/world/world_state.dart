@@ -3,8 +3,6 @@ import 'coordinates.dart';
 import 'terrain_provider.dart';
 
 const parcelWorldGeneratorVersion = 1;
-const parcelWorldRulesVersion = 2;
-const parcelWorldContentVersion = 3;
 
 class OwnedParcel {
   OwnedParcel({
@@ -237,11 +235,8 @@ class WorldEvent {
 
 class ParcelWorldState {
   ParcelWorldState({
-    required this.worldId,
     required this.seed,
     required this.generatorVersion,
-    required this.rulesVersion,
-    required this.contentVersion,
     required this.parcelSize,
     required this.simulatedDate,
     required this.checkInHighWaterDate,
@@ -275,11 +270,8 @@ class ParcelWorldState {
        constructions = List.unmodifiable(constructions),
        events = List.unmodifiable(events);
 
-  final String worldId;
   final int seed;
   final int generatorVersion;
-  final int rulesVersion;
-  final int contentVersion;
   final int parcelSize;
   final DateTime simulatedDate;
   final DateTime checkInHighWaterDate;
@@ -402,11 +394,8 @@ class ParcelWorldState {
     List<WorldConstruction>? constructions,
     List<WorldEvent>? events,
   }) => ParcelWorldState(
-    worldId: worldId,
     seed: seed,
     generatorVersion: generatorVersion,
-    rulesVersion: rulesVersion,
-    contentVersion: contentVersion,
     parcelSize: parcelSize,
     simulatedDate: simulatedDate ?? this.simulatedDate,
     checkInHighWaterDate: checkInHighWaterDate ?? this.checkInHighWaterDate,
@@ -456,11 +445,8 @@ ParcelWorldState newParcelWorldState({
       ? null
       : progression.first;
   return ParcelWorldState(
-    worldId: 'parcel-world-$seed',
     seed: seed,
     generatorVersion: content.terrain.generatorVersion,
-    rulesVersion: parcelWorldRulesVersion,
-    contentVersion: parcelWorldContentVersion,
     parcelSize: defaultParcelSize,
     simulatedDate: DateTime.utc(date.year, date.month, date.day),
     checkInHighWaterDate: DateTime.utc(date.year, date.month, date.day),

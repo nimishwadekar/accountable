@@ -17,10 +17,26 @@ class _MemoryParcelStore implements ParcelWorldStore {
   ParcelWorldState? state;
 
   @override
-  Future<ParcelWorldState?> load() async => state;
+  Future<LoadedCitySave?> load() async {
+    final state = this.state;
+    if (state == null) return null;
+    return LoadedCitySave(
+      tables: MultiCityTables(
+        cities: [
+          CityRecord(id: 'city_1', name: 'City 1', founded: state.dateKey),
+        ],
+        tablesById: {'city_1': worldToSheetTables(state)},
+      ),
+      states: {'city_1': state},
+    );
+  }
 
   @override
-  Future<void> save(ParcelWorldState state) async => this.state = state;
+  Future<void> saveCity(
+    MultiCityTables tables,
+    String cityId,
+    ParcelWorldState state,
+  ) async => this.state = state;
 }
 
 void main() {

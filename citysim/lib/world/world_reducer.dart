@@ -331,9 +331,16 @@ ParcelWorldState purchaseParcel(
   ParcelWorldState state,
   ContentBundle content,
   TerrainProvider terrainProvider,
-  ParcelCoord coord,
-) {
-  final quote = quoteParcelPurchase(state, content, terrainProvider, coord);
+  ParcelCoord coord, {
+  Set<ParcelCoord> claimedParcels = const {},
+}) {
+  final quote = quoteParcelPurchase(
+    state,
+    content,
+    terrainProvider,
+    coord,
+    claimedParcels: claimedParcels,
+  );
   _requireWallet(state, quote.price);
   final parcel = OwnedParcel(
     coord: quote.coord,

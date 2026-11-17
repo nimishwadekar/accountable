@@ -183,17 +183,27 @@ void main() {
 
   test('encoding and decoding CSV documents round-trips the tables', () {
     final tables = handwrittenTables();
-    final documents = encodeSheetTables(tables);
-    final decoded = decodeSheetTables(
+    final documents = encodeMultiCityTables(
+      MultiCityTables(
+        cities: const [
+          CityRecord(id: 'city_1', name: 'City 1', founded: '2026-11-02'),
+        ],
+        tablesById: {'city_1': tables},
+      ),
+    );
+    final decoded = decodeMultiCityTables(
+      cities: documents[citiesSheetName]!,
       userData: documents[userDataSheetName]!,
       tiles: documents[tilesSheetName]!,
+      props: documents[propsSheetName]!,
       ownedParcels: documents[ownedParcelsSheetName]!,
       projects: documents[projectsSheetName]!,
-    );
+    ).tablesById['city_1']!;
     // A comma inside a value exercises CSV quoting.
-    final quoted = decodeSheetTables(
-      userData: 'key,value\nnote,"hello, world"\nseed,7\n',
-    );
+    final quoted = decodeMultiCityTables(
+      cities: 'city_id,name,founded\ncity_1,City 1,2026-11-02\n',
+      userData: 'city_id,key,value\ncity_1,note,"hello, world"\n',
+    ).tablesById['city_1']!;
     expect(quoted.userData['note'], 'hello, world');
     expect(decoded.userData, tables.userData);
     expect(decoded.tiles, tables.tiles);
@@ -213,9 +223,151 @@ void main() {
       terrainProvider: terrain,
     );
     expect(
-      encodeSheetTables(worldToSheetTables(again)),
-      encodeSheetTables(worldToSheetTables(world)),
+      encodeMultiCityTables(
+        MultiCityTables(
+          cities: const [
+            CityRecord(id: 'city_1', name: 'City 1', founded: '2026-11-02'),
+          ],
+          tablesById: {'city_1': worldToSheetTables(again)},
+        ),
+      ),
+      encodeMultiCityTables(
+        MultiCityTables(
+          cities: const [
+            CityRecord(id: 'city_1', name: 'City 1', founded: '2026-11-02'),
+          ],
+          tablesById: {'city_1': worldToSheetTables(world)},
+        ),
+      ),
     );
+  });
+
+  group('multi-city tables', () {
+    test('two cities round-trip with no cross-decoding', () {
+      final first = handwrittenTables();
+      final second = SheetTables(
+        userData: {...first.userData, 'seed': '42'},
+        tiles: const [
+          ['9', '9', 'road', 'complete', 'asphalt', '', '', ''],
+        ],
+        ownedParcels: const [
+          ['5', '5'],
+          ['6', '5'],
+        ],
+      );
+      final documents = encodeMultiCityTables(
+        MultiCityTables(
+          cities: const [
+            CityRecord(id: 'city_1', name: 'Alpha', founded: '2026-11-01'),
+            CityRecord(id: 'city_2', name: 'Beta', founded: '2026-11-02'),
+          ],
+          tablesById: {'city_1': first, 'city_2': second},
+        ),
+      );
+
+      // City-major blocks: every Tiles row of city_1 precedes city_2's.
+      final tilesCityIds = [
+        for (final row in decodeCsvRows(documents[tilesSheetName]!)) row[0],
+      ];
+      expect(
+        tilesCityIds.sublist(0, first.tiles.length),
+        everyElement('city_1'),
+      );
+      expect(tilesCityIds.sublist(first.tiles.length), everyElement('city_2'));
+
+      final decoded = decodeMultiCityTables(
+        cities: documents[citiesSheetName]!,
+        userData: documents[userDataSheetName]!,
+        tiles: documents[tilesSheetName]!,
+        props: documents[propsSheetName]!,
+        ownedParcels: documents[ownedParcelsSheetName]!,
+        projects: documents[projectsSheetName]!,
+      );
+      expect(decoded.cities.map((record) => record.id), ['city_1', 'city_2']);
+      expect(decoded.cities.first.name, 'Alpha');
+      expect(decoded.tablesById['city_1']!.userData, first.userData);
+      expect(decoded.tablesById['city_1']!.tiles, first.tiles);
+      expect(decoded.tablesById['city_1']!.ownedParcels, first.ownedParcels);
+      expect(decoded.tablesById['city_2']!.userData['seed'], '42');
+      expect(decoded.tablesById['city_2']!.tiles, second.tiles);
+      expect(decoded.tablesById['city_2']!.ownedParcels, second.ownedParcels);
+      expect(decoded.nextCityId(), 'city_3');
+    });
+
+    test('city ids sort numerically and mint past the highest', () {
+      expect(MultiCityTables().nextCityId(), 'city_1');
+      expect(
+        MultiCityTables(
+          tablesById: const {'city_1': SheetTables(), 'city_10': SheetTables()},
+        ).nextCityId(),
+        'city_11',
+        reason: 'city_10 sorts after city_9, not after city_1',
+      );
+      expect(
+        () => cityIdNumber('parcel-world-7'),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('the same parcel in two cities fails the decode', () {
+      final documents = encodeMultiCityTables(
+        MultiCityTables(
+          cities: const [
+            CityRecord(id: 'city_1', name: 'A', founded: '2026-11-01'),
+            CityRecord(id: 'city_2', name: 'B', founded: '2026-11-01'),
+          ],
+          tablesById: const {
+            'city_1': SheetTables(
+              ownedParcels: [
+                ['0', '0'],
+              ],
+            ),
+            'city_2': SheetTables(
+              ownedParcels: [
+                ['0', '0'],
+              ],
+            ),
+          },
+        ),
+      );
+      expect(
+        () => decodeMultiCityTables(
+          cities: documents[citiesSheetName]!,
+          userData: documents[userDataSheetName]!,
+          tiles: documents[tilesSheetName]!,
+          props: documents[propsSheetName]!,
+          ownedParcels: documents[ownedParcelsSheetName]!,
+          projects: documents[projectsSheetName]!,
+        ),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('owned by both'),
+          ),
+        ),
+      );
+    });
+
+    test('an unmigrated single-city save fails visibly', () {
+      // The old five-sheet shape: no Cities document, no city column.
+      // There is no migration code, so this is the intended failure.
+      expect(
+        () => decodeMultiCityTables(
+          userData: 'key,value\nseed,7\n',
+          tiles:
+              'x,y,kind,status,detail,variant,facing,project\n'
+              '4,4,road,complete,asphalt,,,\n',
+        ),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('multi-city format'),
+          ),
+        ),
+      );
+    });
   });
 
   test('stale project references on completed roads are healed', () {
@@ -490,8 +642,22 @@ void main() {
     );
     expect(again.props, hasLength(3));
     expect(
-      encodeSheetTables(worldToSheetTables(again)),
-      encodeSheetTables(worldToSheetTables(world)),
+      encodeMultiCityTables(
+        MultiCityTables(
+          cities: const [
+            CityRecord(id: 'city_1', name: 'City 1', founded: '2026-11-02'),
+          ],
+          tablesById: {'city_1': worldToSheetTables(again)},
+        ),
+      ),
+      encodeMultiCityTables(
+        MultiCityTables(
+          cities: const [
+            CityRecord(id: 'city_1', name: 'City 1', founded: '2026-11-02'),
+          ],
+          tablesById: {'city_1': worldToSheetTables(world)},
+        ),
+      ),
     );
   });
 

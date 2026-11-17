@@ -1358,6 +1358,57 @@ void main() {
   });
 
   group('parcel purchase and natural terrain', () {
+    test('another city\'s claim refuses purchase and founding', () {
+      // One map, exclusive parcels: the session passes every other
+      // city's parcels as the claim set, and the same rules refuse
+      // them — founding included.
+      final fresh = freshWorld();
+      const foundingCoord = ParcelCoord(0, 0);
+      expect(
+        () => quoteParcelPurchase(
+          fresh,
+          content,
+          terrain,
+          foundingCoord,
+          claimedParcels: {foundingCoord},
+        ),
+        throwsA(
+          isA<WorldRuleViolation>().having(
+            (error) => error.message,
+            'message',
+            contains('Another city has claimed'),
+          ),
+        ),
+        reason: 'founding cannot take a foreign-held parcel',
+      );
+      // Without the claim the same parcel founds normally —
+      // single-city callers behave exactly as before.
+      expect(
+        () => quoteParcelPurchase(fresh, content, terrain, foundingCoord),
+        returnsNormally,
+      );
+
+      var world = grantWorldDebugCoins(newWorld(), 200);
+      // The settled start already owns (0,0) with its road; expansion
+      // is the purchase under test.
+      const neighbor = ParcelCoord(1, 0);
+      expect(
+        () => purchaseParcel(
+          world,
+          content,
+          terrain,
+          neighbor,
+          claimedParcels: {neighbor},
+        ),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: 'expansion cannot take a foreign-held parcel',
+      );
+      expect(
+        () => purchaseParcel(world, content, terrain, neighbor),
+        returnsNormally,
+      );
+    });
+
     test('parcels are neighboring purchases and owning land is not access', () {
       var world = grantWorldDebugCoins(newWorld(), 100);
       // Authored water parcels are buyable like any other map parcel.
@@ -1684,8 +1735,22 @@ void main() {
     // Round-tripping the rebuilt world again is a fixed point: the same
     // tables come back out.
     expect(
-      encodeSheetTables(worldToSheetTables(decoded)),
-      encodeSheetTables(worldToSheetTables(world)),
+      encodeMultiCityTables(
+        MultiCityTables(
+          cities: const [
+            CityRecord(id: 'city_1', name: 'City 1', founded: '2026-11-02'),
+          ],
+          tablesById: {'city_1': worldToSheetTables(decoded)},
+        ),
+      ),
+      encodeMultiCityTables(
+        MultiCityTables(
+          cities: const [
+            CityRecord(id: 'city_1', name: 'City 1', founded: '2026-11-02'),
+          ],
+          tablesById: {'city_1': worldToSheetTables(world)},
+        ),
+      ),
     );
   });
 

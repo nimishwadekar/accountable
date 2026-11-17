@@ -7,6 +7,8 @@ import 'config/citysim_config.dart';
 import 'content/content_bundle.dart';
 import 'rendering/parcel_world_view.dart';
 import 'storage/server_sheet_store.dart';
+import 'storage/sheet_tables.dart';
+import 'storage/world_sheet_codec.dart';
 import 'world/coordinates.dart';
 import 'world/terrain_provider.dart';
 import 'world/world_content.dart';
@@ -65,6 +67,12 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   ContentBundle? _content;
   ParcelWorldStore? _store;
   ParcelWorldSaveCoordinator? _saveCoordinator;
+
+  /// The whole save — every city's blocks. `_world` is the active
+  /// city's state (the lowest id until switching gameplay exists);
+  /// the other blocks are only read, for the parcel-exclusivity set.
+  MultiCityTables? _cityTables;
+  String? _activeCityId;
 
   ParcelWorldState? _world;
   Object? _loadError;
@@ -161,15 +169,21 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       if (loaded != null) {
         if (!mounted) return;
         setState(() {
-          _world = loaded;
+          _cityTables = loaded.tables;
+          _activeCityId = loaded.activeCityId;
+          _world = loaded.activeCity;
           _loading = false;
         });
         return;
       }
+      // No save yet: a fresh world founds its first city.
       final initial = _newWorld();
-      await store.save(initial);
+      final tables = _freshCityTables('city_1', initial);
+      await store.saveCity(tables, 'city_1', initial);
       if (!mounted) return;
       setState(() {
+        _cityTables = tables;
+        _activeCityId = 'city_1';
         _world = initial;
         _loading = false;
       });
@@ -180,6 +194,33 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         _loading = false;
       });
     }
+  }
+
+  /// A one-city save around a fresh state — the shape of a new world.
+  MultiCityTables _freshCityTables(String cityId, ParcelWorldState state) =>
+      MultiCityTables(
+        cities: [
+          CityRecord(id: cityId, name: 'City 1', founded: state.dateKey),
+        ],
+        tablesById: {cityId: worldToSheetTables(state)},
+      );
+
+  /// Parcels held by every other city — the map is shared and
+  /// parcels are exclusive, so these refuse purchase and founding.
+  Set<ParcelCoord> _foreignParcels() {
+    final tables = _cityTables;
+    final active = _activeCityId;
+    if (tables == null || active == null) return const {};
+    final claimed = <ParcelCoord>{};
+    for (final entry in tables.tablesById.entries) {
+      if (entry.key == active) continue;
+      for (final row in entry.value.ownedParcels) {
+        final x = int.tryParse(row[0]);
+        final y = int.tryParse(row[1]);
+        if (x != null && y != null) claimed.add(ParcelCoord(x, y));
+      }
+    }
+    return claimed;
   }
 
   ParcelWorldState _newWorld() => newParcelWorldState(
@@ -193,8 +234,18 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       _loadError = null;
     });
     final coordinator = _saveCoordinator;
-    if (coordinator == null) return;
-    final write = replace ? coordinator.replace(next) : coordinator.save(next);
+    final cityId = _activeCityId;
+    if (coordinator == null || cityId == null) return;
+    // Splice the active city's block; other cities never change while
+    // one is being played, so the in-memory tables stay current.
+    final tables = (_cityTables ?? MultiCityTables()).withCityTables(
+      cityId,
+      worldToSheetTables(next),
+    );
+    _cityTables = tables;
+    final write = replace
+        ? coordinator.replace(tables, cityId, next)
+        : coordinator.save(tables, cityId, next);
     unawaited(
       write
           .then<void>((_) {
@@ -508,10 +559,14 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     );
     if (confirmed != true || !mounted) return;
     final fresh = _newWorld();
+    // "Start new world" wipes the whole save back to one fresh city.
+    final tables = _freshCityTables('city_1', fresh);
     try {
-      await _saveCoordinator?.replace(fresh);
+      await _saveCoordinator?.replace(tables, 'city_1', fresh);
       if (!mounted) return;
       setState(() {
+        _cityTables = tables;
+        _activeCityId = 'city_1';
         _world = fresh;
         _loading = false;
         _saveError = null;
@@ -538,6 +593,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         _requireContent,
         _terrain,
         coord,
+        claimedParcels: _foreignParcels(),
       );
       final founding = world.parcels.isEmpty;
       final confirmed = await showDialog<bool>(
@@ -576,7 +632,13 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       );
       if (confirmed != true || !mounted) return;
       _runAction(
-        (state) => purchaseParcel(state, _requireContent, _terrain, coord),
+        (state) => purchaseParcel(
+          state,
+          _requireContent,
+          _terrain,
+          coord,
+          claimedParcels: _foreignParcels(),
+        ),
       );
       setState(() => _selectedParcel = null);
     } on WorldRuleViolation catch (error) {
@@ -1359,7 +1421,13 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     ParcelPurchaseQuote? quote;
     String? failure;
     try {
-      quote = quoteParcelPurchase(world, _requireContent, _terrain, parcel);
+      quote = quoteParcelPurchase(
+        world,
+        _requireContent,
+        _terrain,
+        parcel,
+        claimedParcels: _foreignParcels(),
+      );
     } on WorldRuleViolation catch (error) {
       failure = error.message;
     }

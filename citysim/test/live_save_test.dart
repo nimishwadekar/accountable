@@ -7,6 +7,7 @@ import 'package:citysim/storage/sheet_tables.dart';
 import 'package:citysim/storage/world_sheet_codec.dart';
 import 'package:citysim/world/terrain_provider.dart';
 import 'package:citysim/world/world_rules.dart';
+import 'package:citysim/world/world_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The bundled save sheets are live data the player mutates by
@@ -28,24 +29,34 @@ void main() {
   test('the bundled save sheets load and validate against the content', () {
     const dir = 'assets/test_sheets';
     String read(String name) => File('$dir/$name').readAsStringSync();
-    final world = sheetTablesToWorld(
-      decodeSheetTables(
-        userData: read('UserData.csv'),
-        tiles: read('Tiles.csv'),
-        props: read('Props.csv'),
-        ownedParcels: read('OwnedParcels.csv'),
-        projects: read('Projects.csv'),
-      ),
-      content: content,
-      terrainProvider: terrain,
+    final tables = decodeMultiCityTables(
+      cities: read('Cities.csv'),
+      userData: read('UserData.csv'),
+      tiles: read('Tiles.csv'),
+      props: read('Props.csv'),
+      ownedParcels: read('OwnedParcels.csv'),
+      projects: read('Projects.csv'),
     );
-    expect(world.structures, isNotEmpty, reason: 'the save has buildings');
-    validateParcelWorldState(world, content, terrain);
+    expect(tables.cities, isNotEmpty, reason: 'the save has a city');
+    // Every city loads and validates on its own — they are
+    // independent games.
+    ParcelWorldState? world;
+    for (final record in tables.cities) {
+      final city = sheetTablesToWorld(
+        tables.tablesById[record.id]!,
+        content: content,
+        terrainProvider: terrain,
+      );
+      validateParcelWorldState(city, content, terrain);
+      world ??= city;
+    }
+    final town = world!;
+    expect(town.structures, isNotEmpty, reason: 'the save has buildings');
 
     // Wide lots sit along their road: every non-square footprint's
     // facing side must be a fully roaded long edge — the invariant
     // the placement system produces and hand edits must preserve.
-    for (final structure in world.structures) {
+    for (final structure in town.structures) {
       final definition = content.structure(structure.catalogueId)!;
       if (definition.footprintColumns == definition.footprintRows) continue;
       final facing = structure.facing;
@@ -60,7 +71,7 @@ void main() {
       };
       for (final cell in edge) {
         expect(
-          world.roadsByCell.containsKey(cell),
+          town.roadsByCell.containsKey(cell),
           isTrue,
           reason:
               '${structure.catalogueId} at ${origin.key} faces $facing '

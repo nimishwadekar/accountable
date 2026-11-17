@@ -14,11 +14,8 @@ ParcelWorldState stateWith({
   List<CompletedBridge> bridges = const [],
   List<WorldConstruction> constructions = const [],
 }) => ParcelWorldState(
-  worldId: 'test',
   seed: 1,
   generatorVersion: 1,
-  rulesVersion: 1,
-  contentVersion: 1,
   parcelSize: 8,
   simulatedDate: DateTime(2026, 1, 1),
   checkInHighWaterDate: DateTime(2026, 1, 1),

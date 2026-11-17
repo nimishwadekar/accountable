@@ -1,6 +1,6 @@
 // Verification-only: loads the live content and the live save sheets
-// through the game's own parse+codec+validate path, then prints the
-// town's next-report projection and vitality. Not part of the app or
+// through the game's own parse+codec+validate path, then prints each
+// city's next-report projection and vitality. Not part of the app or
 // tests; run with `dart run tool/verify_economy_load.dart`.
 import 'dart:io';
 
@@ -32,25 +32,43 @@ Future<void> main() async {
 
   String sheets(String name) =>
       File('assets/test_sheets/$name.csv').readAsStringSync();
-  final tables = decodeSheetTables(
+  final tables = decodeMultiCityTables(
+    cities: sheets('Cities'),
     userData: sheets('UserData'),
     tiles: sheets('Tiles'),
     props: sheets('Props'),
     ownedParcels: sheets('OwnedParcels'),
     projects: sheets('Projects'),
   );
+  if (tables.isEmpty) {
+    stdout.writeln('no save exists (empty sheets)');
+    return;
+  }
   final terrain = ContentTerrainProvider(content.terrain);
+  for (final record in tables.cities) {
+    final cityTables = tables.tablesById[record.id];
+    if (cityTables == null) continue;
+    _reportCity(record, cityTables, content, terrain);
+  }
+}
+
+void _reportCity(
+  CityRecord record,
+  SheetTables cityTables,
+  ContentBundle content,
+  ContentTerrainProvider terrain,
+) {
   final world = sheetTablesToWorld(
-    tables,
+    cityTables,
     content: content,
     terrainProvider: terrain,
   );
   validateParcelWorldState(world, content, terrain);
   stdout.writeln(
-    'live save loads and validates: ${world.coins} coins, '
-    '${world.structures.length} structures, ${world.roads.length} roads, '
-    '${world.bridges.length} bridges, ${world.constructions.length} '
-    'projects',
+    '${record.id} "${record.name}" (founded ${record.founded}): '
+    '${world.coins} coins, ${world.structures.length} structures, '
+    '${world.roads.length} roads, ${world.bridges.length} bridges, '
+    '${world.constructions.length} projects',
   );
   final ledger = townLedger(world, content);
   stdout.writeln(
@@ -86,7 +104,7 @@ Future<void> main() async {
     '/km2',
   );
 
-  // Round-trip: the save must survive a save→load cycle unchanged.
+  // Round-trip: the city must survive a save→load cycle unchanged.
   final saved = worldToSheetTables(world);
   final reloaded = sheetTablesToWorld(
     saved,

@@ -22,6 +22,7 @@ import 'file_content_source.dart';
 
 const editorPort = 9200;
 const worldSheetNames = [
+  citiesSheetName,
   userDataSheetName,
   tilesSheetName,
   propsSheetName,
@@ -242,7 +243,8 @@ Future<void> _getWorldSummary(
   Directory contentDir,
   Directory assetsDir,
 ) async {
-  final tables = decodeSheetTables(
+  final tables = decodeMultiCityTables(
+    cities: _readWorldDocument(assetsDir, citiesSheetName),
     userData: _readWorldDocument(assetsDir, userDataSheetName),
     tiles: _readWorldDocument(assetsDir, tilesSheetName),
     props: _readWorldDocument(assetsDir, propsSheetName),
@@ -254,7 +256,7 @@ Future<void> _getWorldSummary(
     return;
   }
   final bundle = await loadContentBundle(FileContentSource(contentDir));
-  _respondJson(request, 200, computeWorldUsage(tables, bundle).toJson());
+  _respondJson(request, 200, computeAllCitiesUsage(tables, bundle).toJson());
 }
 
 Future<void> _getContent(HttpRequest request, Directory contentDir) async {
@@ -378,7 +380,8 @@ List<String> _terrainOccupationIssues(
       ?.cast<String, Object?>();
   if (currentParcels == null || incomingParcels == null) return const [];
 
-  final tables = decodeSheetTables(
+  final tables = decodeMultiCityTables(
+    cities: _readWorldDocument(assetsDir, citiesSheetName),
     userData: _readWorldDocument(assetsDir, userDataSheetName),
     tiles: _readWorldDocument(assetsDir, tilesSheetName),
     props: _readWorldDocument(assetsDir, propsSheetName),
@@ -386,7 +389,7 @@ List<String> _terrainOccupationIssues(
     projects: _readWorldDocument(assetsDir, projectsSheetName),
   );
   if (tables.isEmpty) return const [];
-  final usage = computeWorldUsage(tables, bundle);
+  final usage = computeAllCitiesUsage(tables, bundle);
 
   final issues = <String>[];
   for (final entry in currentParcels.entries) {

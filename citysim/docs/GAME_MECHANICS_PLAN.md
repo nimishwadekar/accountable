@@ -619,7 +619,8 @@ distribution of occupancy across buildings, which the final design
   The walled-shop corner is unchanged (grant-button escape until
   demolition lands).
 
-**Multiple cities (future concept, discussed 2026-11-14).** Several
+**Multiple cities (future concept, discussed 2026-11-14; storage
+schema decided 2026-11-16).** Several
 starting cities scattered around the map, unconnected at first, each
 with its own progression and its own treasury; connecting them by
 road is the later milestone this plan already wants to reward. The
@@ -631,19 +632,22 @@ the buyer's size, so it partitions cleanly along settlement lines
 where distance-based pricing would tangle cities together. The lift,
 in the order the decisions force themselves:
 
-- **Settlement partition of the state.** Per-city treasury,
-  population, and unlock set; a settlement tag on
-  every parcel. The five sheets grow a settlement dimension — the
-  biggest schema change since the codec. The earned-minus-spent
-  ledger invariant becomes per-city.
-- **One heartbeat, many reports.** One check-in per day advances
-  every city — the day passes everywhere, protecting the
-  one-check-in product rule. The town report becomes a multi-city
-  report or a city picker.
-- **Purchase locality.** Every treasury purchase needs a settlement
-  context — a road built in one city draws from that city's treasury
-  alone. This is the invasive part; it touches every purchase path
-  in the reducer.
+- **City partition of the state.** Decided (2026-11-16): per-city
+  treasury, population, unlock set, and clock; one shared map with
+  parcels exclusive across cities; a leading `city_id` column on
+  every sheet in city-major blocks plus a Cities index document —
+  not per-city sheets (the workbook tab limit caps those at ~40
+  cities). The biggest schema change since the codec; the design
+  lives in the implementation plan §7. Saves migrate by hand — the
+  game carries no version or migration code.
+- **Per-city check-ins.** Decided (2026-11-16, replacing the
+  one-heartbeat sketch): each city carries its own clock and checks
+  in independently — the player visits every city each day, which
+  builds attachment. The town report stays per-city; a multi-city
+  summary view can come later.
+- **Purchase locality.** Comes free with the partition: the reducer
+  operates on one city's state, so a road built in one city draws
+  from that city's treasury by construction. No reducer changes.
 - **Founding mechanics.** How a second city starts on disconnected
   land: the lore above (boat colonization, splinter households)
   supplies the story; mechanically a founding action is needed —
