@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../content_api.dart';
 import '../edit_fields.dart';
 
 /// Progression editor: the milestone layer above the catalogue.
@@ -300,25 +301,63 @@ class _ProgressionPageState extends State<ProgressionPage> {
     );
   }
 
+  /// The first art file behind a model's rolled variant — one facing
+  /// is enough to recognize it at chip size. Null when nothing
+  /// resolves (unknown model, spriteless role).
+  String? _spritePathFor(String modelId) {
+    for (final model in modelList(widget.categories)) {
+      if ('${model['id']}' != modelId) continue;
+      final roles = (model['assetRoles'] as List?)?.cast<String>() ?? const [];
+      if (roles.isEmpty) return null;
+      final sprite = (spriteMap(widget.categories)[roles.first] as Map?)
+          ?.cast<String, Object?>();
+      if (sprite == null) return null;
+      final entries = spritePathEntries(sprite);
+      return entries.isEmpty ? null : entries.first.$2;
+    }
+    return null;
+  }
+
   Widget _modelChip(String id, String label) {
+    final spritePath = _spritePathFor(id);
+    // The sprite rides inside the label so the chip stays a compact
+    // pill; a transparent image (no thumb box — the chip is the
+    // background) at a fixed height, width bounded so wide art
+    // cannot balloon the chip.
+    Widget content({bool dimmed = false}) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (spritePath != null) ...[
+          Image.network(
+            ContentApi().assetUrl(spritePath),
+            height: 20,
+            fit: BoxFit.contain,
+            opacity: dimmed ? const AlwaysStoppedAnimation(0.4) : null,
+            errorBuilder: (_, _, _) => const SizedBox(width: 16, height: 20),
+          ),
+          const SizedBox(width: 5),
+        ],
+        Text(label),
+      ],
+    );
     return Draggable<String>(
       data: id,
       feedback: Material(
         color: Colors.transparent,
         child: Chip(
-          label: Text(label),
+          label: content(),
           visualDensity: VisualDensity.compact,
           backgroundColor: Colors.white,
         ),
       ),
       childWhenDragging: Chip(
-        label: Text(label),
+        label: content(dimmed: true),
         visualDensity: VisualDensity.compact,
         backgroundColor: Colors.black12,
       ),
       child: Tooltip(
         message: id,
-        child: Chip(label: Text(label), visualDensity: VisualDensity.compact),
+        child: Chip(label: content(), visualDensity: VisualDensity.compact),
       ),
     );
   }
