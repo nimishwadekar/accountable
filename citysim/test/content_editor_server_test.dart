@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'frozen_content.dart';
+
 HttpClient? _testClient;
 
 /// Port of the spawned editor server. An ephemeral port keeps the tests
@@ -28,14 +30,16 @@ void main() {
   late Directory tempRoot;
 
   setUpAll(() async {
-    // Build a throwaway package layout: seed content copied from the real
-    // bundle, stubbed sprite files, and no dashboard build.
+    // Build a throwaway package layout: content written from the
+    // frozen test bundle (so live JSON edits cannot flap these
+    // tests), stubbed sprite files, and no dashboard build.
     tempRoot = await Directory.systemTemp.createTemp('editor_test');
     final contentDir = Directory('${tempRoot.path}/assets/content')
       ..createSync(recursive: true);
-    final source = Directory('assets/content');
-    for (final file in source.listSync().whereType<File>()) {
-      file.copySync('${contentDir.path}/${file.uri.pathSegments.last}');
+    for (final entry in frozenCategories().entries) {
+      File('${contentDir.path}/${entry.key}').writeAsStringSync(
+        const JsonEncoder.withIndent('  ').convert(entry.value),
+      );
     }
     // Stub every referenced sprite file so the server's file-existence
     // validation passes without copying the whole art pack. Sprite paths

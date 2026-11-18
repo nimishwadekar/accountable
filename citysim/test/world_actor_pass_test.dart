@@ -11,7 +11,6 @@ library;
 
 import 'dart:math' as math;
 
-import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/rendering/parcel_world_view.dart';
 import 'package:citysim/rendering/perf_probe.dart';
@@ -22,6 +21,8 @@ import 'package:citysim/world/terrain_provider.dart';
 import 'package:citysim/world/world_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'frozen_content.dart';
 
 ParcelWorldState _anchorWorld(ContentBundle content) => sheetTablesToWorld(
   SheetTables(
@@ -49,11 +50,13 @@ ParcelWorldState _anchorWorld(ContentBundle content) => sheetTablesToWorld(
 );
 
 void main() {
-  // Content loads in setUpAll (real async): asset reads inside a
-  // testWidgets body run in fake-async, where they are unreliable.
+  // The frozen content bundle builds synchronously in setUpAll; the
+  // sprite PNGs it names still decode during the tests, and asset
+  // reads inside a testWidgets body run in fake-async, where they
+  // are unreliable.
   late ContentBundle content;
-  setUpAll(() async {
-    content = await loadContentBundle(const AssetContentSource());
+  setUpAll(() {
+    content = frozenContent();
   });
 
   test('merged actor order equals the single-list sort it replaced', () {

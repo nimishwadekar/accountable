@@ -1,4 +1,3 @@
-import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/world/coordinates.dart';
 import 'package:citysim/world/road_sprite_resolver.dart';
@@ -6,13 +5,15 @@ import 'package:citysim/world/terrain_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'frozen_content.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ContentBundle content;
 
-  setUpAll(() async {
-    content = await loadContentBundle(const AssetContentSource());
+  setUpAll(() {
+    content = frozenContent();
   });
 
   test('sprite side shifts validate within half the sprite width', () {
@@ -186,6 +187,8 @@ void main() {
     // Both deck roles carry the measured lift: 12 world px is where
     // the art draws the deck surface, and the ramps' incline derives
     // from it — a silent change would sink people into the deck.
+    // (The shipped decks' own lift is pinned in
+    // shipped_content_test.dart.)
     expect(content.sprite('bridge.body.se')!.surfaceLift, 12);
     expect(content.sprite('bridge.body.sw')!.surfaceLift, 12);
     expect(content.sprite('road.straight.se')!.surfaceLift, 0);
@@ -245,9 +248,10 @@ void main() {
   });
 
   test('the sway zoom gate parses, round-trips, and validates', () {
-    // The shipped gate: sway draws only at 0.75× camera scale and
+    // The authored gate: sway draws only at 0.75× camera scale and
     // closer — a content-tunable LOD switch, zero keeping the sway
-    // at every zoom.
+    // at every zoom. (The shipped gate's own value is pinned in
+    // shipped_content_test.dart.)
     expect(content.ambience.vegetationSway.minScale, 0.75);
     final fresh = VegetationSwayContent.fromJson(
       content.ambience.vegetationSway.toJson(),
@@ -637,8 +641,8 @@ void main() {
 
   test('terrain samples the authored parcel map with ocean beyond it', () {
     final provider = ContentTerrainProvider(content.terrain);
-    // Sample cells the live tile overrides have not painted — live
-    // content may carry any number of them (parcel size 8).
+    // Sample cells the tile overrides have not painted — a bundle may
+    // carry any number of them (parcel size 8).
     CellCoord baseCell(ParcelCoord parcel) {
       for (final cell in parcel.cells(8)) {
         if (!content.terrain.tiles.containsKey(cell)) return cell;
@@ -660,12 +664,13 @@ void main() {
       TerrainKind.water,
     );
     // Beyond the authored map is fog — the uncharted default. The
-    // map grew to 120 parcels (x −3..6, y −8..3), so the probe sits
-    // in parcel (9,0), east of the charted block.
+    // frozen map's charted block spans x −3..6 and y −1..2 (40
+    // parcels), so the probe sits in parcel (9,0), east of it. (The
+    // shipped map's own size is pinned in shipped_content_test.dart.)
     expect(provider.sample(const CellCoord(72, 2), 145).kind, TerrainKind.fog);
     expect(content.terrain.isOnMap(const ParcelCoord(1, 0)), isTrue);
     expect(content.terrain.isOnMap(const ParcelCoord(9, 9)), isFalse);
-    expect(content.terrain.parcels, hasLength(120));
+    expect(content.terrain.parcels, hasLength(40));
   });
 
   test('tile overrides parse, round-trip, and resolve over the base', () {

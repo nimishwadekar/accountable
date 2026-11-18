@@ -6,14 +6,14 @@
 /// screen centre and check the reported cell: the world point under
 /// the viewport centre must sit exactly on the clamp.
 ///
-/// Expected clamps for the real content's 7x7 charted block: the
-/// block spans world x in [-1792, 1792] and y in [-784, 1008], so
-/// with the 256-px margin the centre may travel x in [-2048, 2048]
-/// and y in [-1040, 1264]. The fixed camera starts centred on cell
-/// (4, 4) = world (0, 128).
+/// Expected clamps for the frozen content's charted block (parcels
+/// columns -3..6, rows -1..2, 8×8 cells each): the block spans world
+/// x in [-1536, 2048] and y in [-528, 1264], so with the 256-px
+/// margin the centre may travel x in [-1792, 2304] and y in
+/// [-784, 1520]. The fixed camera starts centred on cell (4, 4) =
+/// world (0, 128).
 library;
 
-import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/rendering/parcel_world_view.dart';
 import 'package:citysim/storage/sheet_tables.dart';
@@ -24,14 +24,16 @@ import 'package:citysim/world/world_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'frozen_content.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ContentBundle content;
   late ContentTerrainProvider terrain;
 
-  setUpAll(() async {
-    content = await loadContentBundle(const AssetContentSource());
+  setUpAll(() {
+    content = frozenContent();
     terrain = ContentTerrainProvider(content.terrain);
   });
 
@@ -102,8 +104,8 @@ void main() {
     final center = tester.getRect(find.byType(ParcelWorldView)).center;
 
     // Drag far LEFT — the camera pushes east and must stop at the
-    // charted block's right edge plus margin: world x = 4096, which
-    // is cell-diagonal (column - row) = 128. Without the clamp the
+    // charted block's right edge plus margin: world x = 2304, which
+    // is cell-diagonal (column - row) = 72. Without the clamp the
     // 6000-px drag would land around 188.
     var drag = await tester.startGesture(center);
     for (var i = 0; i < 60; i++) {
@@ -117,13 +119,13 @@ void main() {
     var cell = taps.single;
     expect(
       cell.column - cell.row,
-      128,
-      reason: 'east clamp: charted right edge (3840) + 256 margin',
+      72,
+      reason: 'east clamp: charted right edge (2048) + 256 margin',
     );
     expect(cell.column + cell.row, 8, reason: 'no vertical drift');
     taps.clear();
 
-    // Drag far RIGHT — the mirror clamp at world x = -2048.
+    // Drag far RIGHT — the mirror clamp at world x = -1792.
     drag = await tester.startGesture(center);
     for (var i = 0; i < 80; i++) {
       await drag.moveBy(const Offset(100, 0));
@@ -136,16 +138,16 @@ void main() {
     cell = taps.single;
     expect(
       cell.column - cell.row,
-      -64,
-      reason: 'west clamp: charted left edge (-1792) - 256 margin',
+      -56,
+      reason: 'west clamp: charted left edge (-1536) - 256 margin',
     );
     expect(cell.column + cell.row, 8, reason: 'no vertical drift');
     taps.clear();
 
     // Drag far UP — the camera pushes south and must stop at the
-    // charted block's bottom edge plus margin: world y = 1648, which
-    // is cell-diagonal (column + row) = 104 (rounded to the nearest
-    // cell).
+    // charted block's bottom edge plus margin: world y = 1520, which
+    // is cell-diagonal (column + row) = 95, rounding to the nearest
+    // cell at 96.
     drag = await tester.startGesture(center);
     for (var i = 0; i < 30; i++) {
       await drag.moveBy(const Offset(0, -100));
@@ -158,9 +160,9 @@ void main() {
     cell = taps.single;
     expect(
       cell.column + cell.row,
-      104,
-      reason: 'south clamp: charted bottom edge (1392) + 256 margin',
+      96,
+      reason: 'south clamp: charted bottom edge (1264) + 256 margin',
     );
-    expect(cell.column - cell.row, -64, reason: 'no horizontal drift');
+    expect(cell.column - cell.row, -56, reason: 'no horizontal drift');
   });
 }

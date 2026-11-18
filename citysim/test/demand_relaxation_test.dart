@@ -1,4 +1,3 @@
-import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/storage/sheet_tables.dart';
 import 'package:citysim/storage/world_sheet_codec.dart';
@@ -9,6 +8,8 @@ import 'package:citysim/world/world_rules.dart';
 import 'package:citysim/world/world_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'frozen_content.dart';
+
 /// The three demand relaxations, pinned end to end: any build order
 /// converges, tolerance keeps the founding list alive, and surplus
 /// jobs pull migration.
@@ -17,8 +18,8 @@ void main() {
 
   late ContentBundle content;
   late ContentTerrainProvider terrain;
-  setUpAll(() async {
-    content = await loadContentBundle(const AssetContentSource());
+  setUpAll(() {
+    content = frozenContent();
     terrain = ContentTerrainProvider(content.terrain);
   });
 

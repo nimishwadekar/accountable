@@ -21,7 +21,6 @@ library;
 import 'dart:typed_data' show ByteData;
 import 'dart:ui' as ui;
 
-import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/rendering/parcel_world_view.dart';
 import 'package:citysim/storage/sheet_tables.dart';
@@ -33,6 +32,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
+
+import 'frozen_content.dart';
 
 /// A pixel that reads as grass blended with the mint map background:
 /// 15–90% mint by the blue channel. The grass art's own blue channel
@@ -116,7 +117,7 @@ void main() {
       data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
     );
     grassArt = (await codec.getNextFrame()).image;
-    content = await loadContentBundle(const AssetContentSource());
+    content = frozenContent();
   });
 
   testWidgets('tile skirt keeps interior seams opaque at every draw scale', (

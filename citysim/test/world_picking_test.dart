@@ -1,6 +1,5 @@
 import 'dart:ui' as ui;
 
-import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/parcel_city_app.dart';
 import 'package:citysim/rendering/parcel_world_view.dart';
@@ -15,6 +14,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'frozen_content.dart';
 
 class _MemoryParcelStore implements ParcelWorldStore {
   _MemoryParcelStore(this.state);
@@ -50,8 +51,8 @@ void main() {
   late ContentBundle content;
   late ContentTerrainProvider terrain;
 
-  setUpAll(() async {
-    content = await loadContentBundle(const AssetContentSource());
+  setUpAll(() {
+    content = frozenContent();
     terrain = ContentTerrainProvider(content.terrain);
   });
 

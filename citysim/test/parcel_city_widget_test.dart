@@ -1,4 +1,3 @@
-import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/parcel_city_app.dart';
 import 'package:citysim/rendering/parcel_world_view.dart';
@@ -10,6 +9,8 @@ import 'package:citysim/world/world_state.dart';
 import 'package:citysim/world/world_save_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'frozen_content.dart';
 
 /// The world-space centre of a cell, matching the view's camera math
 /// (64×32 logical tiles): used to compute exact tap positions.
@@ -71,11 +72,12 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   // Asset loading inside fake-async tests is unreliable once a prior test
-  // has run the app, so the content bundle is loaded once with real async
-  // before any test starts and injected into the app under test.
+  // has run the app, so the app under test gets its content bundle up
+  // front — built synchronously from the frozen test content — instead
+  // of loading assets while a test runs.
   late ContentBundle content;
-  setUpAll(() async {
-    content = await loadContentBundle(const AssetContentSource());
+  setUpAll(() {
+    content = frozenContent();
   });
 
   /// A world one step into the game: parcel (0,0) founded (free) and

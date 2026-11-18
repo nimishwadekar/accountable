@@ -24,7 +24,6 @@ import 'dart:math' as math;
 import 'dart:typed_data' show ByteData;
 import 'dart:ui' as ui;
 
-import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/rendering/parcel_world_view.dart';
 import 'package:citysim/rendering/perf_probe.dart';
@@ -37,6 +36,8 @@ import 'package:flutter/gestures.dart' show PointerHoverEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter_test/flutter_test.dart';
+
+import 'frozen_content.dart';
 
 /// Reads one big-endian RGBA pixel from a captured image.
 int _pixelAt(ui.Image image, ByteData bytes, Offset point) {
@@ -94,12 +95,13 @@ Future<ui.Image?> _capture(WidgetTester tester, GlobalKey boundaryKey) =>
     });
 
 void main() {
-  // Content loads in setUpAll (real async): asset reads inside a
-  // testWidgets body run in fake-async, where they are unreliable —
-  // see the note in parcel_city_widget_test.dart.
+  // The frozen content bundle builds synchronously in setUpAll; the
+  // sprite PNGs it names still decode during the tests, and asset
+  // reads inside a testWidgets body run in fake-async, where they
+  // are unreliable — see the note in parcel_city_widget_test.dart.
   late ContentBundle content;
-  setUpAll(() async {
-    content = await loadContentBundle(const AssetContentSource());
+  setUpAll(() {
+    content = frozenContent();
   });
 
   testWidgets(

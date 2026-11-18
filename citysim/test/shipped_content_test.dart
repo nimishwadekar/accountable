@@ -52,6 +52,10 @@ void main() {
       isTrue,
       reason: 'the shipped map has a findable founding parcel',
     );
+    // The map grew to 120 parcels (x −3..6, y −8..3) with the big
+    // island layout — pinned so a bad editor write cannot silently
+    // shrink the world the player's cities live on.
+    expect(content.terrain.parcels, hasLength(120));
     // Decorations are free by product rule — the one thing a new
     // settlement can spend on before its first road.
     for (final model in content.catalogue) {
@@ -256,6 +260,12 @@ void main() {
       0,
     ]);
     expect(content.sprite('road.straight.se')!.lanes['north-1'], isNull);
+    // The bridge decks' measured surface lift: 12 world px is where
+    // the art draws the deck surface, and the ramps' incline derives
+    // from it — a silent change would sink people into the deck.
+    expect(content.sprite('bridge.body.se')!.surfaceLift, 12);
+    expect(content.sprite('bridge.body.sw')!.surfaceLift, 12);
+    expect(content.sprite('road.straight.se')!.surfaceLift, 0);
     // Render tuning is authored on the Vehicles page (2026-11),
     // so it grows with tuning; the invariant is that every entry
     // names a real type with in-range, well-named anchors.

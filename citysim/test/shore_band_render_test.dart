@@ -1,10 +1,11 @@
 import 'dart:ui' as ui;
 
-import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/rendering/parcel_world_view.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'frozen_content.dart';
 
 /// Render-level regression tests for the composed shore band: the
 /// neighbouring land's material blended over the water tile's own
@@ -17,8 +18,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ContentBundle content;
-  setUpAll(() async {
-    content = await loadContentBundle(const AssetContentSource());
+  setUpAll(() {
+    content = frozenContent();
   });
 
   Future<ui.Image> decode(String path) async {

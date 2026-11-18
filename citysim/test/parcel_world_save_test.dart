@@ -1,4 +1,3 @@
-import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/storage/server_sheet_store.dart';
 import 'package:citysim/storage/sheet_tables.dart';
@@ -9,6 +8,8 @@ import 'package:citysim/world/world_reducer.dart';
 import 'package:citysim/world/world_rules.dart';
 import 'package:citysim/world/world_state.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'frozen_content.dart';
 
 /// An in-memory documents transport — the test double for the HTTP API.
 class _FakeDocumentsApi implements WorldDocumentsApi {
@@ -33,8 +34,8 @@ void main() {
   late ContentBundle content;
   late ContentTerrainProvider terrain;
 
-  setUpAll(() async {
-    content = await loadContentBundle(const AssetContentSource());
+  setUpAll(() {
+    content = frozenContent();
     terrain = ContentTerrainProvider(content.terrain);
   });
 

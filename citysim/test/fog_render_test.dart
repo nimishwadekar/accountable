@@ -12,7 +12,6 @@ library;
 import 'dart:typed_data' show ByteData;
 import 'dart:ui' as ui;
 
-import 'package:citysim/content/asset_content_source.dart';
 import 'package:citysim/content/content_bundle.dart';
 import 'package:citysim/rendering/parcel_world_view.dart';
 import 'package:citysim/storage/sheet_tables.dart';
@@ -23,6 +22,8 @@ import 'package:citysim/world/world_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter_test/flutter_test.dart';
+
+import 'frozen_content.dart';
 
 /// Only the starter parcel is charted grass; the rest of the world is
 /// fog, authored and unauthored alike.
@@ -107,8 +108,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ContentBundle content;
-  setUpAll(() async {
-    content = await loadContentBundle(const AssetContentSource());
+  setUpAll(() {
+    content = frozenContent();
   });
 
   testWidgets('fog parcels render the cloud deck from sprites', (tester) async {
