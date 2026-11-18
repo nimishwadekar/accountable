@@ -520,7 +520,7 @@
       "path": "sprites/props/flowers/prop_flowers_pink.png",
       "renderScale": 0.5,
       "subcategory": "flowers",
-      "sways": true
+      "sways": false
     },
     "flowers-red": {
       "baseOffsetY": 0,
@@ -533,7 +533,7 @@
       "path": "sprites/props/flowers/prop_flowers_red.png",
       "renderScale": 0.5,
       "subcategory": "flowers",
-      "sways": true
+      "sways": false
     },
     "flowers-yellow": {
       "baseOffsetY": 0,
@@ -546,7 +546,7 @@
       "path": "sprites/props/flowers/prop_flowers_yellow.png",
       "renderScale": 0.5,
       "subcategory": "flowers",
-      "sways": true
+      "sways": false
     },
     "fog.wisp.a": {
       "baseOffsetY": 0,
@@ -1223,7 +1223,7 @@
       "path": "sprites/props/trees/prop_tree_pine_medium.png",
       "renderScale": 0.5,
       "subcategory": "trees",
-      "sways": true
+      "sways": false
     },
     "pine-small": {
       "baseOffsetY": 0,
@@ -1236,7 +1236,7 @@
       "path": "sprites/props/trees/prop_tree_pine_small.png",
       "renderScale": 0.5,
       "subcategory": "trees",
-      "sways": true
+      "sways": false
     },
     "pine-tall": {
       "baseOffsetY": 0,
@@ -1249,7 +1249,7 @@
       "path": "sprites/props/trees/prop_tree_pine_tall.png",
       "renderScale": 0.5,
       "subcategory": "trees",
-      "sways": true
+      "sways": false
     },
     "pizza": {
       "baseOffsetY": 0,
@@ -2901,7 +2901,7 @@
       "path": "sprites/props/trees/prop_tree_common_large.png",
       "renderScale": 0.5,
       "subcategory": "trees",
-      "sways": true
+      "sways": false
     },
     "tree-common-medium": {
       "baseOffsetY": 0,
@@ -2914,7 +2914,7 @@
       "path": "sprites/props/trees/prop_tree_common_medium.png",
       "renderScale": 0.5,
       "subcategory": "trees",
-      "sways": true
+      "sways": false
     },
     "trunk-a": {
       "baseOffsetY": 0,
@@ -3030,7 +3030,7 @@
       "path": "sprites/props/flowers/prop_weed_large_a.png",
       "renderScale": 0.5,
       "subcategory": "flowers",
-      "sways": true
+      "sways": false
     },
     "weed-large-b": {
       "baseOffsetY": 0,
@@ -3043,7 +3043,7 @@
       "path": "sprites/props/flowers/prop_weed_large_b.png",
       "renderScale": 0.5,
       "subcategory": "flowers",
-      "sways": true
+      "sways": false
     },
     "weed-medium": {
       "baseOffsetY": 0,
@@ -3056,7 +3056,7 @@
       "path": "sprites/props/flowers/prop_weed_medium.png",
       "renderScale": 0.5,
       "subcategory": "flowers",
-      "sways": true
+      "sways": false
     },
     "weed-small": {
       "baseOffsetY": 0,
@@ -3069,7 +3069,7 @@
       "path": "sprites/props/flowers/prop_weed_small.png",
       "renderScale": 0.5,
       "subcategory": "flowers",
-      "sways": true
+      "sways": false
     }
   }
 }

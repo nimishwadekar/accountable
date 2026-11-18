@@ -389,11 +389,19 @@ void main() {
         ),
       ],
     );
+    // The shipped content keeps vegetation still (`sways: false`, a
+    // deliberate content choice), so the probe pine re-enables sway
+    // for itself: this test pins the gate mechanic, not the
+    // content's toggle.
+    final sprites = {
+      ...content.sprites,
+      'pine-medium': content.sprites['pine-medium']!.copyWith(sways: true),
+    };
     // Only the gate differs between the two bundles.
     ContentBundle withGate(double minScale) => ContentBundle(
       manifest: content.manifest,
       catalogue: content.catalogue,
-      sprites: content.sprites,
+      sprites: sprites,
       economy: content.economy,
       ambience: AmbienceContent(
         ambientTimeScale: content.ambience.ambientTimeScale,

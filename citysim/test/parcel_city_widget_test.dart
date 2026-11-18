@@ -370,6 +370,51 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('nothing outside the city is selectable', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    // Wide enough to reach the wild pines two parcels north-west of
+    // the founding parcel: the side panel caps the map's width, so a
+    // phone viewport cannot put them under a tap.
+    tester.view.physicalSize = const Size(1600, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = _MemoryParcelStore()..state = foundedWorld();
+
+    await tester.pumpWidget(ParcelCityApp(store: store, content: content));
+    for (var i = 0; i < 50; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+
+    final mapRect = tester.getRect(find.byType(ParcelWorldView));
+    Offset screenFor(CellCoord cell) =>
+        mapRect.center + (_cellWorld(cell) - _cellWorld(const CellCoord(4, 4)));
+
+    // A wild pine stands at (-2,-9), on charted land the town does
+    // not own. Inspecting it must select nothing — not the tree, and
+    // not the tile beneath it.
+    await tester.tapAt(
+      screenFor(const CellCoord(-2, -9)) + const Offset(0, -24),
+    );
+    await tester.pump();
+    var view = tester.widget<ParcelWorldView>(find.byType(ParcelWorldView));
+    expect(view.selectedCell, isNull, reason: 'foreign tiles select nothing');
+    expect(view.selectedPropId, isNull, reason: 'wild props are not pickable');
+
+    // The same rule under the building tool: bare foreign ground
+    // selects nothing there either.
+    await tester.tap(find.text('Buildings'));
+    await tester.pump();
+    await tester.tapAt(screenFor(const CellCoord(10, 10)));
+    await tester.pump();
+    view = tester.widget<ParcelWorldView>(find.byType(ParcelWorldView));
+    expect(view.selectedCell, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('parcel mode ignores fog parcels', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1200, 900);

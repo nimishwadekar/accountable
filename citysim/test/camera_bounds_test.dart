@@ -102,11 +102,11 @@ void main() {
     final center = tester.getRect(find.byType(ParcelWorldView)).center;
 
     // Drag far LEFT — the camera pushes east and must stop at the
-    // charted block's right edge plus margin: world x = 2048, which
-    // is cell-diagonal (column - row) = 64. Without the clamp the
-    // 4000-px drag would land around 188.
+    // charted block's right edge plus margin: world x = 4096, which
+    // is cell-diagonal (column - row) = 128. Without the clamp the
+    // 6000-px drag would land around 188.
     var drag = await tester.startGesture(center);
-    for (var i = 0; i < 40; i++) {
+    for (var i = 0; i < 60; i++) {
       await drag.moveBy(const Offset(-100, 0));
       await tester.pump(const Duration(milliseconds: 16));
     }
@@ -117,8 +117,8 @@ void main() {
     var cell = taps.single;
     expect(
       cell.column - cell.row,
-      64,
-      reason: 'east clamp: charted right edge (1792) + 256 margin',
+      128,
+      reason: 'east clamp: charted right edge (3840) + 256 margin',
     );
     expect(cell.column + cell.row, 8, reason: 'no vertical drift');
     taps.clear();
@@ -143,8 +143,8 @@ void main() {
     taps.clear();
 
     // Drag far UP — the camera pushes south and must stop at the
-    // charted block's bottom edge plus margin: world y = 1264, which
-    // is cell-diagonal (column + row) = 80 (rounded to the nearest
+    // charted block's bottom edge plus margin: world y = 1648, which
+    // is cell-diagonal (column + row) = 104 (rounded to the nearest
     // cell).
     drag = await tester.startGesture(center);
     for (var i = 0; i < 30; i++) {
@@ -158,8 +158,8 @@ void main() {
     cell = taps.single;
     expect(
       cell.column + cell.row,
-      80,
-      reason: 'south clamp: charted bottom edge (1008) + 256 margin',
+      104,
+      reason: 'south clamp: charted bottom edge (1392) + 256 margin',
     );
     expect(cell.column - cell.row, -64, reason: 'no horizontal drift');
   });

@@ -543,6 +543,29 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   ) {
     final world = _world;
     if (world == null) return;
+    // Nothing outside the city is selectable: a tap on foreign or
+    // unowned ground — a wild tree standing on it included, whose
+    // sprite hit carries down to the tile beneath — clears the
+    // selection instead. The parcel tool is the one exception:
+    // choosing land to buy is its whole job.
+    if (_tool != _WorldTool.parcel &&
+        !WorldQueries(world, _terrain).ownsCell(cell)) {
+      setState(() {
+        _selectedCatalogueId = null;
+        _selectedCell = null;
+        _selectedSubtileX = propFrontSubtile;
+        _selectedSubtileY = propFrontSubtile;
+        _selectedPropId = null;
+        _selectedParcel = null;
+        _bridgeStartCell = null;
+        _bridgeEndCell = null;
+        _roadPlanCells = const [];
+        _roadStartCell = null;
+        _highlightCells = const {};
+        _facingOverride = null;
+      });
+      return;
+    }
     _selectedSubtileX = subtileX;
     _selectedSubtileY = subtileY;
     // A prop hit selects that specific prop — several may share a

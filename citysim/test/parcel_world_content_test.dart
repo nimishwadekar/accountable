@@ -659,11 +659,13 @@ void main() {
       provider.sample(baseCell(const ParcelCoord(-1, 0)), 145).kind,
       TerrainKind.water,
     );
-    // Beyond the authored map is fog — the uncharted default.
-    expect(provider.sample(const CellCoord(40, 2), 145).kind, TerrainKind.fog);
+    // Beyond the authored map is fog — the uncharted default. The
+    // map grew to 120 parcels (x −3..6, y −8..3), so the probe sits
+    // in parcel (9,0), east of the charted block.
+    expect(provider.sample(const CellCoord(72, 2), 145).kind, TerrainKind.fog);
     expect(content.terrain.isOnMap(const ParcelCoord(1, 0)), isTrue);
     expect(content.terrain.isOnMap(const ParcelCoord(9, 9)), isFalse);
-    expect(content.terrain.parcels, hasLength(49));
+    expect(content.terrain.parcels, hasLength(120));
   });
 
   test('tile overrides parse, round-trip, and resolve over the base', () {
