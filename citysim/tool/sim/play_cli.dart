@@ -417,7 +417,7 @@ and needs no buy.''');
       'Treasury ${_fmt(state.coins)} coins · earned ${_fmt(state.totalCoinsEarned)} · spent ${_fmt(state.totalCoinsSpent)}',
       'Population ${state.population} · employed ${state.employedPopulation} · waiting list ${state.waitingPopulation}',
       'Housing ${_residentialCapacity()} beds · jobs ${_jobCapacity()}',
-      'Contentment ${ledger.contentment}%${ledger.contentment < 100 ? ' (arrivals ×${(ledger.contentment / 100).toStringAsFixed(2)})' : ''} · coverage: ${ledger.coverage.entries.map((e) => '${e.key} ${(e.value * 100).round()}%').join(', ')}${ledger.coverage.isEmpty ? 'not yet demanded (from ${content.economy.serviceRequirementPopulation} population)' : ''}',
+      'Contentment ${ledger.contentment}% · coverage: ${ledger.coverage.entries.map((e) => '${e.key} ${(e.value * 100).round()}%').join(', ')}${ledger.coverage.isEmpty ? 'not yet demanded (from ${content.economy.serviceRequirementPopulation} population)' : ''}',
       'Milestone: ${state.progressionMilestoneId ?? 'none'}${nextRung == null ? '' : ' · next: ${nextRung.name} at ${nextRung.population} population'}',
       'Parcels ${state.parcels.length} · roads ${state.roads.length} · structures ${state.structures.length} · projects in flight ${state.constructions.length}',
     ];
@@ -444,7 +444,6 @@ and needs no buy.''');
     }
     final completions = (payload['completions'] as List?) ?? const [];
     final unemployed = (payload['unemployed'] as num?)?.toInt() ?? 0;
-    final floor = content.economy.homeTaxUnemploymentFloorPercent;
     final buffer = StringBuffer(
       'Report for ${payload['creditedDate']}: '
       'taxes ${_fmt((payload['taxes'] as num?) ?? 0)} · '
@@ -457,18 +456,7 @@ and needs no buy.''');
       'contentment ${payload['contentment'] ?? 100}%',
     );
     if (unemployed > 0) {
-      // The floor line only when the floor is doing work: with
-      // employment already above it, the levy is the employment
-      // rate and the floor is not binding.
-      final beds = _residentialCapacity();
-      final binding =
-          floor <= 0 ||
-          (beds > 0 && state.employedPopulation / beds < floor / 100);
-      buffer.write(
-        binding
-            ? '\nUnemployed $unemployed — homes pay the $floor% levy floor'
-            : '\nUnemployed $unemployed — the levy sits above the floor',
-      );
+      buffer.write('\nUnemployed $unemployed');
     }
     if (completions.isNotEmpty) {
       buffer.write('\nCompleted: ${completions.join(', ')}');

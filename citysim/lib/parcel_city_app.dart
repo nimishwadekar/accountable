@@ -1250,18 +1250,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                 'Upkeep unpaid     ${formatCoins(shortfall)} — the treasury is empty',
                 style: const TextStyle(color: Color(0xFF9A5B2B)),
               ),
-            Text(
-              'Contentment      $contentment% · arrivals ×'
-              '${(contentment / 100).toStringAsFixed(2)}',
-            ),
+            Text('Contentment      $contentment%'),
             if (unemployed > 0)
               Text(
-                _requireContent.economy.homeTaxUnemploymentFloorPercent > 0
-                    ? 'Unemployed        $unemployed · homes pay the '
-                          '${_requireContent.economy.homeTaxUnemploymentFloorPercent}% '
-                          'levy floor'
-                    : 'Unemployed        $unemployed · only employed '
-                          'residents pay taxes',
+                'Unemployed        $unemployed',
                 style: const TextStyle(color: Color(0xFF9A5B2B)),
               ),
             Text(
@@ -1578,8 +1570,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Contentment ${ledger.contentment}% · arrivals ×'
-            '${(ledger.contentment / 100).toStringAsFixed(2)}',
+            'Contentment ${ledger.contentment}%',
             style: TextStyle(color: contentmentColor),
           ),
           if (ledger.coverage.isEmpty)

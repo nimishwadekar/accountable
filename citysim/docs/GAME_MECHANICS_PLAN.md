@@ -102,7 +102,11 @@ free-construction rule intact. Capacities count people, not households:
   place a café with, forever — unemployed people still pay rent and
   sales taxes in reality, so the floor is both the fix and the more
   realistic rule). The town report shows unemployment whenever it is
-  above zero. The rate is the one pacing dial: realistic annual property
+  above zero — the count only. The report states facts and never
+  explains the levy's mechanics: a floor/binding line was removed
+  2026-11-18 after playtest reviewers misread it (doctrine: players
+  get numbers, not interpretations of numbers). The rate is the one
+  pacing dial: realistic annual property
   rates (~1.2%/yr) would recoup a building in decades, so the levy runs at
   per-report scale and a blended town roughly doubles its invested value
   monthly.
@@ -666,7 +670,11 @@ shop is a pure upkeep drain.
   the unemployment floor, so the homes-only guarantee holds
   unconditionally. Requirements phase in late (nothing demanded
   below the service threshold), so the early game stays exactly as
-  pure as before.
+  pure as before. The HUD shows the contentment percentage only —
+  no derived arrivals multiplier (removed 2026-11-18 under the
+  facts-not-interpretations doctrine; a playtest reviewer read the
+  multiplier as decoration and none could verify it against
+  arrival noise).
 - **The contentment floor is 30 percent** — it floors the growth
   dial, not income. Unhappy towns still grow (at 30% pace) and
   always earn their full levy, so even the most neglected town can
