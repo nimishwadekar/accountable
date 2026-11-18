@@ -27,6 +27,7 @@ Future<void> main(List<String> args) async {
   var days = 150;
   var seedCount = 6;
   var personaIds = const <String>[];
+  var writeReport = true;
   for (var i = 0; i < args.length; i++) {
     if (args[i] == '--days' && i + 1 < args.length) {
       days = int.parse(args[++i]);
@@ -34,6 +35,8 @@ Future<void> main(List<String> args) async {
       seedCount = int.parse(args[++i]);
     } else if (args[i] == '--personas' && i + 1 < args.length) {
       personaIds = args[++i].split(',');
+    } else if (args[i] == '--no-report') {
+      writeReport = false;
     }
   }
 
@@ -80,10 +83,14 @@ Future<void> main(List<String> args) async {
     '${batch.length} runs in ${(batchWatch.elapsedMilliseconds / 1000).toStringAsFixed(1)}s',
   );
 
-  final report = _buildReport(content, personas, batch, days, seedCount);
-  Directory('docs/sim').createSync(recursive: true);
-  File('docs/sim/economy-feel-report.md').writeAsStringSync(report);
-  stdout.writeln('report written: docs/sim/economy-feel-report.md');
+  if (writeReport) {
+    final report = _buildReport(content, personas, batch, days, seedCount);
+    Directory('docs/sim').createSync(recursive: true);
+    File('docs/sim/economy-feel-report.md').writeAsStringSync(report);
+    stdout.writeln('report written: docs/sim/economy-feel-report.md');
+  } else {
+    stdout.writeln('report skipped (--no-report); day logs in build/sim/logs/');
+  }
 }
 
 // ------------------------------------------------------------
