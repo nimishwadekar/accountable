@@ -181,7 +181,11 @@ void main() {
     expect(content.economy.unemploymentTolerancePercent, 10);
     expect(content.economy.jobPullPercentPerCheckIn, 10);
     expect(content.economy.contentmentFloorPercent, 30);
-    expect(content.economy.serviceRequirementPopulation, 250);
+    // Services are demanded exactly at the city milestone (300), so
+    // the demand never arrives before the fire and police stations
+    // that answer it unlock — the 250 gap was a measured income
+    // valley (see docs/sim/economy-feel-report.md).
+    expect(content.economy.serviceRequirementPopulation, 300);
     expect(content.economy.requiredServiceCategories, [
       'fire',
       'police',

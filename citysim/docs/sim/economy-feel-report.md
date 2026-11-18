@@ -2,7 +2,7 @@
 
 Generated 2026-11-17 by `dart run tool/sim/simulate_batch.dart` — scripted personas playing fresh cities through the real reducer, quotes, and wallet. 150 days × 6 seeds × 4 personas = 24 runs.
 
-**Content scale**: treasury start 100,000, parcel 15,000 + 150/pop, road 2,500/tile (+10/tile upkeep), bridge 50,000/tile. Services demanded at 250 pop. Migration 2%/check-in, employment 5%/check-in, job pull 10% of surplus jobs. Buildings construct free.
+**Content scale**: treasury start 100,000, parcel 15,000 + 150/pop, road 2,500/tile (+10/tile upkeep), bridge 50,000/tile. Services demanded at 300 pop. Migration 2%/check-in, employment 5%/check-in, job pull 10% of surplus jobs. Buildings construct free.
 
 ## Personas
 
@@ -15,7 +15,7 @@ Generated 2026-11-17 by `dart run tool/sim/simulate_batch.dart` — scripted per
 
 | persona | → hamlet (15) | → village (50) | → town (120) | → city (300) | → metropolis (800) | → regional capital (2000) | first profit | opening net (first 10) | late net (last 10) | min treasury | max treasury | dead days / first 30 | poor days | final pop | final coins |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| The Planner | 18 | 46 | 67 | 105 | never | never | 7 | 280 | 143,672.5 | 87,030 (day 6) | 6,268,845 | 0 | 0 | 543 | 6,268,845 |
+| The Planner | 18 | 46 | 67 | 105 | never | never | 7 | 280 | 146,239.5 | 87,030 (day 6) | 7,057,466.5 | 0 | 0 | 546 | 7,057,466.5 |
 | The Casual | 20 | 61 | never | never | never | never | 7 | 310 | 21,675.5 | 89,727 (day 9) | 877,503.5 | 0 | 0 | 71.5 | 877,503.5 |
 | The Saver | 18 | 52 | 95 (2/6) | never | never | never | 7 | 185 | 33,338.5 | 89,427 (day 8) | 1,269,099.5 | 0 | 0 | 114.5 | 1,269,099.5 |
 | The Sprawler | 18 | 50 | 82 | never | never | never | 7 | 109 | 64,969.5 | 844.5 (day 28) | 1,840,667 | 0 | 78.5 | 213 | 1,840,667 |
@@ -26,7 +26,7 @@ Generated 2026-11-17 by `dart run tool/sim/simulate_batch.dart` — scripted per
 
 | persona | parcels owned | coins on parcels | coins on roads | refused actions |
 |---|---|---|---|---|
-| The Planner | 5 | 164,175 | 173,750 | 0 |
+| The Planner | 5 | 161,625 | 178,750 | 0 |
 | The Casual | 3 | 41,100 | 125,000 | 0 |
 | The Saver | 5 | 98,175 | 170,000 | 0 |
 | The Sprawler | 49 | 1,184,625 | 191,250 | 4.5 |
@@ -45,8 +45,8 @@ Median across 6 seeds, by check-in number:
 | 30 | 160,110 | 7,863 | 28 | 2 | 100 |
 | 50 | 381,138 | 15,653 | 61 | 5 | 100 |
 | 75 | 1,124,138 | 49,600 | 162 | 15.5 | 100 |
-| 100 | 2,335,519 | 8,544 | 279 | 27 | 33 |
-| 125 | 3,931,353.5 | 116,143 | 423 | 42 | 98 |
+| 100 | 2,728,614 | 85,550 | 279 | 27 | 100 |
+| 125 | 4,693,476 | 117,168.5 | 424.5 | 42 | 99 |
 
 ## The Casual — the curve
 
@@ -98,55 +98,55 @@ Median across 6 seeds, by check-in number:
 
 ## A diary
 
-The median The Planner run (seed 6), day by day for the first 45 days — the onboarding stretch where feel crystallizes:
+The median The Planner run (seed 4), day by day for the first 45 days — the onboarding stretch where feel crystallizes:
 
 | day | in? | net | coins | pop | waiting | milestone | what the player did |
 |---|---|---|---|---|---|---|---|
-| 1 | ✓ | 0 | 92,500 | 0 | 1 | homestead | parcel (3,-3), free; 1 tiles; 1 tiles; 1 tiles |
-| 2 | ✓ | 0 | 92,500 | 0 | 1 | homestead | Café at (28,-22) · cleared 9 nature props; Small House at (28,-20) · cleared 1 nature props; Small House at (27,-21) · cleared 2 nature props; Small House at (29,-19) · cleared 3 nature props |
-| 3 | ✓ | -30 | 92,470 | 0 | 1 | homestead | Small House at (30,-20) · cleared 3 nature props |
+| 1 | ✓ | 0 | 92,500 | 0 | 1 | homestead | parcel (2,2), free; 1 tiles; 1 tiles; 1 tiles |
+| 2 | ✓ | 0 | 92,500 | 0 | 1 | homestead | Café at (20,18); Small House at (20,20); Small House at (19,19); Small House at (21,21) |
+| 3 | ✓ | -30 | 92,470 | 0 | 1 | homestead | Small House at (22,20) |
 | 4 | ✓ | -30 | 92,440 | 1 | 1 | homestead |  |
 | 5 | ✓ | -363 | 92,077 | 2 | 1 | homestead |  |
-| 6 | ✓ | -47 | 87,030 | 3 | 1 | homestead | 1 tiles; 1 tiles; Small House at (30,-21) · cleared 2 nature props |
-| 7 | ✓ | 370 | 87,400 | 4 | 1 | homestead | Café at (27,-20) · cleared 6 nature props |
+| 6 | ✓ | -47 | 87,030 | 3 | 1 | homestead | 1 tiles; 1 tiles; Small House at (22,19) · cleared 1 nature props |
+| 7 | ✓ | 370 | 87,400 | 4 | 1 | homestead | Café at (19,20) · cleared 1 nature props |
 | 8 | ✓ | 767 | 88,167 | 5 | 1 | homestead |  |
-| 9 | ✓ | 1,083 | 89,250 | 6 | 1 | homestead | Small House at (26,-21) · cleared 8 nature props |
+| 9 | ✓ | 1,083 | 89,250 | 6 | 1 | homestead | Small House at (18,19) |
 | 10 | ✓ | 1,050 | 90,300 | 7 | 1 | homestead |  |
 | 11 | ✓ | 1,467 | 91,767 | 8 | 1 | homestead |  |
-| 12 | ✓ | 1,783 | 93,550 | 9 | 1 | homestead | Small House at (26,-18) · cleared 2 nature props |
-| 13 | away | | | | | | |
-| 14 | ✓ | 2,200 | 95,750 | 10 | 1 | homestead |  |
-| 15 | ✓ | 2,617 | 98,367 | 11 | 1 | homestead | Café at (25,-20) · cleared 8 nature props |
-| 16 | ✓ | 2,933 | 98,800 | 12 | 1 | homestead | 1 tiles |
-| 17 | ✓ | 3,350 | 102,150 | 13 | 1 | homestead | Small House at (28,-19) |
-| 18 | ✓ | 3,307 | 105,457 | 14 | 1 | homestead |  |
-| 19 | ✓ | 3,723 | 109,180 | 15 | 1 | hamlet | Small House at (27,-18) · cleared 2 nature props |
-| 20 | ✓ | 4,040 | 113,220 | 16 | 1 | hamlet |  |
-| 21 | ✓ | 4,457 | 117,677 | 17 | 1 | hamlet |  |
-| 22 | ✓ | 4,773 | 122,450 | 18 | 1 | hamlet | Small House at (29,-18) |
-| 23 | ✓ | 5,190 | 127,640 | 19 | 1 | hamlet | Fruit Market at (28,-17) · cleared 1 nature props |
-| 24 | ✓ | 5,607 | 133,247 | 20 | 1 | hamlet |  |
+| 12 | ✓ | 1,783 | 93,550 | 9 | 1 | homestead | Small House at (18,22) · cleared 1 nature props |
+| 13 | ✓ | 2,200 | 95,750 | 10 | 1 | homestead |  |
+| 14 | ✓ | 2,617 | 98,367 | 11 | 1 | homestead | Café at (17,20) · cleared 1 nature props |
+| 15 | ✓ | 2,933 | 98,800 | 12 | 1 | homestead | 1 tiles |
+| 16 | ✓ | 3,350 | 102,150 | 13 | 1 | homestead | Small House at (20,21) · cleared 1 nature props |
+| 17 | ✓ | 3,307 | 105,457 | 14 | 1 | homestead |  |
+| 18 | ✓ | 3,723 | 109,180 | 15 | 1 | hamlet | Small House at (19,22) |
+| 19 | ✓ | 4,040 | 113,220 | 16 | 1 | hamlet |  |
+| 20 | ✓ | 4,457 | 117,677 | 17 | 1 | hamlet |  |
+| 21 | ✓ | 4,773 | 122,450 | 18 | 1 | hamlet | Small House at (21,22) · cleared 1 nature props |
+| 22 | ✓ | 5,190 | 127,640 | 19 | 1 | hamlet | Fruit Market at (20,23) |
+| 23 | ✓ | 5,607 | 133,247 | 20 | 1 | hamlet |  |
+| 24 | away | | | | | | |
 | 25 | ✓ | 5,923 | 136,670 | 21 | 2 | hamlet | 1 tiles |
-| 26 | ✓ | 5,990 | 124,360 | 22 | 2 | hamlet | Small House at (27,-22) · cleared 5 nature props; parcel (2,-3) |
-| 27 | ✓ | 6,397 | 130,757 | 23 | 2 | hamlet |  |
-| 28 | away | | | | | | |
-| 29 | ✓ | 6,813 | 137,570 | 24 | 2 | hamlet | Small House at (26,-23) · cleared 4 nature props |
-| 30 | ✓ | 7,130 | 144,700 | 25 | 2 | hamlet | Fruit Market at (27,-24) · cleared 6 nature props |
+| 26 | away | | | | | | |
+| 27 | ✓ | 5,990 | 124,360 | 22 | 2 | hamlet | Small House at (19,18) · cleared 1 nature props; parcel (1,2) |
+| 28 | ✓ | 6,397 | 130,757 | 23 | 2 | hamlet |  |
+| 29 | ✓ | 6,813 | 137,570 | 24 | 2 | hamlet | Small House at (18,17) |
+| 30 | ✓ | 7,130 | 144,700 | 25 | 2 | hamlet | Fruit Market at (19,16) |
 | 31 | ✓ | 7,547 | 152,247 | 26 | 2 | hamlet |  |
-| 32 | ✓ | 7,863 | 160,110 | 28 | 2 | hamlet | Small House at (28,-23) · cleared 4 nature props |
+| 32 | ✓ | 7,863 | 160,110 | 28 | 2 | hamlet | Small House at (20,17) |
 | 33 | ✓ | 7,930 | 168,040 | 29 | 2 | hamlet |  |
 | 34 | ✓ | 8,347 | 173,887 | 30 | 2 | hamlet | 1 tiles |
-| 35 | ✓ | 8,663 | 182,550 | 31 | 2 | hamlet | Fruit Market at (24,-20) · cleared 3 nature props; Small House at (23,-21) · cleared 1 nature props |
+| 35 | ✓ | 8,663 | 182,550 | 31 | 2 | hamlet | Fruit Market at (16,20); Small House at (15,19) |
 | 36 | ✓ | 9,070 | 191,620 | 32 | 2 | hamlet |  |
-| 37 | ✓ | 9,487 | 201,107 | 34 | 2 | hamlet | Small House at (25,-21) · cleared 3 nature props |
-| 38 | ✓ | 9,453 | 210,560 | 36 | 2 | hamlet | Small House at (24,-22) · cleared 5 nature props |
-| 39 | ✓ | 9,870 | 217,930 | 37 | 2 | hamlet | 1 tiles |
-| 40 | ✓ | 10,187 | 228,117 | 38 | 2 | hamlet | Fruit Market at (23,-20) · cleared 2 nature props |
-| 41 | ✓ | 10,493 | 238,610 | 39 | 2 | hamlet | Small House at (24,-19) · cleared 3 nature props |
-| 42 | ✓ | 10,910 | 249,520 | 41 | 2 | hamlet |  |
-| 43 | ✓ | 11,393 | 260,913 | 43 | 2 | hamlet | Fruit Market at (22,-19); Small House at (23,-18) · cleared 1 nature props |
-| 44 | ✓ | 12,127 | 273,040 | 44 | 2 | hamlet |  |
-| 45 | ✓ | 12,960 | 281,000 | 46 | 2 | hamlet | 1 tiles; 1 tiles |
+| 37 | ✓ | 9,487 | 201,107 | 34 | 2 | hamlet | Small House at (17,19) |
+| 38 | away | | | | | | |
+| 39 | ✓ | 9,453 | 210,560 | 36 | 2 | hamlet | Small House at (16,18) |
+| 40 | ✓ | 9,870 | 217,930 | 37 | 2 | hamlet | 1 tiles |
+| 41 | ✓ | 10,187 | 228,117 | 38 | 2 | hamlet | Fruit Market at (15,20) |
+| 42 | ✓ | 10,493 | 238,610 | 39 | 2 | hamlet | Small House at (16,21) |
+| 43 | ✓ | 10,910 | 249,520 | 41 | 2 | hamlet |  |
+| 44 | ✓ | 11,393 | 260,913 | 43 | 2 | hamlet | Fruit Market at (14,21); Small House at (15,22) · cleared 1 nature props |
+| 45 | away | | | | | | |
 
 ## Method and simplifications
 

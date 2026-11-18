@@ -100,9 +100,12 @@ free-construction rule intact. Capacities count people, not households:
   income scales with population, the parcel cadence stays roughly constant:
   weekly in the founding era, about one per check-in late game.
 - **Services**: fire/police/health coverage is demanded from a population
-  of 250 (`serviceRequirementPopulation`); one clinic covers 400 people, a
-  fire station 1,200, a hospital 3,000. Coverage is deliberately tighter
-  than census reality so services stay a live constraint.
+  of 300 (`serviceRequirementPopulation`) — exactly the city milestone,
+  so the demand never precedes the stations that answer it (the earlier
+  250 opened a measured income valley between 250 and 300); one clinic
+  covers 400 people, a fire station 1,200, a hospital 3,000. Coverage is
+  deliberately tighter than census reality so services stay a live
+  constraint.
 - **Milestones** rescaled to people: 0 / 15 / 50 / 120 / 300 / 800 / 2,000
   — Hamlet in ~5 weeks of daily check-ins, Regional Capital in about a
   year. All rates (migration 2%, employment ramp 5%, job pull 10%,

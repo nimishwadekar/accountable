@@ -18,7 +18,7 @@
   "roadTaxCoinsPerTile": 0,
   "roadTileCostCoins": 2500,
   "roadUpkeepCoinsPerTile": 10,
-  "serviceRequirementPopulation": 250,
+  "serviceRequirementPopulation": 300,
   "startingTreasuryCoins": 100000,
   "unemploymentTolerancePercent": 10,
   "waitingPopulationCapPercent": 10
