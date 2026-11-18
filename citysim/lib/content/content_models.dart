@@ -1939,6 +1939,24 @@ List<ContentIssue> validateContentData({
       'within [0, 100].',
     );
   }
+  // The floor's design promise: a homes-only town can always earn
+  // its way back. That holds only while the floor pays at least a
+  // home's own upkeep — a residential model whose floored levy
+  // cannot cover its upkeep makes the homes-only worst case a
+  // permanent soft-lock (found by a playtest reviewer on an economy
+  // variant that scaled taxes but not upkeep).
+  for (final model in catalogue) {
+    if (!model.isResidential) continue;
+    final flooredLevy =
+        economy.homeTaxUnemploymentFloorPercent * model.taxCoins ~/ 100;
+    if (flooredLevy < model.upkeepCoins) {
+      warning(
+        '${model.id}: the homes-only levy floor pays $flooredLevy of its '
+        '${model.upkeepCoins} upkeep — a town of only ${model.id}s can '
+        'never pay its upkeep.',
+      );
+    }
+  }
   if (economy.serviceRequirementPopulation < 0) {
     error('The service requirement population must not be negative.');
   }

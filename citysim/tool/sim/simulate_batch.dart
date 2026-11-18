@@ -6,6 +6,12 @@
 // Usage:
 //   dart run tool/sim/simulate_batch.dart [--days 150] [--seeds 6]
 //        [--personas planner,casual]
+//        [--content-dir docs/sim/playtests/content-snapshot]
+//        [--variant ladder-a]
+//
+// `--content-dir` freezes the base bundle (the playtest snapshot);
+// `--variant ladder-a` applies the same in-memory variant the play
+// CLI derives, so the control runs the reviewers' exact content.
 //
 // Output:
 //   build/sim/logs/<persona>-seed<n>.jsonl  — one record per day
@@ -17,17 +23,22 @@ import 'dart:math' as math;
 
 import 'package:citysim/content/content_bundle.dart';
 
+import 'content_variants.dart';
 import 'harness.dart';
 import 'personas.dart';
 
-Future<Map<String, Object?>> readCategory(String name) async =>
-    decodeJsonObject(File('assets/content/$name').readAsStringSync());
+Future<Map<String, Object?>> readCategory(
+  String name,
+  String contentDir,
+) async => decodeJsonObject(File('$contentDir/$name').readAsStringSync());
 
 Future<void> main(List<String> args) async {
   var days = 150;
   var seedCount = 6;
   var personaIds = const <String>[];
   var writeReport = true;
+  var contentDir = 'assets/content';
+  var variant = false;
   for (var i = 0; i < args.length; i++) {
     if (args[i] == '--days' && i + 1 < args.length) {
       days = int.parse(args[++i]);
@@ -37,18 +48,23 @@ Future<void> main(List<String> args) async {
       personaIds = args[++i].split(',');
     } else if (args[i] == '--no-report') {
       writeReport = false;
+    } else if (args[i] == '--content-dir' && i + 1 < args.length) {
+      contentDir = args[++i];
+    } else if (args[i] == '--variant' && i + 1 < args.length) {
+      variant = args[++i] == 'ladder-a';
     }
   }
 
-  final content = parseContentBundle(
-    manifest: await readCategory('manifest.json'),
-    catalogue: await readCategory('catalogue.json'),
-    sprites: await readCategory('sprites.json'),
-    economy: await readCategory('economy.json'),
-    ambience: await readCategory('ambience.json'),
-    terrain: await readCategory('terrain.json'),
-    progression: await readCategory('progression.json'),
+  var content = parseContentBundle(
+    manifest: await readCategory('manifest.json', contentDir),
+    catalogue: await readCategory('catalogue.json', contentDir),
+    sprites: await readCategory('sprites.json', contentDir),
+    economy: await readCategory('economy.json', contentDir),
+    ambience: await readCategory('ambience.json', contentDir),
+    terrain: await readCategory('terrain.json', contentDir),
+    progression: await readCategory('progression.json', contentDir),
   );
+  if (variant) content = ladderABundle(content);
   final personas = personaIds.isEmpty
       ? builtinPersonas
       : [

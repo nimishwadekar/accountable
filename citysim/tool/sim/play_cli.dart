@@ -107,10 +107,31 @@ class _PlaySession {
   final List<SimAction> _actionsToday = [];
   bool _dayOpen = false;
 
+  /// The payload of the most recent check-in, persisted in the state
+  /// envelope. The save format does not keep events, so without this
+  /// a fresh session's `report` forgets yesterday's check-in ever
+  /// happened.
+  Map<String, Object?>? lastReport;
+
   WorldQueries get queries => WorldQueries(state, terrain);
 
   void run(String command) {
-    final words = command.trim().split(RegExp(r'\s+'));
+    var words = command.trim().split(RegExp(r'\s+'));
+    // Reviewers mix the CLI's two coordinate forms — the road
+    // command's cells ("4,4") and the space form ("4 4") — so accept
+    // a comma-joined pair anywhere separate numbers are expected.
+    if (const {
+      'map',
+      'found',
+      'parcel',
+      'build',
+      'inspect',
+    }.contains(words.first)) {
+      words = [
+        words.first,
+        for (var i = 1; i < words.length; i++) ...words[i].split(','),
+      ];
+    }
     final head = words.isEmpty || words.first.isEmpty ? '' : words.first;
     // Mutating commands open the game first — the player cannot act
     // without opening the app, and the first open of a fresh world
@@ -120,6 +141,23 @@ class _PlaySession {
     if (!views.contains(head) && !dayCommands.contains(head)) {
       _ensureDayOpened();
     }
+    try {
+      _dispatch(head, words, command);
+    } on FormatException {
+      // A malformed command must refuse like the game refuses an
+      // illegal move — never crash the session (unsaved work would
+      // be lost) and never half-apply.
+      stdout.writeln(
+        '✗ Couldn\'t read that command — check help for the format.',
+      );
+    } on RangeError {
+      stdout.writeln('✗ That command is missing arguments — check help.');
+    } on TypeError {
+      stdout.writeln('✗ That command needs numbers where you typed text.');
+    }
+  }
+
+  void _dispatch(String head, List<String> words, String command) {
     switch (head) {
       case 'help':
         _help();
@@ -128,9 +166,20 @@ class _PlaySession {
       case 'report':
         _report();
       case 'day':
-        _day();
+        // A malformed command must never silently advance the
+        // calendar — a mistyped note once parsed as a day.
+        if (words.length > 1) {
+          stdout.writeln('✗ day takes no arguments.');
+        } else {
+          _day();
+        }
       case 'skip':
-        _skip(words.length > 1 ? int.tryParse(words[1]) ?? 1 : 1);
+        final count = words.length == 2 ? int.tryParse(words[1]) : null;
+        if (count == null || words.length > 2) {
+          stdout.writeln('✗ skip needs one number: skip <n>');
+        } else {
+          _skip(count);
+        }
       case 'map':
         _map(
           words.length > 2
@@ -145,7 +194,14 @@ class _PlaySession {
           founding: true,
         );
       case 'parcel':
-        _parcel(ParcelCoord(int.parse(words[1]), int.parse(words[2])));
+        if (words.length > 3 && words[3] != 'buy') {
+          stdout.writeln('✗ parcel takes "buy" as its only extra word.');
+        } else {
+          _parcel(
+            ParcelCoord(int.parse(words[1]), int.parse(words[2])),
+            buy: words.length > 3,
+          );
+        }
       case 'road':
         _road(words.sublist(1));
       case 'build':
@@ -176,6 +232,7 @@ class _PlaySession {
     _dayOpen = true;
     if (canCheckInWorldToday(state)) {
       state = checkInWorldForToday(state, content);
+      lastReport = _lastCheckInEvent()?.payload;
     }
     _report();
   }
@@ -186,6 +243,7 @@ class _PlaySession {
     _dayOpen = true;
     if (canCheckInWorldToday(state)) {
       state = checkInWorldForToday(state, content);
+      lastReport = _lastCheckInEvent()?.payload;
     }
     _report();
   }
@@ -319,10 +377,13 @@ THE GAME, as the game itself teaches it:
 COMMANDS:
   status · report · map [col row] · catalogue
   day (open tomorrow and check in) · skip <n> (days away)
-  found <parcelX> <parcelY> · parcel <parcelX> <parcelY>
-  road <col,row> [col,row] · build <model> <col> <row>
+  found <parcelX> <parcelY> · parcel <parcelX> <parcelY> [buy]
+  road <col,row> [col,row] [buy] · build <model> <col> <row>
   place <model> <col> <row> <subtileX> <subtileY> (decorations)
-  pickup <propId> · inspect <col> <row> · note <text>''');
+  pickup <propId> · inspect <col> <row> · note <text>
+Purchases quote first: parcel and road print the price (and the
+treasury after) without spending — append "buy" to go through.
+Founding a parcel is free and needs no buy.''');
   }
 
   void _status() {
@@ -353,11 +414,11 @@ COMMANDS:
 
   void _report() {
     final event = _lastCheckInEvent();
-    if (event == null) {
+    final payload = event?.payload ?? lastReport;
+    if (payload == null) {
       stdout.writeln('No check-in has landed yet.');
       return;
     }
-    final payload = event.payload;
     final completions = (payload['completions'] as List?) ?? const [];
     final unemployed = (payload['unemployed'] as num?)?.toInt() ?? 0;
     final floor = content.economy.homeTaxUnemploymentFloorPercent;
@@ -418,9 +479,12 @@ COMMANDS:
         prop.cell.key,
     };
     final byStructure = <String, String>{
+      // Every cell of a footprint carries the building's letter —
+      // a 2×2 block reads as a block, not an anchor dot.
       for (final structure in state.structures)
         if (structure.kind == StructureKind.building)
-          structure.origin.key: _letterFor(structure.catalogueId),
+          for (final cell in structure.footprint)
+            cell.key: _letterFor(structure.catalogueId),
     };
     final constructionCells = <String>{
       for (final job in state.constructions) ...[
@@ -430,8 +494,8 @@ COMMANDS:
     };
     final buffer = StringBuffer(
       'Map around (${focus.column},${focus.row}) — '
-      '. free owned · : unowned · ~ water · # road · , brush · '
-      'h home · c commerce · s civic · u site\n'
+      '. free owned · : unowned · ; unowned brush · ~ water · # road · '
+      ', brush · h home · c commerce · s civic · u site\n'
       'columns $left..${left + width - 1} left to right · '
       'rows $top..${top + height - 1} top to bottom · '
       'parcel boundaries every 8\n',
@@ -514,14 +578,27 @@ COMMANDS:
 
   // ---------------------------------------------------------- actions
 
-  void _parcel(ParcelCoord coord, {bool founding = false}) {
+  void _parcel(ParcelCoord coord, {bool founding = false, bool buy = false}) {
     try {
       final quote = quoteParcelPurchase(state, content, terrain, coord);
-      stdout.writeln(
-        '${founding ? 'Founding' : 'Buying'} parcel (${coord.x},${coord.y}): '
-        '${_fmt(quote.price)} coins · ${quote.landCellCount} land cells',
-      );
+      if (!founding && !buy) {
+        // The game shows a price before a purchase; the CLI quotes
+        // the same way, and only the explicit "buy" spends.
+        stdout.writeln(
+          'Parcel (${coord.x},${coord.y}): ${_fmt(quote.price)} coins · '
+          '${quote.landCellCount} land cells · '
+          'treasury ${_fmt(state.coins)} → ${_fmt(state.coins - quote.price)}',
+        );
+        stdout.writeln(
+          'Append "buy" to purchase: parcel ${coord.x} ${coord.y} buy',
+        );
+        return;
+      }
       state = purchaseParcel(state, content, terrain, coord);
+      stdout.writeln(
+        '${founding ? 'Founded' : 'Bought'} parcel (${coord.x},${coord.y}) '
+        'for ${_fmt(quote.price)} coins · ${quote.landCellCount} land cells',
+      );
       _act(
         SimAction(
           founding ? 'found' : 'parcel',
@@ -543,25 +620,45 @@ COMMANDS:
   }
 
   void _road(List<String> args) {
-    final first = args[0].split(',');
+    final buy = args.isNotEmpty && args.last == 'buy';
+    final cellArgs = buy ? args.sublist(0, args.length - 1) : args;
+    if (cellArgs.isEmpty) {
+      stdout.writeln('✗ road needs cells: road <col,row> [col,row] [buy]');
+      return;
+    }
+    final first = cellArgs[0].split(',');
     final start = CellCoord(int.parse(first[0]), int.parse(first[1]));
-    final end = args.length > 1
+    final end = cellArgs.length > 1
         ? CellCoord(
-            int.parse(args[1].split(',')[0]),
-            int.parse(args[1].split(',')[1]),
+            int.parse(cellArgs[1].split(',')[0]),
+            int.parse(cellArgs[1].split(',')[1]),
           )
         : start;
     final cells = straightLineBetween(start, end);
     try {
       final quote = quoteRoadStretch(state, content, terrain, cells: cells);
+      if (!buy) {
+        // The price lands before the purchase, never after it — an
+        // unquoted road once drained a reviewer's whole treasury.
+        stdout.writeln(
+          'Road quote: ${cells.length} tiles · ${_fmt(quote.price)} coins · '
+          'treasury ${_fmt(state.coins)} → ${_fmt(state.coins - quote.price)}',
+        );
+        stdout.writeln(
+          'The whole stretch lands on the check-in after purchase. '
+          'Append "buy" to purchase: road ${cellArgs.join(' ')} buy',
+        );
+        return;
+      }
       state = planRoadStretch(state, content, terrain, cells: cells);
       stdout.writeln(
         'Road plan bought: ${cells.length} tiles · ${_fmt(quote.price)} coins '
-        '· tiles creep in one per check-in',
+        '· the whole stretch lands on the next check-in',
       );
       _act(SimAction('roads', '${cells.length} tiles', coins: quote.price));
     } on WorldRuleViolation catch (e) {
       stdout.writeln('✗ ${e.message}');
+      _describeBlockers(cells);
       _act(
         SimAction(
           'roads',
@@ -570,6 +667,47 @@ COMMANDS:
           reason: e.message,
         ),
       );
+    }
+  }
+
+  /// Names what stands on the given cells — the specificity the
+  /// game's red marks give a player that a generic refusal cannot:
+  /// which tile is blocked, by what, and how to clear it.
+  void _describeBlockers(List<CellCoord> cells) {
+    final blockers = <String>[];
+    for (final cell in cells) {
+      if (queries.roadsByCell.containsKey(cell)) {
+        blockers.add('(${cell.column},${cell.row}): a road');
+        continue;
+      }
+      final structure = state.structures
+          .where((structure) => structure.footprint.contains(cell))
+          .firstOrNull;
+      if (structure != null) {
+        blockers.add(
+          '(${cell.column},${cell.row}): '
+          '${content.structure(structure.catalogueId)?.name ?? structure.catalogueId}',
+        );
+        continue;
+      }
+      final props = queries.propsByCell[cell] ?? const <PlacedProp>[];
+      if (props.isNotEmpty) {
+        blockers.add(
+          '(${cell.column},${cell.row}): '
+          '${props.map((prop) => content.structure(prop.catalogueId)?.name ?? prop.catalogueId).join(', ')} '
+          '(pickup ${props.first.id})',
+        );
+        continue;
+      }
+      final planned = state.constructions.any(
+        (job) => job.footprint.contains(cell) || job.roadCells.contains(cell),
+      );
+      if (planned) {
+        blockers.add('(${cell.column},${cell.row}): planned work');
+      }
+    }
+    if (blockers.isNotEmpty) {
+      stdout.writeln('Blocked tiles: ${blockers.join(' · ')}');
     }
   }
 
@@ -604,6 +742,11 @@ COMMANDS:
       );
     } on WorldRuleViolation catch (e) {
       stdout.writeln('✗ ${e.message}');
+      _describeBlockers([
+        for (var column = 0; column < definition.footprintColumns; column++)
+          for (var row = 0; row < definition.footprintRows; row++)
+            origin.offset(column, row),
+      ]);
       _act(
         SimAction(
           'build',
@@ -652,6 +795,7 @@ COMMANDS:
       );
     } on WorldRuleViolation catch (e) {
       stdout.writeln('✗ ${e.message}');
+      _describeBlockers([origin]);
       _act(
         SimAction(
           'place',
@@ -664,14 +808,17 @@ COMMANDS:
   }
 
   void _pickup(String propId) {
-    final prop = state.props.where((prop) => prop.id == propId).firstOrNull;
+    // Tolerate the bare id form — inspect shows "prop:…" only in
+    // parentheses, and reviewers naturally type what they read.
+    var prop = state.props.where((prop) => prop.id == propId).firstOrNull;
+    prop ??= state.props.where((prop) => prop.id == 'prop:$propId').firstOrNull;
     if (prop == null) {
       stdout.writeln('✗ No prop "$propId" — see inspect for ids.');
       return;
     }
-    state = pickUpProp(state, content, propId: propId);
-    stdout.writeln('Picked up $propId · free, no refund.');
-    _act(SimAction('pickup', propId, coins: 0));
+    state = pickUpProp(state, content, propId: prop.id);
+    stdout.writeln('Picked up ${prop.id} · free, no refund.');
+    _act(SimAction('pickup', prop.id, coins: 0));
   }
 
   void _inspect(CellCoord cell) {
@@ -748,6 +895,7 @@ Future<void> main(List<String> args) async {
 
   final stateFile = File(statePath);
   ParcelWorldState state;
+  Map<String, Object?>? lastReport;
   if (stateFile.existsSync()) {
     final envelope = decodeJsonObject(stateFile.readAsStringSync());
     state = sheetTablesToWorld(
@@ -755,6 +903,10 @@ Future<void> main(List<String> args) async {
       content: content,
       terrainProvider: terrain,
     );
+    final restored = envelope['lastReport'];
+    if (restored is Map) {
+      lastReport = restored.cast<String, Object?>();
+    }
   } else {
     state = newParcelWorldState(
       content: content,
@@ -773,7 +925,7 @@ Future<void> main(List<String> args) async {
     state: state,
     logFile: File(logPath),
     notesFile: File(notesPath),
-  );
+  )..lastReport = lastReport;
   for (final command in commands) {
     session.run(command);
   }
@@ -783,6 +935,7 @@ Future<void> main(List<String> args) async {
       'schema': 1,
       'day': state.constructionDay,
       'tables': _tablesToJson(worldToSheetTables(session.state)),
+      'lastReport': session.lastReport,
     }),
   );
 }

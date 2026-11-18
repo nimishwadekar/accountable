@@ -170,8 +170,10 @@ free-construction rule intact. Capacities count people, not households:
 Current parcel prices are prototype values and may be retuned. A parcel costs
 a base price plus a per-population surcharge — expanding a settlement gets
 pricier as it grows, so land becomes a progression gated by the tax base that
-must pay for it. Population only ever rises (no demolition, no churn), so the
-price is monotonic and cannot be gamed by shrinking. The precise formula is
+must pay for it. Population only ever rises today (no demolition, no churn),
+so the price is monotonic and cannot be gamed by shrinking; the planned
+demolition work (§8) moves pricing onto a population high-water to keep that
+guarantee under churn. The precise formula is
 documented with the rules code rather than treated as a permanent shop price.
 
 ## 5. Roads and construction
@@ -197,7 +199,8 @@ documented with the rules code rather than treated as a permanent shop price.
 - Tapping a completed road selects its section: the straight run between
   the nearest junctions, turns, or dead ends.
 - Road upgrades, demolition, and cancellation are not part of the
-  current feature set.
+  current feature set; demolition is planned with dependent checks and
+  refund rules (see §8).
 
 ## 6. Buildings, decorations, and bridges
 
@@ -413,6 +416,66 @@ These are candidates, not promises or requirements for the current prototype:
   under the single-site-look decision; dirt in a project's early
   stages and concrete as it progresses remains a future per-stage
   option.
+
+### Demolition (planned — direction agreed 2026-11-18)
+
+The reviewer playtest's chunk-1 findings forced the decision: three
+of four reviewers hit "full parcel = dead parcel", the one true
+soft-lock (a homes-only town with no free road frontage) had
+demolition as its only escape, and every game in the genre ships it
+as the universal solvency lever. The prior blockers and their
+resolutions:
+
+- **The accountability theme.** §9's open question — "no demolition
+  is deliberate; it fits the accountability theme" — resolves as:
+  permanence lives in the *money*, not the *buildings*. Demolition
+  never refunds and never profits; the town keeps what it spent.
+  What you build can go; what you paid cannot come back.
+- **Population monotonicity.** Parcel prices (base + per-population
+  surcharge) assume population only rises, so they cannot be gamed
+  by shrinking. Demolition evicts, so pricing moves to a **population
+  high-water** — a UserData row derived once from stored population
+  on legacy saves, exactly like the progression milestone row — and
+  the price stays monotonic under churn.
+- **The wide-lot road invariant.** Placement turns non-square
+  footprints to face their road, and save validation requires that
+  facing edge to stay fully roaded. Road demolition must therefore
+  refuse while any wide building's facing edge (or a bridge's bank,
+  or an in-flight project's cells) depends on the tile.
+- **Occupancy aggregates.** Population and employment are counters,
+  not citizens; a demolished home cannot un-house specific people.
+  Rule: demolition **evicts to the waiting list** (capped at its
+  normal ceiling; the overflow leaves town), and employment
+  re-clamps to the surviving population and job counts, re-staffing
+  at the next check-ins.
+
+Phasing (each phase is independently shippable):
+
+1. **Buildings** — the Leo fix. `demolishStructure` on a completed
+   building or an in-flight site: no refund, eviction as above, the
+   footprint frees instantly, an event records it with the evicted
+   count. Under-construction sites are cancellations, not
+   demolitions.
+2. **Roads, with the dependent checks** — demolish a selected
+   section (the same junction-to-junction selection as tapping).
+   Refuses while a wide building faces it, a bridge banks on it, or
+   a project targets its cells. **Cancellation refunds in full**
+   (nothing was delivered); demolition of completed tiles refunds
+   nothing — the line is: undone before it exists is a refund,
+   removed after it exists is a sink.
+3. **Bridges** — remove the span; the bank roads are ordinary roads
+   and stay.
+
+Parcels stay permanent: exclusive claims on a shared map, and the
+price formula is a progression, not an inventory. Save format needs
+no new sheets — rows simply vanish — except the population
+high-water row in UserData. Surfaces: a Demolish button with a
+confirm quote (what goes, who is evicted, no refund) in the
+structure sheet; the CLI mirrors the purchase flow
+(`demolish <col> <row>` quotes, `demolish <col> <row> confirm`
+executes). The regression test that matters: a homes-only
+soft-locked town demolishes a home, builds commerce on the freed
+frontage, and recovers.
 
 ### Check-in economy and settlement growth (future work)
 
@@ -747,8 +810,10 @@ Before committing to additional mechanics, decide:
 4. Which regional features, if any, are required for country-scale expansion?
 5. Which long-term presentation features belong in the game, versus remaining
    visual ideas only?
-6. Permanence policy: no demolition is deliberate for buildings — it fits the
-   accountability theme — but decide consciously whether road removal exists
+6. Permanence policy: decided 2026-11-18 — demolition ships (the playtest
+   and genre practice both demand it), but permanence lives in the money:
+   no refunds, no profit, pricing on a population high-water. Buildings,
+   roads, and bridges can go; parcels stay permanent.
    for dead-end cleanup in long-running settlements.
 7. ~~Should asphalt roads be population-gated rather than a freely chosen style?~~
    Moot: dirt is gone and asphalt is the only style; population-gating road

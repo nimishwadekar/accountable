@@ -96,8 +96,8 @@ messages verbatim — the refusal *is* the friction we want captured):
 | `map [col row]` | ASCII cell window centered on the town (~40×20): roads `#`, homes `h`, commerce `c`, civic `s`, props `,`, free `.`, water `~`, owned/unowned shading |
 | `catalogue` | unlocked models with player-facing stats (population/jobs/service/tax/upkeep/stages) |
 | `found <parcelX> <parcelY>` | claim the founding parcel |
-| `parcel <parcelX> <parcelY>` | buy land (quoted, refused if illegal) |
-| `road <c1,r1> <c2,r2>` | plan one road stretch between cells (quoted; invalid tiles listed as the red marks would show) |
+| `parcel <parcelX> <parcelY>` | quote land (price, cells, treasury after); append `buy` to purchase |
+| `road <c1,r1> <c2,r2>` | quote one road stretch between cells (price, treasury after; blocked tiles named); append `buy` to purchase |
 | `build <modelId> <col> <row>` | place a building (quoted; road-frontage and overlap refusals verbatim) |
 | `place <modelId> <col> <row> <sx> <sy>` | place a decoration on the subtile lattice |
 | `pickup <propId>` | pick a prop back up |

@@ -343,6 +343,48 @@ void main() {
     );
   });
 
+  test('a homes-only town must be able to pay its upkeep from the floor', () {
+    // The floor's design promise: a town of only homes always earns
+    // its way back. The frozen bundle keeps it — 30% of the small
+    // home's 500 tax is 150 against 100 upkeep — and a floor too
+    // thin for a home's own upkeep warns.
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: content.terrain,
+        progression: content.progression,
+      ).where((issue) => issue.message.contains('homes-only')),
+      isEmpty,
+    );
+
+    // A floor too thin for the small home's upkeep warns: a town of
+    // only homes could never pay its upkeep.
+    final thin = content.economy.copyWith(homeTaxUnemploymentFloorPercent: 10);
+    final issues = validateContentData(
+      catalogue: content.catalogue,
+      sprites: content.sprites,
+      economy: thin,
+      ambience: content.ambience,
+      terrain: content.terrain,
+      progression: content.progression,
+    );
+    expect(
+      issues.any(
+        (issue) =>
+            issue.severity == 'warning' &&
+            issue.message.contains('small-home') &&
+            issue.message.contains('homes-only'),
+      ),
+      isTrue,
+      reason: '10% of the small home\'s 500 tax is 50, under its 100 upkeep',
+    );
+    // It warns, it does not error — balance is the content suite's job.
+    expect(issues.where((issue) => issue.severity == 'error'), isEmpty);
+  });
+
   test('progression milestones validate structure and floors', () {
     ProgressionContent withMilestones(List<Map<String, Object?>> raw) =>
         ProgressionContent.fromJson({'milestones': raw});

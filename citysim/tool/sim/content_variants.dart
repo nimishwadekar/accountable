@@ -255,6 +255,15 @@ TerrainContent bigIslandMap() {
 /// the density models, the designed ladder extension, the blend-40
 /// economy (taxes ×0.4, parcels 30,000 + 400/population), and the
 /// enlarged map.
+///
+/// The variant raises the homes-only levy floor to 70%: blend-40
+/// scales taxes but not upkeep, so the shipped 30% floor pays
+/// 60/home against 100/home upkeep — a homes-only town on this
+/// variant is insolvent by construction (the reviewer playtest's
+/// one true soft-lock, Leo, chunk 1). At 70% the floor pays
+/// 140/home against 100 upkeep plus a typical road load: broke, a
+/// homes-only town still climbs out. Only towns under 70%
+/// employment see the difference.
 ContentBundle ladderABundle(ContentBundle base) {
   final extras = [
     for (final json in densityModels) _model(json.cast<String, Object?>()),
@@ -269,6 +278,7 @@ ContentBundle ladderABundle(ContentBundle base) {
     economy: base.economy.copyWith(
       parcelBaseCoins: 30000,
       parcelPerPopulationCoins: 400,
+      homeTaxUnemploymentFloorPercent: 70,
     ),
     ambience: base.ambience,
     terrain: bigIslandMap(),

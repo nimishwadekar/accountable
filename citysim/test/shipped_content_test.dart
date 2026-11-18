@@ -63,6 +63,23 @@ void main() {
         expect(model.costCoins, 0, reason: model.id);
       }
     }
+    // The homes-only floor keeps its promise on the shipped content:
+    // every residential model's floored levy covers its upkeep. (An
+    // economy variant that scaled taxes but not upkeep broke this —
+    // the playtest's one true soft-lock — so the validator now
+    // warns when an edit breaks it; the shipped files must not.)
+    expect(
+      validateContentData(
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy,
+        ambience: content.ambience,
+        terrain: content.terrain,
+        progression: content.progression,
+      ).where((issue) => issue.message.contains('homes-only')),
+      isEmpty,
+      reason: 'no shipped home is insolvent at the levy floor',
+    );
     // The sway gate: sway draws only at 0.75× camera scale and closer.
     expect(content.ambience.vegetationSway.minScale, 0.75);
     // The parcel-mode claim tint: a muted slate, distinct from the
