@@ -17,9 +17,7 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 
 # Content upgrades
 
-- make money amounts realistic order of magnitude.
-- Tune money amounts.
-- Tune population amounts.
+- Run gameplay simulations and tune the values.
 - more terrain sprite tiles.
 
 # Visual upgrades

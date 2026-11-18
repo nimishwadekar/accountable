@@ -201,13 +201,14 @@ void main() {
     expect(content.ambience.ambientTimeScale, 1.0);
     // 0.6 draws a person at ~1.8 m on the 0.2 m/px scale ruler.
     expect(content.ambience.pedestrians.spriteScale, closeTo(0.6, 0.001));
-    // Street life follows population: 20% of the live save's 51 is
-    // the ten walkers the old road-based formula happened to show.
+    // Street life follows population: 20% of the live save's 254 is
+    // the walker count the tuned ambience carries.
     expect(content.ambience.pedestrians.populationPercent, 20);
     // Traffic follows population too: ten types, percents summing
     // to one hundred, a sedan-heavy civilian mix, and colour
-    // variants rolled per trip.
-    expect(content.ambience.cars.populationPercent, 10);
+    // variants rolled per trip. Tuned down to 2% once population
+    // began counting people — 10% of 254 was a parking lot.
+    expect(content.ambience.cars.populationPercent, 2);
     expect(content.ambience.cars.minTripCells, 10);
     expect(content.ambience.cars.types, hasLength(9));
     expect(

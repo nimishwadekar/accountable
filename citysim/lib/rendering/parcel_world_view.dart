@@ -1768,18 +1768,25 @@ class _ParcelWorldPainter extends CustomPainter {
   /// standard tilemap order (Tiled layers, Godot tilemap layers,
   /// Unity sorting layers), and replaying the few dozen visible
   /// roads per frame is cheap next to the cached terrain.
+  /// Every road cell neighbour masks read: this city's roads and
+  /// bridge decks plus the passive cities' — the shared set for
+  /// built-road drawing and plan previews alike.
+  Set<CellCoord> _roadMaskCells() => <CellCoord>{
+    ...queries.roadsByCell.keys,
+    for (final bridge in state.bridges) ...bridge.waterCells,
+    for (final passive in passiveQueries) ...passive.roadsByCell.keys,
+    for (final passive in passiveQueries)
+      for (final bridge in _allByChunkScan(passive.bridgeChunks))
+        ...bridge.waterCells,
+  };
+
   void _drawRoads(Canvas canvas, Size size, _CellBounds bounds) {
     // Road neighbour masks read the road set around the view — every
     // city's, so a junction against a passive city's road renders
-    // with the right connectors.
-    final roadCells = <CellCoord>{
-      ...queries.roadsByCell.keys,
-      for (final bridge in state.bridges) ...bridge.waterCells,
-      for (final passive in passiveQueries) ...passive.roadsByCell.keys,
-      for (final passive in passiveQueries)
-        for (final bridge in _allByChunkScan(passive.bridgeChunks))
-          ...bridge.waterCells,
-    };
+    // with the right connectors. A live plan joins the set too, so
+    // the built roads it touches preview the connectors they will
+    // carry once it is delivered.
+    final roadCells = _roadMaskCells()..addAll(_previewLine() ?? const []);
     RoadSegment? roadAt(CellCoord cell) {
       final own = queries.roadsByCell[cell];
       if (own != null) return own;
@@ -3285,29 +3292,46 @@ class _ParcelWorldPainter extends CustomPainter {
     canvas.restore();
   }
 
-  /// Translucent preview of the road or bridge line under
-  /// construction by the active tool: the projected tiles show as
-  /// translucent road art, and tiles that would make the quote fail
-  /// (water, unowned, occupied) carry a red mark. The preview follows
-  /// the cursor on desktop (hover); on touch it appears once the end
-  /// tile is committed.
-  void _drawLinePreview(Canvas canvas, Size size) {
-    final roadPath = content.tryAssetPath('road.straight.se');
-    final roadImage = roadPath == null ? null : images[roadPath];
-    List<CellCoord>? line;
-    var isBridge = false;
+  /// The active tool's projected line: the committed plan when one
+  /// exists, else the cursor-follow projection. Null when no line is
+  /// active. Shared by the preview and the road mask set, so built
+  /// roads adjacent to a plan preview the connectors they will carry
+  /// once it is delivered.
+  List<CellCoord>? _previewLine() {
     if (roadStartCell case final start?) {
-      line = roadPlanCells.isNotEmpty
+      return roadPlanCells.isNotEmpty
           ? roadPlanCells
           : (hoverCell == null ? null : straightLineBetween(start, hoverCell!));
-    } else if (bridgeStartCell case final start?) {
-      isBridge = true;
+    }
+    if (bridgeStartCell case final start?) {
       final end = bridgeEndCell ?? hoverCell;
       if (end != null && end != start) {
-        line = straightLineBetween(start, end);
+        return straightLineBetween(start, end);
       }
     }
+    return null;
+  }
+
+  /// Translucent preview of the road or bridge line under
+  /// construction by the active tool. Road tiles preview their real
+  /// art: each planned tile resolves its connector role against the
+  /// built roads plus the plan itself, so the ghost shows exactly
+  /// what the road will look like once delivered — straights,
+  /// corners, junctions, and crossings. Tiles that would make the
+  /// quote fail (water, unowned, occupied) carry a red mark. The
+  /// preview follows the cursor on desktop (hover); on touch it
+  /// appears once the end tile is committed. Bridge spans keep the
+  /// straight-tile stand-in; deck previews are future work.
+  void _drawLinePreview(Canvas canvas, Size size) {
+    final line = _previewLine();
     if (line == null) return;
+    final isBridge = bridgeStartCell != null;
+    final roadPath = content.tryAssetPath('road.straight.se');
+    final roadImage = roadPath == null ? null : images[roadPath];
+    // The road branch's mask set: every built road plus the plan
+    // itself, so planned tiles connect to each other and to the
+    // existing network exactly as they will once delivered.
+    final roadCells = isBridge ? null : (_roadMaskCells()..addAll(line));
 
     bool validRoadCell(CellCoord cell) =>
         queries.ownsCell(cell) &&
@@ -3333,12 +3357,40 @@ class _ParcelWorldPainter extends CustomPainter {
       final valid = isBridge
           ? validBridgeCell(cell, index == 0 || index == line.length - 1)
           : validRoadCell(cell);
-      final rect = Rect.fromCenter(
-        center: center,
-        width: _logicalTileWidth * scale,
-        height: _logicalTileHeight * scale,
-      );
-      if (roadImage != null) {
+      if (!isBridge && roadCells != null) {
+        // The real placement art for this tile as it will be once
+        // delivered: the same mask, crossing, and rect math the
+        // built-road pass uses, ghosted.
+        final mask = roadNeighborMask(cell, roadCells);
+        final role =
+            roadCrossingRole(mask, cell, roadCells) ?? roadSpriteRole(mask);
+        final path = content.tryAssetPath(role);
+        final image = path == null ? null : images[path];
+        final sprite = path == null ? null : content.sprite(role);
+        if (image != null && sprite != null) {
+          canvas.drawImageRect(
+            image,
+            Rect.fromLTWH(
+              0,
+              0,
+              image.width.toDouble(),
+              image.height.toDouble(),
+            ),
+            _tileScreenRect(image, sprite, cell, size, scale, offset),
+            Paint()
+              ..filterQuality = FilterQuality.medium
+              ..color = const Color(0x73FFFFFF),
+          );
+        } else {
+          _drawCellOutline(
+            canvas,
+            center,
+            const Color(0xFF8B682A),
+            scale,
+            fill: const Color(0x447BBE92),
+          );
+        }
+      } else if (roadImage != null) {
         canvas.drawImageRect(
           roadImage,
           Rect.fromLTWH(
@@ -3347,7 +3399,11 @@ class _ParcelWorldPainter extends CustomPainter {
             roadImage.width.toDouble(),
             roadImage.height.toDouble(),
           ),
-          rect,
+          Rect.fromCenter(
+            center: center,
+            width: _logicalTileWidth * scale,
+            height: _logicalTileHeight * scale,
+          ),
           Paint()
             ..filterQuality = FilterQuality.medium
             ..color = const Color(0x73FFFFFF),
