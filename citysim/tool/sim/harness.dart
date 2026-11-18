@@ -503,7 +503,7 @@ class SimHarness {
     var cleared = 0;
     for (final prop in [...state.props]) {
       if (!blocking.contains(prop.cell)) continue;
-      state = pickUpProp(state, content, propId: prop.id);
+      state = demolishProp(state, content, propId: prop.id);
       cleared++;
     }
     return cleared;

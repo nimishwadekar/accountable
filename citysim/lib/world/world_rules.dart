@@ -93,6 +93,43 @@ class BridgeQuote {
   final int bridgeCost;
 }
 
+/// What demolishing a completed building does: no refund, the
+/// footprint frees, and the town absorbs the occupancy loss. The
+/// eviction cascade in numbers — population only falls when the
+/// remaining beds cannot house everyone; of those who lose their
+/// homes, the waiting list takes what its cap allows and the rest
+/// leave town for good.
+class StructureDemolitionQuote {
+  const StructureDemolitionQuote({
+    required this.structure,
+    required this.model,
+    required this.bedsAfter,
+    required this.jobsAfter,
+    required this.stayers,
+    required this.evicted,
+    required this.joinDemand,
+    required this.leftTown,
+  });
+
+  final PlacedStructure structure;
+  final StructureDefinition model;
+
+  /// Remaining beds and jobs, counted the way the ledger counts
+  /// them: live content over the surviving buildings.
+  final int bedsAfter;
+  final int jobsAfter;
+
+  /// Residents that keep their homes — the whole population when
+  /// the beds still fit everyone.
+  final int stayers;
+
+  /// Residents that lose their homes; [joinDemand] of them join the
+  /// waiting list and [leftTown] leave the city for good.
+  final int evicted;
+  final int joinDemand;
+  final int leftTown;
+}
+
 /// The town's per-check-in ledger and vitality. Taxes are collected
 /// from occupied buildings only — occupancy scales each building's
 /// flat tax — and multiplied by contentment; upkeep is owed in full,
@@ -373,6 +410,63 @@ RoadProjectQuote quoteRoadStretch(
     cells: List.unmodifiable(cells),
     style: RoadStyle.asphalt,
     price: cells.length * content.roadTileCost(),
+  );
+}
+
+/// Quotes demolishing a completed building: the occupancy cascade
+/// computed without touching the state, so the confirm dialog and
+/// the CLI can show exactly what the town loses before anything
+/// goes. In-flight construction sites are not buildings — they are
+/// not demolishable and this quote refuses them.
+StructureDemolitionQuote quoteStructureDemolition(
+  ParcelWorldState state,
+  ContentBundle content, {
+  required String structureId,
+}) {
+  PlacedStructure? target;
+  for (final structure in state.structures) {
+    if (structure.id == structureId) {
+      target = structure;
+      break;
+    }
+  }
+  if (target == null) {
+    throw const WorldRuleViolation('That building is no longer standing.');
+  }
+  final model = content.structure(target.catalogueId);
+  if (model == null) {
+    throw WorldRuleViolation(
+      'Unknown building "${target.catalogueId}" — it cannot be demolished.',
+    );
+  }
+  // The town's remaining capacities, counted the way the ledger
+  // counts them: live content over the surviving buildings.
+  var bedsAfter = 0;
+  var jobsAfter = 0;
+  for (final structure in state.structures) {
+    if (structure.id == structureId) continue;
+    final other = content.structure(structure.catalogueId);
+    if (other == null) continue;
+    if (other.isResidential) bedsAfter += other.population;
+    if (other.isCommerce) jobsAfter += other.jobs;
+  }
+  final stayers = state.population < bedsAfter ? state.population : bedsAfter;
+  final evicted = state.population - stayers;
+  // The waiting list's cap, exactly as the check-in refill caps it:
+  // a percentage of the surviving population, floored at one.
+  final cap = ((stayers * content.economy.waitingPopulationCapPercent) ~/ 100)
+      .clamp(1, 1 << 30);
+  final room = (cap - state.waitingPopulation).clamp(0, 1 << 30);
+  final joinDemand = room < evicted ? room : evicted;
+  return StructureDemolitionQuote(
+    structure: target,
+    model: model,
+    bedsAfter: bedsAfter,
+    jobsAfter: jobsAfter,
+    stayers: stayers,
+    evicted: evicted,
+    joinDemand: joinDemand,
+    leftTown: evicted - joinDemand,
   );
 }
 

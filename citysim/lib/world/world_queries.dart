@@ -387,7 +387,7 @@ class WorldQueries {
 
 /// The materialized form of a nature row: the save's prop shape with
 /// the codec's derived id, priced free — nature costs nothing to
-/// inherit and refunds nothing when picked up. Purchase copies
+/// inherit and refunds nothing when removed. Purchase copies
 /// exactly this, so the frontier render and the bought-land render
 /// draw the identical sprite.
 PlacedProp placedPropFromTerrain(TerrainProp row) => PlacedProp(

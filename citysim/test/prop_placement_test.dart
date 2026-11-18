@@ -256,13 +256,13 @@ void main() {
       subtileY: 3,
     );
     final coinsAfterPlacement = world.coins;
-    world = pickUpProp(world, content, propId: world.props.single.id);
+    world = demolishProp(world, content, propId: world.props.single.id);
     expect(world.props, isEmpty);
     expect(world.coins, coinsAfterPlacement, reason: 'no refund, no charge');
     expect(
       world.events.last.kind,
-      'prop-picked-up',
-      reason: 'the pick-up is logged',
+      'prop-demolished',
+      reason: 'the removal is logged',
     );
     // The subtile is placeable again — and only that subtile was freed.
     world = startStructureConstruction(
@@ -276,9 +276,9 @@ void main() {
     );
     expect(world.props, hasLength(1));
     expect(
-      () => pickUpProp(world, content, propId: 'prop:9:9:0.0'),
+      () => demolishProp(world, content, propId: 'prop:9:9:0.0'),
       throwsA(isA<WorldRuleViolation>()),
-      reason: 'picking up a missing prop fails loudly',
+      reason: 'removing a missing prop fails loudly',
     );
     expect(
       () => validateParcelWorldState(world, content, terrain),
@@ -346,7 +346,7 @@ void main() {
     expect(visible.single.id, 'prop:3,10:2.3');
     expect(visible.single.pricePaid, 0, reason: 'nature is free');
     // The interactive half of the view stays save-only: wild props
-    // cannot be picked up, block nothing, and resolve by no id.
+    // cannot be removed, block nothing, and resolve by no id.
     expect(queries.propsByCell, isEmpty);
     expect(queries.propsById, isEmpty);
     expect(queries.propsByAnchor, isEmpty);
@@ -391,8 +391,8 @@ void main() {
       () => validateParcelWorldState(world, content, nature),
       returnsNormally,
     );
-    // And pick-up clears them — the settlement chops its own trees.
-    world = pickUpProp(world, content, propId: 'prop:3,10:2.3');
+    // And demolition clears them — the settlement chops its own trees.
+    world = demolishProp(world, content, propId: 'prop:3,10:2.3');
     expect(
       world.props.map((prop) => prop.id),
       isNot(contains('prop:3,10:2.3')),

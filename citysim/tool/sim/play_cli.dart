@@ -26,7 +26,8 @@
 //   road <c1,r1> <c2,r2>          plan one road stretch (quoted)
 //   build <model> <col> <row>     place a building (quoted)
 //   place <model> <col> <row> <sx> <sy>   place a decoration
-//   pickup <propId>               pick a placed or nature prop back up
+//   demolish <col> <row> [<sx> <sy>] [confirm]
+//                                remove a building or prop (quoted first)
 //   inspect <col> <row>           what stands on a cell
 //   note <text>                   append a session note
 
@@ -126,6 +127,7 @@ class _PlaySession {
       'parcel',
       'build',
       'inspect',
+      'demolish',
     }.contains(words.first)) {
       words = [
         words.first,
@@ -208,8 +210,8 @@ class _PlaySession {
         _build(words[1], CellCoord(int.parse(words[2]), int.parse(words[3])));
       case 'place':
         _place(words);
-      case 'pickup':
-        _pickup(words.sublist(1).join(' '));
+      case 'demolish':
+        _demolish(words.sublist(1));
       case 'inspect':
         _inspect(CellCoord(int.parse(words[1]), int.parse(words[2])));
       case 'note':
@@ -367,8 +369,11 @@ THE GAME, as the game itself teaches it:
   Buildings need a completed road along one full side of their
   footprint. Road plans are paid upfront, then the whole stretch
   lands on the check-in after you buy it. Brush and trees standing
-  on a tile must be picked up (free) before you can build or pave
-  there.
+  on a tile must be cleared with the demolish tool (free) before
+  you can build or pave there.
+  Buildings can be demolished (no refund; residents may be lost)
+  and props removed (free) — demolish is the only removal there is;
+  roads, bridges, and land are permanent.
   Reaching population milestones unlocks new kinds of buildings.
   Services (health, fire, police) are demanded once your town is
   large enough; low coverage saps contentment, and contentment
@@ -380,10 +385,13 @@ COMMANDS:
   found <parcelX> <parcelY> · parcel <parcelX> <parcelY> [buy]
   road <col,row> [col,row] [buy] · build <model> <col> <row>
   place <model> <col> <row> <subtileX> <subtileY> (decorations)
-  pickup <propId> · inspect <col> <row> · note <text>
+  demolish <col> <row> [<sx> <sy>] [confirm] · inspect <col> <row>
+  note <text>
 Purchases quote first: parcel and road print the price (and the
 treasury after) without spending — append "buy" to go through.
-Founding a parcel is free and needs no buy.''');
+Demolition quotes too: it prints what stands there and who loses
+homes — append "confirm" to go through. Founding a parcel is free
+and needs no buy.''');
   }
 
   void _status() {
@@ -695,7 +703,8 @@ Founding a parcel is free and needs no buy.''');
         blockers.add(
           '(${cell.column},${cell.row}): '
           '${props.map((prop) => content.structure(prop.catalogueId)?.name ?? prop.catalogueId).join(', ')} '
-          '(pickup ${props.first.id})',
+          '(demolish ${props.first.cell.column},${props.first.cell.row} '
+          '${props.first.subtileX} ${props.first.subtileY})',
         );
         continue;
       }
@@ -807,18 +816,142 @@ Founding a parcel is free and needs no buy.''');
     }
   }
 
-  void _pickup(String propId) {
-    // Tolerate the bare id form — inspect shows "prop:…" only in
-    // parentheses, and reviewers naturally type what they read.
-    var prop = state.props.where((prop) => prop.id == propId).firstOrNull;
-    prop ??= state.props.where((prop) => prop.id == 'prop:$propId').firstOrNull;
-    if (prop == null) {
-      stdout.writeln('✗ No prop "$propId" — see inspect for ids.');
+  /// The game's one removal surface: buildings through the
+  /// eviction-cascade quote, props free. `demolish <col> <row>`
+  /// quotes whatever stands there; append `confirm` to go through.
+  /// A tile carrying several props needs its subtile:
+  /// `demolish <col> <row> <sx> <sy>`.
+  void _demolish(List<String> args) {
+    final confirm = args.isNotEmpty && args.last == 'confirm';
+    var rest = confirm ? args.sublist(0, args.length - 1) : args;
+    if (rest.isNotEmpty && rest.first.startsWith('prop:')) {
+      // The id form, as the blocker hints print it.
+      final parts = rest.first.split(':');
+      final cell = parts[1].split(',');
+      final subtile = parts[2].split('.');
+      rest = [cell[0], cell[1], subtile[0], subtile[1]];
+    }
+    if (rest.length != 2 && rest.length != 4) {
+      stdout.writeln(
+        '✗ demolish needs a cell and optionally a subtile: '
+        'demolish <col> <row> [<sx> <sy>] [confirm]',
+      );
       return;
     }
-    state = pickUpProp(state, content, propId: prop.id);
-    stdout.writeln('Picked up ${prop.id} · free, no refund.');
-    _act(SimAction('pickup', prop.id, coins: 0));
+    final cell = CellCoord(int.parse(rest[0]), int.parse(rest[1]));
+    int? subtileX;
+    int? subtileY;
+    if (rest.length == 4) {
+      subtileX = int.parse(rest[2]);
+      subtileY = int.parse(rest[3]);
+    }
+
+    // Buildings first: the footprint owns the tile.
+    final structure = state.structures
+        .where((structure) => structure.footprint.contains(cell))
+        .firstOrNull;
+    if (structure != null) {
+      try {
+        final quote = quoteStructureDemolition(
+          state,
+          content,
+          structureId: structure.id,
+        );
+        final model = quote.model;
+        if (!confirm) {
+          final capacity = model.isResidential
+              ? 'houses ${model.population} residents'
+              : model.isCommerce
+              ? 'offers ${model.jobs} jobs'
+              : model.serviceCategory != null
+              ? '${model.serviceCapacity} ${model.serviceCategory} coverage'
+              : 'a plain civic building';
+          final consequence = quote.evicted > 0
+              ? '\n${quote.evicted} residents lose their homes — '
+                    '${quote.joinDemand} join the waiting list, '
+                    '${quote.leftTown} leave town for good.'
+              : '';
+          stdout.writeln(
+            '${model.name} (${structure.id}): '
+            'net ${_fmt(model.netCoinsPerCheckIn)} coins per check-in · '
+            '$capacity · no refund.$consequence',
+          );
+          stdout.writeln(
+            'Append "confirm" to demolish: '
+            'demolish ${cell.column} ${cell.row} confirm',
+          );
+          return;
+        }
+        state = demolishStructure(state, content, structureId: structure.id);
+        stdout.writeln(
+          '${model.name} demolished · ${quote.evicted} residents displaced '
+          '(${quote.leftTown} left town) · no refund',
+        );
+        _act(SimAction('demolish', model.name, coins: 0));
+      } on WorldRuleViolation catch (e) {
+        stdout.writeln('✗ ${e.message}');
+        _act(
+          SimAction('demolish', 'at ${cell.key}', ok: false, reason: e.message),
+        );
+      }
+      return;
+    }
+
+    // Then the props on the tile — several may share it, so the
+    // subtile picks one.
+    final props = queries.propsByCell[cell] ?? const <PlacedProp>[];
+    if (props.isEmpty) {
+      stdout.writeln(
+        '✗ Nothing demolishable at (${cell.column},${cell.row}) — '
+        'buildings and props only; roads and bridges are permanent.',
+      );
+      return;
+    }
+    PlacedProp? prop;
+    if (subtileX != null && subtileY != null) {
+      prop = props
+          .where(
+            (prop) => prop.subtileX == subtileX && prop.subtileY == subtileY,
+          )
+          .firstOrNull;
+      if (prop == null) {
+        stdout.writeln(
+          '✗ No prop at subtile $subtileX,$subtileY of '
+          '(${cell.column},${cell.row}).',
+        );
+        return;
+      }
+    } else if (props.length == 1) {
+      prop = props.single;
+    } else {
+      stdout.writeln(
+        'Several props share (${cell.column},${cell.row}) — name the '
+        'subtile:',
+      );
+      for (final candidate in props) {
+        stdout.writeln(
+          '  ${candidate.id} — '
+          '${content.structure(candidate.catalogueId)?.name ?? candidate.catalogueId}',
+        );
+      }
+      return;
+    }
+    final model = content.structure(prop.catalogueId);
+    if (!confirm) {
+      stdout.writeln(
+        '${model?.name ?? prop.catalogueId} (${prop.id}): free to remove, '
+        'no refund. The tile and subtile become placeable again.',
+      );
+      stdout.writeln(
+        'Append "confirm" to demolish: '
+        'demolish ${cell.column} ${cell.row} ${prop.subtileX} '
+        '${prop.subtileY} confirm',
+      );
+      return;
+    }
+    state = demolishProp(state, content, propId: prop.id);
+    stdout.writeln('${model?.name ?? prop.catalogueId} removed · free');
+    _act(SimAction('demolish', prop.id, coins: 0));
   }
 
   void _inspect(CellCoord cell) {

@@ -1539,6 +1539,211 @@ void main() {
     });
   });
 
+  group('demolition', () {
+    test('demolishing with spare beds moves nobody', () {
+      var world = newWorld();
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(3, 4),
+        nextDay,
+      );
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(5, 4),
+        nextDay,
+      );
+      world = world.copyWith(
+        population: 3,
+        employedPopulation: 0,
+        waitingPopulation: 0,
+      );
+      final coins = world.coins;
+      final id = world.structures.first.id;
+      final quote = quoteStructureDemolition(world, content, structureId: id);
+      expect(quote.bedsAfter, 3, reason: 'one three-bed cottage remains');
+      expect(quote.stayers, 3, reason: 'the remaining beds house everyone');
+      expect(quote.evicted, 0);
+      world = demolishStructure(world, content, structureId: id);
+      expect(world.structures, hasLength(1));
+      expect(world.population, 3, reason: 'residents moved, none lost');
+      expect(world.waitingPopulation, 0);
+      expect(world.coins, coins, reason: 'no refund, no charge');
+      final event = world.events.last;
+      expect(event.kind, 'structure-demolished');
+      expect(event.payload['evicted'], 0);
+      expect(
+        () => validateParcelWorldState(world, content, terrain),
+        returnsNormally,
+      );
+    });
+
+    test('the eviction cascade: stay, wait, and leave for good', () {
+      var world = newWorld();
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(3, 4),
+        nextDay,
+      );
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(5, 4),
+        nextDay,
+      );
+      world = world.copyWith(
+        population: 5,
+        employedPopulation: 2,
+        waitingPopulation: 0,
+      );
+      final id = world.structures.first.id;
+      final quote = quoteStructureDemolition(world, content, structureId: id);
+      // One cottage remains: three beds for five residents. The
+      // waiting list's cap is ten percent of the survivors, floored
+      // at one — so one evicted resident waits, one leaves for good.
+      expect(quote.bedsAfter, 3);
+      expect(quote.stayers, 3);
+      expect(quote.evicted, 2);
+      expect(quote.joinDemand, 1);
+      expect(quote.leftTown, 1);
+      world = demolishStructure(world, content, structureId: id);
+      expect(world.population, 3);
+      expect(world.waitingPopulation, 1);
+      expect(
+        world.employedPopulation,
+        0,
+        reason: 'no jobs remain, so nobody stays employed',
+      );
+      expect(
+        () => validateParcelWorldState(world, content, terrain),
+        returnsNormally,
+      );
+      // The loss round-trips through the save.
+      final reloaded = sheetTablesToWorld(
+        worldToSheetTables(world),
+        content: content,
+        terrainProvider: terrain,
+      );
+      expect(reloaded.population, 3);
+      expect(reloaded.waitingPopulation, 1);
+      expect(reloaded.employedPopulation, 0);
+      expect(reloaded.structures, hasLength(1));
+    });
+
+    test('demolishing a staffed workplace unemploys its workers', () {
+      var world = newWorld();
+      world = _buildCottage(
+        world,
+        content,
+        terrain,
+        const CellCoord(3, 4),
+        nextDay,
+      );
+      // The café is a 2×1 lot: its street edge needs a full two-tile
+      // road along its west side.
+      world = planAndSettleRoad(world, cells: const [CellCoord(4, 5)]);
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'cafe',
+        origin: const CellCoord(5, 4),
+      );
+      world = settleAll(world);
+      world = world.copyWith(
+        population: 3,
+        employedPopulation: 2,
+        waitingPopulation: 0,
+      );
+      final cafe = world.structures.firstWhere(
+        (structure) => structure.catalogueId == 'cafe',
+      );
+      world = demolishStructure(world, content, structureId: cafe.id);
+      expect(world.employedPopulation, 0, reason: 'the workplace is gone');
+      expect(world.population, 3, reason: 'residents keep their homes');
+      expect(
+        () => validateParcelWorldState(world, content, terrain),
+        returnsNormally,
+      );
+    });
+
+    test('a homes-only town frees frontage and builds its way out', () {
+      // The playtest soft-lock, as a regression: every cell beside
+      // the one road tile carries a home, so nothing else can sit
+      // against the road and no jobs can ever arrive. Demolition is
+      // the escape — one home comes down, commerce takes its place
+      // on the freed frontage, and the town can recover.
+      var world = newWorld();
+      for (final cell in [
+        const CellCoord(3, 4),
+        const CellCoord(5, 4),
+        const CellCoord(4, 3),
+        const CellCoord(4, 5),
+      ]) {
+        world = _buildCottage(world, content, terrain, cell, nextDay);
+      }
+      world = world.copyWith(
+        population: 6,
+        employedPopulation: 0,
+        waitingPopulation: 0,
+        // The market unlocks at the hamlet milestone this town never
+        // reached — granted here like the demand tests grant it,
+        // because the frontage, not the unlock, is under test.
+        unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'fruit-market'},
+      );
+      expect(
+        () => startStructureConstruction(
+          world,
+          content,
+          terrain,
+          catalogueId: 'fruit-market',
+          origin: const CellCoord(3, 3),
+        ),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: '(3,3) touches no road — the frontage is spent',
+      );
+      final home = world.structures.firstWhere(
+        (structure) => structure.origin == const CellCoord(3, 4),
+      );
+      world = demolishStructure(world, content, structureId: home.id);
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'fruit-market',
+        origin: const CellCoord(3, 4),
+      );
+      expect(
+        world.constructions.single.catalogueId,
+        'fruit-market',
+        reason: 'commerce takes the freed frontage — the recovery path',
+      );
+    });
+
+    test('in-flight sites are not demolishable', () {
+      var world = newWorld();
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'small-home',
+        origin: const CellCoord(3, 4),
+      );
+      final siteId = world.constructions.single.id;
+      expect(
+        () => quoteStructureDemolition(world, content, structureId: siteId),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: 'a site is not a building — its work finishes in days',
+      );
+    });
+  });
+
   group('parcel purchase and natural terrain', () {
     test('another city\'s claim refuses purchase and founding', () {
       // One map, exclusive parcels: the session passes every other

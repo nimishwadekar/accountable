@@ -18,7 +18,7 @@ import 'world/world_rules.dart';
 import 'world/world_save_store.dart';
 import 'world/world_state.dart';
 
-enum _WorldTool { inspect, parcel, road, building, decor, bridge }
+enum _WorldTool { inspect, parcel, road, building, decor, bridge, demolish }
 
 class ParcelCityApp extends StatelessWidget {
   const ParcelCityApp({super.key, this.store, this.content});
@@ -574,6 +574,21 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         structureId != null && world.props.any((prop) => prop.id == structureId)
         ? structureId
         : null;
+    if (_tool == _WorldTool.demolish) {
+      // The demolish tool is the game's one removal surface: a
+      // building opens its demolition quote, a prop its own. Ground,
+      // roads, and bridges have nothing to remove yet — the tap
+      // just clears the selection.
+      if (structureId != null &&
+          world.structures.any((s) => s.id == structureId)) {
+        _confirmDemolition(structureId);
+      } else if (_selectedPropId != null) {
+        _confirmDemolishProp(_selectedPropId!);
+      } else {
+        setState(_resetInteractionSurface);
+      }
+      return;
+    }
     if (_tool == _WorldTool.road) {
       // A tap on any in-flight stretch's tiles selects that whole
       // project. Delivery is automatic — the whole stretch lands on
@@ -1014,19 +1029,81 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     }
   }
 
-  /// Picks the selected prop back up — free, no refund. The game's
-  /// one removal action, scoped to decorations; buildings stay
-  /// permanent.
-  Future<void> _confirmPickUp() async {
+  /// The Demolish tool's confirm: the building's net and capacity,
+  /// the eviction consequence spelled out, and no refund — the
+  /// numbers a player weighs demolition by.
+  Future<void> _confirmDemolition(String structureId) async {
     final world = _world;
-    final propId = _selectedPropId;
-    if (world == null || propId == null) return;
+    if (world == null) return;
+    final StructureDemolitionQuote quote;
+    try {
+      quote = quoteStructureDemolition(
+        world,
+        _requireContent,
+        structureId: structureId,
+      );
+    } on WorldRuleViolation catch (error) {
+      _showMessage(error.message);
+      return;
+    }
+    final model = quote.model;
+    final capacity = model.isResidential
+        ? 'houses ${model.population} residents'
+        : model.isCommerce
+        ? 'offers ${model.jobs} jobs'
+        : model.serviceCategory != null
+        ? '${model.serviceCapacity} ${model.serviceCategory} coverage'
+        : 'a plain civic building';
+    final consequence = quote.evicted > 0
+        ? '\n\n${quote.evicted} residents lose their homes — '
+              '${quote.joinDemand} join the waiting list and '
+              '${quote.leftTown} leave town for good.'
+        : '';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Demolish ${model.name.toLowerCase()}?'),
+        content: Text(
+          'Net ${formatCoins(model.netCoinsPerCheckIn)} coins per check-in · '
+          '$capacity.$consequence'
+          '\n\nNo refund — what was spent stays spent.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep it'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Demolish'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    _runAction(
+      (state) =>
+          demolishStructure(state, _requireContent, structureId: structureId),
+    );
+    setState(() {
+      _selectedCell = null;
+      _selectedPropId = null;
+      _highlightCells = const {};
+    });
+  }
+
+  /// The Demolish tool's prop confirm: free, no refund, and the
+  /// tile and subtile become placeable again. This is the game's
+  /// only prop removal — there is no pick-up action anywhere else.
+  Future<void> _confirmDemolishProp(String propId) async {
+    final world = _world;
+    if (world == null) return;
     final prop = world.props.where((prop) => prop.id == propId).firstOrNull;
     if (prop == null) return;
     final definition = _requireContent.structure(prop.catalogueId)!;
     // Possession is never gated, but placement is: a prop whose model
     // the settlement has not unlocked (a nature exotic, re-tiered
-    // content) cannot be placed again once picked up.
+    // content) cannot be placed again once removed.
     final milestone = _requireContent.progression.milestoneForModel(
       prop.catalogueId,
     );
@@ -1037,7 +1114,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Pick up ${definition.name.toLowerCase()}?'),
+        title: Text('Demolish ${definition.name.toLowerCase()}?'),
         content: Text(
           'Free — no coins are refunded. The tile and subtile become '
           'placeable again.'
@@ -1047,17 +1124,17 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Not now'),
+            child: const Text('Keep it'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Pick up'),
+            child: const Text('Demolish'),
           ),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
-    _runAction((state) => pickUpProp(state, _requireContent, propId: propId));
+    _runAction((state) => demolishProp(state, _requireContent, propId: propId));
     setState(() {
       _selectedCell = null;
       _selectedPropId = null;
@@ -1309,7 +1386,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             roadStartCell: _roadStartCell,
             highlightCells: _highlightCells,
             facingOverride: _facingOverride,
-            structurePicking: _tool == _WorldTool.inspect,
+            structurePicking:
+                _tool == _WorldTool.inspect || _tool == _WorldTool.demolish,
             dimStructures:
                 _tool == _WorldTool.road || _tool == _WorldTool.bridge,
             parcelMode: _tool == _WorldTool.parcel,
@@ -1404,6 +1482,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         _bridgeStartCell == null
             ? 'Choose a connected road tile on the near river bank'
             : 'Choose a dry landing cell on the far bank',
+      _WorldTool.demolish =>
+        'Tap a building to demolish it · tap a prop to pick it up',
     };
   }
 
@@ -1992,9 +2072,11 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
               '${selectedProp.subtileY} of tile ${selectedProp.cell.key}',
             ),
             const SizedBox(height: 6),
-            FilledButton(
-              onPressed: _confirmPickUp,
-              child: const Text('Pick up · free'),
+            // Prop removal lives in the Demolish tool only — there is
+            // no pick-up action.
+            const Text(
+              'Remove it with the Demolish tool · free',
+              style: TextStyle(fontSize: 11, color: Color(0xFF617267)),
             ),
           ],
         ),
@@ -2214,6 +2296,7 @@ class _ToolPicker extends StatelessWidget {
             _WorldTool.building => 'Buildings',
             _WorldTool.decor => 'Decor',
             _WorldTool.bridge => 'Bridge',
+            _WorldTool.demolish => 'Demolish',
           }),
           selected: selected == tool,
           onSelected: (_) => onSelected(tool),

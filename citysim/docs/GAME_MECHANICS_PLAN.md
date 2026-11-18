@@ -171,9 +171,10 @@ Current parcel prices are prototype values and may be retuned. A parcel costs
 a base price plus a per-population surcharge — expanding a settlement gets
 pricier as it grows, so land becomes a progression gated by the tax base that
 must pay for it. Population only ever rises today (no demolition, no churn),
-so the price is monotonic and cannot be gamed by shrinking; the planned
-demolition work (§8) moves pricing onto a population high-water to keep that
-guarantee under churn. The precise formula is
+so the price is monotonic; once demolition lands (§8) the price tracks
+current population and may fall with it — a town that drives out its
+residents cheapens its own land, paid for in permanently lost people.
+The precise formula is
 documented with the rules code rather than treated as a permanent shop price.
 
 ## 5. Roads and construction
@@ -251,8 +252,8 @@ documented with the rules code rather than treated as a permanent shop price.
 - They require owned, vacant dry land but do not require road
   adjacency.
 - Placed props are physical: buildings, road stretches, and bridge banks refuse
-  cells carrying a prop until it is picked up (pick-up is free and instant) —
-  clear the land first.
+  cells carrying a prop until it is removed (removal is free and instant,
+  through the Demolish tool) — clear the land first.
 - Nature props are the map's, not the save's: the terrain editor's brush
   sprinkles trees, flowers, and rocks onto unowned land, the game shows them on
   the frontier, and buying a parcel makes its nature part of the save — the
@@ -309,9 +310,9 @@ can never gain population.
 **Unlocks gate placement, never possession.** Saves may legally hold items
 above the reached milestone — nature exotics materialized by purchase,
 models re-tiered by content edits — and validation never rejects them;
-only new placement checks the unlock set. Picking up a locked prop is
+only new placement checks the unlock set. Removing a locked prop is
 allowed (clearing land is sacred) but it cannot be placed again until its
-milestone, which the pick-up dialog says.
+milestone, which the removal dialog says.
 
 **The high-water milestone never regresses.** The save stores the last
 milestone reached (stable id, plus the population threshold it had when
@@ -417,7 +418,7 @@ These are candidates, not promises or requirements for the current prototype:
   stages and concrete as it progresses remains a future per-stage
   option.
 
-### Demolition (planned — direction agreed 2026-11-18)
+### Demolition (planned — direction agreed 2026-11-18, refined same day)
 
 The reviewer playtest's chunk-1 findings forced the decision: three
 of four reviewers hit "full parcel = dead parcel", the one true
@@ -432,48 +433,50 @@ resolutions:
   never refunds and never profits; the town keeps what it spent.
   What you build can go; what you paid cannot come back.
 - **Population monotonicity.** Parcel prices (base + per-population
-  surcharge) assume population only rises, so they cannot be gamed
-  by shrinking. Demolition evicts, so pricing moves to a **population
-  high-water** — a UserData row derived once from stored population
-  on legacy saves, exactly like the progression milestone row — and
-  the price stays monotonic under churn.
+  surcharge) assumed population only rises. Decided: the price
+  simply tracks current population and **may fall** — a mayor
+  demolishing homes and driving people out cheapens the surrounding
+  land, which is honest. The exploit is paid for in people, because
+  eviction can permanently lose them (below), so shrinking to
+  cheapen land trades citizens for coins. Milestone unlocks stay on
+  their stored high-water, unchanged.
 - **The wide-lot road invariant.** Placement turns non-square
   footprints to face their road, and save validation requires that
-  facing edge to stay fully roaded. Road demolition must therefore
-  refuse while any wide building's facing edge (or a bridge's bank,
-  or an in-flight project's cells) depends on the tile.
+  facing edge to stay fully roaded — a blocker for *road*
+  demolition, deferred with infrastructure.
 - **Occupancy aggregates.** Population and employment are counters,
-  not citizens; a demolished home cannot un-house specific people.
-  Rule: demolition **evicts to the waiting list** (capped at its
-  normal ceiling; the overflow leaves town), and employment
-  re-clamps to the surviving population and job counts, re-staffing
-  at the next check-ins.
+  not citizens, so a demolished home cannot un-house specific
+  people. The cascade: after demolition, current population is
+  compared to the town's remaining beds. Everyone fits — nobody
+  moves. Overflow — as many as can stay stay; the rest join the
+  residential demand (the waiting list, at its normal cap); demand
+  beyond the cap is dropped, those people forced out of town for
+  good. Employment re-clamps to the survivors and the remaining
+  jobs. Players weigh demolition seriously because they may
+  permanently lose residents.
 
-Phasing (each phase is independently shippable):
+Scope, decided 2026-11-18:
 
-1. **Buildings** — the Leo fix. `demolishStructure` on a completed
-   building or an in-flight site: no refund, eviction as above, the
-   footprint frees instantly, an event records it with the evicted
-   count. Under-construction sites are cancellations, not
-   demolitions.
-2. **Roads, with the dependent checks** — demolish a selected
-   section (the same junction-to-junction selection as tapping).
-   Refuses while a wide building faces it, a bridge banks on it, or
-   a project targets its cells. **Cancellation refunds in full**
-   (nothing was delivered); demolition of completed tiles refunds
-   nothing — the line is: undone before it exists is a refund,
-   removed after it exists is a sink.
-3. **Bridges** — remove the span; the bank roads are ordinary roads
-   and stay.
+- **Now: buildings and props.** Buildings demolish through the
+  cascade above, no refund, the footprint freeing instantly; props
+  are removed free through the same Demolish tool — there is no
+  separate pick-up action anywhere in the game. In-flight
+  construction sites are not demolishable — that work finishes in
+  days and cancellation is a separate future feature.
+- **Deferred: infrastructure.** Roads, bridges, and their dependent
+  checks (wide-lot facing edges, bridge banks, project cells) wait,
+  together with the cancellation-refund question. Parcels stay
+  permanent for good: exclusive claims on a shared map, and the
+  price is a progression, not an inventory.
 
-Parcels stay permanent: exclusive claims on a shared map, and the
-price formula is a progression, not an inventory. Save format needs
-no new sheets — rows simply vanish — except the population
-high-water row in UserData. Surfaces: a Demolish button with a
-confirm quote (what goes, who is evicted, no refund) in the
-structure sheet; the CLI mirrors the purchase flow
-(`demolish <col> <row>` quotes, `demolish <col> <row> confirm`
-executes). The regression test that matters: a homes-only
+Surface: a **Demolish tool** — the game's one removal surface.
+Selected, tapping any building opens a small dialog — the building's
+net coins per check-in, its capacity (residents housed or jobs), the
+eviction consequence if the remaining beds cannot hold everyone, and
+a Demolish button. Tapping a prop offers its free removal through
+the same tool. The CLI mirrors the purchase flow:
+`demolish <col> <row>` quotes, `demolish <col> <row> confirm`
+executes. The regression test that matters: a homes-only
 soft-locked town demolishes a home, builds commerce on the freed
 frontage, and recovers.
 
@@ -812,8 +815,9 @@ Before committing to additional mechanics, decide:
    visual ideas only?
 6. Permanence policy: decided 2026-11-18 — demolition ships (the playtest
    and genre practice both demand it), but permanence lives in the money:
-   no refunds, no profit, pricing on a population high-water. Buildings,
-   roads, and bridges can go; parcels stay permanent.
+   no refunds, no profit, and land prices that fall with a shrinking
+   population, paid for in permanently lost residents. Buildings and props
+   can go now; infrastructure is deferred; parcels stay permanent.
    for dead-end cleanup in long-running settlements.
 7. ~~Should asphalt roads be population-gated rather than a freely chosen style?~~
    Moot: dirt is gone and asphalt is the only style; population-gating road

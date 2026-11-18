@@ -421,7 +421,7 @@ String _buildReport(
   line(
     '- Every action runs through the production reducer '
     '(`purchaseParcel`, `planRoadStretch`, '
-    '`startStructureConstruction`, `pickUpProp`, '
+    '`startStructureConstruction`, `demolishProp`, '
     '`checkInWorldForToday`); no rule or price is re-implemented, '
     'so results cannot drift from the shipped game.',
   );

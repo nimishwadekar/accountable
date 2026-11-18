@@ -346,7 +346,7 @@ ParcelWorldState purchaseParcel(
   );
   // Nature materializes with the land: the parcel's terrain rows
   // copy verbatim into the Props table — the same sprites the
-  // frontier drew, now the settlement's to pick up before building.
+  // frontier drew, now the settlement's to clear before building.
   // Purchase is the only ownership path, so this is the one copy.
   // The rows' models do NOT unlock with them: possession is never
   // gated, but placing new ones stays behind their milestone — an
@@ -574,11 +574,13 @@ ParcelWorldState startStructureConstruction(
   );
 }
 
-/// Picks a placed prop back up: free, no refund, and the tile and
-/// subtile become placeable again. Buildings keep the permanence
-/// rule — this is the game's one removal action, scoped to
-/// decorations.
-ParcelWorldState pickUpProp(
+/// Removes a placed prop: free, no refund, and the tile and
+/// subtile become placeable again. Prop removal lives in the
+/// Demolish tool only — there is no separate pick-up action.
+/// Buildings have their own removal — [demolishStructure] — with
+/// the eviction cascade; infrastructure (roads, bridges) stays
+/// permanent for now.
+ParcelWorldState demolishProp(
   ParcelWorldState state,
   ContentBundle content, {
   required String propId,
@@ -603,12 +605,63 @@ ParcelWorldState pickUpProp(
       ...state.events,
       _event(
         state,
-        kind: 'prop-picked-up',
-        description: '${definition.name} picked up',
+        kind: 'prop-demolished',
+        description: '${definition.name} removed',
         payload: {
           'catalogueId': target.catalogueId,
           'cell': target.cell.toJson(),
           'subtile': [target.subtileX, target.subtileY],
+        },
+      ),
+    ],
+    nextEventNumber: state.nextEventNumber + 1,
+  );
+}
+
+/// Demolishes a completed building: the footprint frees instantly,
+/// nothing refunds, and the town absorbs the occupancy loss through
+/// the eviction cascade — everyone the remaining beds can house
+/// stays (moved into other buildings), the overflow joins the
+/// residential demand, and demand beyond the waiting list's cap
+/// leaves town for good. Employment re-clamps to the survivors and
+/// the remaining jobs; demolition of a staffed workplace unemploys
+/// its workers. Milestone unlocks keep their high-water — a dip
+/// demotes nothing.
+ParcelWorldState demolishStructure(
+  ParcelWorldState state,
+  ContentBundle content, {
+  required String structureId,
+}) {
+  final quote = quoteStructureDemolition(
+    state,
+    content,
+    structureId: structureId,
+  );
+  final target = quote.structure;
+  var employed = state.employedPopulation;
+  if (employed > quote.stayers) employed = quote.stayers;
+  if (employed > quote.jobsAfter) employed = quote.jobsAfter;
+  return state.copyWith(
+    structures: [
+      for (final structure in state.structures)
+        if (structure.id != structureId) structure,
+    ],
+    population: quote.stayers,
+    waitingPopulation: state.waitingPopulation + quote.joinDemand,
+    employedPopulation: employed,
+    events: [
+      ...state.events,
+      _event(
+        state,
+        kind: 'structure-demolished',
+        description: '${quote.model.name} demolished',
+        payload: {
+          'catalogueId': target.catalogueId,
+          'origin': target.origin.toJson(),
+          'evicted': quote.evicted,
+          'leftTown': quote.leftTown,
+          'beds': quote.bedsAfter,
+          'jobs': quote.jobsAfter,
         },
       ),
     ],

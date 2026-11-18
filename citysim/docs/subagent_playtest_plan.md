@@ -100,7 +100,7 @@ messages verbatim — the refusal *is* the friction we want captured):
 | `road <c1,r1> <c2,r2>` | quote one road stretch between cells (price, treasury after; blocked tiles named); append `buy` to purchase |
 | `build <modelId> <col> <row>` | place a building (quoted; road-frontage and overlap refusals verbatim) |
 | `place <modelId> <col> <row> <sx> <sy>` | place a decoration on the subtile lattice |
-| `pickup <propId>` | pick a prop back up |
+| `demolish <col> <row> [<sx> <sy>]` | quote removing the building or prop at a cell (net, capacity, who loses homes); append `confirm` to execute |
 | `inspect <col> <row>` | what stands here, and the placement quote if relevant |
 | `note "<text>"` | append a timestamped session note to the notes file |
 
