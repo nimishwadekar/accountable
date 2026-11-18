@@ -39,6 +39,7 @@ import 'package:citysim/storage/sheet_tables.dart';
 import 'package:citysim/storage/world_sheet_codec.dart';
 import 'package:citysim/world/coordinates.dart';
 import 'package:citysim/world/terrain_provider.dart';
+import 'package:citysim/world/world_content.dart';
 import 'package:citysim/world/world_queries.dart';
 import 'package:citysim/world/world_reducer.dart';
 import 'package:citysim/world/world_rules.dart';
@@ -137,10 +138,24 @@ class _PlaySession {
     final head = words.isEmpty || words.first.isEmpty ? '' : words.first;
     // Mutating commands open the game first — the player cannot act
     // without opening the app, and the first open of a fresh world
-    // is day 1 with its check-in.
-    const views = {'help', 'status', 'report', 'map', 'catalogue', 'note'};
-    const dayCommands = {'day', 'skip'};
-    if (!views.contains(head) && !dayCommands.contains(head)) {
+    // is day 1 with its check-in. Quotes are browsing, not playing:
+    // a parcel or road price check costs no day, exactly as reading
+    // the shop in the game costs no check-in.
+    final mutates = switch (head) {
+      'parcel' || 'road' => words.contains('buy'),
+      'demolish' => words.contains('confirm'),
+      'help' ||
+      'status' ||
+      'report' ||
+      'map' ||
+      'catalogue' ||
+      'note' ||
+      'day' ||
+      'skip' ||
+      '' => false,
+      _ => true,
+    };
+    if (mutates) {
       _ensureDayOpened();
     }
     try {
@@ -376,8 +391,8 @@ THE GAME, as the game itself teaches it:
   roads, bridges, and land are permanent.
   Reaching population milestones unlocks new kinds of buildings.
   Services (health, fire, police) are demanded once your town is
-  large enough; low coverage saps contentment, and contentment
-  multiplies your taxes.
+  large enough; low coverage saps contentment, and unhappy towns
+  grow slower — contentment scales arrivals, never taxes.
 
 COMMANDS:
   status · report · map [col row] · catalogue
@@ -402,7 +417,7 @@ and needs no buy.''');
       'Treasury ${_fmt(state.coins)} coins · earned ${_fmt(state.totalCoinsEarned)} · spent ${_fmt(state.totalCoinsSpent)}',
       'Population ${state.population} · employed ${state.employedPopulation} · waiting list ${state.waitingPopulation}',
       'Housing ${_residentialCapacity()} beds · jobs ${_jobCapacity()}',
-      'Contentment ${ledger.contentment}% · coverage: ${ledger.coverage.entries.map((e) => '${e.key} ${(e.value * 100).round()}%').join(', ')}${ledger.coverage.isEmpty ? 'not yet demanded' : ''}',
+      'Contentment ${ledger.contentment}%${ledger.contentment < 100 ? ' (arrivals ×${(ledger.contentment / 100).toStringAsFixed(2)})' : ''} · coverage: ${ledger.coverage.entries.map((e) => '${e.key} ${(e.value * 100).round()}%').join(', ')}${ledger.coverage.isEmpty ? 'not yet demanded (from ${content.economy.serviceRequirementPopulation} population)' : ''}',
       'Milestone: ${state.progressionMilestoneId ?? 'none'}${nextRung == null ? '' : ' · next: ${nextRung.name} at ${nextRung.population} population'}',
       'Parcels ${state.parcels.length} · roads ${state.roads.length} · structures ${state.structures.length} · projects in flight ${state.constructions.length}',
     ];
@@ -442,10 +457,17 @@ and needs no buy.''');
       'contentment ${payload['contentment'] ?? 100}%',
     );
     if (unemployed > 0) {
+      // The floor line only when the floor is doing work: with
+      // employment already above it, the levy is the employment
+      // rate and the floor is not binding.
+      final beds = _residentialCapacity();
+      final binding =
+          floor <= 0 ||
+          (beds > 0 && state.employedPopulation / beds < floor / 100);
       buffer.write(
-        floor > 0
+        binding
             ? '\nUnemployed $unemployed — homes pay the $floor% levy floor'
-            : '\nUnemployed $unemployed — only employed residents pay taxes',
+            : '\nUnemployed $unemployed — the levy sits above the floor',
       );
     }
     if (completions.isNotEmpty) {
@@ -579,7 +601,8 @@ and needs no buy.''');
                   : '—'}'
               ' · ${model.footprintColumns}x${model.footprintRows} · '
               '${model.constructionStages} stages · '
-              'tax ${_fmt(model.taxCoins)} · upkeep ${_fmt(model.upkeepCoins)}',
+              'tax ${_fmt(model.taxCoins)} · upkeep ${_fmt(model.upkeepCoins)}'
+              ' · ${model.name}',
     ];
     stdout.writeln(lines.join('\n'));
   }
@@ -590,6 +613,16 @@ and needs no buy.''');
     try {
       final quote = quoteParcelPurchase(state, content, terrain, coord);
       if (!founding && !buy) {
+        if (state.parcels.isEmpty) {
+          // Pre-founding, every parcel quotes the founding price of
+          // zero — label it, or "0 coins" reads as free land.
+          stdout.writeln(
+            'Parcel (${coord.x},${coord.y}): your founding parcel — free · '
+            '${quote.landCellCount} land cells',
+          );
+          stdout.writeln('Claim it with: found ${coord.x} ${coord.y}');
+          return;
+        }
         // The game shows a price before a purchase; the CLI quotes
         // the same way, and only the explicit "buy" spends.
         stdout.writeln(
@@ -685,7 +718,9 @@ and needs no buy.''');
     final blockers = <String>[];
     for (final cell in cells) {
       if (queries.roadsByCell.containsKey(cell)) {
-        blockers.add('(${cell.column},${cell.row}): a road');
+        blockers.add(
+          '(${cell.column},${cell.row}): already road — quote only the new tiles',
+        );
         continue;
       }
       final structure = state.structures
@@ -730,6 +765,16 @@ and needs no buy.''');
       );
       return;
     }
+    // The cells the game will actually occupy: non-square footprints
+    // turn so their street edge lands on the road beside the origin,
+    // so the blocker search and the success message must both follow
+    // the turn (the unturned rectangle names the wrong tiles).
+    final facing = facingForPlacement(queries, [origin], null);
+    final footprint = structureFootprint(
+      definition,
+      origin,
+      quarterTurns: footprintTurnsFor(definition, facing),
+    );
     try {
       state = startStructureConstruction(
         state,
@@ -739,7 +784,9 @@ and needs no buy.''');
         origin: origin,
       );
       stdout.writeln(
-        '${definition.name} site planned at (${origin.column},${origin.row}) '
+        '${definition.name} site planned at '
+        '${footprint.map((cell) => '(${cell.column},${cell.row})').join('')}'
+        '${footprint.length > 1 ? ' · door faces $facing' : ''} '
         '· ${definition.constructionStages} stages of work · free',
       );
       _act(
@@ -751,11 +798,15 @@ and needs no buy.''');
       );
     } on WorldRuleViolation catch (e) {
       stdout.writeln('✗ ${e.message}');
-      _describeBlockers([
-        for (var column = 0; column < definition.footprintColumns; column++)
-          for (var row = 0; row < definition.footprintRows; row++)
-            origin.offset(column, row),
-      ]);
+      if (e.message.contains('beside a road')) {
+        // The refusal names the rule it broke last; the wide-lot
+        // rule it usually means is this one.
+        stdout.writeln(
+          '  (wide lots need a completed road along one full side of '
+          'their footprint — a turned 2×1 needs both edge tiles roaded)',
+        );
+      }
+      _describeBlockers(footprint);
       _act(
         SimAction(
           'build',
@@ -976,7 +1027,13 @@ and needs no buy.''');
         final model = job.catalogueId == null
             ? job.kind.name
             : content.structure(job.catalogueId!)?.name ?? job.catalogueId;
-        lines.add('  under construction: $model (${job.id})');
+        // Structure sites carry their own stage count; roads and
+        // bridges land whole, so they only say they are in flight.
+        final stages = job.catalogueId == null
+            ? ''
+            : ' · stage ${job.stagesDone} of '
+                  '${content.structure(job.catalogueId!)?.constructionStages ?? '?'}';
+        lines.add('  under construction: $model (${job.id}$stages)');
       }
     }
     for (final prop in queries.propsByCell[cell] ?? const <PlacedProp>[]) {

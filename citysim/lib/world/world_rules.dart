@@ -193,8 +193,11 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
   // employment rate over residential capacity, commerce taxes by
   // the staffing rate over job capacity — every home pays the
   // average rate, so unemployment reads as a town condition, not a
-  // named citizen's. Civic buildings are always active. Upkeep
-  // is always owed in full, vacant or not.
+  // named citizen's. Service buildings are civic, never commerce:
+  // their jobs are the town's employer appeal (the arrival pull),
+  // never part of the commerce levy — a staffed clinic must not
+  // dilute what the shops pay. Civic buildings are always active.
+  // Upkeep is always owed in full, vacant or not.
   var residentialCapacity = 0;
   var jobCapacity = 0;
   var homeTax = 0;
@@ -207,6 +210,8 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
     if (model.isResidential) {
       residentialCapacity += model.population;
       homeTax += model.taxCoins;
+    } else if (model.isService) {
+      civicTax += model.taxCoins;
     } else if (model.isCommerce) {
       jobCapacity += model.jobs;
       commerceTax += model.taxCoins;
@@ -231,7 +236,10 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
     gross += homeTax * homeLevyRate;
   }
   if (jobCapacity > 0) {
-    gross += commerceTax * employed / jobCapacity;
+    // Clamped at full staffing: a save whose employed count outruns
+    // the commerce pool (saves from before service buildings left
+    // the levy) must not pay above the catalogue rate.
+    gross += commerceTax * (employed / jobCapacity).clamp(0.0, 1.0);
   }
   gross += civicTax;
   var bridgeTiles = 0;
@@ -249,7 +257,10 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
 
   // Contentment: average coverage across the required service
   // categories once the town is big enough to be demanding; full
-  // contentment below that; the floor applies always.
+  // contentment below that; the floor applies always. Contentment
+  // is the town's appeal to newcomers, never its tax collector —
+  // it scales the migration pipeline (see the check-in's demand
+  // pass), so an unhappy town stagnates rather than going broke.
   final coverage = <String, double>{};
   var contentment = 100;
   if (population >= economy.serviceRequirementPopulation) {
@@ -277,7 +288,10 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
     contentment = economy.contentmentFloorPercent;
   }
 
-  final taxes = (gross * contentment / 100).round();
+  // Taxes are the levy, unmultiplied: nothing may push income below
+  // the levy floor, so the homes-only guarantee (floored levy ≥
+  // upkeep) holds unconditionally.
+  final taxes = gross.round();
   return TownLedger(
     grossTaxes: gross,
     taxes: taxes,

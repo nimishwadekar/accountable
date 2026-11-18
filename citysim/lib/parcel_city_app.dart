@@ -1251,7 +1251,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                 style: const TextStyle(color: Color(0xFF9A5B2B)),
               ),
             Text(
-              'Contentment      $contentment% · taxes ×'
+              'Contentment      $contentment% · arrivals ×'
               '${(contentment / 100).toStringAsFixed(2)}',
             ),
             if (unemployed > 0)
@@ -1578,7 +1578,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Contentment ${ledger.contentment}% · taxes ×'
+            'Contentment ${ledger.contentment}% · arrivals ×'
             '${(ledger.contentment / 100).toStringAsFixed(2)}',
             style: TextStyle(color: contentmentColor),
           ),

@@ -417,6 +417,13 @@ These are candidates, not promises or requirements for the current prototype:
   under the single-site-look decision; dirt in a project's early
   stages and concrete as it progresses remains a future per-stage
   option.
+- Manual category assignment in the editor: a building's economic
+  class (residential / commerce / service / civic) is derived today
+  from its numbers — population, jobs, serviceCategory — which the
+  2026-11-18 civic reclassification made load-bearing (a service
+  building's jobs are appeal, never levy). An editor control that
+  names the class explicitly, with validation that the numbers agree
+  with it, would retire the derivation as the single source of truth.
 
 ### Demolition (planned — direction agreed 2026-11-18, refined same day)
 
@@ -645,20 +652,34 @@ shop is a pure upkeep drain.
   positions fill only at check-ins, capped by a rate knob (seed: one
   per check-in) — growth costs check-ins, not money, and the town
   visibly grows one family a day.
-- **Contentment is the tax multiplier.** Coverage per required
+- **Contentment is the town's appeal, never its tax collector**
+  (redesigned 2026-11-18 after the run-3 playtest: the tax
+  multiplier stacked a second income floor over unscaled upkeep —
+  a City-scale town at the floor ran −25k/day, survivable only
+  through the free-construction escape). Coverage per required
   service category (fire, police, health — content lists them) is
   capacity ÷ population, clamped at 1.0; contentment is the average
-  across categories as a percentage. Collected taxes multiply by
-  contentment, rounded once on the total. Requirements phase in late
-  (nothing demanded below roughly ten households), so the early game
-  stays exactly as pure as stage 1.
-- **The contentment floor is 30 percent** — the no-dead-ends
-  guarantee under this system. Unhappy citizens still pay something
-  (it is a utopia, not a tax strike), so even the most neglected
-  town keeps a trickle of income and can always afford the road tile
-  that starts its recovery. Doctrine extended: contentment gates
-  income, never growth; the fix for low contentment — service
-  buildings — is always free labor.
+  across categories as a percentage. The whole migration pipeline —
+  arrivals and the waiting list's refill — runs at the contentment
+  rate, so an unhappy town stagnates rather than going broke.
+  Taxes are the levy, unmultiplied: nothing may push income below
+  the unemployment floor, so the homes-only guarantee holds
+  unconditionally. Requirements phase in late (nothing demanded
+  below the service threshold), so the early game stays exactly as
+  pure as before.
+- **The contentment floor is 30 percent** — it floors the growth
+  dial, not income. Unhappy towns still grow (at 30% pace) and
+  always earn their full levy, so even the most neglected town can
+  afford the road tile that starts its recovery. Doctrine
+  extended: contentment gates growth, never income; the fix for
+  low contentment — service buildings — is always free labor.
+- **Service buildings are civic, never commerce** (also
+  2026-11-18): a `serviceCategory` classifies a building before
+  its jobs ever reach the commerce levy — a staffed clinic must
+  not dilute what the shops pay (a playtest reviewer measured a
+  7% tax gap from exactly this). Civic jobs still count toward
+  the town's employer appeal, the arrival pull, but they are not
+  staffable positions and never enter the levy's denominators.
 - **Storage.** A ninth `occupancy` column on the Tiles sheet holds
   filled units per completed structure: households for residential,
   staffed positions for commerce (a cafe staffs up job-by-job

@@ -182,14 +182,21 @@ ParcelWorldState checkInWorldForToday(
   var waiting = state.waitingPopulation;
   final economy = content.economy;
   var residentialCapacity = 0;
-  var jobCapacity = 0;
+  var staffableJobs = 0;
+  var employerJobs = 0;
   for (final structure in structures) {
     final model = content.structure(structure.catalogueId);
     if (model == null) continue;
     if (model.isResidential) {
       residentialCapacity += model.population;
+    } else if (model.isService) {
+      // Service jobs are employer appeal, never staffable positions
+      // and never levy denominators — a clinic attracts residents
+      // without diluting what the shops pay.
+      employerJobs += model.jobs;
     } else if (model.isCommerce) {
-      jobCapacity += model.jobs;
+      staffableJobs += model.jobs;
+      employerJobs += model.jobs;
     }
   }
   int budget(int percent) {
@@ -199,12 +206,21 @@ ParcelWorldState checkInWorldForToday(
 
   // Surplus jobs pull: each open position beyond the employed
   // population adds pull jobs to the migration budget — commerce
-  // built ahead visibly accelerates migration. The pull only feeds
-  // the budget; the waiting list's cap still bounds every burst.
-  final surplusJobs = (jobCapacity - employed).clamp(0, 1 << 30);
+  // built ahead visibly accelerates migration, and so do staffed
+  // civic employers. The pull only feeds the budget; the waiting
+  // list's cap still bounds every burst.
+  final surplusJobs = (employerJobs - employed).clamp(0, 1 << 30);
   final pullJobs = (surplusJobs * economy.jobPullPercentPerCheckIn / 100)
       .floor();
-  final migrationBudget = budget(economy.migrationPercentPerCheckIn) + pullJobs;
+  // Contentment is the town's appeal to newcomers, never its tax
+  // collector: the whole migration pipeline — arrivals and the
+  // list's refill — runs at the contentment rate, so an unhappy
+  // town stagnates instead of going broke. Below the service
+  // requirement, contentment is always full and nothing changes.
+  final appeal = ledger.contentment / 100;
+  final migrationBudget =
+      ((budget(economy.migrationPercentPerCheckIn) + pullJobs) * appeal)
+          .floor();
 
   // Citizens move in while the waiting list and vacant housing both
   // exist — regardless of unemployment.
@@ -220,7 +236,7 @@ ParcelWorldState checkInWorldForToday(
   // Positions staff while citizens are unemployed and jobs vacant.
   final employmentBudget = budget(economy.employmentPercentPerCheckIn);
   final unemployed = population - employed;
-  final vacantJobs = jobCapacity - employed;
+  final vacantJobs = staffableJobs - employed;
   final positionsStaffed =
       (unemployed < employmentBudget ? unemployed : employmentBudget).clamp(
         0,

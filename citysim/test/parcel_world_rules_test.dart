@@ -1077,6 +1077,49 @@ void main() {
         reason: 'no coverage at all hits the floor',
       );
 
+      // Contentment is appeal, never a tax collector: the same
+      // primed town (waiting list 5, two beds open) checks in under
+      // a content economy (no service categories — contentment 100)
+      // and under the demanding one (contentment 30). Full appeal
+      // moves a resident; the unhappy town stalls — stagnation,
+      // not ruin.
+      final contentEconomy = ContentBundle(
+        manifest: content.manifest,
+        terrain: content.terrain,
+        catalogue: content.catalogue,
+        sprites: content.sprites,
+        economy: content.economy.copyWith(
+          serviceRequirementPopulation: 2,
+          requiredServiceCategories: const [],
+        ),
+        ambience: content.ambience,
+        progression: content.progression,
+      );
+      final primed = world.copyWith(waitingPopulation: 5);
+      int arrivedWith(ContentBundle bundle) {
+        final played = checkInWorldForToday(
+          advanceWorldDays(primed, 1),
+          bundle,
+        );
+        return (played.events
+                        .lastWhere((event) => event.kind == 'check-in')
+                        .payload['populationArrived']
+                    as num?)
+                ?.toInt() ??
+            0;
+      }
+
+      expect(
+        arrivedWith(contentEconomy),
+        1,
+        reason: 'full appeal: the migration budget moves a resident',
+      );
+      expect(
+        arrivedWith(demanding),
+        0,
+        reason: 'the contentment floor stalls arrivals — stagnation, not ruin',
+      );
+
       // A fire station south of an eastward road covers the town:
       // fire climbs to full, contentment rises off the floor but
       // stays capped by the missing categories — the average.
@@ -1102,6 +1145,28 @@ void main() {
         withFire.contentment,
         lessThan(100),
         reason: 'police and health are still missing',
+      );
+      // Same town, different contentment, same levy — the
+      // multiplier is gone from taxes entirely.
+      expect(
+        townLedger(world, contentEconomy).taxes,
+        withFire.taxes,
+        reason: 'contentment scales arrivals, never taxes',
+      );
+      // And the station's jobs never enter the levy: demolishing it
+      // changes upkeep and coverage, not one coin of tax.
+      final station = world.structures.firstWhere(
+        (structure) => structure.catalogueId == 'fire-station',
+      );
+      final withoutStation = demolishStructure(
+        world,
+        content,
+        structureId: station.id,
+      );
+      expect(
+        townLedger(withoutStation, demanding).taxes,
+        withFire.taxes,
+        reason: 'civic jobs are appeal, not levy denominators',
       );
       validateParcelWorldState(world, content, terrain);
     });
