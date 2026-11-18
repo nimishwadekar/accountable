@@ -2,7 +2,6 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 
 # New systems
 
-- Have own content jsons for tests so edits don't break them.
 - attach service requirement to milestones.
 - Code review and enhancement.
 - sheets and accountable integration.
