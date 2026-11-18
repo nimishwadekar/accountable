@@ -588,6 +588,12 @@ void main() {
     await tester.tap(find.text('Beta'));
     await tester.pump();
     expect(find.text('Beta'), findsOneWidget);
+    // The camera flies there — out, across, in — over about three
+    // seconds. Let it land before the road-plan taps lean on its
+    // final position.
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
     // A road plan in Beta — attributed to Beta alone. The camera
     // flew to Beta's owned area, so its parcel sits under the
@@ -625,12 +631,112 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Alpha'));
     await tester.pump();
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     expect(
       find.textContaining('Buy road plan'),
       findsNothing,
       reason: 'the interaction surface resets with focus',
     );
     expect(find.text('1 parcel · 0 structures'), findsOneWidget);
+  });
+
+  testWidgets('re-picking the focused city flies the camera home', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1600, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // The same two towns as the focus test: Alpha at (0,0), Beta at
+    // (2,0) with its road at (20,4).
+    final alpha = foundedWorld(withRoad: true);
+    final beta = sheetTablesToWorld(
+      SheetTables(
+        userData: {
+          'seed': '9',
+          'coins': '${content.economy.startingTreasuryCoins}',
+          'coins_earned': '${content.economy.startingTreasuryCoins}',
+          'coins_spent': '0',
+          'simulated_date': '2026-11-02',
+          'high_water_date': '2026-11-02',
+          'construction_day': '0',
+        },
+        ownedParcels: const [
+          ['2', '0'],
+        ],
+        tiles: const [
+          ['20', '4', 'road', 'complete', 'asphalt', '', '', ''],
+        ],
+        projects: const [],
+      ),
+      content: content,
+      terrainProvider: ContentTerrainProvider(content.terrain),
+    );
+    final store = _MemoryCityStore(
+      MultiCityTables(
+        cities: const [
+          CityRecord(id: 'city_1', name: 'Alpha', founded: '2026-11-01'),
+          CityRecord(id: 'city_2', name: 'Beta', founded: '2026-11-02'),
+        ],
+        tablesById: {
+          'city_1': worldToSheetTables(alpha),
+          'city_2': worldToSheetTables(beta),
+        },
+      ),
+      {'city_1': alpha, 'city_2': beta},
+    );
+
+    await tester.pumpWidget(ParcelCityApp(store: store, content: content));
+    for (var i = 0; i < 50; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+
+    // Fly to Beta and let the camera land on its centroid.
+    await tester.tap(find.text('Alpha'));
+    await tester.pump();
+    await tester.tap(find.text('Beta'));
+    await tester.pump();
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    // Wander off: a drag pans the camera away from the centroid.
+    await tester.dragFrom(
+      tester.getRect(find.byType(ParcelWorldView)).center,
+      const Offset(220, 120),
+    );
+    await tester.pump();
+
+    // Re-pick the focused city from the list — a camera move, not a
+    // switch: the flight must run even though focus never changed.
+    await tester.tap(find.text('Beta'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(SimpleDialogOption, 'Beta'));
+    await tester.pump();
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    // The camera is home: a road plan on Beta's parcel quotes. Had
+    // the flight not run, the home-anchored taps would land on
+    // foreign ground and the buy button could not appear.
+    await tester.tap(find.text('Roads'));
+    await tester.pump();
+    final viewCenter = tester.getRect(find.byType(ParcelWorldView)).center;
+    Offset screenFor(CellCoord cell) =>
+        viewCenter + (_cellWorld(cell) - _cellWorld(const CellCoord(20, 4)));
+    await tester.tapAt(screenFor(const CellCoord(20, 5)));
+    await tester.pump();
+    await tester.tapAt(screenFor(const CellCoord(21, 5)));
+    await tester.pump();
+    expect(find.textContaining('Buy road plan'), findsOneWidget);
   });
 
   testWidgets('starting a new city founds a second save block', (tester) async {

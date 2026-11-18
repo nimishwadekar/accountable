@@ -311,10 +311,22 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   /// map already holds it, the interaction surface resets, and the
   /// camera flies to its owned area. A city yet to found keeps the
   /// camera — the player is about to pick a founding parcel
-  /// anywhere.
+  /// anywhere. Re-picking the city already in focus is a camera
+  /// move, not a switch: the flight home recomputes the centroid
+  /// (the town may have grown since focus landed there) and leaves
+  /// selections and half-drawn plans untouched.
   void _switchFocus(String cityId) {
     final next = _cityStates[cityId];
-    if (next == null || cityId == _activeCityId) return;
+    if (next == null) return;
+    if (cityId == _activeCityId) {
+      if (next.parcels.isNotEmpty) {
+        setState(() {
+          _cameraFocusCell = _ownedAreaCentre(next);
+          _cameraResetToken++;
+        });
+      }
+      return;
+    }
     setState(() {
       _activeCityId = cityId;
       _resetInteractionSurface();

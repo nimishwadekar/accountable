@@ -219,16 +219,27 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   Offset _panZoomStartPosition = Offset.zero;
   bool _cameraInitialized = false;
 
+  /// Real, unscaled seconds since the ambient ticker started — the
+  /// camera flyover's clock. Unlike [_AmbientClock.seconds], content
+  /// cannot slow it: the flight is a camera move, not an ambient
+  /// animation.
+  double _tickerSeconds = 0;
+
+  /// The in-flight city-switch camera move, advanced by the ambient
+  /// ticker each frame. Null while the camera is at rest. Any user
+  /// input — a drag, a wheel zoom, a trackpad gesture — cancels it
+  /// and hands control back.
+  _CameraFlyover? _cameraFlyover;
+
   /// Drives vegetation sway and ambient pedestrians. The clock is muted
   /// when the platform requests reduced motion; the ambient time scale
   /// comes from content so the editor can tune it live.
   final _AmbientClock _ambient = _AmbientClock();
-  late final Ticker _ambientTicker = createTicker(
-    (elapsed) => _ambient.tick(
-      elapsed,
-      timeScale: widget.content.ambience.ambientTimeScale,
-    ),
-  );
+  late final Ticker _ambientTicker = createTicker((elapsed) {
+    _tickerSeconds = elapsed.inMicroseconds / Duration.microsecondsPerSecond;
+    _ambient.tick(elapsed, timeScale: widget.content.ambience.ambientTimeScale);
+    _tickCameraFlyover();
+  });
   final _TerrainChunkCache _terrainCache = _TerrainChunkCache();
 
   /// Session-static actors — structures, props, bridge pieces —
@@ -292,8 +303,11 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _ambientTicker.muted =
-        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final muted = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    _ambientTicker.muted = muted;
+    // Reduced motion arriving mid-flight ends the move at its
+    // target rather than freezing it in the air.
+    if (muted) _finishCameraFlyoverNow();
   }
 
   @override
@@ -320,7 +334,19 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
       _ghostPinned = false;
     }
     if (widget.cameraResetToken != oldWidget.cameraResetToken) {
-      _cameraInitialized = false;
+      final target = widget.cameraFocusCell;
+      final flying =
+          target != null &&
+          _cameraInitialized &&
+          !(MediaQuery.maybeDisableAnimationsOf(context) ?? false);
+      if (flying) {
+        // Any reset with a focus cell flies there — a city switch, a
+        // re-pick of the focused city, or the reset button. A first
+        // layout or reduced motion snaps as before.
+        _startCameraFlyover(target);
+      } else {
+        _cameraInitialized = false;
+      }
     }
   }
 
@@ -367,6 +393,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
           final world = Listener(
             behavior: HitTestBehavior.opaque,
             onPointerDown: (event) {
+              _cancelCameraFlyover();
               _pointerDown[event.pointer] = event.localPosition;
             },
             onPointerUp: (event) {
@@ -392,6 +419,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
               _panZoomStartScale = _scale;
               _panZoomStartOffset = _offset;
               _panZoomStartPosition = event.position;
+              _cancelCameraFlyover();
             },
             onPointerPanZoomUpdate: (event) {
               final anchor = _screenToWorld(
@@ -414,6 +442,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onScaleStart: (details) {
+                _cancelCameraFlyover();
                 _scaleAtGestureStart = _scale;
                 _worldAnchorAtGestureStart = _screenToWorld(
                   details.localFocalPoint,
@@ -522,6 +551,71 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
     _offset = Offset(-world.dx * _scale, -world.dy * _scale);
     _clampCamera();
   }
+
+  /// Sets the camera so [center] (a world point) sits at the
+  /// viewport centre at [scale].
+  void _applyCamera(Offset center, double scale) {
+    _scale = scale;
+    _offset = Offset(-center.dx * scale, -center.dy * scale);
+    _clampCamera();
+  }
+
+  /// Starts the cinematic move to [target]: zoom out to the map's
+  /// widest view, glide across the land at that height, and settle
+  /// onto the target city. Switching cities should read as travel,
+  /// and the country passing beneath is half the map's character.
+  void _startCameraFlyover(CellCoord target) {
+    final startCenter = Offset(-_offset.dx / _scale, -_offset.dy / _scale);
+    final targetCenter = _cellWorldCenter(target);
+    // The glide scales with the crossing's on-screen length at full
+    // zoom-out — neighbouring cities get a short hop, opposite ends
+    // of the map get a proper journey.
+    final glideScreenDistance =
+        (targetCenter - startCenter).distance * cameraMinZoom;
+    _cameraFlyover = _CameraFlyover(
+      startSeconds: _tickerSeconds,
+      startCenter: startCenter,
+      startScale: _scale,
+      targetCenter: targetCenter,
+      targetScale: 1.0,
+      panSeconds: (glideScreenDistance / 900).clamp(0.3, 1.5),
+    );
+  }
+
+  /// One flyover step, from the ambient ticker's frame callback.
+  void _tickCameraFlyover() {
+    final flyover = _cameraFlyover;
+    if (flyover == null || !_cameraInitialized) return;
+    final t = _tickerSeconds - flyover.startSeconds;
+    if (t >= flyover.totalSeconds) {
+      setState(() {
+        _applyCamera(flyover.targetCenter, flyover.targetScale);
+        _cameraFlyover = null;
+      });
+      return;
+    }
+    final (scale, center) = flyover.at(t);
+    setState(() {
+      _scale = scale;
+      _offset = Offset(-center.dx * scale, -center.dy * scale);
+      _clampCamera();
+    });
+  }
+
+  /// Ends any in-flight move immediately at its target — reduced
+  /// motion arriving mid-flight, so the camera never freezes in the
+  /// air. A build always follows didChangeDependencies, so the
+  /// direct mutation is safe.
+  void _finishCameraFlyoverNow() {
+    final flyover = _cameraFlyover;
+    if (flyover == null) return;
+    _cameraFlyover = null;
+    _applyCamera(flyover.targetCenter, flyover.targetScale);
+  }
+
+  /// Drops an in-flight move wherever it stands — user input takes
+  /// the camera from here.
+  void _cancelCameraFlyover() => _cameraFlyover = null;
 
   /// The camera's play area: the union of the charted parcels' diamond
   /// bounding boxes, inflated by [cameraChartedMargin] of fog. Cached
@@ -636,6 +730,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
   /// anchored to that screen position.
   void _zoomAt(Offset focalPoint, Size size, double factor) {
     if (factor == 1.0) return;
+    _cancelCameraFlyover();
     final anchor = _screenToWorld(focalPoint, size, _scale, _offset);
     final nextScale = (_scale * factor).clamp(cameraMinZoom, cameraMaxZoom);
     setState(() {
@@ -4413,6 +4508,53 @@ class _AmbientClock extends ChangeNotifier {
     _seconds =
         elapsed.inMicroseconds / Duration.microsecondsPerSecond * timeScale;
     notifyListeners();
+  }
+}
+
+/// The city-switch camera move: zoom out to the map's widest view,
+/// glide across the land at that height, then settle onto the
+/// target. Each phase eases in and out, so the hand-offs between
+/// zoom and glide read as one continuous flight.
+class _CameraFlyover {
+  _CameraFlyover({
+    required this.startSeconds,
+    required this.startCenter,
+    required this.startScale,
+    required this.targetCenter,
+    required this.targetScale,
+    required this.panSeconds,
+  });
+
+  /// The zoom phases' lengths; the glide between them scales with
+  /// the crossing's distance.
+  static const zoomOutSeconds = 0.55;
+  static const zoomInSeconds = 0.7;
+
+  /// The ticker time the move began.
+  final double startSeconds;
+  final Offset startCenter;
+  final double startScale;
+  final Offset targetCenter;
+  final double targetScale;
+  final double panSeconds;
+
+  double get totalSeconds => zoomOutSeconds + panSeconds + zoomInSeconds;
+
+  /// The camera (scale, world centre) [t] seconds into the move.
+  (double, Offset) at(double t) {
+    if (t < zoomOutSeconds) {
+      final p = Curves.easeInOutCubic.transform(t / zoomOutSeconds);
+      return (ui.lerpDouble(startScale, cameraMinZoom, p)!, startCenter);
+    }
+    final panEnd = zoomOutSeconds + panSeconds;
+    if (t < panEnd) {
+      final p = Curves.easeInOutCubic.transform(
+        (t - zoomOutSeconds) / panSeconds,
+      );
+      return (cameraMinZoom, Offset.lerp(startCenter, targetCenter, p)!);
+    }
+    final p = Curves.easeInOutCubic.transform((t - panEnd) / zoomInSeconds);
+    return (ui.lerpDouble(cameraMinZoom, targetScale, p)!, targetCenter);
   }
 }
 
