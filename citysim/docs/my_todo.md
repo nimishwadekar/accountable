@@ -16,6 +16,8 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 - Could have rail later too.
 - Demolition.
 
+- A few AI agents actually living in the game and experiencing life, to provide character.
+
 # Content upgrades
 
 - Run gameplay simulations and tune the values.

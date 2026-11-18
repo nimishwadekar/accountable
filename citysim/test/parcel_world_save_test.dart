@@ -72,7 +72,7 @@ void main() {
     // nothing delivered), then save and reload mid-project.
     var world = grantWorldDebugCoins(
       checkInWorldForToday(newWorld(), content),
-      350000,
+      500000,
     );
     world = purchaseParcel(world, content, terrain, const ParcelCoord(0, 0));
     world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
@@ -203,7 +203,7 @@ void main() {
     // Finish a road stretch east of the founding parcel's road.
     var world = grantWorldDebugCoins(
       checkInWorldForToday(newWorld(), content),
-      100,
+      60000,
     );
     world = purchaseParcel(world, content, terrain, const ParcelCoord(0, 0));
     world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));

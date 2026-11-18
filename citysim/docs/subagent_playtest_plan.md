@@ -65,10 +65,19 @@ reviewer's mood is an anecdote.
 
 A command-oriented driver the sub-agents call. Each invocation loads
 the save, runs a batch of commands, saves, prints results — one shell
-call per play session:
+call per play session. The CLI ships as an AOT-compiled binary
+(~50 ms per invocation; `dart run` costs ~800 ms of VM boot and JIT
+per call, which adds up over hundreds of sessions). Rebuild it after
+any code change:
 
 ```
-dart run tool/sim/play_cli.dart --state docs/sim/playtests/maya/state.json \
+dart compile exe tool/sim/play_cli.dart -o build/play_cli
+```
+
+A session is then:
+
+```
+./build/play_cli --state docs/sim/playtests/maya/state.json \
   --log docs/sim/playtests/maya/log.jsonl \
   --notes docs/sim/playtests/maya/notes.md \
   "day" "status" "map" "build apartments 12 9" "note \"...\""
@@ -186,8 +195,9 @@ Per chunk:
 > need a completed road along one full side of their footprint.
 > Nothing progresses on days you don't open the game.
 >
-> HOW TO PLAY — every session is one shell call:
-> `dart run tool/sim/play_cli.dart --state {STATE} --log {LOG} --notes {NOTES} "day" "status" ...`
+> HOW TO PLAY — every session is one shell call (run from
+> /Users/nwadekar/Projects/accountable/citysim):
+> `./build/play_cli --state {STATE} --log {LOG} --notes {NOTES} "day" "status" ...`
 > Commands run in order, the save updates, results print. Start any
 > session you're unsure about with `help`. Plan bigger sessions as
 > one call with several commands.

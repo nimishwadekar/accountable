@@ -1488,7 +1488,7 @@ void main() {
     });
 
     test('road and bridge creep ride alongside structure work', () {
-      var world = grantWorldDebugCoins(newWorld(), 200);
+      var world = grantWorldDebugCoins(newWorld(), 60000);
       world = startStructureConstruction(
         world,
         content,
@@ -1591,7 +1591,7 @@ void main() {
     });
 
     test('parcels are neighboring purchases and owning land is not access', () {
-      var world = grantWorldDebugCoins(newWorld(), 100);
+      var world = grantWorldDebugCoins(newWorld(), 15000);
       // Authored water parcels are buyable like any other map parcel.
       world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
       expect(world.parcels, hasLength(2));
@@ -1647,7 +1647,7 @@ void main() {
     });
 
     test('water parcels are buyable but fog beyond the map is not', () {
-      var world = grantWorldDebugCoins(newWorld(), 100);
+      var world = grantWorldDebugCoins(newWorld(), 30000);
       world = purchaseParcel(world, content, terrain, const ParcelCoord(-1, 0));
       final queries = WorldQueries(world, terrain);
       // Sample a cell the live tile overrides have not painted — live
@@ -1685,7 +1685,7 @@ void main() {
     // Disconnected from any road, spanning owned dry land only — the
     // store validates on save, so a fresh plan (zero coins funded)
     // must satisfy save validation as-is.
-    var world = grantWorldDebugCoins(newWorld(), 50);
+    var world = grantWorldDebugCoins(newWorld(), 60000);
     world = planAndSettleRoad(
       world,
       cells: const [CellCoord(2, 2), CellCoord(3, 2), CellCoord(4, 2)],
@@ -1736,7 +1736,7 @@ void main() {
   });
 
   test('a bridge creeps tile by tile before opening the far bank', () {
-    var world = grantWorldDebugCoins(newWorld(), 350000);
+    var world = grantWorldDebugCoins(newWorld(), 500000);
     // Everything under the bridge must be owned up front: the water
     // parcel and the far-bank parcel are bought before planning.
     world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
@@ -1936,7 +1936,7 @@ void main() {
   });
 
   test('a vertical one-tile bridge round-trips through the save', () {
-    var world = grantWorldDebugCoins(newWorld(), 60);
+    var world = grantWorldDebugCoins(newWorld(), 50000);
     // Two short roads north and south of the crossing; the banks
     // themselves stay vacant land so the span is a single vertical
     // tile between them.

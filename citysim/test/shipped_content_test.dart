@@ -159,7 +159,10 @@ void main() {
     expect(byId['tires']!.subcategory, 'clutter');
     expect(byId['wild-grass']!.costCoins, 0);
 
-    expect(content.economy.startingTreasuryCoins, 100000);
+    // The founding stake was cut from 100k to 20k — a deliberate
+    // tightening of the opening once whole-stretch roads and the
+    // unemployment floor made the early game faster and safer.
+    expect(content.economy.startingTreasuryCoins, 20000);
     expect(content.economy.roadTileCostCoins, 2500);
     expect(content.economy.bridgeTileCostCoins, 50000);
     expect(
