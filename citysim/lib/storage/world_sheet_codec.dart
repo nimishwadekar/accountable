@@ -82,8 +82,7 @@ SheetTables worldToSheetTables(ParcelWorldState state) {
     for (final bridge in state.bridges)
       for (final cell in bridge.waterCells)
         _tileRow(cell, 'bridge', 'complete', '', '', '', ''),
-    for (final job in state.constructions)
-      ..._plannedTilesFor(job, {for (final road in state.roads) road.cell}),
+    for (final job in state.constructions) ..._plannedTilesFor(job),
   ];
 
   final props = [
@@ -487,28 +486,25 @@ List<String> _tileRow(
   project,
 ];
 
-/// Planned tiles for a project: unfunded road cells and planned
-/// structure origins. Funded road tiles already have complete rows, and
-/// planned bridge spans are derived from the project's target banks.
-List<List<String>> _plannedTilesFor(
-  WorldConstruction job,
-  Set<CellCoord> fundedRoadCells,
-) {
+/// Planned tiles for a project: every road cell of an in-flight
+/// stretch (whole-stretch delivery means none are laid yet) and the
+/// planned structure origins. Bridge spans are derived from the
+/// project's target banks.
+List<List<String>> _plannedTilesFor(WorldConstruction job) {
   switch (job.kind) {
     case WorldConstructionKind.road:
       final project = _projectColumn(job.id);
       return [
         for (final cell in job.roadCells)
-          if (!fundedRoadCells.contains(cell))
-            _tileRow(
-              cell,
-              'road',
-              'planned',
-              job.roadStyle!.name,
-              '',
-              '',
-              project,
-            ),
+          _tileRow(
+            cell,
+            'road',
+            'planned',
+            job.roadStyle!.name,
+            '',
+            '',
+            project,
+          ),
       ];
     case WorldConstructionKind.structure:
       return [
@@ -667,9 +663,11 @@ List<String> _plannedStructureTile(
   );
 }
 
-/// Rebuilds a road project: its cells are every tile row referencing the
-/// project, ordered by walking the four-connected path from the end that
-/// touches a completed road outside the project.
+/// Rebuilds a road project: its cells are every tile row referencing
+/// the project. Under whole-stretch delivery an in-flight plan has
+/// no delivered tiles — every referencing row is a planned cell — so
+/// the plan is simply the path, ordered by walking it from the end
+/// that touches a completed road outside the project.
 WorldConstruction _roadConstruction(
   List<String> row,
   int number,
@@ -687,14 +685,7 @@ WorldConstruction _roadConstruction(
     throw FormatException('Road project $number has no planned tiles.');
   }
   final outside = roadsByCell.keys.where((cell) => !cells.contains(cell));
-  final fundedCells = roadsByCell.entries
-      .where((entry) => entry.value.projectId == projectId)
-      .map((entry) => entry.key)
-      .toSet();
-  final ordered = _orderPath(cells, outside.toSet(), fundedCells);
-  // Delivery is per tile: the roads the project laid are exactly the
-  // first delivered tiles of the plan, so the count of this
-  // project's completed road tiles is its delivered prefix.
+  final ordered = _orderPath(cells, outside.toSet());
   return WorldConstruction(
     id: projectId,
     kind: WorldConstructionKind.road,
@@ -704,17 +695,11 @@ WorldConstruction _roadConstruction(
   );
 }
 
-/// Orders a four-connected path of cells. The preferred start is the
-/// end already holding one of the project's funded tiles — funding
-/// grows from the plan's start, so the funded prefix marks it — then
-/// an end touching a completed road outside the path, then simply the
+/// Orders a four-connected path of cells. The preferred start is an
+/// end touching a completed road outside the path, then simply the
 /// deterministically smallest end (disconnected plans have no road
 /// anchor at all). Ties resolve deterministically.
-List<CellCoord> _orderPath(
-  Set<CellCoord> cells,
-  Set<CellCoord> outside,
-  Set<CellCoord> funded,
-) {
+List<CellCoord> _orderPath(Set<CellCoord> cells, Set<CellCoord> outside) {
   if (cells.length == 1) return cells.toList();
   CellCoord? bestStart;
   int bestRank = -1;
@@ -722,8 +707,7 @@ List<CellCoord> _orderPath(
     final inPath = cell.neighbors.where(cells.contains).length;
     if (inPath != 1) continue; // Path ends only.
     var rank = 0;
-    if (funded.contains(cell)) rank = 2;
-    if (rank == 0 && _touchesOutside(cell, outside)) rank = 1;
+    if (_touchesOutside(cell, outside)) rank = 1;
     final tieBreak =
         bestStart == null ||
         (cell.column + cell.row) < (bestStart.column + bestStart.row);

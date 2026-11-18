@@ -63,18 +63,15 @@ void main() {
   ParcelWorldState nextDay(ParcelWorldState world) =>
       checkInWorldForToday(advanceWorldDays(world, 1), content);
 
-  /// Plans a road stretch and lets the check-ins lay it fully. Call
-  /// only when the stretch is the sole in-flight work: a check-in
-  /// advances every project, not one.
+  /// Plans a road stretch and lets the next check-in land it whole.
+  /// Call only when the stretch is the sole in-flight work: a
+  /// check-in advances every project, not one.
   ParcelWorldState planAndSettleRoad(
     ParcelWorldState world, {
     required List<CellCoord> cells,
   }) {
     world = planRoadStretch(world, content, terrain, cells: cells);
-    for (final _ in cells) {
-      world = nextDay(world);
-    }
-    return world;
+    return nextDay(world);
   }
 
   /// Check-ins until no construction remains.
@@ -320,7 +317,7 @@ void main() {
 
   group('construction projects and staged work', () {
     test(
-      'road plans are upfront purchases that creep one tile per check-in',
+      'road plans are upfront purchases that land whole the next check-in',
       () {
         var world = grantWorldDebugCoins(newWorld(), 5);
         world = planRoadStretch(
@@ -339,8 +336,8 @@ void main() {
           reason: 'the whole stretch is paid upfront',
         );
         expect(world.roads, hasLength(1));
-        // A second stretch plans while the first creeps — roads never
-        // block each other.
+        // A second stretch plans while the first is in flight — roads
+        // never block each other.
         world = planRoadStretch(
           world,
           content,
@@ -352,28 +349,31 @@ void main() {
         world = advanceWorldDays(world, 30);
         expect(world.roads, hasLength(1), reason: 'days never build anything');
 
-        // One check-in lays one tile of each creeping stretch, in plan
-        // order from the start.
+        // One check-in lays every tile of every stretch, whatever
+        // their lengths — the whole street arrives the day after its
+        // plan, so a stack of single-tile plans buys no extra speed.
         world = nextDay(world);
-        expect(world.roads, hasLength(3));
+        expect(world.roads, hasLength(4));
         expect(
           world.roads.any((road) => road.cell == const CellCoord(5, 4)),
           isTrue,
-          reason: 'the first planned tile lays first',
+        );
+        expect(
+          world.roads.any((road) => road.cell == const CellCoord(6, 4)),
+          isTrue,
+          reason: 'the long stretch lands whole',
         );
         expect(
           world.roads.any((road) => road.cell == const CellCoord(3, 4)),
           isTrue,
-          reason: 'every creeping stretch advances together',
+          reason: 'every in-flight stretch lands together',
         );
-        world = nextDay(world);
-        expect(world.roads, hasLength(4));
         expect(
           world.constructions.where(
             (job) => job.roadCells.contains(const CellCoord(5, 4)),
           ),
           isEmpty,
-          reason: 'laying the last tile settles the stretch',
+          reason: 'the stretch settles on the check-in after its plan',
         );
         // The plans were paid upfront (pinned above); the ledger also
         // carries each check-in's road upkeep now.
@@ -1206,15 +1206,29 @@ void main() {
         catalogueId: 'small-home',
         origin: const CellCoord(3, 4),
       );
-      // The home completes and newcomers arrive — but with no
-      // job, every report collects nothing.
+      // The home completes and newcomers arrive — with no job the
+      // levy floors instead of vanishing: the unemployment floor is
+      // the soft-lock fix (a homes-only town used to earn nothing
+      // forever).
       world = nextDay(world);
       world = nextDay(world);
       world = nextDay(world);
       final unemployed = world.events.lastWhere(
         (event) => event.kind == 'check-in',
       );
-      expect(unemployed.payload['taxes'], 0, reason: 'no citizen has a job');
+      expect(
+        unemployed.payload['taxes'],
+        (content.structure('small-home')!.taxCoins *
+                content.economy.homeTaxUnemploymentFloorPercent /
+                100)
+            .round(),
+        reason: 'no citizen has a job, so homes pay the levy floor',
+      );
+      expect(
+        unemployed.payload['unemployed'],
+        1,
+        reason: 'the pre-arrival unemployment that produced the floor taxes',
+      );
       expect(world.population, 2);
 
       // A shop opens and employs a citizen: the next report
@@ -1252,6 +1266,158 @@ void main() {
             content.structure('fruit-market')!.upkeepCoins +
             10,
         reason: 'home and shop upkeep plus the starter road tile',
+      );
+    });
+
+    test('home taxes floor at the unemployment rate and top up with jobs', () {
+      // Two settled homes (six beds) around the starter road; the
+      // levy is read straight from the ledger at several employment
+      // levels. The floor binds below its rate, the raw rate wins
+      // above it, and full employment pays the whole levy.
+      var world = newWorld();
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'small-home',
+        origin: const CellCoord(4, 3),
+      );
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'small-home',
+        origin: const CellCoord(4, 5),
+      );
+      world = settleAll(world);
+      final homeTax = 2 * content.structure('small-home')!.taxCoins;
+      final floor = content.economy.homeTaxUnemploymentFloorPercent;
+      expect(floor, greaterThan(0), reason: 'the shipped content sets a floor');
+
+      var ledger = townLedger(
+        world.copyWith(population: 6, employedPopulation: 0),
+        content,
+      );
+      expect(
+        ledger.taxes,
+        (homeTax * floor / 100).round(),
+        reason: 'total unemployment pays the floor, not zero',
+      );
+      ledger = townLedger(
+        world.copyWith(population: 6, employedPopulation: 1),
+        content,
+      );
+      expect(
+        ledger.taxes,
+        (homeTax * floor / 100).round(),
+        reason: 'a sixth employed is still under the floor rate',
+      );
+      ledger = townLedger(
+        world.copyWith(population: 6, employedPopulation: 3),
+        content,
+      );
+      expect(
+        ledger.taxes,
+        (homeTax * 0.5).round(),
+        reason: 'half employed pays the raw rate above the floor',
+      );
+      ledger = townLedger(
+        world.copyWith(population: 6, employedPopulation: 6),
+        content,
+      );
+      expect(ledger.taxes, homeTax, reason: 'full employment pays it all');
+    });
+
+    test('a homes-only town recovers through the unemployment floor', () {
+      // The reviewer soft-lock, reproduced: homes ring the only
+      // road, no jobs anywhere, and the treasury is empty. Before
+      // the floor this town earned nothing forever — no taxes
+      // without employment, no roads or land without taxes, and
+      // nothing to demolish. The floor's trickle must let it buy a
+      // road, open a café, and restart employment.
+      var world = newWorld();
+      for (final origin in [
+        const CellCoord(4, 3),
+        const CellCoord(3, 4),
+        const CellCoord(5, 4),
+        const CellCoord(4, 5),
+      ]) {
+        world = startStructureConstruction(
+          world,
+          content,
+          terrain,
+          catalogueId: 'small-home',
+          origin: origin,
+        );
+      }
+      world = settleAll(world);
+      world = nextDay(world);
+      world = nextDay(world);
+      expect(world.employedPopulation, 0, reason: 'no jobs exist');
+      expect(world.population, greaterThan(0));
+
+      // The museum state: an empty treasury that must refill through
+      // the floor alone.
+      var recovered = world.copyWith(coins: 0);
+      final floorOnly =
+          (4 *
+                  content.structure('small-home')!.taxCoins *
+                  content.economy.homeTaxUnemploymentFloorPercent /
+                  100)
+              .round();
+      var guard = 0;
+      while (recovered.coins < 2 * content.economy.roadTileCostCoins &&
+          guard++ < 90) {
+        recovered = nextDay(recovered);
+      }
+      expect(
+        recovered.coins,
+        greaterThanOrEqualTo(2 * content.economy.roadTileCostCoins),
+        reason: 'the floor accrues enough to extend the road',
+      );
+      final floorReport = recovered.events.lastWhere(
+        (event) => event.kind == 'check-in',
+      );
+      expect(floorReport.payload['taxes'], floorOnly);
+
+      // Extend the street east, open a café on the new frontage, and
+      // let staffing climb: employment restarts and the levy rises
+      // above the floor.
+      recovered = planRoadStretch(
+        recovered,
+        content,
+        terrain,
+        cells: const [CellCoord(6, 4), CellCoord(7, 4)],
+      );
+      recovered = nextDay(recovered);
+      recovered = startStructureConstruction(
+        recovered,
+        content,
+        terrain,
+        catalogueId: 'cafe',
+        origin: const CellCoord(6, 3),
+      );
+      recovered = settleAll(recovered);
+      for (var day = 0; day < 6; day++) {
+        recovered = nextDay(recovered);
+      }
+      expect(
+        recovered.employedPopulation,
+        greaterThan(0),
+        reason: 'the café staffs the unemployed',
+      );
+      final report = recovered.events.lastWhere(
+        (event) => event.kind == 'check-in',
+      );
+      expect(
+        report.payload['taxes'] as int,
+        greaterThan(floorOnly),
+        reason: 'commerce income lifts the levy above the floor',
+      );
+      expect(
+        (report.payload['unemployed'] as int) < recovered.population,
+        isTrue,
+        reason: 'some citizens hold jobs again',
       );
     });
 
@@ -1766,42 +1932,6 @@ void main() {
           tablesById: {'city_1': worldToSheetTables(world)},
         ),
       ),
-    );
-  });
-
-  test('a partially funded road keeps its build direction across a reload', () {
-    var world = grantWorldDebugCoins(newWorld(), 10);
-    // A disconnected stretch running west: its start is the east
-    // (larger) end, so the codec's smallest-end fallback alone would
-    // resume funding from the wrong end after a reload.
-    world = planRoadStretch(
-      world,
-      content,
-      terrain,
-      cells: const [CellCoord(3, 7), CellCoord(2, 7), CellCoord(1, 7)],
-    );
-    world = nextDay(world);
-    expect(
-      world.roads.any((road) => road.cell == const CellCoord(3, 7)),
-      isTrue,
-    );
-
-    final decoded = sheetTablesToWorld(
-      worldToSheetTables(world),
-      content: content,
-      terrainProvider: terrain,
-    );
-    final reloaded = decoded.constructions.single;
-    expect(
-      reloaded.roadCells.first,
-      const CellCoord(3, 7),
-      reason: 'the funded end marks the plan start',
-    );
-    final played = checkInWorldForToday(advanceWorldDays(decoded, 1), content);
-    expect(
-      played.roads.any((road) => road.cell == const CellCoord(2, 7)),
-      isTrue,
-      reason: 'creep continues from the delivered end',
     );
   });
 

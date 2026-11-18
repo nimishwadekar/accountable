@@ -35,9 +35,11 @@ class PersonaTraits {
     this.parcelBuffer = 1.2,
     this.roomCells = 24,
     this.maxBuildsPerDay = 2,
+    this.buildsPerDayPopDivisor,
     this.jobTargetPercent = 0,
     this.housingStyle = HousingStyle.cheap,
     this.housingVacancyTarget = 4,
+    this.housingVacancyPercent,
     this.splitsRoadStrokes = false,
     this.serviceTarget = 0.85,
     this.foundingShortlist = 4,
@@ -67,6 +69,12 @@ class PersonaTraits {
   /// Successful builds per day — the player's attention budget.
   final int maxBuildsPerDay;
 
+  /// When set, the budget grows with the town: the maximum of the
+  /// flat budget and the population over this divisor — the
+  /// grinding devotee whose session length scales with the city.
+  /// Null keeps the flat budget.
+  final int? buildsPerDayPopDivisor;
+
   /// Open job positions kept in the town, as a share of population
   /// (minimum six). Zero is the reactive player, who builds commerce
   /// only when the last job fills.
@@ -76,6 +84,11 @@ class PersonaTraits {
 
   /// Vacant beds the persona keeps ahead of the waiting list.
   final int housingVacancyTarget;
+
+  /// When set, the vacancy target becomes this share of the
+  /// population instead — the scaled player whose construction
+  /// pipeline grows with the town. Null keeps the flat target.
+  final int? housingVacancyPercent;
 
   /// Plans each frontage tile as its own road job, so they deliver
   /// in parallel — the savvy-player trick.
@@ -119,17 +132,29 @@ class TraitPersona implements PlayerPersona {
       h.foundAt(h.chooseFoundingParcel(shortlist: traits.foundingShortlist));
     }
     var builds = traits.maxBuildsPerDay;
+    if (traits.buildsPerDayPopDivisor != null) {
+      builds = math.max(
+        builds,
+        h.state.population ~/ traits.buildsPerDayPopDivisor!,
+      );
+    }
 
     // Services first — contentment multiplies every coin the town
-    // makes, so the planner never lets it sag.
+    // makes, so the planner never lets it sag. A planned frontage
+    // road counts as progress: the building lands the day the tiles
+    // creep in.
     if (h.state.population >= h.content.economy.serviceRequirementPopulation) {
       for (final category in h.content.economy.requiredServiceCategories) {
         if (builds <= 0) break;
         if (h.serviceCoveragePlanned(category) < traits.serviceTarget) {
           final model = _pickService(h, category);
-          if (model != null &&
-              h.attemptBuild(model, splitStrokes: traits.splitsRoadStrokes) ==
-                  BuildOutcome.built) {
+          if (model == null) continue;
+          final outcome = h.attemptBuild(
+            model,
+            splitStrokes: traits.splitsRoadStrokes,
+          );
+          if (outcome == BuildOutcome.built ||
+              outcome == BuildOutcome.roadPlanned) {
             builds--;
           }
         }
@@ -145,25 +170,40 @@ class TraitPersona implements PlayerPersona {
       if (vacancy >= target) break;
       final model = _pickCommerce(h, dense: traits.jobTargetPercent > 0);
       if (model == null) break;
-      if (h.attemptBuild(model, splitStrokes: traits.splitsRoadStrokes) ==
-          BuildOutcome.built) {
+      final outcome = h.attemptBuild(
+        model,
+        splitStrokes: traits.splitsRoadStrokes,
+      );
+      if (outcome == BuildOutcome.built ||
+          outcome == BuildOutcome.roadPlanned) {
         builds--;
         continue;
       }
       break;
     }
 
-    // Homes for the waiting list.
+    // Homes for the waiting list. The vacancy target scales with the
+    // town when the persona sets a percent: a devoted player's
+    // construction pipeline grows with the city.
+    final vacancyTarget = traits.housingVacancyPercent == null
+        ? traits.housingVacancyTarget
+        : math.max(
+            traits.housingVacancyTarget,
+            h.state.population * traits.housingVacancyPercent! ~/ 100,
+          );
     while (builds > 0) {
       final vacancy = h.residentialCapacityPlanned - h.state.population;
-      if (h.state.waitingPopulation <= 0 ||
-          vacancy >= traits.housingVacancyTarget) {
+      if (h.state.waitingPopulation <= 0 || vacancy >= vacancyTarget) {
         break;
       }
       final model = _pickHome(h);
       if (model == null) break;
-      if (h.attemptBuild(model, splitStrokes: traits.splitsRoadStrokes) ==
-          BuildOutcome.built) {
+      final outcome = h.attemptBuild(
+        model,
+        splitStrokes: traits.splitsRoadStrokes,
+      );
+      if (outcome == BuildOutcome.built ||
+          outcome == BuildOutcome.roadPlanned) {
         builds--;
         continue;
       }
@@ -207,7 +247,19 @@ class TraitPersona implements PlayerPersona {
   String? _pickService(SimHarness h, String category) {
     final options = _unlocked(h, (model) => model.serviceCategory == category);
     if (options.isEmpty) return null;
-    return _minBy(options, (model) => model.upkeepCoins).id;
+    // The smallest building that covers the whole town, so small
+    // towns get clinics and metropolises get regional hospitals —
+    // picking by upkeep alone would place hundreds of small ones in
+    // a big city. When nothing covers the town yet, take the largest
+    // and let the loop add more.
+    final covering = [
+      for (final model in options)
+        if (model.serviceCapacity >= h.state.population) model,
+    ];
+    if (covering.isNotEmpty) {
+      return _minBy(covering, (model) => model.serviceCapacity).id;
+    }
+    return _maxBy(options, (model) => model.serviceCapacity).id;
   }
 
   List<StructureDefinition> _unlocked(

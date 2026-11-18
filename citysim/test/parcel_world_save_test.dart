@@ -68,8 +68,8 @@ void main() {
       api: api,
     );
 
-    // Play: check in, found, expand, buy a partly delivered road
-    // plan, then save and reload mid-project.
+    // Play: check in, found, expand, buy a road plan (in flight,
+    // nothing delivered), then save and reload mid-project.
     var world = grantWorldDebugCoins(
       checkInWorldForToday(newWorld(), content),
       350000,
@@ -83,7 +83,6 @@ void main() {
       terrain,
       cells: [for (var column = 4; column <= 6; column++) CellCoord(column, 4)],
     );
-    world = nextDay(world);
 
     final reloaded = await store.load();
     expect(reloaded, isNull, reason: 'no documents yet');
@@ -94,21 +93,28 @@ void main() {
       midProject.roads.where(
         (road) => road.projectId == midProject.constructions.single.id,
       ),
-      hasLength(1),
-      reason: 'one tile delivered, one still creeping',
+      isEmpty,
+      reason: 'nothing delivered — the plan waits for its check-in',
     );
     expect(midProject.coins, world.coins);
-    expect(
-      midProject.checkInCount,
-      2,
-      reason: 'founding check-in plus the day',
-    );
-    expect(midProject.lastCheckInDate, DateTime.utc(2026, 11, 3));
+    expect(midProject.checkInCount, 1, reason: 'the founding check-in');
+    expect(midProject.lastCheckInDate, DateTime.utc(2026, 11, 2));
 
-    // Continue playing on the reloaded world: finish the road, build a
-    // cottage, bridge the east channel, and start a café.
+    // Continue playing on the reloaded world: the road lands whole,
+    // then build a cottage, bridge the east channel, and start a
+    // café.
     var played = midProject;
     played = nextDay(played);
+    expect(
+      played.roads.where(
+        (road) =>
+            road.cell == const CellCoord(4, 4) ||
+            road.cell == const CellCoord(5, 4) ||
+            road.cell == const CellCoord(6, 4),
+      ),
+      isNotEmpty,
+      reason: 'the whole stretch landed on its first check-in',
+    );
     played = startStructureConstruction(
       played,
       content,
@@ -208,9 +214,8 @@ void main() {
       cells: [for (var column = 5; column <= 7; column++) CellCoord(column, 4)],
     );
     final finishedId = world.constructions.single.id;
-    for (var column = 5; column <= 7; column++) {
-      world = nextDay(world);
-    }
+    // One check-in lands the whole stretch, whatever its length.
+    world = nextDay(world);
     expect(world.constructions, isEmpty);
     expect(
       world.roads.where((road) => road.projectId == finishedId),
@@ -245,19 +250,30 @@ void main() {
       cells: [const CellCoord(4, 5), const CellCoord(4, 6)],
     );
     expect(played.constructions.single.id, finishedId);
-    played = nextDay(played);
 
+    // Save the stretch in flight and reload: the reused id must
+    // rebuild the project from its own planned tiles only.
     await save(store, played);
     final second = (await store.load())!.activeCity;
-    expect(second.constructions.single.roadCells, hasLength(2));
+    expect(
+      second.constructions.single.roadCells,
+      hasLength(2),
+      reason: 'the reused id rebuilds from its own planned tiles',
+    );
     expect(
       second.roads.where(
         (road) => road.projectId == second.constructions.single.id,
       ),
-      hasLength(1),
-      reason: 'one tile delivered, one still creeping',
+      isEmpty,
+      reason: 'nothing delivered — the plan waits for its check-in',
     );
-    expect(second.roads, hasLength(4), reason: '3 finished + 1 delivered tile');
+    expect(
+      second.roads,
+      hasLength(3),
+      reason:
+          '3 finished; the new plan is '
+          'still undelivered',
+    );
   });
 
   test('saving one city splices only its block', () async {

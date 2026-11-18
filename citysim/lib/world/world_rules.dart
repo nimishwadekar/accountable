@@ -55,7 +55,7 @@ class RoadProjectQuote {
   final RoadStyle style;
 
   /// Upfront treasury price of the whole stretch, paid at planning;
-  /// the tiles then creep in one per check-in.
+  /// the whole stretch then lands on the next check-in.
   final int price;
 }
 
@@ -180,7 +180,18 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
   }
   var gross = 0.0;
   if (residentialCapacity > 0) {
-    gross += homeTax * employed / residentialCapacity;
+    // Homes pay their levy whether or not everyone holds a job: at
+    // least the unemployment floor, topped back up to the full rate
+    // by employment. The floor is the soft-lock fix — without it a
+    // homes-only town earns literally nothing (only employed people
+    // paid), so it could never afford the roads or land a café
+    // needed to recover. Realistic too: unemployed people still pay
+    // rent and sales taxes; employment raises a town's base rather
+    // than creating it from nothing.
+    final employmentRate = employed / residentialCapacity;
+    final floor = economy.homeTaxUnemploymentFloorPercent / 100;
+    final homeLevyRate = employmentRate < floor ? floor : employmentRate;
+    gross += homeTax * homeLevyRate;
   }
   if (jobCapacity > 0) {
     gross += commerceTax * employed / jobCapacity;

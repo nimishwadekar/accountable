@@ -511,6 +511,7 @@ class EconomyContent {
     this.unemploymentTolerancePercent = 10,
     this.jobPullPercentPerCheckIn = 10,
     this.contentmentFloorPercent = 0,
+    this.homeTaxUnemploymentFloorPercent = 0,
     this.serviceRequirementPopulation = 0,
     this.requiredServiceCategories = const [],
   });
@@ -520,7 +521,8 @@ class EconomyContent {
   final int startingTreasuryCoins;
 
   /// Upfront price of one road tile in a stretch plan — the whole
-  /// stretch is paid at planning, then creeps one tile per check-in.
+  /// stretch is paid at planning, then lands whole on the next
+  /// check-in.
   final int roadTileCostCoins;
 
   /// Upfront price of one bridge span tile; banks cost the road tile
@@ -567,6 +569,17 @@ class EconomyContent {
   /// even a neglected town keeps a trickle of income.
   final int contentmentFloorPercent;
 
+  /// Homes pay at least this percentage of their levy regardless of
+  /// employment — the unemployment floor. Full employment tops the
+  /// rate back up to one hundred. The floor is what keeps a homes-
+  /// only town on the economy's life support instead of locking it
+  /// out entirely: without it, no jobs means no taxes, no taxes
+  /// means no roads or land, and the town soft-locks with nothing to
+  /// demolish or sell. Realistic too — unemployed people still pay
+  /// rent and sales taxes; employment raises a town's base rather
+  /// than creating it from nothing.
+  final int homeTaxUnemploymentFloorPercent;
+
   /// Population below which no service coverage is demanded — the
   /// early game stays pure.
   final int serviceRequirementPopulation;
@@ -600,6 +613,7 @@ class EconomyContent {
     'unemploymentTolerancePercent': unemploymentTolerancePercent,
     'jobPullPercentPerCheckIn': jobPullPercentPerCheckIn,
     'contentmentFloorPercent': contentmentFloorPercent,
+    'homeTaxUnemploymentFloorPercent': homeTaxUnemploymentFloorPercent,
     'serviceRequirementPopulation': serviceRequirementPopulation,
     'requiredServiceCategories': requiredServiceCategories,
   };
@@ -616,6 +630,7 @@ class EconomyContent {
     int? unemploymentTolerancePercent,
     int? jobPullPercentPerCheckIn,
     int? contentmentFloorPercent,
+    int? homeTaxUnemploymentFloorPercent,
     int? serviceRequirementPopulation,
     List<String>? requiredServiceCategories,
   }) => EconomyContent(
@@ -637,6 +652,8 @@ class EconomyContent {
         jobPullPercentPerCheckIn ?? this.jobPullPercentPerCheckIn,
     contentmentFloorPercent:
         contentmentFloorPercent ?? this.contentmentFloorPercent,
+    homeTaxUnemploymentFloorPercent:
+        homeTaxUnemploymentFloorPercent ?? this.homeTaxUnemploymentFloorPercent,
     serviceRequirementPopulation:
         serviceRequirementPopulation ?? this.serviceRequirementPopulation,
     requiredServiceCategories:
@@ -665,6 +682,8 @@ class EconomyContent {
           json['unemploymentTolerancePercent'] as int? ?? 10,
       jobPullPercentPerCheckIn: json['jobPullPercentPerCheckIn'] as int? ?? 10,
       contentmentFloorPercent: json['contentmentFloorPercent'] as int? ?? 0,
+      homeTaxUnemploymentFloorPercent:
+          json['homeTaxUnemploymentFloorPercent'] as int? ?? 0,
       serviceRequirementPopulation:
           json['serviceRequirementPopulation'] as int? ?? 0,
       requiredServiceCategories: [
@@ -1912,6 +1931,13 @@ List<ContentIssue> validateContentData({
   if (economy.contentmentFloorPercent < 0 ||
       economy.contentmentFloorPercent > 100) {
     error('The contentment floor must be a percentage within [0, 100].');
+  }
+  if (economy.homeTaxUnemploymentFloorPercent < 0 ||
+      economy.homeTaxUnemploymentFloorPercent > 100) {
+    error(
+      'The home tax unemployment floor must be a percentage '
+      'within [0, 100].',
+    );
   }
   if (economy.serviceRequirementPopulation < 0) {
     error('The service requirement population must not be negative.');

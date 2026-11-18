@@ -575,9 +575,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         ? structureId
         : null;
     if (_tool == _WorldTool.road) {
-      // A tap on any creeping stretch's tiles selects that whole
-      // project. Road creep is automatic, so any number of
-      // stretches may creep at once and planning is always open.
+      // A tap on any in-flight stretch's tiles selects that whole
+      // project. Delivery is automatic — the whole stretch lands on
+      // the check-in after its plan is bought — so any number of
+      // stretches may be in flight and planning is always open.
       final roadProject = world.constructions
           .where((job) => job.kind == WorldConstructionKind.road)
           .where(
@@ -1152,6 +1153,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     final shortfall = value('upkeepShortfall');
     final net = value('net');
     final contentment = value('contentment');
+    final unemployed = value('unemployed');
     final advanced = value('stagesAdvanced');
     final completions =
         (payload['completions'] as List?)?.cast<String>() ?? const [];
@@ -1175,6 +1177,16 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
               'Contentment      $contentment% · taxes ×'
               '${(contentment / 100).toStringAsFixed(2)}',
             ),
+            if (unemployed > 0)
+              Text(
+                _requireContent.economy.homeTaxUnemploymentFloorPercent > 0
+                    ? 'Unemployed        $unemployed · homes pay the '
+                          '${_requireContent.economy.homeTaxUnemploymentFloorPercent}% '
+                          'levy floor'
+                    : 'Unemployed        $unemployed · only employed '
+                          'residents pay taxes',
+                style: const TextStyle(color: Color(0xFF9A5B2B)),
+              ),
             Text(
               'Net                 ${net >= 0 ? '+' : ''}${formatCoins(net)}',
               style: const TextStyle(fontWeight: FontWeight.bold),
@@ -1553,8 +1565,9 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       );
 
   Widget _roadControls(ParcelWorldState world) {
-    // Creep cards for every in-flight stretch — road creep is
-    // automatic, so any number creep at once and planning stays open.
+    // Progress cards for every in-flight stretch — delivery is
+    // automatic, the whole stretch landing on the check-in after
+    // its plan is bought, so planning stays open.
     final creepCards = [
       for (final job in world.constructions)
         if (job.kind == WorldConstructionKind.road)
@@ -1592,7 +1605,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
                     : failure ??
                           '${_roadPlanCells.length} road tiles · '
                               '${formatCoins(quote!.price)} coins, paid upfront. The '
-                              'stretch then builds one tile per check-in.',
+                              'whole stretch lands on the next check-in.',
               ),
               if (quote != null && world.coins < quote.price)
                 Text(
@@ -1640,7 +1653,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         children: [
           Text(
             '$delivered/${project.roadCells.length} tiles laid · '
-            'one more per check-in',
+            'the whole stretch lands on the next check-in',
           ),
           LinearProgressIndicator(
             value: project.roadCells.isEmpty
@@ -2332,7 +2345,7 @@ class _ConstructionList extends StatelessWidget {
                       '${content.structure(job.catalogueId ?? '')?.constructionStages ?? 1} · one per check-in',
                 WorldConstructionKind.road =>
                   '${state.roads.where((road) => road.projectId == job.id).length}/'
-                      '${job.roadCells.length} tiles laid · one per check-in',
+                      '${job.roadCells.length} tiles · lands whole next check-in',
                 WorldConstructionKind.bridge =>
                   '${job.stagesDone}/${job.bridgeDeliveryCells.length} cells raised · one per check-in',
               }),

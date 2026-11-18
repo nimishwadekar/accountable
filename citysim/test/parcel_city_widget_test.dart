@@ -215,7 +215,8 @@ void main() {
       ]);
       expect(store.state?.roads, isEmpty, reason: 'nothing delivered yet');
 
-      // Creep: a day passes, the check-in lays the first tile.
+      // Delivery: a day passes, the check-in lands the whole stretch
+      // and settles it — one day of waiting, whatever the length.
       final advanceButton = find.text('+1 day');
       await tester.scrollUntilVisible(
         advanceButton,
@@ -234,9 +235,14 @@ void main() {
         isTrue,
       );
       expect(
-        store.state?.roads.where((road) => road.projectId == 'construction-1'),
-        hasLength(1),
-        reason: 'one tile delivered, one still creeping',
+        store.state?.roads.any((road) => road.cell == const CellCoord(6, 4)),
+        isTrue,
+        reason: 'the whole stretch landed on one check-in',
+      );
+      expect(
+        store.state?.constructions,
+        isEmpty,
+        reason: 'the settled stretch leaves no project behind',
       );
 
       tester.view.physicalSize = const Size(320, 800);
@@ -656,9 +662,14 @@ void main() {
     expect(find.textContaining('Buy road plan'), findsOneWidget);
     await tester.tap(find.textContaining('Buy road plan'));
     await tester.pump();
-    // The purchase committed to Beta: the road tool shows the creep
-    // card for the new stretch.
-    expect(find.text('0/2 tiles laid · one more per check-in'), findsOneWidget);
+    // The purchase committed to Beta: the road tool shows the
+    // progress card for the new stretch.
+    expect(
+      find.text(
+        '0/2 tiles laid · the whole stretch lands on the next check-in',
+      ),
+      findsOneWidget,
+    );
 
     // The save spliced Beta's block only.
     expect(store.states['city_2']!.constructions, hasLength(1));

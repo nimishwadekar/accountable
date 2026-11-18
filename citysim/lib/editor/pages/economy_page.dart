@@ -56,8 +56,8 @@ class _EconomyPageState extends State<EconomyPage> {
                 min: 0,
                 help:
                     'Upfront coins per tile of a road stretch plan. The '
-                    'whole stretch is paid at planning, then creeps one '
-                    'tile per check-in.',
+                    'whole stretch is paid at planning, then lands whole '
+                    'on the next check-in.',
                 onChanged: (v) => _edit((e) => e['roadTileCostCoins'] = v),
               ),
             ),
@@ -268,6 +268,23 @@ class _EconomyPageState extends State<EconomyPage> {
                     'trickle of income.',
                 onChanged: (v) =>
                     _edit((e) => e['contentmentFloorPercent'] = v),
+              ),
+            ),
+            SizedBox(
+              width: 180,
+              child: IntField(
+                label: 'Home tax unemployment floor %',
+                value: asInt(economy['homeTaxUnemploymentFloorPercent']),
+                min: 0,
+                max: 100,
+                help:
+                    'Homes pay at least this percentage of their levy '
+                    'regardless of employment; full employment tops the '
+                    'rate back up to 100. The floor keeps a homes-only '
+                    'town on the economy’s life support instead of '
+                    'soft-locking it out of taxes entirely.',
+                onChanged: (v) =>
+                    _edit((e) => e['homeTaxUnemploymentFloorPercent'] = v),
               ),
             ),
             SizedBox(

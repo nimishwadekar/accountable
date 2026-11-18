@@ -85,48 +85,41 @@ ParcelWorldState checkInWorldForToday(
         );
         nextEvent++;
       case WorldConstructionKind.road:
-        // Delivery is the road rows themselves: the next planned
-        // tile without a row is the one this check-in lays.
-        final delivered = roads
-            .where((road) => road.projectId == job.id)
-            .length;
+        // Delivery is the road rows themselves: the whole stretch
+        // lands on the first check-in after its plan is bought —
+        // one day of waiting, whatever the length. Tiles once crept
+        // in one per check-in per plan, which let a stack of
+        // single-tile plans deliver far faster than one long street:
+        // a knowledge gate on the opening that whole-stretch
+        // delivery removes.
         advanced++;
-        if (delivered >= job.roadCells.length) {
-          constructions.add(job);
-          break;
-        }
-        final cell = job.roadCells[delivered];
-        roads.add(
-          RoadSegment(
-            id: 'road-${job.id}-${cell.key}',
-            cell: cell,
-            style: RoadStyle.asphalt,
-            pricePaid: content.economy.roadTileCostCoins,
-            completedAtDay: state.constructionDay,
-            projectId: job.id,
-          ),
-        );
-        if (delivered + 1 == job.roadCells.length) {
-          roads = [
-            for (final road in roads)
-              road.projectId == job.id ? _detachProject(road) : road,
-          ];
-          completions.add('a ${job.roadCells.length}-tile road stretch');
-          events.add(
-            _event(
-              state,
-              kind: 'road-project-complete',
-              description: 'Road stretch completed',
-              payload: {'projectId': job.id, 'cells': job.roadCells.length},
-              eventNumber: nextEvent,
+        for (final cell in job.roadCells) {
+          roads.add(
+            RoadSegment(
+              id: 'road-${job.id}-${cell.key}',
+              cell: cell,
+              style: RoadStyle.asphalt,
+              pricePaid: content.economy.roadTileCostCoins,
+              completedAtDay: state.constructionDay,
+              projectId: job.id,
             ),
           );
-          nextEvent++;
-        } else {
-          // Unfinished: the plan stays in flight — its delivery is
-          // the road rows, so the job itself carries over unchanged.
-          constructions.add(job);
         }
+        roads = [
+          for (final road in roads)
+            road.projectId == job.id ? _detachProject(road) : road,
+        ];
+        completions.add('a ${job.roadCells.length}-tile road stretch');
+        events.add(
+          _event(
+            state,
+            kind: 'road-project-complete',
+            description: 'Road stretch completed',
+            payload: {'projectId': job.id, 'cells': job.roadCells.length},
+            eventNumber: nextEvent,
+          ),
+        );
+        nextEvent++;
       case WorldConstructionKind.bridge:
         final cells = job.bridgeDeliveryCells;
         final done = job.stagesDone + 1;
@@ -274,6 +267,9 @@ ParcelWorldState checkInWorldForToday(
       'upkeepShortfall': shortfall,
       'net': taxes - paid,
       'contentment': ledger.contentment,
+      // The unemployment that produced today's taxes — the report
+      // explains income with it.
+      'unemployed': state.unemployment,
       'stagesAdvanced': advanced,
       'completions': completions,
       'populationArrived': populationArrived,
@@ -385,8 +381,8 @@ ParcelWorldState purchaseParcel(
 }
 
 /// Buys a road stretch plan: the whole price is paid upfront from
-/// the treasury, then the tiles creep in one per check-in. Road
-/// creep is automatic.
+/// the treasury, then the whole stretch lands on the next check-in.
+/// Delivery is automatic.
 ParcelWorldState planRoadStretch(
   ParcelWorldState state,
   ContentBundle content,

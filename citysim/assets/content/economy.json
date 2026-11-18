@@ -5,6 +5,7 @@
   "bridgeTaxCoinsPerTile": 0,
   "bridgeUpkeepCoinsPerTile": 300,
   "contentmentFloorPercent": 30,
+  "homeTaxUnemploymentFloorPercent": 30,
   "employmentPercentPerCheckIn": 5,
   "jobPullPercentPerCheckIn": 10,
   "migrationPercentPerCheckIn": 2,
@@ -19,7 +20,7 @@
   "roadTileCostCoins": 2500,
   "roadUpkeepCoinsPerTile": 10,
   "serviceRequirementPopulation": 300,
-  "startingTreasuryCoins": 100000,
+  "startingTreasuryCoins": 20000,
   "unemploymentTolerancePercent": 10,
   "waitingPopulationCapPercent": 10
 }

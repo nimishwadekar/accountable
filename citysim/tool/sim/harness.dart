@@ -442,6 +442,14 @@ class SimHarness {
     final queries = WorldQueries(state, terrain);
     _Placement? pending;
     for (final origin in _scanOrigins()) {
+      // Cheap pre-filter: every footprint contains its origin cell,
+      // so an occupied origin can never host anything. In a dense
+      // town this skips nearly the whole scan.
+      if (queries.structuresByCell.containsKey(origin) ||
+          queries.roadsByCell.containsKey(origin) ||
+          queries.reservedCells.contains(origin)) {
+        continue;
+      }
       final placement = _placementFor(definition, origin, queries);
       if (placement == null) continue;
       if (placement.missingRoadCells.isEmpty) {
@@ -503,9 +511,16 @@ class SimHarness {
 
   /// Candidate origins, scanning outward from the town's centre so
   /// towns grow compactly. Deterministic: the same town state
-  /// always suggests the same next spot.
+  /// always suggests the same next spot. Cached across build
+  /// attempts — the order only changes when land is bought.
+  List<CellCoord>? _scanCache;
+  int _scanCacheParcels = -1;
+
   List<CellCoord> _scanOrigins() {
     if (state.parcels.isEmpty) return const [];
+    if (_scanCache != null && _scanCacheParcels == state.parcels.length) {
+      return _scanCache!;
+    }
     var centreColumn = 0.0;
     var centreRow = 0.0;
     for (final parcel in state.parcels) {
@@ -529,6 +544,8 @@ class SimHarness {
       if (a.row != b.row) return a.row.compareTo(b.row);
       return a.column.compareTo(b.column);
     });
+    _scanCache = origins;
+    _scanCacheParcels = state.parcels.length;
     return origins;
   }
 

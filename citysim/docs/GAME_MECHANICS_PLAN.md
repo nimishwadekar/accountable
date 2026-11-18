@@ -71,9 +71,14 @@ with five or more land cells, so a new game can always be founded.
   2026-11-17): buildings are gated by land, road access, and staged time —
   never by money. Coins buy parcels, roads, and bridges; nothing else.
   Decorations always were free; the pin now covers every model.
-- Parcel purchases are paid immediately. Road-stretch and bridge plans are
-  bought upfront from the wallet; the tiles then creep in one per check-in.
-  Structure plans complete one stage per check-in.
+- Parcel purchases are paid immediately. Road-stretch plans are
+  bought upfront from the wallet and the whole stretch lands on the
+  next check-in (one day of waiting, whatever the length — tiles once
+  crept one per check-in per plan, which let a stack of single-tile
+  plans deliver far faster than one long street, a knowledge gate
+  found by a playtest reviewer). Bridge plans are bought upfront and
+  the deck still builds one tile per check-in. Structure plans
+  complete one stage per check-in.
 - Calendar advancement alone never completes a project.
 
 ### The realistic economy (decided 2026-11-17)
@@ -90,7 +95,14 @@ free-construction rule intact. Capacities count people, not households:
 - **Taxes are a per-capita levy** at report time: ≈ $170 per housed
   resident and $250 per job per check-in in the shipped content (civic
   buildings pay nothing — services are pure cost, which is the contentment
-  trade-off). The rate is the one pacing dial: realistic annual property
+  trade-off). Homes pay at least the **unemployment floor** — 30% of
+  their levy, with full employment topping the rate back up to 100%
+  (added 2026-11-17 after a playtest reviewer soft-locked: a homes-only
+  town had zero jobs, therefore zero taxes, therefore no road or land to
+  place a café with, forever — unemployed people still pay rent and
+  sales taxes in reality, so the floor is both the fix and the more
+  realistic rule). The town report shows unemployment whenever it is
+  above zero. The rate is the one pacing dial: realistic annual property
   rates (~1.2%/yr) would recoup a building in decades, so the levy runs at
   per-report scale and a blended town roughly doubles its invested value
   monthly.
@@ -455,9 +467,9 @@ collect taxes, net upkeep, advance every active construction one stage
   built by labor (a per-model planning fee for landmarks can be
   revisited later). Parcels are population-scaled (base plus a
   per-population surcharge), keeping the save-up cadence constant as
-  the town grows. Road stretch plans and bridges are bought upfront
-  and then build one tile per check-in — creeping construction
-  replaces per-tile coin funding.
+  the town grows. Road stretch plans are bought upfront and land
+  whole on the next check-in; bridge decks still build one tile per
+  check-in — visible construction replaces per-tile coin funding.
 - **No coin-rush.** Growth costs check-ins, not money; a
   pay-to-finish-a-stage knob can be reconsidered later if the waiting
   ever feels dead.
