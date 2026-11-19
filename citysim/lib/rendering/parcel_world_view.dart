@@ -55,6 +55,7 @@ class ParcelWorldView extends StatefulWidget {
     this.highlightCells = const {},
     this.cameraResetToken = 0,
     this.facingOverride,
+    this.foundingFacing,
     this.structurePicking = true,
     this.dimStructures = false,
     this.parcelMode = false,
@@ -124,6 +125,11 @@ class ParcelWorldView extends StatefulWidget {
   /// Player's pre-placement door-side choice for the footprint preview,
   /// toggled by the floating swap button while roads touch both halves.
   final String? facingOverride;
+
+  /// The founding hall's front direction while placing it — the
+  /// painter draws an arrow on the road cell founding will plant,
+  /// pointing the chosen way. Null whenever the hall isn't placing.
+  final String? foundingFacing;
 
   /// Whether taps pick standing structures by their sprites. Only the
   /// inspect tool wants that; every other tool targets the tapped cell
@@ -492,6 +498,7 @@ class _ParcelWorldViewState extends State<ParcelWorldView>
                   highlightCells: widget.highlightCells,
                   hoverCell: _hoverCell,
                   facingOverride: widget.facingOverride,
+                  foundingFacing: widget.foundingFacing,
                   dimStructures: widget.dimStructures,
                   ambient: _ambient,
                   terrainCache: _terrainCache,
@@ -1443,6 +1450,7 @@ class _ParcelWorldPainter extends CustomPainter {
     required this.highlightCells,
     required this.hoverCell,
     required this.facingOverride,
+    this.foundingFacing,
     required this.dimStructures,
     required this.ambient,
     required this.terrainCache,
@@ -1505,6 +1513,10 @@ class _ParcelWorldPainter extends CustomPainter {
   final Set<CellCoord> highlightCells;
   final CellCoord? hoverCell;
   final String? facingOverride;
+
+  /// The founding hall's front direction while placing — see the
+  /// widget field of the same name.
+  final String? foundingFacing;
 
   /// Whether standing structures draw translucent (x-ray) so tiles and
   /// banks behind them stay visible while the road and bridge tools
@@ -3634,6 +3646,24 @@ class _ParcelWorldPainter extends CustomPainter {
               fill: invalid ? const Color(0x33B3261E) : const Color(0x334BC69B),
             );
           }
+          // The founding arrow: a bold chevron on the road cell
+          // founding will plant, pointing the hall's chosen front.
+          if (definition.isRoot && foundingFacing != null) {
+            final front = frontRoadCellForFacing(
+              structureFootprint(definition, selectedCell!),
+              foundingFacing,
+            );
+            if (front != null) {
+              _drawFoundingArrow(
+                canvas,
+                size,
+                front,
+                foundingFacing!,
+                scale: scale,
+                offset: offset,
+              );
+            }
+          }
         }
         // Pre-placement preview: show the door side this plan would get,
         // using the same roll and road-side rule placement will apply.
@@ -3922,6 +3952,7 @@ class _ParcelWorldPainter extends CustomPainter {
       oldDelegate.bridgeStartCell != bridgeStartCell ||
       oldDelegate.bridgeEndCell != bridgeEndCell ||
       oldDelegate.facingOverride != facingOverride ||
+      oldDelegate.foundingFacing != foundingFacing ||
       oldDelegate.dimStructures != dimStructures ||
       oldDelegate.parcelMode != parcelMode ||
       oldDelegate.showTileGrid != showTileGrid ||
@@ -4190,6 +4221,54 @@ void _drawCellOutline(
       ..color = stroke
       ..strokeWidth = 1.5 * scale.clamp(0.7, 1.6)
       ..style = PaintingStyle.stroke,
+  );
+}
+
+/// The founding arrow: a compass chevron on the road cell founding
+/// plants, pointing the hall's chosen front. Grid north/east project
+/// to the screen's up-right and down-right halves of the diamond,
+/// matching how the door facings map.
+void _drawFoundingArrow(
+  Canvas canvas,
+  Size size,
+  CellCoord frontCell,
+  String facing, {
+  required double scale,
+  required Offset offset,
+}) {
+  final center = _worldToScreen(
+    _cellWorldCenter(frontCell),
+    size,
+    scale,
+    offset,
+  );
+  final direction = switch (facing) {
+    'north' => const Offset(2, -1),
+    'east' => const Offset(2, 1),
+    'south' => const Offset(-2, 1),
+    _ => const Offset(-2, -1),
+  };
+  final unit = direction / direction.distance;
+  final side = Offset(-unit.dy, unit.dx);
+  final length = 13.0 * scale;
+  final width = 8.0 * scale;
+  final tip = center + unit * length;
+  final left = center - unit * length * 0.4 + side * width;
+  final right = center - unit * length * 0.4 - side * width;
+  final path = Path()
+    ..moveTo(tip.dx, tip.dy)
+    ..lineTo(left.dx, left.dy)
+    ..lineTo(center.dx, center.dy)
+    ..lineTo(right.dx, right.dy)
+    ..close();
+  canvas.drawPath(path, Paint()..color = const Color(0xFF1E6552));
+  canvas.drawPath(
+    path,
+    Paint()
+      ..color = Colors.white
+      ..strokeWidth = 1.6 * scale.clamp(0.7, 1.6)
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round,
   );
 }
 

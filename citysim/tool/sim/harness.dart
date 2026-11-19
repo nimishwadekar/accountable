@@ -343,24 +343,109 @@ class SimHarness {
     return best;
   }
 
+  /// Founds the city: the hall needs a 3×3 of dry land plus a dry
+  /// front cell, all inside the parcel. The scouted parcel hosts it
+  /// or the founder drives on — a full scan, the way a player
+  /// passes a valley with no room.
   bool foundAt(ParcelCoord coord) {
-    try {
-      state = purchaseParcel(state, content, terrain, coord);
-      _act(
-        SimAction('found', 'parcel (${coord.x},${coord.y}), free', coins: 0),
-      );
-      return true;
-    } on WorldRuleViolation catch (e) {
-      _act(
-        SimAction(
-          'found',
-          'parcel (${coord.x},${coord.y})',
-          ok: false,
-          reason: e.message,
-        ),
-      );
-      return false;
+    if (_tryFoundAt(coord)) return true;
+    final charted =
+        content.terrain.parcels.keys
+            .where(
+              (c) =>
+                  terrain.sample(c.origin(state.parcelSize), state.seed).kind !=
+                  TerrainKind.fog,
+            )
+            .toList()
+          ..shuffle(rng);
+    for (final candidate in charted) {
+      if (_tryFoundAt(candidate)) return true;
     }
+    _act(
+      SimAction(
+        'found',
+        'parcel (${coord.x},${coord.y})',
+        ok: false,
+        reason: 'no charted parcel can host the city hall',
+      ),
+    );
+    return false;
+  }
+
+  bool _tryFoundAt(ParcelCoord coord) {
+    final root = rootHallModel(content);
+    if (root == null) return false;
+    final size = state.parcelSize;
+    final northWest = coord.origin(size);
+    // The hall prefers the rim with open country ahead of its front:
+    // the whole parcel stays buildable behind it, and the front road
+    // starts the town's main street outward. Score every legal
+    // (spot, facing) by the open run ahead and found on the best.
+    CellCoord? bestOrigin;
+    String? bestFacing;
+    var bestRun = -1;
+    for (var dy = 0; dy <= size - 3; dy++) {
+      for (var dx = 0; dx <= size - 3; dx++) {
+        final origin = CellCoord(northWest.column + dx, northWest.row + dy);
+        for (final facing in const ['south', 'east', 'north', 'west']) {
+          final CityFoundingQuote quote;
+          try {
+            quote = quoteCityFounding(
+              state,
+              content,
+              terrain,
+              origin: origin,
+              facing: facing,
+            );
+          } on WorldRuleViolation {
+            continue;
+          }
+          final run = _openRunAhead(quote.frontCell, facing);
+          if (run > bestRun) {
+            bestRun = run;
+            bestOrigin = origin;
+            bestFacing = facing;
+          }
+        }
+      }
+    }
+    if (bestOrigin == null || bestFacing == null) return false;
+    state = foundCity(
+      state,
+      content,
+      terrain,
+      origin: bestOrigin,
+      facing: bestFacing,
+    );
+    _act(
+      SimAction(
+        'found',
+        'hall at (${bestOrigin.column},${bestOrigin.row}) facing '
+            '$bestFacing',
+        coins: 0,
+      ),
+    );
+    return true;
+  }
+
+  /// Consecutive land cells from [front] in [facing]'s direction —
+  /// the open ground the main street can grow into. Water ends the
+  /// run; unowned parcels do not (they can be bought).
+  int _openRunAhead(CellCoord front, String facing) {
+    final step = switch (facing) {
+      'north' => const CellCoord(0, -1),
+      'south' => const CellCoord(0, 1),
+      'east' => const CellCoord(1, 0),
+      _ => const CellCoord(-1, 0),
+    };
+    var run = 0;
+    var cursor = front;
+    for (var i = 0; i < state.parcelSize * 2; i++) {
+      cursor = CellCoord(cursor.column + step.column, cursor.row + step.row);
+      if (!terrain.sample(cursor, state.seed).isLand) break;
+      run++;
+    }
+    return run;
   }
 
   /// Buys the best adjacent parcel if the treasury covers it.
@@ -440,7 +525,12 @@ class SimHarness {
       return BuildOutcome.notUnlocked;
     }
     final queries = WorldQueries(state, terrain);
+    // The outside connection once per attempt: only roads linked to
+    // the hall's front road carry buildings.
+    final connected = connectedRoadCells(state, content);
     _Placement? pending;
+    List<CellCoord>? pendingConnector;
+    var pendingCost = 1 << 30;
     for (final origin in _scanOrigins()) {
       // Cheap pre-filter: every footprint contains its origin cell,
       // so an occupied origin can never host anything. In a dense
@@ -450,23 +540,222 @@ class SimHarness {
           queries.reservedCells.contains(origin)) {
         continue;
       }
-      final placement = _placementFor(definition, origin, queries);
+      final placement = _placementFor(definition, origin, queries, connected);
       if (placement == null) continue;
       if (placement.missingRoadCells.isEmpty) {
         if (_place(catalogueId, placement)) return BuildOutcome.built;
         continue;
       }
-      pending ??= placement;
+      // A frontage that touches no connected tile needs a connector —
+      // and one that has no path is skipped outright: an orphan road
+      // carries no buildings and is pure waste. Among the rest, the
+      // cheapest total paving wins, the street a player would extend.
+      final touches = placement.missingRoadCells.any(
+        (cell) =>
+            connected.contains(cell) || cell.neighbors.any(connected.contains),
+      );
+      List<CellCoord>? connector;
+      if (!touches) {
+        connector = _connectingStroke(
+          placement.missingRoadCells.first,
+          connected,
+          avoid: placement.footprint,
+        );
+        if (connector == null) continue;
+      }
+      final cost = placement.missingRoadCells.length + (connector?.length ?? 0);
+      final roadPlan = [...placement.missingRoadCells, ...?connector];
+      // Every consuming act must leave the network breathing: the
+      // footprint and its roads together may never take the last
+      // free cells touching the connected streets, or nothing can
+      // ever attach again.
+      if (!_keepsBreathing(
+        placement.footprint.toSet(),
+        roadPlan,
+        queries,
+        connected,
+      )) {
+        continue;
+      }
+      if (cost < pendingCost) {
+        pendingCost = cost;
+        pending = placement;
+        pendingConnector = connector;
+      }
     }
     if (pending == null) {
+      // Nothing placeable at any price: extend a street into open
+      // ground instead of giving up — the street-first loop every
+      // player runs.
+      if (extendStreet()) return BuildOutcome.roadPlanned;
       noSpaceThisSession = true;
       return BuildOutcome.noSpace;
     }
-    final planned = planRoads(
-      pending.missingRoadCells,
-      splitStrokes: splitStrokes,
-    );
+    // A connector that outprices the wallet is paved the player's
+    // way: extend the street in affordable pieces, and the frontage
+    // arrives with it.
+    final tileCost = content.economy.roadTileCostCoins;
+    if (pendingCost * tileCost > state.coins) {
+      return extendStreet()
+          ? BuildOutcome.roadPlanned
+          : BuildOutcome.cannotAfford;
+    }
+    final planned = planRoads([
+      ...pending.missingRoadCells,
+      ...?pendingConnector,
+    ], splitStrokes: splitStrokes);
     return planned ? BuildOutcome.roadPlanned : BuildOutcome.cannotAfford;
+  }
+
+  /// Extends a street from the connected network into open ground:
+  /// the straight run ahead of some escape cell. A street is at
+  /// least three tiles or nothing — paving one tile the moment the
+  /// wallet crosses one tile's price spends every scrap of income on
+  /// stubs that front nothing, where saving a few days buys a run
+  /// buildings can actually line.
+  bool extendStreet({int minTiles = 3, int maxTiles = 6}) {
+    final queries = WorldQueries(state, terrain);
+    final connected = connectedRoadCells(state, content);
+    if (connected.isEmpty) return false;
+    bool paveable(CellCoord cell) =>
+        !queries.roadsByCell.containsKey(cell) &&
+        !queries.structuresByCell.containsKey(cell) &&
+        !queries.reservedCells.contains(cell) &&
+        queries.ownsCell(cell) &&
+        queries.terrainAt(cell).isLand;
+    final affordable = (state.coins ~/ content.economy.roadTileCostCoins).clamp(
+      0,
+      maxTiles,
+    );
+    if (affordable < minTiles) return false;
+    List<CellCoord>? best;
+    for (final road in connected) {
+      for (final start in road.neighbors) {
+        if (!paveable(start)) continue;
+        for (final direction in [
+          const CellCoord(1, 0),
+          const CellCoord(-1, 0),
+          const CellCoord(0, 1),
+          const CellCoord(0, -1),
+        ]) {
+          final run = <CellCoord>[start];
+          var cursor = start;
+          while (run.length < affordable) {
+            final next = CellCoord(
+              cursor.column + direction.column,
+              cursor.row + direction.row,
+            );
+            if (!paveable(next)) break;
+            run.add(next);
+            cursor = next;
+          }
+          if (best == null || run.length > best.length) {
+            best = run;
+          }
+        }
+      }
+    }
+    if (best == null || best.isEmpty) return false;
+    if (!_keepsBreathing(const {}, best, queries, connected)) return false;
+    return planRoads(best, splitStrokes: false);
+  }
+
+  /// Whether the network still breathes after [footprint] and
+  /// [newRoads] land: at least two free owned land cells remain
+  /// adjacent to the (grown) connected streets — the places a future
+  /// street can attach. Lined placements guard themselves inside
+  /// [_placementFor]; everything else that consumes ground passes
+  /// through here.
+  bool _keepsBreathing(
+    Set<CellCoord> footprint,
+    List<CellCoord> newRoads,
+    WorldQueries queries,
+    Set<CellCoord> connected,
+  ) {
+    final blocked = {...footprint, ...newRoads};
+    bool free(CellCoord cell) =>
+        !blocked.contains(cell) &&
+        !newRoads.contains(cell) &&
+        !queries.roadsByCell.containsKey(cell) &&
+        !queries.structuresByCell.containsKey(cell) &&
+        !queries.reservedCells.contains(cell) &&
+        queries.ownsCell(cell) &&
+        queries.terrainAt(cell).isLand;
+    final escape = <CellCoord>{
+      for (final road in {...connected, ...newRoads})
+        for (final neighbour in road.neighbors)
+          if (free(neighbour)) neighbour,
+    };
+    return escape.length >= 2;
+  }
+
+  /// The shortest connector of new road cells linking [from] back to
+  /// the connected network, paving around whatever already stands —
+  /// structures, rising sites, roads that are not the network's, and
+  /// the cells in [avoid]. Null when no free path exists.
+  List<CellCoord>? _connectingStroke(
+    CellCoord from,
+    Set<CellCoord> connected, {
+    List<CellCoord> avoid = const [],
+  }) {
+    final queries = WorldQueries(state, terrain);
+    final blocked = avoid.toSet();
+    bool paveable(CellCoord cell) =>
+        !queries.roadsByCell.containsKey(cell) &&
+        !queries.structuresByCell.containsKey(cell) &&
+        !queries.reservedCells.contains(cell) &&
+        !blocked.contains(cell) &&
+        queries.ownsCell(cell) &&
+        queries.terrainAt(cell).isLand;
+    final queue = <CellCoord>[from];
+    final cameFrom = <CellCoord, CellCoord>{};
+    final seen = {from};
+    while (queue.isNotEmpty) {
+      final cell = queue.removeAt(0);
+      if (cell != from && cell.neighbors.any(connected.contains)) {
+        final path = <CellCoord>[cell];
+        var cursor = cell;
+        while (true) {
+          final previous = cameFrom[cursor];
+          if (previous == null || previous == from) break;
+          cursor = previous;
+          path.add(cursor);
+        }
+        return path.reversed.toList();
+      }
+      for (final neighbour in cell.neighbors) {
+        if (seen.contains(neighbour) || !paveable(neighbour)) continue;
+        seen.add(neighbour);
+        cameFrom[neighbour] = cell;
+        queue.add(neighbour);
+      }
+    }
+    return null;
+  }
+
+  /// Whether [catalogueId] has a spot on the existing connected
+  /// street — lined, connected, no paving needed.
+  bool canLineUp(String catalogueId) {
+    final definition = content.structure(catalogueId);
+    if (definition == null ||
+        !definition.enabled ||
+        !state.unlockedCatalogueIds.contains(catalogueId)) {
+      return false;
+    }
+    final queries = WorldQueries(state, terrain);
+    final connected = connectedRoadCells(state, content);
+    for (final origin in _scanOrigins()) {
+      if (queries.structuresByCell.containsKey(origin) ||
+          queries.roadsByCell.containsKey(origin) ||
+          queries.reservedCells.contains(origin)) {
+        continue;
+      }
+      final placement = _placementFor(definition, origin, queries, connected);
+      if (placement != null && placement.missingRoadCells.isEmpty) {
+        return true;
+      }
+    }
+    return false;
   }
 
   bool _place(String catalogueId, _Placement placement) {
@@ -559,9 +848,26 @@ class SimHarness {
     StructureDefinition definition,
     CellCoord origin,
     WorldQueries queries,
+    Set<CellCoord> connected,
   ) {
     const sides = ['north', 'east', 'south', 'west'];
     final sideOptions = <(int, _Placement)>[];
+    // The network's escape cells: free ground still touching a
+    // connected road, where a future street can attach. A town that
+    // builds on all of them walls itself in — nothing can connect
+    // again — so placements leave two open (the cross-street-gap
+    // rule every reviewer learned the hard way).
+    final escape = <CellCoord>{
+      for (final road in queries.roadsByCell.keys)
+        if (connected.contains(road))
+          for (final neighbour in road.neighbors)
+            if (!queries.roadsByCell.containsKey(neighbour) &&
+                !queries.structuresByCell.containsKey(neighbour) &&
+                !queries.reservedCells.contains(neighbour) &&
+                queries.ownsCell(neighbour) &&
+                queries.terrainAt(neighbour).isLand)
+              neighbour,
+    };
     for (final side in sides) {
       final turns = footprintTurnsFor(definition, side);
       final footprint = structureFootprint(
@@ -587,7 +893,13 @@ class SimHarness {
       final missing = <CellCoord>[];
       var buildable = true;
       for (final cell in edge) {
-        if (queries.roadsByCell.containsKey(cell)) continue;
+        // A bridge bank is not frontage — it falls to the missing
+        // list, and being a road it can never be paved, so the side
+        // is simply unusable.
+        if (queries.roadsByCell.containsKey(cell) &&
+            !queries.bridgeBankCells.contains(cell)) {
+          continue;
+        }
         lined = false;
         missing.add(cell);
         if (!queries.ownsCell(cell) ||
@@ -598,6 +910,14 @@ class SimHarness {
         }
       }
       if (lined) {
+        // A lined side must also belong to the outside connection —
+        // a road beside the building is not enough, it must be THE
+        // road, linked back to the hall's front.
+        if (!edge.any(connected.contains)) continue;
+        // And it must not seal the last escape cells: a footprint on
+        // the network's last free touchpoints walls the town in.
+        final consumed = footprint.where(escape.contains).length;
+        if (consumed > 0 && escape.length - consumed < 2) continue;
         return _Placement(
           origin: origin,
           turns: turns,
@@ -666,6 +986,15 @@ class SimHarness {
   /// parallel. The savvy-player trick, and a pacing question worth
   /// measuring.
   bool planRoads(List<CellCoord> cells, {required bool splitStrokes}) {
+    if (cells.isEmpty) return true;
+    // A frontage plus its connector can name a cell twice — the
+    // connector's path may cross the frontage it serves. Strokes
+    // share every named cell exactly once.
+    final seen = <CellCoord>{};
+    cells = [
+      for (final cell in cells)
+        if (seen.add(cell)) cell,
+    ];
     if (cells.isEmpty) return true;
     // Clear the ground before quoting: nature props on a tile make
     // the quote refuse, and a player clears the brush before buying

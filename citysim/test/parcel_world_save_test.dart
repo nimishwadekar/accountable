@@ -75,25 +75,32 @@ void main() {
       checkInWorldForToday(newWorld(), content),
       500000,
     );
-    world = purchaseParcel(world, content, terrain, const ParcelCoord(0, 0));
+    world = foundCity(
+      world,
+      content,
+      terrain,
+      origin: const CellCoord(3, 1),
+      facing: 'south',
+    );
     world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
     world = purchaseParcel(world, content, terrain, const ParcelCoord(2, 0));
     world = planRoadStretch(
       world,
       content,
       terrain,
-      cells: [for (var column = 4; column <= 6; column++) CellCoord(column, 4)],
+      cells: [for (var column = 5; column <= 6; column++) CellCoord(column, 4)],
     );
 
     final reloaded = await store.load();
     expect(reloaded, isNull, reason: 'no documents yet');
     await save(store, world);
     final midProject = (await store.load())!.activeCity;
-    expect(midProject.constructions.single.roadCells, hasLength(3));
+    final midRoad = midProject.constructions.lastWhere(
+      (job) => job.kind == WorldConstructionKind.road,
+    );
+    expect(midRoad.roadCells, hasLength(2));
     expect(
-      midProject.roads.where(
-        (road) => road.projectId == midProject.constructions.single.id,
-      ),
+      midProject.roads.where((road) => road.projectId == midRoad.id),
       isEmpty,
       reason: 'nothing delivered — the plan waits for its check-in',
     );
@@ -126,7 +133,8 @@ void main() {
     played = nextDay(played);
     played = nextDay(played);
     // The bridge spans the east channel from vacant banks: the road
-    // stops at (7,4) so both bridge banks are free land.
+    // stops before the near bank so both bridge banks are free land
+    // (the founding road at (4,4) plus three landed tiles).
     played = startBridgeConstruction(
       played,
       content,
@@ -144,7 +152,7 @@ void main() {
       content,
       terrain,
       catalogueId: 'cafe',
-      origin: const CellCoord(6, 5),
+      origin: const CellCoord(5, 5),
     );
 
     await save(store, played);
@@ -152,9 +160,14 @@ void main() {
     expect(
       finalWorld.roads,
       hasLength(5),
-      reason: '3 planned + 2 bridge banks',
+      reason: 'founding road + 2 planned + 2 bridge banks',
     );
-    expect(finalWorld.structures.single.catalogueId, 'small-home');
+    expect(
+      finalWorld.structures
+          .lastWhere((structure) => structure.catalogueId == 'small-home')
+          .catalogueId,
+      'small-home',
+    );
     expect(finalWorld.bridges.single.nearBank, const CellCoord(7, 4));
     expect(finalWorld.bridges.single.farBank, const CellCoord(16, 4));
     expect(finalWorld.constructions.single.catalogueId, 'cafe');
@@ -201,13 +214,43 @@ void main() {
       api: api,
     );
 
-    // Finish a road stretch east of the founding parcel's road.
-    var world = grantWorldDebugCoins(
-      checkInWorldForToday(newWorld(), content),
-      60000,
+    // Finish a road stretch east of the founding road. The settled
+    // start is codec-assembled (hall complete, front road at (4,4))
+    // so the road plan is the town's first project — the numbering
+    // story this test tells.
+    var world = sheetTablesToWorld(
+      SheetTables(
+        userData: {
+          'seed': '99',
+          'coins': '60000',
+          'coins_earned': '60000',
+          'coins_spent': '0',
+          'simulated_date': '2026-11-02',
+          'high_water_date': '2026-11-02',
+          'construction_day': '1',
+        },
+        ownedParcels: const [
+          ['0', '0'],
+          ['1', '0'],
+        ],
+        tiles: const [
+          ['4', '4', 'road', 'complete', 'asphalt', '', '', ''],
+          [
+            '3',
+            '1',
+            'structure',
+            'complete',
+            'city-hall',
+            'city-hall',
+            'south',
+            '',
+          ],
+        ],
+        projects: const [],
+      ),
+      content: content,
+      terrainProvider: terrain,
     );
-    world = purchaseParcel(world, content, terrain, const ParcelCoord(0, 0));
-    world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
     world = planRoadStretch(
       world,
       content,
@@ -270,9 +313,9 @@ void main() {
     );
     expect(
       second.roads,
-      hasLength(3),
+      hasLength(4),
       reason:
-          '3 finished; the new plan is '
+          '4 finished (founding road plus three); the new plan is '
           'still undelivered',
     );
   });
@@ -292,7 +335,13 @@ void main() {
       checkInWorldForToday(newWorld(), content),
       100,
     );
-    first = purchaseParcel(first, content, terrain, const ParcelCoord(0, 0));
+    first = foundCity(
+      first,
+      content,
+      terrain,
+      origin: const CellCoord(3, 1),
+      facing: 'south',
+    );
     final second = newWorld();
     final tables = MultiCityTables(
       cities: [

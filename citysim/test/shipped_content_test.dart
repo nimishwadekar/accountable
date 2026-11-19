@@ -98,11 +98,25 @@ void main() {
     // The ladder is complete: every enabled model belongs to a
     // milestone or is legitimately nature-only (none are today).
     final assigned = {for (final milestone in milestones) ...milestone.models};
-    final enabled = {for (final model in content.purchaseableModels) model.id};
+    final enabled = {
+      for (final model in content.purchaseableModels)
+        if (!model.isRoot) model.id,
+    };
     expect(enabled.difference(assigned), isEmpty, reason: 'no strays');
     expect(assigned.difference(enabled), isEmpty, reason: 'no ghosts');
     // The fresh-game floor: a home unlocks from the start.
     expect(milestones.first.models, contains('small-home'));
+    // The founding hall is in no milestone by design: it places only
+    // through founding.
+    expect(
+      content.catalogue.where((model) => model.isRoot).single.id,
+      'city-hall',
+    );
+    expect(
+      assigned.contains('city-hall'),
+      isFalse,
+      reason: 'the hall never unlocks through milestones',
+    );
   });
 
   test('content seed snapshot holds the seeded defaults', () {
@@ -110,8 +124,19 @@ void main() {
     // starts from — the original nine models, the promoted Buggy
     // Studio pack art, and the promoted props. Editing them in the
     // editor is expected; editing them by accident in the JSON is not.
-    expect(content.catalogue, hasLength(40));
+    expect(content.catalogue, hasLength(41));
     final byId = {for (final model in content.catalogue) model.id: model};
+    // The founding hall: 3×3, pure ceremony — zero stats, five
+    // stages, church art as the placeholder.
+    expect(byId['city-hall']!.isRoot, true);
+    expect(byId['city-hall']!.footprintColumns, 3);
+    expect(byId['city-hall']!.footprintRows, 3);
+    expect(byId['city-hall']!.jobs, 0);
+    expect(byId['city-hall']!.taxCoins, 0);
+    expect(byId['city-hall']!.upkeepCoins, 0);
+    expect(byId['city-hall']!.constructionStages, 5);
+    expect(byId['city-hall']!.assetRoles, ['city-hall']);
+    expect(byId['city-hall']!.subcategory, 'civic');
     expect(byId['small-home']!.costCoins, 0);
     expect(byId['small-home']!.taxCoins, 500);
     expect(byId['small-home']!.upkeepCoins, 100);

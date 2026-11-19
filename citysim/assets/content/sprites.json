@@ -396,6 +396,22 @@
       "subcategory": "civic",
       "sways": false
     },
+    "city-hall": {
+      "baseOffsetY": 0,
+      "category": "buildings",
+      "codeReferenced": false,
+      "facings": {
+        "left": "sprites/buildings/civic/bld_church_a.png",
+        "right": "sprites/buildings/civic/bld_church_b.png"
+      },
+      "groundAnchor": [
+        0.5,
+        1
+      ],
+      "renderScale": 0.75,
+      "subcategory": "civic",
+      "sways": false
+    },
     "clinic": {
       "baseOffsetY": 0,
       "category": "buildings",

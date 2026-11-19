@@ -347,14 +347,16 @@ ParcelPurchaseQuote quoteParcelPurchase(
   if (claimedParcels.contains(candidate)) {
     throw const WorldRuleViolation('Another city has claimed that parcel.');
   }
-  // The founding purchase — a new game's first — is free and needs
-  // no neighbour, because nothing is owned yet. It still needs
-  // buildable ground: five or more land cells for the first road and
-  // home, so the opening can never dead-end on water. Every later
-  // purchase is normal: adjacent, and priced by the settlement's
-  // size.
-  final founding = state.parcels.isEmpty;
-  if (!founding && !candidate.neighbors.any(queries.ownsParcel)) {
+  // Founding is the hall's act now: before the first parcel a city
+  // can only place its city hall, whose landing claims the parcel.
+  // Every purchase after founding is normal: adjacent, and priced by
+  // the settlement's size.
+  if (state.parcels.isEmpty) {
+    throw const WorldRuleViolation(
+      'Place your city hall first — founding claims its parcel.',
+    );
+  }
+  if (!candidate.neighbors.any(queries.ownsParcel)) {
     throw const WorldRuleViolation('Buy a neighboring parcel to expand there.');
   }
   // Buyable means charted terrain — grass or water alike. Fog is the
@@ -371,21 +373,292 @@ ParcelPurchaseQuote quoteParcelPurchase(
       .cells(state.parcelSize)
       .map((cell) => terrainProvider.sample(cell, state.seed))
       .toList();
-  if (founding &&
-      cells.where((cell) => cell.isLand).length < foundingLandCells) {
-    throw const WorldRuleViolation(
-      'Your founding parcel needs at least $foundingLandCells land '
-      'cells — pick somewhere you can build.',
-    );
-  }
   final base = content.economy.parcelBaseCoins;
   final perPopulation = content.economy.parcelPerPopulationCoins;
   return ParcelPurchaseQuote(
     coord: candidate,
-    price: founding ? 0 : base + perPopulation * state.population,
+    price: base + perPopulation * state.population,
     cells: cells,
     basePrice: base,
     perPopulationCoins: perPopulation,
+  );
+}
+
+/// The catalogue's founding hall, if this content ships one. Content
+/// validation pins exactly one root model; null only in degenerate
+/// bundles tests build by hand.
+StructureDefinition? rootHallModel(ContentBundle content) {
+  for (final model in content.catalogue) {
+    if (model.isRoot) return model;
+  }
+  return null;
+}
+
+/// The road cell at the middle of a square footprint's front face,
+/// one cell out — where founding plants the network's root road.
+CellCoord? frontRoadCellForFacing(List<CellCoord> footprint, String? facing) {
+  if (facing == null || footprint.isEmpty) return null;
+  var minColumn = footprint.first.column;
+  var maxColumn = footprint.first.column;
+  var minRow = footprint.first.row;
+  var maxRow = footprint.first.row;
+  for (final cell in footprint) {
+    if (cell.column < minColumn) minColumn = cell.column;
+    if (cell.column > maxColumn) maxColumn = cell.column;
+    if (cell.row < minRow) minRow = cell.row;
+    if (cell.row > maxRow) maxRow = cell.row;
+  }
+  final centreColumn = (minColumn + maxColumn) ~/ 2;
+  final centreRow = (minRow + maxRow) ~/ 2;
+  return switch (facing) {
+    'north' => CellCoord(centreColumn, minRow - 1),
+    'south' => CellCoord(centreColumn, maxRow + 1),
+    'east' => CellCoord(maxColumn + 1, centreRow),
+    'west' => CellCoord(minColumn - 1, centreRow),
+    _ => null,
+  };
+}
+
+/// The city hall's front road cell — the root of the road network.
+/// The hall counts while still under construction (its road lands at
+/// placement), so a fresh town can grow around its rising hall.
+/// Null before founding or in content without a hall.
+CellCoord? cityHallFrontRoadCell(
+  ParcelWorldState state,
+  ContentBundle content,
+) {
+  final model = rootHallModel(content);
+  if (model == null) return null;
+  List<CellCoord>? footprint;
+  String? facing;
+  for (final structure in state.structures) {
+    if (structure.catalogueId == model.id) {
+      footprint = structure.footprint;
+      facing = structure.facing;
+      break;
+    }
+  }
+  if (footprint == null) {
+    for (final job in state.constructions) {
+      if (job.catalogueId == model.id &&
+          job.kind == WorldConstructionKind.structure) {
+        footprint = job.footprint;
+        facing = job.facing;
+        break;
+      }
+    }
+  }
+  if (footprint == null) return null;
+  return frontRoadCellForFacing(footprint, facing);
+}
+
+/// Every road tile transitively connected to the city hall's front
+/// road — the outside connection. Roads may be paved anywhere, but
+/// only this set carries buildings. Bridges weld their banks, so a
+/// network may cross water; roads are permanent, so the set only
+/// grows and never needs re-checking against demolition.
+Set<CellCoord> connectedRoadCells(
+  ParcelWorldState state,
+  ContentBundle content,
+) {
+  final root = cityHallFrontRoadCell(state, content);
+  if (root == null) return const {};
+  final roads = state.roadsByCell;
+  if (!roads.containsKey(root)) return const {};
+  final welded = <CellCoord, Set<CellCoord>>{};
+  for (final bridge in state.bridges) {
+    (welded[bridge.nearBank] ??= {}).add(bridge.farBank);
+    (welded[bridge.farBank] ??= {}).add(bridge.nearBank);
+  }
+  final connected = <CellCoord>{root};
+  final queue = <CellCoord>[root];
+  while (queue.isNotEmpty) {
+    final cell = queue.removeLast();
+    final neighbours = <CellCoord>[
+      CellCoord(cell.column + 1, cell.row),
+      CellCoord(cell.column - 1, cell.row),
+      CellCoord(cell.column, cell.row + 1),
+      CellCoord(cell.column, cell.row - 1),
+      if (welded[cell] != null) ...welded[cell]!,
+    ];
+    for (final neighbour in neighbours) {
+      if (connected.contains(neighbour) || !roads.containsKey(neighbour)) {
+        continue;
+      }
+      connected.add(neighbour);
+      queue.add(neighbour);
+    }
+  }
+  return connected;
+}
+
+/// Whether a footprint borders a fully road-lined side whose strip
+/// belongs to the outside connection — the placement gate every
+/// building but the hall passes through. Bridge banks are not
+/// frontage: the network flows through them, but a building may
+/// not face a landing.
+bool footprintHasOutsideConnection(
+  ParcelWorldState state,
+  ContentBundle content,
+  Iterable<CellCoord> footprint,
+) {
+  final connected = connectedRoadCells(state, content);
+  if (connected.isEmpty) return false;
+  final roads = state.roadsByCell;
+  final banks = <CellCoord>{
+    for (final bridge in state.bridges) ...[bridge.nearBank, bridge.farBank],
+  };
+  final cells = footprint.toSet();
+  var minColumn = cells.first.column;
+  var maxColumn = cells.first.column;
+  var minRow = cells.first.row;
+  var maxRow = cells.first.row;
+  for (final cell in cells) {
+    if (cell.column < minColumn) minColumn = cell.column;
+    if (cell.column > maxColumn) maxColumn = cell.column;
+    if (cell.row < minRow) minRow = cell.row;
+    if (cell.row > maxRow) maxRow = cell.row;
+  }
+  bool sideLinks(
+    bool Function(CellCoord cell) onSide,
+    CellCoord Function(CellCoord cell) roadOf,
+  ) {
+    for (final cell in cells) {
+      if (onSide(cell)) {
+        final road = roadOf(cell);
+        if (!roads.containsKey(road) || banks.contains(road)) return false;
+      }
+    }
+    for (final cell in cells) {
+      if (onSide(cell) && connected.contains(roadOf(cell))) return true;
+    }
+    return false;
+  }
+
+  return sideLinks(
+        (cell) => cell.row == minRow,
+        (cell) => CellCoord(cell.column, cell.row - 1),
+      ) ||
+      sideLinks(
+        (cell) => cell.row == maxRow,
+        (cell) => CellCoord(cell.column, cell.row + 1),
+      ) ||
+      sideLinks(
+        (cell) => cell.column == minColumn,
+        (cell) => CellCoord(cell.column - 1, cell.row),
+      ) ||
+      sideLinks(
+        (cell) => cell.column == maxColumn,
+        (cell) => CellCoord(cell.column + 1, cell.row),
+      );
+}
+
+/// Everything founding needs to say yes: the parcel the hall claims,
+/// the hall's footprint, and where its front road lands.
+class CityFoundingQuote {
+  const CityFoundingQuote({
+    required this.parcel,
+    required this.footprint,
+    required this.frontCell,
+    required this.facing,
+    required this.clearedNatureCount,
+  });
+
+  final ParcelCoord parcel;
+  final List<CellCoord> footprint;
+  final CellCoord frontCell;
+  final String facing;
+
+  /// Nature props founding levels — the founders clear their own
+  /// ground under the hall and its road.
+  final int clearedNatureCount;
+}
+
+/// Quotes founding a city: a 3×3 hall (per content's root model) at
+/// [origin] facing [facing], with one road tile planted at the middle
+/// of its front face. The parcel holding hall and road becomes the
+/// free founding parcel. Brush and trees under the ten cells are
+/// cleared by the act itself.
+CityFoundingQuote quoteCityFounding(
+  ParcelWorldState state,
+  ContentBundle content,
+  TerrainProvider terrainProvider, {
+  required CellCoord origin,
+  required String facing,
+  Set<ParcelCoord> claimedParcels = const {},
+  WorldRules rules = const WorldRules(),
+}) {
+  final model = rootHallModel(content);
+  if (model == null) {
+    throw const WorldRuleViolation('This content ships no city hall.');
+  }
+  if (state.parcels.isNotEmpty) {
+    throw const WorldRuleViolation('Your city is already founded.');
+  }
+  const compass = ['north', 'east', 'south', 'west'];
+  if (!compass.contains(facing)) {
+    throw const WorldRuleViolation(
+      'The city hall faces north, east, south, or west.',
+    );
+  }
+  final parcel = parcelForCell(origin, parcelSize: state.parcelSize);
+  if (parcel.x.abs() > rules.maximumCoordinate ||
+      parcel.y.abs() > rules.maximumCoordinate) {
+    throw const WorldRuleViolation('That parcel is outside the supported map.');
+  }
+  if (claimedParcels.contains(parcel)) {
+    throw const WorldRuleViolation('Another city has claimed that parcel.');
+  }
+  final footprint = structureFootprint(model, origin);
+  final front = frontRoadCellForFacing(footprint, facing)!;
+  // Hall and road stand together on their parcel: founding claims
+  // exactly one, and a road on a neighbour's ground could never be
+  // owned.
+  for (final cell in [...footprint, front]) {
+    if (parcelForCell(cell, parcelSize: state.parcelSize) != parcel) {
+      throw const WorldRuleViolation(
+        'The city hall and its front road must fit within one parcel.',
+      );
+    }
+  }
+  // Buyable means charted terrain: fog is the uncharted default
+  // beyond the authored map, and authored fog stays hidden.
+  if (terrainProvider
+          .sample(parcel.origin(state.parcelSize), state.seed)
+          .kind ==
+      TerrainKind.fog) {
+    throw const WorldRuleViolation('That parcel is hidden in the fog.');
+  }
+  for (final cell in [...footprint, front]) {
+    if (!terrainProvider.sample(cell, state.seed).isLand) {
+      throw const WorldRuleViolation(
+        'The city hall and its front road need dry land.',
+      );
+    }
+  }
+  final landCells = parcel
+      .cells(state.parcelSize)
+      .where((cell) => terrainProvider.sample(cell, state.seed).isLand)
+      .length;
+  if (landCells < foundingLandCells) {
+    throw WorldRuleViolation(
+      'Your founding parcel needs at least $foundingLandCells land '
+      'cells — pick somewhere you can build.',
+    );
+  }
+  final footprintCells = {...footprint, front};
+  return CityFoundingQuote(
+    parcel: parcel,
+    footprint: footprint,
+    frontCell: front,
+    facing: facing,
+    clearedNatureCount: [
+      // Nature materializes with the parcel claim, so the count
+      // reads the terrain provider's rows, not state.props (empty
+      // before founding owns anything).
+      for (final row in terrainProvider.natureProps)
+        if (footprintCells.contains(row.cell)) row,
+    ].length,
   );
 }
 
@@ -451,6 +724,11 @@ StructureDemolitionQuote quoteStructureDemolition(
   if (model == null) {
     throw WorldRuleViolation(
       'Unknown building "${target.catalogueId}" — it cannot be demolished.',
+    );
+  }
+  if (model.isRoot) {
+    throw const WorldRuleViolation(
+      'The city hall cannot be demolished — it is the town\'s root.',
     );
   }
   // The town's remaining capacities, counted the way the ledger
@@ -530,6 +808,11 @@ StructurePlacementQuote quoteStructurePlacement(
       !state.unlockedCatalogueIds.contains(catalogueId)) {
     throw const WorldRuleViolation('That model has not been unlocked.');
   }
+  if (definition.isRoot) {
+    throw const WorldRuleViolation(
+      'The city hall places only through founding.',
+    );
+  }
   final queries = WorldQueries(state, terrainProvider);
   if (definition.kind == StructureKind.decoration) {
     // Decorations place as props on the subtile lattice; the surface
@@ -576,6 +859,16 @@ StructurePlacementQuote quoteStructurePlacement(
   if (definition.kind == StructureKind.building &&
       !queries.buildingHasRoadAccess(footprint)) {
     throw const WorldRuleViolation('Place the building beside a road first.');
+  }
+  // The outside connection: a building's frontage must belong to the
+  // road network rooted at the city hall's front road. Roads may be
+  // paved anywhere — only the connected network carries buildings.
+  if (definition.kind == StructureKind.building &&
+      !footprintHasOutsideConnection(state, content, footprint)) {
+    throw const WorldRuleViolation(
+      'That road has no outside connection — link it back to the '
+      "city hall's front road.",
+    );
   }
   return StructurePlacementQuote(
     catalogueId: catalogueId,
@@ -766,11 +1059,18 @@ void validateParcelWorldState(
         'The parcel-world save contains an invalid structure.',
       );
     }
-    if (definition.kind == StructureKind.building &&
-        !queries.buildingHasRoadAccess(structure.footprint)) {
-      throw const FormatException(
-        'The parcel-world save has a building without connected road access.',
-      );
+    // The founding hall is the one standing building without road
+    // access: its own front road is the root, and it places through
+    // founding, not the catalogue. Every other building must stand
+    // on the hall's network: a fully road-lined side (banks are not
+    // frontage) whose strip is connected to the root.
+    if (definition.kind == StructureKind.building && !definition.isRoot) {
+      if (!footprintHasOutsideConnection(state, content, structure.footprint)) {
+        throw FormatException(
+          'A ${definition.name} at ${structure.origin.key} stands off the '
+          "city hall's road network.",
+        );
+      }
     }
   }
   // Props: one per subtile, on the placement surface (ground, road,
@@ -884,15 +1184,19 @@ void validateParcelWorldState(
             ),
             job.footprint,
           ) ||
-          !state.unlockedCatalogueIds.contains(definition.id) ||
+          // The founding hall is the one structure that needs neither
+          // an unlock nor road access: it places through founding,
+          // and its own front road is the network's root.
+          (!definition.isRoot &&
+              (!state.unlockedCatalogueIds.contains(definition.id) ||
+                  !queries.buildingHasRoadAccess(job.footprint))) ||
           job.footprint.any(
             (cell) =>
                 !queries.ownsCell(cell) ||
                 !queries.terrainAt(cell).isLand ||
                 occupied.contains(cell) ||
                 !reserved.add(cell),
-          ) ||
-          !queries.buildingHasRoadAccess(job.footprint)) {
+          )) {
         throw const FormatException(
           'The parcel-world save has an invalid structure reservation.',
         );
@@ -985,6 +1289,49 @@ void validateParcelWorldState(
   // old saves loadable).
   if (state.unlockedCatalogueIds.any((id) => content.structure(id) == null)) {
     throw const FormatException('The parcel-world model unlocks are invalid.');
+  }
+  // The founding hall: a city with land must hold exactly one —
+  // standing or still rising — and its front road must stand. This
+  // is what refuses saves from before founding: no hall, no load,
+  // and no migration code ever.
+  final hallModel = rootHallModel(content);
+  if (hallModel != null) {
+    final halls = [
+      ...state.structures.where((s) => s.catalogueId == hallModel.id),
+      ...state.constructions.where(
+        (job) =>
+            job.catalogueId == hallModel.id &&
+            job.kind == WorldConstructionKind.structure,
+      ),
+    ];
+    if (state.parcels.isNotEmpty && halls.isEmpty) {
+      throw const FormatException(
+        'The city owns land but has no city hall — saves from before '
+        'founding are not supported.',
+      );
+    }
+    if (halls.length > 1) {
+      throw const FormatException('The city has more than one city hall.');
+    }
+    if (halls.isNotEmpty) {
+      if (state.parcels.isEmpty) {
+        throw const FormatException(
+          'The city hall stands on land the city does not own.',
+        );
+      }
+      final front = cityHallFrontRoadCell(state, content);
+      final bridgeBanks = <CellCoord>{
+        for (final bridge in state.bridges) ...[
+          bridge.nearBank,
+          bridge.farBank,
+        ],
+      };
+      if (front == null ||
+          !state.roadsByCell.containsKey(front) ||
+          bridgeBanks.contains(front)) {
+        throw const FormatException('The city hall has no road at its front.');
+      }
+    }
   }
 
   // Purchase receipts are not reconstructible from the sheet storage;

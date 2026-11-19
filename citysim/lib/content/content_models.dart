@@ -50,6 +50,7 @@ class StructureDefinition {
     this.serviceCategory,
     this.serviceCapacity = 0,
     this.legalTerrain = const [],
+    this.isRoot = false,
   });
 
   final String id;
@@ -119,14 +120,25 @@ class StructureDefinition {
   /// The occupancy-flavoured classification: a model is what it
   /// offers. Population makes it residential, jobs make it commerce,
   /// a service category makes it a service building; anything else
-  /// is plain civic (upkeep drain, no coverage).
+  /// is plain civic (upkeep drain, no coverage). A service
+  /// building's jobs are employer appeal, never commerce: it
+  /// classifies by its service before its jobs ever reach the
+  /// commerce question.
   bool get isResidential => population > 0;
-  bool get isCommerce => jobs > 0;
+  bool get isCommerce => jobs > 0 && serviceCategory == null;
   bool get isService => serviceCategory != null;
 
   /// Disabled models stay loadable for existing saves but are hidden from
   /// new purchases and unlock grants.
   final bool enabled;
+
+  /// The city's founding hall — the root of its road network. A root
+  /// model places only through founding (never the catalogue, never a
+  /// milestone grant), carries no stats, and cannot be demolished.
+  /// Founding places one road tile ahead of its front; roads
+  /// transitively connected to that tile are the only ones buildings
+  /// may front.
+  final bool isRoot;
 
   /// The sprite category this model draws its variants from, derived from
   /// the gameplay kind — buildings render building sprites, decorations
@@ -156,6 +168,7 @@ class StructureDefinition {
     String? serviceCategory,
     int? serviceCapacity,
     List<String>? legalTerrain,
+    bool? isRoot,
   }) => StructureDefinition(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -175,6 +188,7 @@ class StructureDefinition {
     serviceCategory: serviceCategory ?? this.serviceCategory,
     serviceCapacity: serviceCapacity ?? this.serviceCapacity,
     legalTerrain: legalTerrain ?? this.legalTerrain,
+    isRoot: isRoot ?? this.isRoot,
   );
 
   Map<String, Object?> toJson() => {
@@ -195,6 +209,7 @@ class StructureDefinition {
     if (serviceCategory != null) 'serviceCategory': serviceCategory,
     'serviceCapacity': serviceCapacity,
     if (legalTerrain.isNotEmpty) 'legalTerrain': legalTerrain,
+    if (isRoot) 'isRoot': isRoot,
   };
 
   static StructureDefinition fromJson(Map<String, Object?> json) =>
@@ -228,6 +243,7 @@ class StructureDefinition {
           for (final tag in json['legalTerrain'] as List? ?? const [])
             tag as String,
         ],
+        isRoot: json['isRoot'] as bool? ?? false,
       );
 }
 
@@ -1673,6 +1689,45 @@ List<ContentIssue> validateContentData({
     }
   }
 
+  // The founding hall: exactly one root model, and it is pure
+  // ceremony — zero stats, a square footprint (the founding road
+  // anchors to the middle of its front face), a building. Without
+  // one no city can found; with two, founding is ambiguous.
+  final roots = [
+    for (final model in catalogue)
+      if (model.isRoot) model,
+  ];
+  if (roots.isEmpty) {
+    error('The catalogue needs a root model — the founding hall.');
+  }
+  if (roots.length > 1) {
+    error(
+      'Multiple root models (${roots.map((model) => model.id).join(', ')}) '
+      '— founding takes exactly one hall.',
+    );
+  }
+  for (final model in roots) {
+    if (model.kind != StructureKind.building) {
+      error('${model.id}: the root model must be a building.');
+    }
+    if (model.footprintColumns != model.footprintRows) {
+      error(
+        '${model.id}: the root model needs a square footprint — the '
+        'founding road anchors to the middle of its front face.',
+      );
+    }
+    if (model.population != 0 ||
+        model.jobs != 0 ||
+        model.taxCoins != 0 ||
+        model.upkeepCoins != 0 ||
+        model.serviceCategory != null) {
+      error(
+        '${model.id}: the root model is pure ceremony — no population, '
+        'jobs, tax, upkeep, or service.',
+      );
+    }
+  }
+
   // The progression layer: milestones are the single authority over
   // when models unlock for placement. Structural rules are errors —
   // the derivation and the editor tab rely on them; the balance
@@ -1710,6 +1765,11 @@ List<ContentIssue> validateContentData({
           'Milestone "${milestone.id}" unlocks disabled model "$modelId" '
           '— milestones govern placement, so a disabled model has none.',
         );
+      } else if (model.isRoot) {
+        error(
+          'Milestone "${milestone.id}" unlocks root model "$modelId" — '
+          'the founding hall places only through founding.',
+        );
       }
     }
   }
@@ -1728,6 +1788,7 @@ List<ContentIssue> validateContentData({
   }
   for (final model in catalogue) {
     if (assigned.contains(model.id)) continue;
+    if (model.isRoot) continue; // the hall places through founding alone
     final natureOnly =
         model.kind == StructureKind.decoration && model.legalTerrain.isNotEmpty;
     if (!natureOnly) {

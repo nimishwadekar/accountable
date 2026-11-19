@@ -50,6 +50,16 @@ void main() {
       ],
       tiles: [
         ['4', '4', 'road', 'complete', 'dirt', '', '', ''],
+        [
+          '3',
+          '1',
+          'structure',
+          'complete',
+          'city-hall',
+          'city-hall',
+          'south',
+          '',
+        ],
         ['5', '4', 'road', 'complete', 'asphalt', '', '', ''],
         ['6', '4', 'road', 'complete', 'asphalt', '', '', ''],
         ['7', '4', 'road', 'complete', 'asphalt', '', '', ''],

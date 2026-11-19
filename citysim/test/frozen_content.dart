@@ -145,6 +145,7 @@ Map<String, Object?> _building(
   int constructionStages = 1,
   String? serviceCategory,
   int serviceCapacity = 0,
+  bool isRoot = false,
 }) => {
   'id': id,
   'name': name,
@@ -162,6 +163,7 @@ Map<String, Object?> _building(
   'serviceCategory': ?serviceCategory,
   'serviceCapacity': serviceCapacity,
   'enabled': true,
+  if (isRoot) 'isRoot': true,
 };
 
 Map<String, Object?> _prop(
@@ -186,6 +188,18 @@ Map<String, Object?> _prop(
 };
 
 final _catalogue = <Map<String, Object?>>[
+  _building(
+    'city-hall',
+    'City Hall',
+    "The town's first building and its front door — every road grows "
+        'from here.',
+    'civic',
+    ['city-hall'],
+    columns: 3,
+    rows: 3,
+    constructionStages: 2,
+    isRoot: true,
+  ),
   _building(
     'small-home',
     'Small House',
@@ -428,6 +442,13 @@ Map<String, Object?> _facingSprite(
 };
 
 final _sprites = <String, Object?>{
+  // The founding hall — church art as the placeholder, as in the
+  // shipped content.
+  'city-hall': _facingSprite(
+    'sprites/buildings/civic/bld_church_a.png',
+    'sprites/buildings/civic/bld_church_b.png',
+    subcategory: 'civic',
+  ),
   // Houses.
   'home-small-yellow': _facingSprite(
     'sprites/buildings/houses/bld_house_small_yellow_a.png',

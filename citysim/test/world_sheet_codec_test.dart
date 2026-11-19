@@ -45,6 +45,16 @@ void main() {
     },
     tiles: [
       ['4', '4', 'road', 'complete', 'dirt', '', '', ''],
+      [
+        '3',
+        '1',
+        'structure',
+        'complete',
+        'city-hall',
+        'city-hall',
+        'south',
+        '',
+      ],
       ['5', '4', 'road', 'complete', 'asphalt', '', '', ''],
       ['6', '4', 'road', 'complete', 'asphalt', '', '', ''],
       ['7', '4', 'road', 'complete', 'asphalt', '', '', ''],
@@ -150,7 +160,10 @@ void main() {
 
     // Structures rebuild with their content-derived footprint, variant,
     // and door side; the café is still a mid-construction project.
-    final cottage = world.structures.single;
+    // (The hall rebuilds too — see the founding row in the tables.)
+    final cottage = world.structures.lastWhere(
+      (structure) => structure.catalogueId == 'small-home',
+    );
     expect(cottage.catalogueId, 'small-home');
     expect(cottage.assetRole, 'home-small-yellow');
     expect(cottage.facing, 'east');
@@ -428,6 +441,16 @@ void main() {
         tiles: const [
           ['4', '4', 'road', 'complete', 'asphalt', '', '', '3'],
           ['5', '4', 'road', 'planned', 'asphalt', '', '', '3'],
+          [
+            '3',
+            '1',
+            'structure',
+            'complete',
+            'city-hall',
+            'city-hall',
+            'south',
+            '',
+          ],
         ],
         projects: const [
           ['3', 'road', 'asphalt', '', ''],

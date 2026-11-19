@@ -115,6 +115,40 @@ free-construction rule intact. Capacities count people, not households:
   upkeep). Because the parcel price escalates with population while tax
   income scales with population, the parcel cadence stays roughly constant:
   weekly in the founding era, about one per check-in late game.
+- **Founding is the city hall** (added 2026-11-18, closing the
+  sparse-road-pad exploit the run-3 playtest measured — frontage
+  without a network let four buildings ride one orphan tile). A
+  city is founded by placing a 3×3 **city hall** with a chosen
+  facing (a swap button and a direction arrow place it; north,
+  east, south, or west). One road tile plants itself at the middle
+  of the hall's front face, and the parcel holding hall and road
+  becomes the free founding parcel; brush under the ten footprint
+  cells clears with the act. The hall is pure ceremony — zero
+  jobs, tax, and upkeep, five stages, church art as its
+  placeholder sprite until real art lands — and it is permanent:
+  it cannot be demolished, never appears in the catalogue, and
+  places only through founding.
+- **The outside connection**: that front-road tile is the root of
+  the town's road network. Buildings construct only where their
+  fronting road is transitively connected to it — road tiles join
+  by orthogonal adjacency, and each bridge welds its two banks, so
+  a network may cross water. **Bridge banks are not frontage**
+  (2026-11-18): a bridge's near and far landings carry its ramp
+  art, and a building may never face them — the network flows
+  through banks, but a landing is not a street. The save validator
+  enforces the connection on every standing building: a save whose
+  building fronts a road off the hall's network is refused on
+  load, naming the building. Roads themselves still pave anywhere
+  (a network in the woods is legal; it carries no buildings until
+  it links home), and because roads are permanent the connected
+  set only ever grows. A town that builds on every free cell
+  touching its own network seals itself in — recoverable by
+  demolishing a building beside a road, which is ordinary play,
+  not a trap. Every city founds its own root: multi-city maps
+  never require roads between towns, and where two towns'
+  networks meet they simply join. Saves from before founding
+  (land with no hall) are refused on load, by absence — no
+  version code anywhere.
 - **Services**: fire/police/health coverage is demanded from a population
   of 300 (`serviceRequirementPopulation`) — exactly the city milestone,
   so the demand never precedes the stations that answer it (the earlier
@@ -428,6 +462,11 @@ These are candidates, not promises or requirements for the current prototype:
   building's jobs are appeal, never levy). An editor control that
   names the class explicitly, with validation that the numbers agree
   with it, would retire the derivation as the single source of truth.
+- City hall upgrades: the hall is content (`isRoot` on the model),
+  zero-stat and 3×3, with church art as a placeholder. An upgrade
+  path — a grander hall per milestone tier, or halls that gain
+  capabilities — is pure content work on that model and its sprite
+  roles.
 
 ### Demolition (planned — direction agreed 2026-11-18, refined same day)
 

@@ -245,6 +245,17 @@ class WorldQueries {
   /// Footprints larger than 1×1 therefore need a road along an
   /// entire side, not a single touching corner; for a 1×1 footprint
   /// the rule is exactly "any adjacent road".
+  /// The cells a bridge touches land on — its near and far banks.
+  /// Banks carry the bridge's ramp art and its landing, not street
+  /// frontage: a building may never face them, though the road
+  /// network flows through them freely.
+  late final Set<CellCoord> bridgeBankCells = Set.unmodifiable({
+    for (final bridge in state.bridges) ...[bridge.nearBank, bridge.farBank],
+  });
+
+  /// Whether a building can stand on this footprint: a completed
+  /// road along one full side of it. Bridge banks are not frontage
+  /// — a landing is not a street, whatever art paves it.
   bool buildingHasRoadAccess(Iterable<CellCoord> footprint) {
     final cells = footprint.toSet();
     if (cells.isEmpty) return false;
@@ -264,7 +275,10 @@ class WorldQueries {
     ) {
       for (final cell in cells) {
         if (!onSide(cell)) continue;
-        if (!roadsByCell.containsKey(roadNeighbor(cell))) return false;
+        final road = roadNeighbor(cell);
+        if (!roadsByCell.containsKey(road) || bridgeBankCells.contains(road)) {
+          return false;
+        }
       }
       return true;
     }

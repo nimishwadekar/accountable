@@ -2,10 +2,12 @@ This is my note-taking for my own memory. AI shouldn't modify this file.
 
 # New systems
 
+- City hall
+
 - attach service requirement to milestones.
 - Code review and enhancement.
+- upgradeable city hall.
 - sheets and accountable integration.
-- outside connection: roads need to be connected. decide how people move into the place. progression is starting multiple cities without connecting them initially. Figure out how.
 
 - composite sprite editor: create new sprite from existing sprites. Multi-tile roads as composites of single-tile roads.
 - terrain elevation and slops and cliffs and their sprites.

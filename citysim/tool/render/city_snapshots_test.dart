@@ -11,7 +11,6 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:citysim/content/content_bundle.dart';
@@ -125,81 +124,79 @@ void _serveAssetsFromDisk() {
 
 void main() {
   for (final name in const ['maya', 'leo', 'sam', 'vera']) {
-    testWidgets(
-      'render $name',
-      timeout: const Timeout(Duration(minutes: 3)),
-      (tester) async {
-        _serveAssetsFromDisk();
-        final content = _loadContent();
-        final terrain = ContentTerrainProvider(content.terrain);
-        final envelope = decodeJsonObject(
-          File('$_stateDir/$name/state.json').readAsStringSync(),
-        );
-        final state = sheetTablesToWorld(
-          _tablesFromJson(envelope['tables']),
-          content: content,
-          terrainProvider: terrain,
-        );
-        final day = envelope['day'];
-        final frame = _frame(state);
-        final size = Size(frame.width, frame.height);
-        tester.view.physicalSize = size;
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.reset);
+    testWidgets('render $name', timeout: const Timeout(Duration(minutes: 3)), (
+      tester,
+    ) async {
+      _serveAssetsFromDisk();
+      final content = _loadContent();
+      final terrain = ContentTerrainProvider(content.terrain);
+      final envelope = decodeJsonObject(
+        File('$_stateDir/$name/state.json').readAsStringSync(),
+      );
+      final state = sheetTablesToWorld(
+        _tablesFromJson(envelope['tables']),
+        content: content,
+        terrainProvider: terrain,
+      );
+      final day = envelope['day'];
+      final frame = _frame(state);
+      final size = Size(frame.width, frame.height);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
 
-        final capture = GlobalKey();
-        await tester.pumpWidget(
-          MaterialApp(
-            debugShowCheckedModeBanner: false,
-            home: RepaintBoundary(
-              key: capture,
-              child: ParcelWorldView(
-                state: state,
-                content: content,
-                terrainProvider: terrain,
-                cameraFocusCell: frame.focus,
-                onCellTap: (_, __, ___, ____) {},
-              ),
+      final capture = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          debugShowCheckedModeBanner: false,
+          home: RepaintBoundary(
+            key: capture,
+            child: ParcelWorldView(
+              state: state,
+              content: content,
+              terrainProvider: terrain,
+              cameraFocusCell: frame.focus,
+              onCellTap: (_, _, _, _) {},
             ),
           ),
-        );
+        ),
+      );
 
-        // Sprites decode asynchronously through the real event loop.
-        // Wait for the ground wave (the canvas mounts), then give the
-        // late waves — roads, actors, shore bands — time to land.
-        var mounted = false;
-        for (var i = 0; i < 240 && !mounted; i++) {
-          await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 150)),
-          );
-          await tester.pump(const Duration(milliseconds: 16));
-          mounted = find.byType(CircularProgressIndicator).evaluate().isEmpty;
-        }
-        expect(mounted, isTrue, reason: 'city art did not finish loading');
-        for (var i = 0; i < 12; i++) {
-          await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 200)),
-          );
-          await tester.pump(const Duration(milliseconds: 100));
-        }
-        await tester.pump();
+      // Sprites decode asynchronously through the real event loop.
+      // Wait for the ground wave (the canvas mounts), then give the
+      // late waves — roads, actors, shore bands — time to land.
+      var mounted = false;
+      for (var i = 0; i < 240 && !mounted; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 150)),
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        mounted = find.byType(CircularProgressIndicator).evaluate().isEmpty;
+      }
+      expect(mounted, isTrue, reason: 'city art did not finish loading');
+      for (var i = 0; i < 12; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 200)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.pump();
 
-        final boundary = tester.renderObject<RenderRepaintBoundary>(
-          find.byKey(capture),
-        );
-        final image = await tester.runAsync(
-          () => boundary.toImage(pixelRatio: 1.0),
-        );
-        final bytes = await tester.runAsync(
-          () => image!.toByteData(format: ui.ImageByteFormat.png),
-        );
-        Directory(_outputDir).createSync(recursive: true);
-        final out = File('$_outputDir/$name-day$day.png')
-          ..writeAsBytesSync(bytes!.buffer.asUint8List());
-        // ignore: avoid_print
-        print('rendered ${out.path} (${image!.width}x${image.height})');
-        expect(image.width, greaterThan(100));
-      },
-    );
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(capture),
+      );
+      final image = await tester.runAsync(
+        () => boundary.toImage(pixelRatio: 1.0),
+      );
+      final bytes = await tester.runAsync(
+        () => image!.toByteData(format: ui.ImageByteFormat.png),
+      );
+      Directory(_outputDir).createSync(recursive: true);
+      final out = File('$_outputDir/$name-day$day.png')
+        ..writeAsBytesSync(bytes!.buffer.asUint8List());
+      // ignore: avoid_print
+      print('rendered ${out.path} (${image!.width}x${image.height})');
+      expect(image.width, greaterThan(100));
+    });
   }
 }

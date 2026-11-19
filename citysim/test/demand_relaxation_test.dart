@@ -43,6 +43,16 @@ void main() {
         ],
         tiles: const [
           ['4', '4', 'road', 'complete', 'asphalt', '', '', ''],
+          [
+            '3',
+            '1',
+            'structure',
+            'complete',
+            'city-hall',
+            'city-hall',
+            'south',
+            '',
+          ],
         ],
         projects: const [],
       ),
@@ -74,7 +84,7 @@ void main() {
       content,
       terrain,
       catalogueId: 'fruit-market',
-      origin: const CellCoord(4, 3),
+      origin: const CellCoord(4, 5),
     );
     a = nextDay(a);
     a = nextDay(a);
@@ -114,7 +124,7 @@ void main() {
       content,
       terrain,
       catalogueId: 'fruit-market',
-      origin: const CellCoord(4, 3),
+      origin: const CellCoord(4, 5),
     );
     for (var i = 0; i < 5; i++) {
       b = nextDay(b);
@@ -185,7 +195,7 @@ void main() {
       content,
       terrain,
       catalogueId: 'small-home',
-      origin: const CellCoord(4, 3),
+      origin: const CellCoord(4, 5),
     );
     world = nextDay(world);
     world = nextDay(world);
@@ -204,25 +214,40 @@ void main() {
     // budget — with the pull at 50% the list refills to its cap of
     // 4; with the seeded 10% it refills to 2.
     var world = fresh();
+    // Two streets on an L: row 4 east, then column 4 south to a
+    // second row — nine frontage pads for the market row (the hall
+    // owns row 3's middle).
     world = planRoadStretch(
       world,
       content,
       terrain,
       cells: const [CellCoord(5, 4), CellCoord(6, 4), CellCoord(7, 4)],
     );
+    world = planRoadStretch(
+      world,
+      content,
+      terrain,
+      cells: const [CellCoord(4, 5), CellCoord(4, 6)],
+    );
+    world = planRoadStretch(
+      world,
+      content,
+      terrain,
+      cells: const [CellCoord(5, 6), CellCoord(6, 6), CellCoord(7, 6)],
+    );
     for (var i = 0; i < 3; i++) {
       world = nextDay(world);
     }
     for (final origin in [
       const CellCoord(3, 4),
-      const CellCoord(4, 3),
-      const CellCoord(4, 5),
-      const CellCoord(5, 3),
       const CellCoord(6, 3),
       const CellCoord(7, 3),
       const CellCoord(5, 5),
       const CellCoord(6, 5),
       const CellCoord(7, 5),
+      const CellCoord(3, 5),
+      const CellCoord(3, 6),
+      const CellCoord(5, 7),
     ]) {
       world = startStructureConstruction(
         world,

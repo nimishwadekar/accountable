@@ -206,10 +206,7 @@ class _PlaySession {
       case 'catalogue':
         _catalogue();
       case 'found':
-        _parcel(
-          ParcelCoord(int.parse(words[1]), int.parse(words[2])),
-          founding: true,
-        );
+        _found(words.sublist(1));
       case 'parcel':
         if (words.length > 3 && words[3] != 'buy') {
           stdout.writeln('✗ parcel takes "buy" as its only extra word.');
@@ -378,17 +375,21 @@ THE GAME, as the game itself teaches it:
   paid, and every construction advances one stage. Days you don't
   open the game, nothing progresses at all.
   Buildings construct for free. Land, roads, and bridges cost coins.
-  Land is bought as whole parcels, adjacent to your town; the first
-  (founding) parcel is free and needs buildable ground. Parcel
-  prices rise with your population.
+  Your city is founded by placing its city hall — a 3x3 building
+  with a front you choose; one road tile lands before its front and
+  the parcel it all stands on is claimed free. Every later parcel is
+  bought whole, adjacent to your town, and prices rise with your
+  population.
   Buildings need a completed road along one full side of their
-  footprint. Road plans are paid upfront, then the whole stretch
-  lands on the check-in after you buy it. Brush and trees standing
-  on a tile must be cleared with the demolish tool (free) before
-  you can build or pave there.
+  footprint — and that road must connect, through the road network,
+  back to the city hall's front road. Roads themselves may be paved
+  anywhere; only connected roads carry buildings. Road plans are
+  paid upfront, then the whole stretch lands on the check-in after
+  you buy it. Brush and trees standing on a tile must be cleared
+  with the demolish tool (free) before you can build or pave there.
   Buildings can be demolished (no refund; residents may be lost)
   and props removed (free) — demolish is the only removal there is;
-  roads, bridges, and land are permanent.
+  roads, bridges, land, and the city hall are permanent.
   Reaching population milestones unlocks new kinds of buildings.
   Services (health, fire, police) are demanded once your town is
   large enough; low coverage saps contentment, and unhappy towns
@@ -397,7 +398,7 @@ THE GAME, as the game itself teaches it:
 COMMANDS:
   status · report · map [col row] · catalogue
   day (open tomorrow and check in) · skip <n> (days away)
-  found <parcelX> <parcelY> · parcel <parcelX> <parcelY> [buy]
+  found <col> <row> [north|east|south|west] · parcel <parcelX> <parcelY> [buy]
   road <col,row> [col,row] [buy] · build <model> <col> <row>
   place <model> <col> <row> <subtileX> <subtileY> (decorations)
   demolish <col> <row> [<sx> <sy>] [confirm] · inspect <col> <row>
@@ -405,8 +406,8 @@ COMMANDS:
 Purchases quote first: parcel and road print the price (and the
 treasury after) without spending — append "buy" to go through.
 Demolition quotes too: it prints what stands there and who loses
-homes — append "confirm" to go through. Founding a parcel is free
-and needs no buy.''');
+homes — append "confirm" to go through. Founding is one free act:
+the hall, its front road, and the parcel claim land together.''');
   }
 
   void _status() {
@@ -513,7 +514,7 @@ and needs no buy.''');
     final buffer = StringBuffer(
       'Map around (${focus.column},${focus.row}) — '
       '. free owned · : unowned · ; unowned brush · ~ water · # road · '
-      ', brush · h home · c commerce · s civic · u site\n'
+      ', brush · h home · c commerce · s civic · H hall · u site\n'
       'columns $left..${left + width - 1} left to right · '
       'rows $top..${top + height - 1} top to bottom · '
       'parcel boundaries every 8\n',
@@ -568,6 +569,7 @@ and needs no buy.''');
   String _letterFor(String catalogueId) {
     final model = content.structure(catalogueId);
     if (model == null) return '?';
+    if (model.isRoot) return 'H';
     if (model.isResidential) return 'h';
     if (model.isCommerce) return 'c';
     if (model.serviceCategory != null) return 's';
@@ -597,20 +599,46 @@ and needs no buy.''');
 
   // ---------------------------------------------------------- actions
 
-  void _parcel(ParcelCoord coord, {bool founding = false, bool buy = false}) {
+  void _found(List<String> words) {
+    final column = words.isNotEmpty ? int.tryParse(words[0]) : null;
+    final row = words.length > 1 ? int.tryParse(words[1]) : null;
+    final facing = words.length > 2 ? words[2] : 'south';
+    if (column == null || row == null) {
+      stdout.writeln(
+        '✗ found needs a cell and a facing: '
+        'found <col> <row> [north|east|south|west]',
+      );
+      return;
+    }
+    final cell = CellCoord(column, row);
+    try {
+      final quote = quoteCityFounding(
+        state,
+        content,
+        terrain,
+        origin: cell,
+        facing: facing,
+      );
+      state = foundCity(state, content, terrain, origin: cell, facing: facing);
+      _act(SimAction('found', 'hall at ${cell.key} facing $facing'));
+      stdout.writeln(
+        'City founded · the hall rises at ${cell.key} facing $facing · '
+        'front road at ${quote.frontCell.key} · parcel ${quote.parcel.key} '
+        'claimed free'
+        '${quote.clearedNatureCount > 0 ? ' · ${quote.clearedNatureCount} nature levelled' : ''}',
+      );
+    } on WorldRuleViolation catch (e) {
+      stdout.writeln('✗ ${e.message}');
+      _act(
+        SimAction('found', 'hall at ${cell.key}', ok: false, reason: e.message),
+      );
+    }
+  }
+
+  void _parcel(ParcelCoord coord, {bool buy = false}) {
     try {
       final quote = quoteParcelPurchase(state, content, terrain, coord);
-      if (!founding && !buy) {
-        if (state.parcels.isEmpty) {
-          // Pre-founding, every parcel quotes the founding price of
-          // zero — label it, or "0 coins" reads as free land.
-          stdout.writeln(
-            'Parcel (${coord.x},${coord.y}): your founding parcel — free · '
-            '${quote.landCellCount} land cells',
-          );
-          stdout.writeln('Claim it with: found ${coord.x} ${coord.y}');
-          return;
-        }
+      if (!buy) {
         // The game shows a price before a purchase; the CLI quotes
         // the same way, and only the explicit "buy" spends.
         stdout.writeln(
@@ -625,12 +653,12 @@ and needs no buy.''');
       }
       state = purchaseParcel(state, content, terrain, coord);
       stdout.writeln(
-        '${founding ? 'Founded' : 'Bought'} parcel (${coord.x},${coord.y}) '
+        'Bought parcel (${coord.x},${coord.y}) '
         'for ${_fmt(quote.price)} coins · ${quote.landCellCount} land cells',
       );
       _act(
         SimAction(
-          founding ? 'found' : 'parcel',
+          'parcel',
           'parcel (${coord.x},${coord.y})',
           coins: quote.price,
         ),
@@ -639,7 +667,7 @@ and needs no buy.''');
       stdout.writeln('✗ ${e.message}');
       _act(
         SimAction(
-          founding ? 'found' : 'parcel',
+          'parcel',
           'parcel (${coord.x},${coord.y})',
           ok: false,
           reason: e.message,

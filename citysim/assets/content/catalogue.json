@@ -777,6 +777,29 @@
     },
     {
       "assetRoles": [
+        "city-hall"
+      ],
+      "constructionStages": 5,
+      "costCoins": 0,
+      "description": "The town's first building and its front door — every road grows from here.",
+      "enabled": true,
+      "footprint": {
+        "columns": 3,
+        "rows": 3
+      },
+      "id": "city-hall",
+      "isRoot": true,
+      "jobs": 0,
+      "kind": "building",
+      "name": "City Hall",
+      "population": 0,
+      "serviceCapacity": 0,
+      "subcategory": "civic",
+      "taxCoins": 0,
+      "upkeepCoins": 0
+    },
+    {
+      "assetRoles": [
         "gas-station"
       ],
       "constructionStages": 3,

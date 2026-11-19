@@ -31,12 +31,62 @@ void main() {
     today: DateTime.utc(2026, 11, 2),
   );
 
-  /// A settled start: parcel (0,0) owned with one road tile at its
-  /// centre — the shape every town-building test begins from,
-  /// assembled directly through the save codec so no coins, days, or
-  /// events are spent reaching it. (The founding itself is covered
-  /// from [freshWorld] above.)
+  /// A settled start: parcel (0,0) owned with its city hall (3×3,
+  /// north of the road) and the hall's front road at (4,4) — the
+  /// shape every town-building test begins from, assembled directly
+  /// through the save codec so no coins, days, or events are spent
+  /// reaching it. (The founding itself is covered from [freshWorld]
+  /// above.) The road at (4,4) IS the hall's front road: the root of
+  /// the connected network every test builds on.
   ParcelWorldState newWorld() => sheetTablesToWorld(
+    SheetTables(
+      userData: {
+        'seed': '123456',
+        'coins': '${content.economy.startingTreasuryCoins}',
+        'coins_earned': '${content.economy.startingTreasuryCoins}',
+        'coins_spent': '0',
+        'simulated_date': '2026-11-02',
+        'high_water_date': '2026-11-02',
+        'construction_day': '0',
+      },
+      ownedParcels: const [
+        ['0', '0'],
+      ],
+      tiles: const [
+        ['4', '4', 'road', 'complete', 'asphalt', '', '', ''],
+        [
+          '3',
+          '1',
+          'structure',
+          'complete',
+          'city-hall',
+          'city-hall',
+          'south',
+          '',
+        ],
+      ],
+      projects: const [],
+    ),
+    content: content,
+    terrainProvider: terrain,
+  );
+
+  /// The heartbeat: a simulated day passes and the town report runs
+  /// — taxes, upkeep, then every in-flight project one stage.
+  ParcelWorldState nextDay(ParcelWorldState world) =>
+      checkInWorldForToday(advanceWorldDays(world, 1), content);
+
+  /// What building tests mean by "the town's structures": everything
+  /// standing except the founding hall the settled fixture carries.
+  List<PlacedStructure> built(ParcelWorldState world) => [
+    for (final structure in world.structures)
+      if (structure.catalogueId != 'city-hall') structure,
+  ];
+
+  /// The pre-founding-era settled shape: parcel and road, no hall.
+  /// Only the rejection test may build it — every valid town carries
+  /// its hall.
+  ParcelWorldState newWorldHallLess() => sheetTablesToWorld(
     SheetTables(
       userData: {
         'seed': '123456',
@@ -58,11 +108,6 @@ void main() {
     content: content,
     terrainProvider: terrain,
   );
-
-  /// The heartbeat: a simulated day passes and the town report runs
-  /// — taxes, upkeep, then every in-flight project one stage.
-  ParcelWorldState nextDay(ParcelWorldState world) =>
-      checkInWorldForToday(advanceWorldDays(world, 1), content);
 
   /// Plans a road stretch and lets the next check-in land it whole.
   /// Call only when the stretch is the sole in-flight work: a
@@ -108,30 +153,56 @@ void main() {
       );
     });
 
-    test('the founding parcel is free, anywhere charted, and needs land', () {
+    test('founding places the hall, its front road, and claims the parcel', () {
       var world = freshWorld();
 
-      // Any charted parcel with room to build: free, no neighbour
-      // required — there is nothing to be adjacent to yet.
-      final quote = quoteParcelPurchase(
+      // Any charted parcel with room for the hall and its road: free,
+      // no neighbour required — there is nothing to be adjacent to
+      // yet. The hall is 3×3 facing south at (3,1), so its front road
+      // lands at (4,4).
+      final quote = quoteCityFounding(
         world,
         content,
         terrain,
-        const ParcelCoord(0, 0),
+        origin: const CellCoord(3, 1),
+        facing: 'south',
       );
-      expect(quote.price, 0, reason: 'the founding parcel is free');
-      world = purchaseParcel(world, content, terrain, const ParcelCoord(0, 0));
+      expect(quote.parcel, const ParcelCoord(0, 0));
+      expect(quote.frontCell, const CellCoord(4, 4));
+      expect(quote.footprint.length, 9);
+      expect(
+        world.coins,
+        content.economy.startingTreasuryCoins,
+        reason: 'quoting never spends',
+      );
+      world = foundCity(
+        world,
+        content,
+        terrain,
+        origin: const CellCoord(3, 1),
+        facing: 'south',
+      );
       expect(world.parcels.single.coord, const ParcelCoord(0, 0));
       expect(world.parcels.single.pricePaid, 0);
       expect(world.coins, content.economy.startingTreasuryCoins);
+      expect(world.roads.single.cell, const CellCoord(4, 4));
+      expect(world.roads.single.pricePaid, 0);
+      final hall = world.constructions.single;
+      expect(hall.catalogueId, 'city-hall');
+      expect(hall.facing, 'south');
       expect(
-        world.events.last.description,
-        'Parcel 0,0 claimed · the founding parcel, free',
+        world.events.last.kind,
+        'city-founded',
+        reason: 'founding is the town\'s first event',
       );
       expect(
         () => validateParcelWorldState(world, content, terrain),
         returnsNormally,
       );
+
+      // The outside connection is live the moment founding lands:
+      // the front road roots the network even while the hall rises.
+      expect(connectedRoadCells(world, content), {const CellCoord(4, 4)});
 
       // The second parcel is a normal purchase: adjacent, priced by
       // the settlement's size.
@@ -139,7 +210,7 @@ void main() {
         world,
         content,
         terrain,
-        const ParcelCoord(1, 0),
+        const ParcelCoord(0, 1),
       );
       expect(
         second.price,
@@ -157,25 +228,52 @@ void main() {
         reason: 'a non-adjacent second parcel is refused',
       );
 
-      // The founding needs buildable ground: five or more land
-      // cells. A water parcel would dead-end the opening — nothing
-      // to road, nothing to build, no income for a second parcel.
+      // Land before the hall: nothing can be bought, because
+      // founding is the hall's act — it claims its own parcel.
+      expect(
+        () => purchaseParcel(
+          freshWorld(),
+          content,
+          terrain,
+          const ParcelCoord(0, 0),
+        ),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: 'an unfounded city cannot buy land',
+      );
+
+      // The hall and its road need dry land, and both must fit inside
+      // the one parcel founding claims.
       final waterParcel = content.terrain.parcels.entries
           .firstWhere((entry) => entry.value == TerrainKind.water)
           .key;
-      expect(
-        () => quoteParcelPurchase(world, content, terrain, waterParcel),
-        returnsNormally,
-        reason: 'paid purchases may still be water',
+      final waterOrigin = CellCoord(
+        waterParcel.x * 8 + 3,
+        waterParcel.y * 8 + 1,
       );
-      final fresh = freshWorld();
       expect(
-        () => purchaseParcel(fresh, content, terrain, waterParcel),
+        () => quoteCityFounding(
+          freshWorld(),
+          content,
+          terrain,
+          origin: waterOrigin,
+          facing: 'south',
+        ),
         throwsA(isA<WorldRuleViolation>()),
-        reason: 'the founding parcel refuses open water',
+        reason: 'the hall refuses open water',
       );
-      // Not only open water: a mostly-drowned parcel with four land
-      // cells fails the same buildability bar. A synthetic map pins
+      expect(
+        () => quoteCityFounding(
+          freshWorld(),
+          content,
+          terrain,
+          origin: const CellCoord(6, 6),
+          facing: 'south',
+        ),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: 'the hall and its road must fit within one parcel',
+      );
+      // Not only open water: a mostly-drowned parcel with one land
+      // cell fails the same buildability bar. A synthetic map pins
       // this regardless of what the authored terrain carries.
       final sparseLand = ContentTerrainProvider(
         TerrainContent(
@@ -193,10 +291,29 @@ void main() {
         reason: 'the synthetic map carries no nature',
       );
       expect(
-        () =>
-            purchaseParcel(fresh, content, sparseLand, const ParcelCoord(0, 0)),
+        () => quoteCityFounding(
+          freshWorld(),
+          content,
+          sparseLand,
+          origin: const CellCoord(0, 0),
+          facing: 'south',
+        ),
         throwsA(isA<WorldRuleViolation>()),
-        reason: 'four land cells cannot found a settlement',
+        reason: 'a drowned parcel cannot host the hall',
+      );
+      // Another city's claim is as final as ownership: founding
+      // refuses a parcel already taken.
+      expect(
+        () => quoteCityFounding(
+          freshWorld(),
+          content,
+          terrain,
+          origin: const CellCoord(3, 1),
+          facing: 'south',
+          claimedParcels: {const ParcelCoord(0, 0)},
+        ),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: 'another city has claimed that parcel',
       );
     });
 
@@ -402,7 +519,7 @@ void main() {
         expect(project.stagesDone, 0);
         expect(project.population, 3);
         expect(world.coins, content.economy.startingTreasuryCoins);
-        expect(world.structures, isEmpty);
+        expect(built(world), isEmpty);
         expect(world.population, 0);
         // Concurrency is unlimited (the builder cap was removed
         // 2026-11-16): a second site plans fine while the first is
@@ -424,15 +541,15 @@ void main() {
 
         world = advanceWorldDays(world, 14);
         expect(world.constructions.single.stagesDone, 0);
-        expect(world.structures, isEmpty, reason: 'days never build anything');
+        expect(built(world), isEmpty, reason: 'days never build anything');
 
         world = nextDay(world);
         expect(world.constructions.single.stagesDone, 1);
-        expect(world.structures, isEmpty);
+        expect(built(world), isEmpty);
         world = nextDay(world);
 
-        expect(world.structures.single.catalogueId, 'small-home');
-        expect(world.structures.single.population, 3);
+        expect(built(world).single.catalogueId, 'small-home');
+        expect(built(world).single.population, 3);
         expect(world.population, 1);
         expect(
           world.constructions,
@@ -458,7 +575,7 @@ void main() {
         2 + content.economy.startingTreasuryCoins,
         reason: 'props are free in the staged economy',
       );
-      expect(world.structures, isEmpty);
+      expect(built(world), isEmpty);
       expect(world.props.single.catalogueId, 'flower-garden');
       expect(
         content.structure('flower-garden')!.assetRoles,
@@ -489,7 +606,7 @@ void main() {
           content,
           terrain,
           catalogueId: catalogueId,
-          origin: CellCoord(2 + index, 2),
+          origin: CellCoord(2 + index, 6),
         );
       }
 
@@ -513,14 +630,10 @@ void main() {
 
     test('placements roll sprite variants deterministically', () {
       var world = grantWorldDebugCoins(newWorld(), 30);
-      // Three cottages fit beside the starter road without blocking the
-      // southern extension; extend the road, then place three more beside
-      // it for six rolls of the six-variant cottage.
-      final nearRoad = [
-        const CellCoord(3, 4),
-        const CellCoord(5, 4),
-        const CellCoord(4, 3),
-      ];
+      // Two cottages fit beside the starter road (the hall owns the
+      // north side); extend the road south, then place four more
+      // beside it for six rolls of the six-variant cottage.
+      final nearRoad = [const CellCoord(3, 4), const CellCoord(5, 4)];
       final rolled = <String?>[];
       for (final origin in nearRoad) {
         world = startStructureConstruction(
@@ -541,6 +654,7 @@ void main() {
         const CellCoord(3, 5),
         const CellCoord(5, 5),
         const CellCoord(3, 6),
+        const CellCoord(5, 6),
       ]) {
         world = startStructureConstruction(
           world,
@@ -557,9 +671,9 @@ void main() {
       // one variant, every structure keeps its rolled role, and the same
       // seed replays the same sequence.
       expect(rolled.length, greaterThan(1));
-      final structureRoles = world.structures.map((s) => s.assetRole).toList();
+      final structureRoles = built(world).map((s) => s.assetRole).toList();
       expect(
-        world.structures.every(
+        built(world).every(
           (structure) => content
               .structure('small-home')!
               .assetRoles
@@ -571,7 +685,7 @@ void main() {
       final replay = grantWorldDebugCoins(newWorld(), 30);
       var replayed = replay;
       final replayRoles = <String?>[];
-      for (final origin in nearRoad.take(3)) {
+      for (final origin in nearRoad) {
         replayed = startStructureConstruction(
           replayed,
           content,
@@ -582,6 +696,18 @@ void main() {
         replayRoles.add(replayed.constructions.single.assetRole);
         replayed = settleAll(replayed);
       }
+      replayed = planAndSettleRoad(
+        replayed,
+        cells: const [CellCoord(4, 5), CellCoord(4, 6)],
+      );
+      replayed = startStructureConstruction(
+        replayed,
+        content,
+        terrain,
+        catalogueId: 'small-home',
+        origin: const CellCoord(3, 5),
+      );
+      replayRoles.add(replayed.constructions.single.assetRole);
       expect(replayRoles, rolled.take(3), reason: 'same seed, same rolls');
 
       final decoded = sheetTablesToWorld(
@@ -590,19 +716,19 @@ void main() {
         terrainProvider: terrain,
       );
       expect(
-        decoded.structures.map((s) => s.assetRole).toList(),
+        built(decoded).map((s) => s.assetRole).toList(),
         structureRoles,
         reason: 'variant snapshots survive the sheet round-trip',
       );
     });
 
     test('buildings larger than 1x1 need a road along a whole side', () {
-      // A 2×2 footprint at (5,3) touches the starter road only at its
-      // south-west corner cell (5,4): one adjacent road is no longer
+      // A 2×2 footprint at (4,5) touches the starter road only at its
+      // north-west corner cell (4,4): one adjacent road is not
       // frontage for a multi-cell building.
       var world = grantWorldDebugCoins(newWorld(), 10);
       final apartments = content.structure('apartments')!;
-      final footprint = structureFootprint(apartments, const CellCoord(5, 3));
+      final footprint = structureFootprint(apartments, const CellCoord(4, 5));
       expect(
         WorldQueries(world, terrain).buildingHasRoadAccess(footprint),
         isFalse,
@@ -614,21 +740,14 @@ void main() {
           content,
           terrain,
           catalogueId: 'apartments',
-          origin: const CellCoord(5, 3),
+          origin: const CellCoord(4, 5),
         ),
         throwsA(isA<WorldRuleViolation>()),
       );
 
-      // Roads along the whole north side (5,2) and (6,2) satisfy it.
-      world = planAndSettleRoad(
-        world,
-        cells: const [
-          CellCoord(4, 3),
-          CellCoord(4, 2),
-          CellCoord(5, 2),
-          CellCoord(6, 2),
-        ],
-      );
+      // The north side is (4,4) and (5,4): the starter road already
+      // runs at (4,4), and paving (5,4) completes the frontage.
+      world = planAndSettleRoad(world, cells: const [CellCoord(5, 4)]);
       expect(
         WorldQueries(world, terrain).buildingHasRoadAccess(footprint),
         isTrue,
@@ -641,7 +760,7 @@ void main() {
         WorldQueries(world, terrain).buildingHasRoadAccess(
           structureFootprint(
             content.structure('small-home')!,
-            const CellCoord(5, 4),
+            const CellCoord(5, 5),
           ),
         ),
         isTrue,
@@ -649,9 +768,9 @@ void main() {
     });
 
     test('building facings follow the adjacent road side', () {
-      // The starter road sits at (4,4): grid east of (3,4), south of
-      // (4,3), north of (4,5), and west of (5,4). The saved facing is
-      // the bordering road side itself.
+      // The starter road sits at (4,4): grid east of (3,4), north of
+      // (4,5), and west of (5,4). The saved facing is the bordering
+      // road side itself. (The hall owns the road's north flank.)
       var world = grantWorldDebugCoins(newWorld(), 30);
       world = startStructureConstruction(
         world,
@@ -668,9 +787,9 @@ void main() {
         content,
         terrain,
         catalogueId: 'small-home',
-        origin: const CellCoord(4, 3),
+        origin: const CellCoord(4, 5),
       );
-      expect(world.constructions.single.facing, 'south');
+      expect(world.constructions.single.facing, 'north');
       expect(
         () => validateParcelWorldState(world, content, terrain),
         returnsNormally,
@@ -944,7 +1063,7 @@ void main() {
         world,
         content,
         terrain,
-        const CellCoord(4, 3),
+        const CellCoord(4, 5),
         nextDay,
       );
       expect(world.population, 2);
@@ -994,10 +1113,15 @@ void main() {
     });
 
     test('the town reports its physical footprint', () {
-      // A fresh world: one 8×8 parcel and the founding road tile.
+      // A fresh world: one 8×8 parcel, the founding road tile, and
+      // the 3×3 city hall.
       var world = newWorld();
       expect(world.ownedTileCount, 64);
-      expect(world.builtTileCount, 1, reason: 'the founding road');
+      expect(
+        world.builtTileCount,
+        10,
+        reason: 'the founding road plus the hall',
+      );
 
       // A cottage adds its one footprint tile to built-up land,
       // never to the limits.
@@ -1009,14 +1133,14 @@ void main() {
         nextDay,
       );
       expect(world.ownedTileCount, 64);
-      expect(world.builtTileCount, 2);
+      expect(world.builtTileCount, 11);
 
       // Road tiles count as built-up land too.
       world = planAndSettleRoad(
         world,
-        cells: const [CellCoord(4, 3), CellCoord(4, 2)],
+        cells: const [CellCoord(3, 5), CellCoord(3, 6)],
       );
-      expect(world.builtTileCount, 4);
+      expect(world.builtTileCount, 13);
     });
 
     test('service coverage scales contentment, floored at 30 percent', () {
@@ -1047,22 +1171,28 @@ void main() {
         content,
         terrain,
         catalogueId: 'fruit-market',
-        origin: const CellCoord(4, 3),
+        origin: const CellCoord(4, 5),
       );
       world = nextDay(world);
       world = nextDay(world);
+      // The street extends east while its flank is still open — the
+      // second cottage then lines the extension at (6,5).
+      world = planAndSettleRoad(
+        world,
+        cells: const [CellCoord(5, 4), CellCoord(6, 4), CellCoord(7, 4)],
+      );
       world = _buildCottage(
         world,
         content,
         terrain,
-        const CellCoord(5, 4),
+        const CellCoord(6, 5),
         nextDay,
       );
       expect(world.population, 4);
       expect(
         world.employedPopulation,
-        3,
-        reason: 'the market employs three citizens',
+        4,
+        reason: 'the market employs every citizen',
       );
 
       // No services at all: coverage zero across the board and
@@ -1125,10 +1255,6 @@ void main() {
       // stays capped by the missing categories — the average.
       world = world.copyWith(
         unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'fire-station'},
-      );
-      world = planAndSettleRoad(
-        world,
-        cells: const [CellCoord(6, 4), CellCoord(7, 4)],
       );
       world = startStructureConstruction(
         world,
@@ -1346,7 +1472,7 @@ void main() {
         content,
         terrain,
         catalogueId: 'small-home',
-        origin: const CellCoord(4, 3),
+        origin: const CellCoord(3, 4),
       );
       world = startStructureConstruction(
         world,
@@ -1402,12 +1528,7 @@ void main() {
       // nothing to demolish. The floor's trickle must let it buy a
       // road, open a café, and restart employment.
       var world = newWorld();
-      for (final origin in [
-        const CellCoord(4, 3),
-        const CellCoord(3, 4),
-        const CellCoord(5, 4),
-        const CellCoord(4, 5),
-      ]) {
+      for (final origin in [const CellCoord(3, 4), const CellCoord(4, 5)]) {
         world = startStructureConstruction(
           world,
           content,
@@ -1426,19 +1547,19 @@ void main() {
       // the floor alone.
       var recovered = world.copyWith(coins: 0);
       final floorOnly =
-          (4 *
+          (2 *
                   content.structure('small-home')!.taxCoins *
                   content.economy.homeTaxUnemploymentFloorPercent /
                   100)
               .round();
       var guard = 0;
-      while (recovered.coins < 2 * content.economy.roadTileCostCoins &&
+      while (recovered.coins < 3 * content.economy.roadTileCostCoins &&
           guard++ < 90) {
         recovered = nextDay(recovered);
       }
       expect(
         recovered.coins,
-        greaterThanOrEqualTo(2 * content.economy.roadTileCostCoins),
+        greaterThanOrEqualTo(3 * content.economy.roadTileCostCoins),
         reason: 'the floor accrues enough to extend the road',
       );
       final floorReport = recovered.events.lastWhere(
@@ -1453,7 +1574,7 @@ void main() {
         recovered,
         content,
         terrain,
-        cells: const [CellCoord(6, 4), CellCoord(7, 4)],
+        cells: const [CellCoord(5, 4), CellCoord(6, 4), CellCoord(7, 4)],
       );
       recovered = nextDay(recovered);
       recovered = startStructureConstruction(
@@ -1522,7 +1643,7 @@ void main() {
 
       world = nextDay(world);
       expect(
-        world.structures,
+        built(world),
         hasLength(1),
         reason: 'the home completes with an empty treasury',
       );
@@ -1537,7 +1658,7 @@ void main() {
         content,
         terrain,
         catalogueId: 'fruit-market',
-        origin: const CellCoord(4, 3),
+        origin: const CellCoord(4, 5),
       );
       world = settleAll(world);
       // Employment ramps one position per check-in, and the first
@@ -1627,13 +1748,13 @@ void main() {
         waitingPopulation: 0,
       );
       final coins = world.coins;
-      final id = world.structures.first.id;
+      final id = built(world).first.id;
       final quote = quoteStructureDemolition(world, content, structureId: id);
       expect(quote.bedsAfter, 3, reason: 'one three-bed cottage remains');
       expect(quote.stayers, 3, reason: 'the remaining beds house everyone');
       expect(quote.evicted, 0);
       world = demolishStructure(world, content, structureId: id);
-      expect(world.structures, hasLength(1));
+      expect(built(world), hasLength(1));
       expect(world.population, 3, reason: 'residents moved, none lost');
       expect(world.waitingPopulation, 0);
       expect(world.coins, coins, reason: 'no refund, no charge');
@@ -1667,7 +1788,7 @@ void main() {
         employedPopulation: 2,
         waitingPopulation: 0,
       );
-      final id = world.structures.first.id;
+      final id = built(world).first.id;
       final quote = quoteStructureDemolition(world, content, structureId: id);
       // One cottage remains: three beds for five residents. The
       // waiting list's cap is ten percent of the survivors, floored
@@ -1698,7 +1819,7 @@ void main() {
       expect(reloaded.population, 3);
       expect(reloaded.waitingPopulation, 1);
       expect(reloaded.employedPopulation, 0);
-      expect(reloaded.structures, hasLength(1));
+      expect(built(reloaded), hasLength(1));
     });
 
     test('demolishing a staffed workplace unemploys its workers', () {
@@ -1739,16 +1860,16 @@ void main() {
     });
 
     test('a homes-only town frees frontage and builds its way out', () {
-      // The playtest soft-lock, as a regression: every cell beside
-      // the one road tile carries a home, so nothing else can sit
-      // against the road and no jobs can ever arrive. Demolition is
-      // the escape — one home comes down, commerce takes its place
-      // on the freed frontage, and the town can recover.
+      // The playtest soft-lock, as a regression: every free cell
+      // beside the road tile carries a home (the hall owns the
+      // fourth), so nothing else can sit against the road and no
+      // jobs can ever arrive. Demolition is the escape — one home
+      // comes down, commerce takes its place on the freed frontage,
+      // and the town can recover.
       var world = newWorld();
       for (final cell in [
         const CellCoord(3, 4),
         const CellCoord(5, 4),
-        const CellCoord(4, 3),
         const CellCoord(4, 5),
       ]) {
         world = _buildCottage(world, content, terrain, cell, nextDay);
@@ -1809,20 +1930,302 @@ void main() {
     });
   });
 
+  group('the outside connection', () {
+    test('only the hall\'s front road roots the network', () {
+      var world = newWorld();
+      // The front road at (4,4) is the root; a fresh street touching
+      // the hall's SIDE joins nothing.
+      world = planAndSettleRoad(world, cells: const [CellCoord(2, 4)]);
+      // (2,4) touches the hall's west flank (3,4)... wait — it
+      // touches the hall cell (3,4)? No: the hall occupies columns
+      // 3-5, so (2,4) is free ground beside it, connected to the
+      // network only through (3,4) — which is a building, not a
+      // road. The side street is an island.
+      expect(connectedRoadCells(world, content), {
+        const CellCoord(4, 4),
+      }, reason: 'a road beside the hall is not the front road');
+      // A cottage on the side street refuses: frontage exists, the
+      // connection does not.
+      expect(
+        () => startStructureConstruction(
+          world,
+          content,
+          terrain,
+          catalogueId: 'small-home',
+          origin: const CellCoord(1, 4),
+        ),
+        throwsA(
+          isA<WorldRuleViolation>().having(
+            (error) => error.message,
+            'message',
+            contains('no outside connection'),
+          ),
+        ),
+        reason: 'frontage without connection carries no buildings',
+      );
+      // Join the side street to the front road and the same cottage
+      // places: the network reached it.
+      world = planAndSettleRoad(world, cells: const [CellCoord(3, 4)]);
+      expect(connectedRoadCells(world, content), {
+        const CellCoord(4, 4),
+        const CellCoord(2, 4),
+        const CellCoord(3, 4),
+      });
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'small-home',
+        origin: const CellCoord(1, 4),
+      );
+      expect(world.constructions.single.catalogueId, 'small-home');
+      validateParcelWorldState(world, content, terrain);
+    });
+
+    test('a bridge welds the network across water', () {
+      // The founding road at (4,4) reaches the channel's near bank
+      // via a street; the far bank's street is an island until the
+      // bridge opens, then both join the root.
+      var world = grantWorldDebugCoins(newWorld(), 600000);
+      // The far street lives in parcel (2,0), past the water parcel
+      // (1,0) — both bought so the far bank's ground is owned.
+      world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
+      world = purchaseParcel(world, content, terrain, const ParcelCoord(2, 0));
+      world = planAndSettleRoad(
+        world,
+        cells: const [CellCoord(5, 4), CellCoord(6, 4)],
+      );
+      final farStreet = [
+        for (var column = 17; column <= 19; column++) CellCoord(column, 4),
+      ];
+      world = planAndSettleRoad(world, cells: farStreet);
+      expect(
+        connectedRoadCells(world, content).containsAll(farStreet),
+        isFalse,
+        reason: 'the far street is an island before the bridge',
+      );
+      world = startBridgeConstruction(
+        world,
+        content,
+        terrain,
+        nearBank: const CellCoord(7, 4),
+        farBank: const CellCoord(16, 4),
+      );
+      world = settleAll(world);
+      expect(
+        connectedRoadCells(world, content).containsAll(farStreet),
+        isTrue,
+        reason: 'the bridge welds the far street to the root',
+      );
+      // And a cottage on the far street places.
+      world = startStructureConstruction(
+        world,
+        content,
+        terrain,
+        catalogueId: 'small-home',
+        origin: const CellCoord(17, 3),
+      );
+      expect(world.constructions.single.catalogueId, 'small-home');
+      validateParcelWorldState(world, content, terrain);
+    });
+
+    test('all four facings plant the front road on the right cell', () {
+      // Each facing quotes the road at the middle of that face, one
+      // cell out — the compass the arrow shows.
+      final fresh = freshWorld();
+      final cases = {
+        'north': const CellCoord(4, 2),
+        'east': const CellCoord(6, 4),
+        'south': const CellCoord(4, 6),
+        'west': const CellCoord(2, 4),
+      };
+      for (final entry in cases.entries) {
+        final quote = quoteCityFounding(
+          fresh,
+          content,
+          terrain,
+          origin: const CellCoord(3, 3),
+          facing: entry.key,
+        );
+        expect(quote.frontCell, entry.value, reason: entry.key);
+      }
+    });
+
+    test(
+      'the hall is permanent: demolition refuses, and a second cannot found',
+      () {
+        var world = newWorld();
+        final hall = world.structures.firstWhere(
+          (structure) => structure.catalogueId == 'city-hall',
+        );
+        expect(
+          () => quoteStructureDemolition(world, content, structureId: hall.id),
+          throwsA(
+            isA<WorldRuleViolation>().having(
+              (error) => error.message,
+              'message',
+              contains("town's root"),
+            ),
+          ),
+        );
+        // The hall never places through the catalogue either — not
+        // even unlocked.
+        world = world.copyWith(
+          unlockedCatalogueIds: {...world.unlockedCatalogueIds, 'city-hall'},
+        );
+        expect(
+          () => startStructureConstruction(
+            world,
+            content,
+            terrain,
+            catalogueId: 'city-hall',
+            origin: const CellCoord(3, 4),
+          ),
+          throwsA(
+            isA<WorldRuleViolation>().having(
+              (error) => error.message,
+              'message',
+              contains('only through founding'),
+            ),
+          ),
+        );
+      },
+    );
+
+    test('bridge banks are not frontage', () {
+      // A bridge over the channel: both its banks are road tiles,
+      // but a building may not face either — a landing is not a
+      // street, whatever art paves it.
+      var world = grantWorldDebugCoins(newWorld(), 600000);
+      world = purchaseParcel(world, content, terrain, const ParcelCoord(1, 0));
+      world = purchaseParcel(world, content, terrain, const ParcelCoord(2, 0));
+      world = planAndSettleRoad(
+        world,
+        cells: const [CellCoord(5, 4), CellCoord(6, 4)],
+      );
+      world = startBridgeConstruction(
+        world,
+        content,
+        terrain,
+        nearBank: const CellCoord(7, 4),
+        farBank: const CellCoord(16, 4),
+      );
+      world = settleAll(world);
+      expect(world.roadsByCell.containsKey(const CellCoord(16, 4)), isTrue);
+      expect(
+        () => startStructureConstruction(
+          world,
+          content,
+          terrain,
+          catalogueId: 'small-home',
+          origin: const CellCoord(16, 3),
+        ),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: 'a bridge landing is not frontage',
+      );
+      expect(
+        () => startStructureConstruction(
+          world,
+          content,
+          terrain,
+          catalogueId: 'small-home',
+          origin: const CellCoord(7, 3),
+        ),
+        throwsA(isA<WorldRuleViolation>()),
+        reason: 'the near landing is not frontage either',
+      );
+      validateParcelWorldState(world, content, terrain);
+    });
+
+    test('a save with a building off the network is refused', () {
+      // A hand-edited shape: the hall roots (4,4), but a cottage
+      // stands on a road that never reached it. The validator names
+      // the building — saves are data, and this one is wrong.
+      final world = sheetTablesToWorld(
+        SheetTables(
+          userData: {
+            'seed': '123456',
+            'coins': '${content.economy.startingTreasuryCoins}',
+            'coins_earned': '${content.economy.startingTreasuryCoins}',
+            'coins_spent': '0',
+            'simulated_date': '2026-11-02',
+            'high_water_date': '2026-11-02',
+            'construction_day': '0',
+          },
+          ownedParcels: const [
+            ['0', '0'],
+          ],
+          tiles: const [
+            ['4', '4', 'road', 'complete', 'asphalt', '', '', ''],
+            [
+              '3',
+              '1',
+              'structure',
+              'complete',
+              'city-hall',
+              'city-hall',
+              'south',
+              '',
+            ],
+            ['6', '6', 'road', 'complete', 'asphalt', '', '', ''],
+            [
+              '6',
+              '5',
+              'structure',
+              'complete',
+              'small-home',
+              'home-small-yellow',
+              'south',
+              '',
+            ],
+          ],
+          projects: const [],
+        ),
+        content: content,
+        terrainProvider: terrain,
+      );
+      expect(
+        () => validateParcelWorldState(world, content, terrain),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('off the city hall'),
+          ),
+        ),
+      );
+    });
+
+    test('a save whose city owns land without a hall is refused', () {
+      // The no-migration contract: pre-founding saves fail loudly on
+      // load, by absence — no version code anywhere.
+      expect(
+        () => validateParcelWorldState(newWorldHallLess(), content, terrain),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('no city hall'),
+          ),
+        ),
+      );
+    });
+  });
+
   group('parcel purchase and natural terrain', () {
     test('another city\'s claim refuses purchase and founding', () {
       // One map, exclusive parcels: the session passes every other
       // city's parcels as the claim set, and the same rules refuse
       // them — founding included.
       final fresh = freshWorld();
-      const foundingCoord = ParcelCoord(0, 0);
       expect(
-        () => quoteParcelPurchase(
+        () => quoteCityFounding(
           fresh,
           content,
           terrain,
-          foundingCoord,
-          claimedParcels: {foundingCoord},
+          origin: const CellCoord(3, 1),
+          facing: 'south',
+          claimedParcels: {const ParcelCoord(0, 0)},
         ),
         throwsA(
           isA<WorldRuleViolation>().having(
@@ -1833,10 +2236,16 @@ void main() {
         ),
         reason: 'founding cannot take a foreign-held parcel',
       );
-      // Without the claim the same parcel founds normally —
-      // single-city callers behave exactly as before.
+      // Without the claim the same spot founds normally — single-city
+      // callers behave exactly as before.
       expect(
-        () => quoteParcelPurchase(fresh, content, terrain, foundingCoord),
+        () => quoteCityFounding(
+          fresh,
+          content,
+          terrain,
+          origin: const CellCoord(3, 1),
+          facing: 'south',
+        ),
         returnsNormally,
       );
 
@@ -1959,31 +2368,33 @@ void main() {
     var world = grantWorldDebugCoins(newWorld(), 60000);
     world = planAndSettleRoad(
       world,
-      cells: const [CellCoord(2, 2), CellCoord(3, 2), CellCoord(4, 2)],
+      cells: const [CellCoord(2, 6), CellCoord(3, 6), CellCoord(4, 6)],
     );
     world = startBridgeConstruction(
       world,
       content,
       terrain,
-      nearBank: const CellCoord(5, 2),
-      farBank: const CellCoord(7, 2),
+      nearBank: const CellCoord(5, 6),
+      farBank: const CellCoord(7, 6),
     );
     final job = world.constructions.single;
     expect(job.kind, WorldConstructionKind.bridge);
     expect(job.stagesDone, 0);
-    expect(job.waterCells, const [CellCoord(6, 2)]);
+    expect(job.waterCells, const [CellCoord(6, 6)]);
     validateParcelWorldState(world, content, terrain);
 
     // The first check-in delivers the near bank as a road tile and
     // the state stays valid mid-construction.
     world = nextDay(world);
     expect(
-      world.roads.any((road) => road.cell == const CellCoord(5, 2)),
+      world.roads.any((road) => road.cell == const CellCoord(5, 6)),
       isTrue,
     );
-    validateParcelWorldState(world, content, terrain);
-
-    // Cell by cell to completion: the store validates on every save,
+    validateParcelWorldState(
+      world,
+      content,
+      terrain,
+    ); // Cell by cell to completion: the store validates on every save,
     // so the finished disconnected bridge must validate too — the
     // far bank opens as a road tile with it.
     while (world.constructions.isNotEmpty) {
@@ -1991,10 +2402,10 @@ void main() {
       validateParcelWorldState(world, content, terrain);
     }
     final bridge = world.bridges.single;
-    expect(bridge.nearBank, const CellCoord(5, 2));
-    expect(bridge.farBank, const CellCoord(7, 2));
+    expect(bridge.nearBank, const CellCoord(5, 6));
+    expect(bridge.farBank, const CellCoord(7, 6));
     expect(
-      world.roads.any((road) => road.cell == const CellCoord(7, 2)),
+      world.roads.any((road) => road.cell == const CellCoord(7, 6)),
       isTrue,
       reason: 'the far bank opens as a road with the bridge',
     );
@@ -2068,13 +2479,17 @@ void main() {
       isTrue,
       reason: 'the far bank opens with the bridge',
     );
+    // The bank is a landing, not frontage: a cottage beside it needs
+    // a real street beyond, paved onto the far shore — which the
+    // bridge's weld keeps connected to the hall's network.
+    world = planAndSettleRoad(world, cells: const [CellCoord(17, 4)]);
     expect(
       quoteStructurePlacement(
         world,
         content,
         terrain,
         catalogueId: 'small-home',
-        origin: const CellCoord(17, 4),
+        origin: const CellCoord(17, 3),
       ).price,
       0,
       reason: 'building plans are free in the staged economy',
@@ -2213,18 +2628,18 @@ void main() {
     // tile between them.
     world = planAndSettleRoad(
       world,
-      cells: const [CellCoord(5, 1), CellCoord(5, 2)],
+      cells: const [CellCoord(2, 1), CellCoord(2, 2)],
     );
     world = planAndSettleRoad(
       world,
-      cells: const [CellCoord(5, 6), CellCoord(5, 7)],
+      cells: const [CellCoord(2, 6), CellCoord(2, 7)],
     );
     world = startBridgeConstruction(
       world,
       content,
       terrain,
-      nearBank: const CellCoord(5, 3),
-      farBank: const CellCoord(5, 5),
+      nearBank: const CellCoord(2, 3),
+      farBank: const CellCoord(2, 5),
     );
     world = settleAll(world);
 
@@ -2234,9 +2649,9 @@ void main() {
       terrainProvider: terrain,
     );
     final bridge = decoded.bridges.single;
-    expect(bridge.waterCells, const [CellCoord(5, 4)]);
-    expect(bridge.nearBank, const CellCoord(5, 3));
-    expect(bridge.farBank, const CellCoord(5, 5));
+    expect(bridge.waterCells, const [CellCoord(2, 4)]);
+    expect(bridge.nearBank, const CellCoord(2, 3));
+    expect(bridge.farBank, const CellCoord(2, 5));
     validateParcelWorldState(decoded, content, terrain);
   });
 
@@ -2265,10 +2680,16 @@ void main() {
     expect(clinic.footprint, const [CellCoord(4, 5), CellCoord(5, 5)]);
     world = settleAll(world);
 
-    // A north-south street down column 6.
+    // A north-south street down column 6, joined to the row-4 street
+    // at (6,4) — frontage must reach the hall's network.
     world = planAndSettleRoad(
       world,
-      cells: const [CellCoord(6, 5), CellCoord(6, 6), CellCoord(6, 7)],
+      cells: const [
+        CellCoord(6, 4),
+        CellCoord(6, 5),
+        CellCoord(6, 6),
+        CellCoord(6, 7),
+      ],
     );
     world = startStructureConstruction(
       world,
@@ -2299,7 +2720,10 @@ void main() {
     // road turns the lot a quarter — the footprint transposes to run
     // south from the origin.
     world = planAndSettleRoad(world, cells: const [CellCoord(5, 4)]);
-    world = planAndSettleRoad(world, cells: const [CellCoord(3, 5)]);
+    world = planAndSettleRoad(
+      world,
+      cells: const [CellCoord(3, 4), CellCoord(3, 5)],
+    );
     world = startStructureConstruction(
       world,
       content,
@@ -2325,8 +2749,10 @@ void main() {
     // but the cell the turned lot needs is taken by a cottage, so the
     // swap refuses instead of clipping through it.
     world = planAndSettleRoad(world, cells: const [CellCoord(2, 5)]);
-    world = planAndSettleRoad(world, cells: const [CellCoord(1, 6)]);
-    world = planAndSettleRoad(world, cells: const [CellCoord(1, 7)]);
+    world = planAndSettleRoad(
+      world,
+      cells: const [CellCoord(1, 5), CellCoord(1, 6), CellCoord(1, 7)],
+    );
     world = startStructureConstruction(
       world,
       content,

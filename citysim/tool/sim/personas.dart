@@ -168,10 +168,22 @@ class TraitPersona implements PlayerPersona {
           ? 2
           : math.max(6, h.state.population * traits.jobTargetPercent ~/ 100);
       if (vacancy >= target) break;
-      final model = _pickCommerce(h, dense: traits.jobTargetPercent > 0);
-      if (model == null) break;
+      final ladder = _commerceLadder(h, dense: traits.jobTargetPercent > 0);
+      if (ladder.isEmpty) break;
+      // The street first: a smaller model that lines up today beats
+      // paving toward the big one — the corner market employs the
+      // jobless while the office waits for its street. When nothing
+      // lines up, the ladder's head paves.
+      String? pick;
+      for (final model in ladder) {
+        if (h.canLineUp(model)) {
+          pick = model;
+          break;
+        }
+      }
+      pick ??= ladder.first;
       final outcome = h.attemptBuild(
-        model,
+        pick,
         splitStrokes: traits.splitsRoadStrokes,
       );
       if (outcome == BuildOutcome.built ||
@@ -235,13 +247,15 @@ class TraitPersona implements PlayerPersona {
     }
   }
 
-  String? _pickCommerce(SimHarness h, {required bool dense}) {
+  List<String> _commerceLadder(SimHarness h, {required bool dense}) {
     final options = _unlocked(h, (model) => model.isCommerce);
-    if (options.isEmpty) return null;
-    if (dense) {
-      return _maxBy(options, (model) => model.jobs / _area(model)).id;
-    }
-    return _minBy(options, (model) => model.upkeepCoins).id;
+    if (options.isEmpty) return const [];
+    options.sort(
+      dense
+          ? (a, b) => (b.jobs / _area(b)).compareTo(a.jobs / _area(a))
+          : (a, b) => a.upkeepCoins.compareTo(b.upkeepCoins),
+    );
+    return [for (final model in options) model.id];
   }
 
   String? _pickService(SimHarness h, String category) {

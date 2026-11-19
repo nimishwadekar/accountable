@@ -80,11 +80,11 @@ void main() {
     content = frozenContent();
   });
 
-  /// A world one step into the game: parcel (0,0) founded (free) and
-  /// optionally a first road tile at its centre — assembled directly
-  /// through the save codec so no coins, days, or events are spent
-  /// reaching it.
-  ParcelWorldState foundedWorld({bool withRoad = true}) => sheetTablesToWorld(
+  /// A world one step into the game: parcel (0,0) founded with its
+  /// city hall and the hall's front road at (4,4) — assembled
+  /// directly through the save codec so no coins, days, or events
+  /// are spent reaching it.
+  ParcelWorldState foundedWorld() => sheetTablesToWorld(
     SheetTables(
       userData: {
         'seed': '7',
@@ -98,11 +98,19 @@ void main() {
       ownedParcels: const [
         ['0', '0'],
       ],
-      tiles: withRoad
-          ? const [
-              ['4', '4', 'road', 'complete', 'asphalt', '', '', ''],
-            ]
-          : const [],
+      tiles: const [
+        ['4', '4', 'road', 'complete', 'asphalt', '', '', ''],
+        [
+          '3',
+          '1',
+          'structure',
+          'complete',
+          'city-hall',
+          'city-hall',
+          'south',
+          '',
+        ],
+      ],
       projects: const [],
     ),
     content: content,
@@ -131,44 +139,55 @@ void main() {
       // says where to begin.
       expect(find.text('0 parcels · 0 structures'), findsOneWidget);
       expect(
-        find.text('Open the Parcel tool to claim your free founding parcel'),
+        find.text(
+          'Open the Building tool to place your city hall and found the city',
+        ),
         findsOneWidget,
       );
       expect(find.text('Could not load the world artwork.'), findsNothing);
 
-      // Found: the parcel tool, a tap on the charted parcel under the
-      // camera's centre, and the free claim.
-      await tester.tap(find.text('Parcels').first);
+      // Found: the Building tool, a tap north of the camera's centre
+      // for the hall (its ghost pins there), and the free placement —
+      // hall, front road, and the parcel claim land together.
+      await tester.tap(find.text('Buildings').first);
       await tester.pump();
       expect(
         find.text(
-          'Your first parcel is free — tap one with at least 5 land cells',
+          'Tap a spot for your city hall · the button swaps its facing',
         ),
         findsOneWidget,
       );
       final mapRect = tester.getRect(find.byType(ParcelWorldView));
-      await tester.tapAt(mapRect.center);
+      // The camera centres on (4,4); a tap 64px up lands the hall's
+      // origin at (2,2), its front road at (3,5) — leaving the east
+      // flank free for the road plan below.
+      await tester.tapAt(mapRect.center + const Offset(0, -64));
       await tester.pump();
-      final review = find.text('Review parcel purchase');
-      await tester.ensureVisible(review);
+      final placeButton = find.text('Place city hall');
+      await tester.ensureVisible(placeButton);
       await tester.pump();
-      await tester.tap(review);
+      await tester.tap(placeButton);
       await tester.pump();
-      await tester.tap(find.text('Claim parcel'));
+      await tester.tap(find.text('Found city'));
       await tester.pump();
       expect(find.text('1 parcel · 0 structures'), findsOneWidget);
       expect(store.state?.parcels.single.coord, const ParcelCoord(0, 0));
       expect(store.state?.parcels.single.pricePaid, 0);
-      expect(store.state?.roads, isEmpty, reason: 'nothing is pre-built');
+      expect(
+        store.state?.roads.single.cell,
+        const CellCoord(3, 5),
+        reason: "founding plants the hall's front road",
+      );
+      expect(store.state?.constructions.single.catalogueId, 'city-hall');
       expect(
         store.state?.coins,
         content.economy.startingTreasuryCoins,
-        reason: 'the founding parcel is free',
+        reason: 'founding is free',
       );
 
-      // The check-in is the town report: a founded town with no
-      // roads yet owes nothing, and no coin moves.
-      await tester.tap(find.text('Check in · +0'));
+      // The check-in is the town report: the rising hall pays
+      // nothing, the front road owes its upkeep.
+      await tester.tap(find.textContaining('Check in ·'));
       await tester.pump();
       expect(find.textContaining('Town report'), findsOneWidget);
       expect(find.textContaining('Upkeep paid'), findsOneWidget);
@@ -176,8 +195,14 @@ void main() {
       await tester.pump();
       expect(
         store.state?.coins,
-        content.economy.startingTreasuryCoins,
-        reason: 'an empty town nets zero',
+        content.economy.startingTreasuryCoins -
+            content.economy.roadUpkeepCoinsPerTile,
+        reason: 'the front road owes upkeep from day one',
+      );
+      expect(
+        store.state?.constructions.single.stagesDone,
+        1,
+        reason: 'the hall rose one stage',
       );
 
       // The founding claim scrolled the panel down; the tool chips
@@ -208,14 +233,23 @@ void main() {
       expect(
         store.state?.coins,
         content.economy.startingTreasuryCoins -
+            content.economy.roadUpkeepCoinsPerTile -
             2 * content.economy.roadTileCostCoins,
-        reason: 'the whole stretch is paid upfront',
+        reason:
+            'the whole stretch is paid upfront, after the front '
+            "road's first upkeep",
       );
-      expect(store.state?.constructions.single.roadCells, [
-        const CellCoord(5, 4),
-        const CellCoord(6, 4),
-      ]);
-      expect(store.state?.roads, isEmpty, reason: 'nothing delivered yet');
+      expect(
+        store.state?.constructions
+            .lastWhere((job) => job.kind == WorldConstructionKind.road)
+            .roadCells,
+        [const CellCoord(5, 4), const CellCoord(6, 4)],
+      );
+      expect(
+        store.state?.roads,
+        hasLength(1),
+        reason: 'only the hall front road stands — nothing delivered yet',
+      );
 
       // Delivery: a day passes, the check-in lands the whole stretch
       // and settles it — one day of waiting, whatever the length.
@@ -262,7 +296,10 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(
-        ParcelCityApp(store: _MemoryParcelStore(), content: content),
+        ParcelCityApp(
+          store: _MemoryParcelStore()..state = foundedWorld(),
+          content: content,
+        ),
       );
       for (var i = 0; i < 20; i++) {
         await tester.pump(const Duration(milliseconds: 100));
@@ -303,7 +340,7 @@ void main() {
     tester.view.physicalSize = const Size(900, 900);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final store = _MemoryParcelStore()..state = foundedWorld(withRoad: false);
+    final store = _MemoryParcelStore()..state = foundedWorld();
 
     await tester.pumpWidget(ParcelCityApp(store: store, content: content));
     for (var i = 0; i < 50; i++) {
@@ -585,7 +622,7 @@ void main() {
 
     // Two towns on the shared map: Alpha at (0,0), Beta at (2,0) —
     // a charted grass parcel east of the channel.
-    final alpha = foundedWorld(withRoad: true);
+    final alpha = foundedWorld();
     final beta = sheetTablesToWorld(
       SheetTables(
         userData: {
@@ -633,7 +670,7 @@ void main() {
 
     // The lowest id is focused.
     expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('1 parcel · 0 structures'), findsOneWidget);
+    expect(find.text('1 parcel · 1 structures'), findsOneWidget);
 
     // Switch focus to Beta through the city list.
     await tester.tap(find.text('Alpha'));
@@ -697,7 +734,7 @@ void main() {
       findsNothing,
       reason: 'the interaction surface resets with focus',
     );
-    expect(find.text('1 parcel · 0 structures'), findsOneWidget);
+    expect(find.text('1 parcel · 1 structures'), findsOneWidget);
   });
 
   testWidgets('re-picking the focused city flies the camera home', (
@@ -710,7 +747,7 @@ void main() {
 
     // The same two towns as the focus test: Alpha at (0,0), Beta at
     // (2,0) with its road at (20,4).
-    final alpha = foundedWorld(withRoad: true);
+    final alpha = foundedWorld();
     final beta = sheetTablesToWorld(
       SheetTables(
         userData: {
@@ -803,7 +840,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final alpha = foundedWorld(withRoad: true);
+    final alpha = foundedWorld();
     final store = _MemoryCityStore(
       MultiCityTables(
         cities: const [
@@ -838,7 +875,9 @@ void main() {
     expect(find.text('City 2'), findsOneWidget);
     expect(find.text('0 parcels · 0 structures'), findsOneWidget);
     expect(
-      find.text('Open the Parcel tool to claim your free founding parcel'),
+      find.text(
+        'Open the Building tool to place your city hall and found the city',
+      ),
       findsOneWidget,
     );
     expect(store.tables.cities.map((record) => record.id), [
@@ -847,7 +886,7 @@ void main() {
     ]);
 
     // Founding cannot take city_1's parcel…
-    await tester.tap(find.text('Parcels'));
+    await tester.tap(find.text('Buildings'));
     await tester.pump();
     final viewCenter = tester.getRect(find.byType(ParcelWorldView)).center;
     await tester.tapAt(viewCenter);
@@ -858,12 +897,12 @@ void main() {
         viewCenter + (_cellWorld(cell) - _cellWorld(const CellCoord(4, 4)));
     await tester.tapAt(screenFor(const CellCoord(20, 4)));
     await tester.pump();
-    final review = find.text('Review parcel purchase');
-    await tester.ensureVisible(review);
+    final placeButton = find.text('Place city hall');
+    await tester.ensureVisible(placeButton);
     await tester.pump();
-    await tester.tap(review);
+    await tester.tap(placeButton);
     await tester.pump();
-    await tester.tap(find.text('Claim parcel'));
+    await tester.tap(find.text('Found city'));
     await tester.pump();
     expect(find.text('1 parcel · 0 structures'), findsOneWidget);
 
@@ -872,5 +911,14 @@ void main() {
     expect(store.states['city_1']!.parcels, hasLength(1));
     expect(store.tables.tablesById['city_2']!.ownedParcels, hasLength(1));
     expect(store.tables.tablesById['city_1']!.ownedParcels, hasLength(1));
+    // Let the map's async art waves (shore bands) settle before the
+    // tree tears down — a decode finishing mid-teardown asserts.
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    await tester.pump();
   });
 }

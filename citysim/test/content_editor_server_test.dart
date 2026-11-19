@@ -113,7 +113,11 @@ void main() {
   test('saving a valid change writes the file and backs up', () async {
     final content = await _decode(await _get('/api/content'));
     final models = (content['catalogue.json'] as Map)['models'] as List;
-    (models.first as Map)['taxCoins'] = 510;
+    // The root hall is zero-stat by rule — the edit lands on a home.
+    final home = models.firstWhere(
+      (model) => (model as Map)['id'] == 'small-home',
+    ) as Map;
+    home['taxCoins'] = 510;
     final response = await _post('/api/content', content);
     expect(response.statusCode, 200);
     final body = await _decode(response);
@@ -121,7 +125,11 @@ void main() {
 
     final fresh = await _decode(await _get('/api/content'));
     final freshModels = (fresh['catalogue.json'] as Map)['models'] as List;
-    expect((freshModels.first as Map)['taxCoins'], 510);
+    expect(
+      (freshModels.firstWhere((m) => (m as Map)['id'] == 'small-home')
+          as Map)['taxCoins'],
+      510,
+    );
 
     final backups = await _decode(await _get('/api/backups'));
     expect((backups['backups'] as List), isNotEmpty);

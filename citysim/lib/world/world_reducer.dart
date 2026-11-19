@@ -396,6 +396,98 @@ ParcelWorldState purchaseParcel(
   );
 }
 
+/// Founds the city: places the city hall at [origin] facing [facing],
+/// plants one road tile at the middle of its front face, and claims
+/// the parcel holding both as the free founding parcel. Nature under
+/// the hall and road levels itself — the founders clear their own
+/// ground. The hall rises in stages like any building; the road and
+/// the outside connection are live the moment founding lands.
+ParcelWorldState foundCity(
+  ParcelWorldState state,
+  ContentBundle content,
+  TerrainProvider terrainProvider, {
+  required CellCoord origin,
+  required String facing,
+  Set<ParcelCoord> claimedParcels = const {},
+}) {
+  final quote = quoteCityFounding(
+    state,
+    content,
+    terrainProvider,
+    origin: origin,
+    facing: facing,
+    claimedParcels: claimedParcels,
+  );
+  final model = rootHallModel(content)!;
+  final parcel = OwnedParcel(
+    coord: quote.parcel,
+    pricePaid: 0,
+    purchasedAtDay: state.constructionDay,
+    terrain: quote.parcel
+        .cells(state.parcelSize)
+        .map((cell) => terrainProvider.sample(cell, state.seed))
+        .toList(),
+  );
+  // Nature materializes with the claim (the purchase path's copy),
+  // minus whatever stands under the hall and its front road.
+  final levelled = {...quote.footprint, quote.frontCell};
+  final nature = [
+    for (final row in terrainProvider.natureProps)
+      if (parcelForCell(row.cell, parcelSize: state.parcelSize) == quote.parcel)
+        placedPropFromTerrain(row),
+  ];
+  final survivingProps = [
+    ...state.props,
+    ...nature,
+  ].where((prop) => !levelled.contains(prop.cell)).toList();
+  final hall = WorldConstruction(
+    id: 'construction-${state.nextEntityNumber}',
+    kind: WorldConstructionKind.structure,
+    catalogueId: model.id,
+    structureKind: model.kind,
+    origin: origin,
+    quarterTurns: 0,
+    footprint: quote.footprint,
+    stagesDone: 0,
+    startedAtDay: state.constructionDay,
+    population: model.population,
+    assetRole: model.assetRoles.first,
+    facing: facing,
+  );
+  final road = RoadSegment(
+    id: 'road-founding-${state.nextEntityNumber}',
+    cell: quote.frontCell,
+    style: RoadStyle.asphalt,
+    pricePaid: 0,
+    completedAtDay: state.constructionDay,
+  );
+  return state.copyWith(
+    nextEntityNumber: state.nextEntityNumber + 1,
+    parcels: [...state.parcels, parcel],
+    props: survivingProps,
+    roads: [...state.roads, road],
+    constructions: [...state.constructions, hall],
+    events: [
+      ...state.events,
+      _event(
+        state,
+        kind: 'city-founded',
+        description:
+            'City founded · the city hall rises at ${origin.key}, facing '
+            '$facing',
+        payload: {
+          'parcel': [quote.parcel.x, quote.parcel.y],
+          'hall': origin.toJson(),
+          'facing': facing,
+          'frontRoad': quote.frontCell.toJson(),
+          'clearedNature': quote.clearedNatureCount,
+        },
+      ),
+    ],
+    nextEventNumber: state.nextEventNumber + 1,
+  );
+}
+
 /// Buys a road stretch plan: the whole price is paid upfront from
 /// the treasury, then the whole stretch lands on the next check-in.
 /// Delivery is automatic.
