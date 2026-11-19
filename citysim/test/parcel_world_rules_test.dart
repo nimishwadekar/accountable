@@ -84,8 +84,8 @@ void main() {
   ];
 
   /// The pre-founding-era settled shape: parcel and road, no hall.
-  /// Only the rejection test may build it — every valid town carries
-  /// its hall.
+  /// Only rejection tests may build it — a legal hall-less city
+  /// holds nothing but its claim.
   ParcelWorldState newWorldHallLess() => sheetTablesToWorld(
     SheetTables(
       userData: {
@@ -153,124 +153,218 @@ void main() {
       );
     });
 
-    test('founding places the hall, its front road, and claims the parcel', () {
-      var world = freshWorld();
+    test(
+      'founding claims its parcel free, then places the hall and front road',
+      () {
+        var world = freshWorld();
 
-      // Any charted parcel with room for the hall and its road: free,
-      // no neighbour required — there is nothing to be adjacent to
-      // yet. The hall is 3×3 facing south at (3,1), so its front road
-      // lands at (4,4).
-      final quote = quoteCityFounding(
-        world,
-        content,
-        terrain,
-        origin: const CellCoord(3, 1),
-        facing: 'south',
-      );
-      expect(quote.parcel, const ParcelCoord(0, 0));
-      expect(quote.frontCell, const CellCoord(4, 4));
-      expect(quote.footprint.length, 9);
-      expect(
-        world.coins,
-        content.economy.startingTreasuryCoins,
-        reason: 'quoting never spends',
-      );
-      world = foundCity(
-        world,
-        content,
-        terrain,
-        origin: const CellCoord(3, 1),
-        facing: 'south',
-      );
-      expect(world.parcels.single.coord, const ParcelCoord(0, 0));
-      expect(world.parcels.single.pricePaid, 0);
-      expect(world.coins, content.economy.startingTreasuryCoins);
-      expect(world.roads.single.cell, const CellCoord(4, 4));
-      expect(world.roads.single.pricePaid, 0);
-      final hall = world.constructions.single;
-      expect(hall.catalogueId, 'city-hall');
-      expect(hall.facing, 'south');
-      expect(
-        world.events.last.kind,
-        'city-founded',
-        reason: 'founding is the town\'s first event',
-      );
-      expect(
-        () => validateParcelWorldState(world, content, terrain),
-        returnsNormally,
-      );
-
-      // The outside connection is live the moment founding lands:
-      // the front road roots the network even while the hall rises.
-      expect(connectedRoadCells(world, content), {const CellCoord(4, 4)});
-
-      // The second parcel is a normal purchase: adjacent, priced by
-      // the settlement's size.
-      final second = quoteParcelPurchase(
-        world,
-        content,
-        terrain,
-        const ParcelCoord(0, 1),
-      );
-      expect(
-        second.price,
-        content.economy.parcelBaseCoins +
-            content.economy.parcelPerPopulationCoins * world.population,
-      );
-      expect(
-        () => quoteParcelPurchase(
+        // The first act: the claim — free, no neighbour required
+        // (there is nothing to be adjacent to yet), on any charted
+        // parcel the hall can stand on.
+        final claimQuote = quoteParcelPurchase(
           world,
           content,
           terrain,
-          const ParcelCoord(4, 4),
-        ),
-        throwsA(isA<WorldRuleViolation>()),
-        reason: 'a non-adjacent second parcel is refused',
-      );
-
-      // Land before the hall: nothing can be bought, because
-      // founding is the hall's act — it claims its own parcel.
-      expect(
-        () => purchaseParcel(
-          freshWorld(),
+          const ParcelCoord(0, 0),
+        );
+        expect(claimQuote.price, 0);
+        expect(
+          world.coins,
+          content.economy.startingTreasuryCoins,
+          reason: 'quoting never spends',
+        );
+        world = purchaseParcel(
+          world,
           content,
           terrain,
           const ParcelCoord(0, 0),
-        ),
-        throwsA(isA<WorldRuleViolation>()),
-        reason: 'an unfounded city cannot buy land',
-      );
+        );
+        expect(world.parcels.single.coord, const ParcelCoord(0, 0));
+        expect(world.parcels.single.pricePaid, 0);
+        expect(world.coins, content.economy.startingTreasuryCoins);
+        expect(
+          world.events.last.description,
+          contains('founding parcel, free'),
+          reason: 'the claim is the town\'s first event',
+        );
+        // Mid-founding is a valid save: one parcel, nothing built.
+        expect(
+          () => validateParcelWorldState(world, content, terrain),
+          returnsNormally,
+        );
 
-      // The hall and its road need dry land, and both must fit inside
-      // the one parcel founding claims.
-      final waterParcel = content.terrain.parcels.entries
-          .firstWhere((entry) => entry.value == TerrainKind.water)
-          .key;
-      final waterOrigin = CellCoord(
-        waterParcel.x * 8 + 3,
-        waterParcel.y * 8 + 1,
-      );
+        // Between claim and hall nothing else may act: no land buys,
+        // no roads, no buildings — the hall is the next and only act.
+        expect(
+          () => quoteParcelPurchase(
+            world,
+            content,
+            terrain,
+            const ParcelCoord(0, 1),
+          ),
+          throwsA(isA<WorldRuleViolation>()),
+          reason: 'the hall precedes every purchase',
+        );
+        expect(
+          () => quoteRoadStretch(
+            world,
+            content,
+            terrain,
+            cells: const [CellCoord(4, 5)],
+          ),
+          throwsA(isA<WorldRuleViolation>()),
+          reason: 'roads wait for the hall',
+        );
+        expect(
+          () => quoteStructurePlacement(
+            world,
+            content,
+            terrain,
+            catalogueId: 'small-home',
+            origin: const CellCoord(4, 5),
+          ),
+          throwsA(isA<WorldRuleViolation>()),
+          reason: 'buildings wait for the hall',
+        );
+
+        // The second act: the hall — 3×3 facing south at (3,1), its
+        // front road landing at (4,4) on the claim.
+        final quote = quoteCityFounding(
+          world,
+          content,
+          terrain,
+          origin: const CellCoord(3, 1),
+          facing: 'south',
+        );
+        expect(quote.parcel, const ParcelCoord(0, 0));
+        expect(quote.frontCell, const CellCoord(4, 4));
+        expect(quote.footprint.length, 9);
+        world = foundCity(
+          world,
+          content,
+          terrain,
+          origin: const CellCoord(3, 1),
+          facing: 'south',
+        );
+        expect(world.parcels, hasLength(1), reason: 'the hall claims no land');
+        expect(world.coins, content.economy.startingTreasuryCoins);
+        expect(world.roads.single.cell, const CellCoord(4, 4));
+        expect(world.roads.single.pricePaid, 0);
+        final hall = world.constructions.single;
+        expect(hall.catalogueId, 'city-hall');
+        expect(hall.facing, 'south');
+        expect(
+          world.events.last.kind,
+          'city-founded',
+          reason: 'founding is the town\'s second event',
+        );
+        expect(
+          () => validateParcelWorldState(world, content, terrain),
+          returnsNormally,
+        );
+
+        // The outside connection is live the moment founding lands:
+        // the front road roots the network even while the hall rises.
+        expect(connectedRoadCells(world, content), {const CellCoord(4, 4)});
+
+        // The second parcel is a normal purchase: adjacent, priced by
+        // the settlement's size.
+        final second = quoteParcelPurchase(
+          world,
+          content,
+          terrain,
+          const ParcelCoord(0, 1),
+        );
+        expect(
+          second.price,
+          content.economy.parcelBaseCoins +
+              content.economy.parcelPerPopulationCoins * world.population,
+        );
+        expect(
+          () => quoteParcelPurchase(
+            world,
+            content,
+            terrain,
+            const ParcelCoord(4, 4),
+          ),
+          throwsA(isA<WorldRuleViolation>()),
+          reason: 'a non-adjacent second parcel is refused',
+        );
+      },
+    );
+
+    test('founding refuses what it cannot stand on, and repeats', () {
+      // Founding before the claim: the hall has nowhere to stand.
       expect(
         () => quoteCityFounding(
           freshWorld(),
           content,
           terrain,
-          origin: waterOrigin,
+          origin: const CellCoord(3, 1),
           facing: 'south',
         ),
-        throwsA(isA<WorldRuleViolation>()),
+        throwsA(
+          isA<WorldRuleViolation>().having(
+            (error) => error.message,
+            'message',
+            contains('Claim your founding parcel first'),
+          ),
+        ),
+      );
+
+      // A water parcel cannot be claimed: the claim's gate is the
+      // hall's own buildability bar — a 3×3 lot with its front road
+      // on dry land. A claim that could not host the hall would seal
+      // the game shut.
+      final waterParcel = content.terrain.parcels.entries
+          .firstWhere((entry) => entry.value == TerrainKind.water)
+          .key;
+      expect(
+        () => quoteParcelPurchase(freshWorld(), content, terrain, waterParcel),
+        throwsA(
+          isA<WorldRuleViolation>().having(
+            (error) => error.message,
+            'message',
+            contains('cannot host the city hall'),
+          ),
+        ),
         reason: 'the hall refuses open water',
+      );
+      // With a claim in hand the hall must fit inside it: a 3×3 at
+      // (6,6) spills past the parcel's edge onto unowned ground.
+      final claimed = purchaseParcel(
+        freshWorld(),
+        content,
+        terrain,
+        const ParcelCoord(0, 0),
       );
       expect(
         () => quoteCityFounding(
-          freshWorld(),
+          claimed,
           content,
           terrain,
           origin: const CellCoord(6, 6),
           facing: 'south',
         ),
-        throwsA(isA<WorldRuleViolation>()),
-        reason: 'the hall and its road must fit within one parcel',
+        throwsA(
+          isA<WorldRuleViolation>().having(
+            (error) => error.message,
+            'message',
+            contains('within your founding parcel'),
+          ),
+        ),
+        reason: 'the hall and its road must fit within the claim',
+      );
+      expect(
+        () => quoteCityFounding(
+          claimed,
+          content,
+          terrain,
+          origin: const CellCoord(3, 1),
+          facing: 'south',
+        ),
+        returnsNormally,
+        reason: 'a parcel the claim accepts hosts its hall',
       );
       // Not only open water: a mostly-drowned parcel with one land
       // cell fails the same buildability bar. A synthetic map pins
@@ -291,29 +385,59 @@ void main() {
         reason: 'the synthetic map carries no nature',
       );
       expect(
-        () => quoteCityFounding(
+        () => quoteParcelPurchase(
           freshWorld(),
           content,
           sparseLand,
-          origin: const CellCoord(0, 0),
-          facing: 'south',
+          const ParcelCoord(0, 0),
         ),
         throwsA(isA<WorldRuleViolation>()),
-        reason: 'a drowned parcel cannot host the hall',
+        reason: 'a drowned parcel cannot be claimed',
       );
-      // Another city's claim is as final as ownership: founding
-      // refuses a parcel already taken.
+
+      // Something standing on the hall's ten cells refuses founding —
+      // nature does not count (founding levels its own ground), but
+      // roads and buildings do. The pre-founding-era fixture carries
+      // a road exactly where a south-facing hall's front road lands.
       expect(
         () => quoteCityFounding(
-          freshWorld(),
+          newWorldHallLess(),
           content,
           terrain,
           origin: const CellCoord(3, 1),
           facing: 'south',
-          claimedParcels: {const ParcelCoord(0, 0)},
         ),
-        throwsA(isA<WorldRuleViolation>()),
-        reason: 'another city has claimed that parcel',
+        throwsA(
+          isA<WorldRuleViolation>().having(
+            (error) => error.message,
+            'message',
+            contains('already stands there'),
+          ),
+        ),
+      );
+      // And once founded, founding is done.
+      final founded = foundCity(
+        claimed,
+        content,
+        terrain,
+        origin: const CellCoord(3, 1),
+        facing: 'south',
+      );
+      expect(
+        () => quoteCityFounding(
+          founded,
+          content,
+          terrain,
+          origin: const CellCoord(3, 1),
+          facing: 'south',
+        ),
+        throwsA(
+          isA<WorldRuleViolation>().having(
+            (error) => error.message,
+            'message',
+            contains('already founded'),
+          ),
+        ),
       );
     });
 
@@ -2031,8 +2155,14 @@ void main() {
 
     test('all four facings plant the front road on the right cell', () {
       // Each facing quotes the road at the middle of that face, one
-      // cell out — the compass the arrow shows.
-      final fresh = freshWorld();
+      // cell out — the compass the arrow shows. On the claim, where
+      // every facing is legal ground.
+      final claimed = purchaseParcel(
+        freshWorld(),
+        content,
+        terrain,
+        const ParcelCoord(0, 0),
+      );
       final cases = {
         'north': const CellCoord(4, 2),
         'east': const CellCoord(6, 4),
@@ -2041,7 +2171,7 @@ void main() {
       };
       for (final entry in cases.entries) {
         final quote = quoteCityFounding(
-          fresh,
+          claimed,
           content,
           terrain,
           origin: const CellCoord(3, 3),
@@ -2196,35 +2326,66 @@ void main() {
       );
     });
 
-    test('a save whose city owns land without a hall is refused', () {
-      // The no-migration contract: pre-founding saves fail loudly on
-      // load, by absence — no version code anywhere.
+    test('a hall-less save holds only the founding claim', () {
+      // Mid-founding is the one legal hall-less shape: exactly the
+      // claim — one parcel, nothing built. It validates.
+      final claim = purchaseParcel(
+        freshWorld(),
+        content,
+        terrain,
+        const ParcelCoord(0, 0),
+      );
+      expect(
+        () => validateParcelWorldState(claim, content, terrain),
+        returnsNormally,
+        reason: 'the claim alone is a valid save',
+      );
+      // The pre-founding era built roads and homes before the hall
+      // existed; those saves refuse — by shape, with no version code
+      // anywhere.
       expect(
         () => validateParcelWorldState(newWorldHallLess(), content, terrain),
         throwsA(
           isA<FormatException>().having(
             (error) => error.message,
             'message',
-            contains('no city hall'),
+            contains('founding parcel'),
           ),
         ),
+      );
+      // Two parcels without a hall are unreachable by play — the
+      // hall precedes every purchase — and refuse.
+      final twoParcels = claim.copyWith(
+        parcels: [
+          ...claim.parcels,
+          OwnedParcel(
+            coord: const ParcelCoord(0, 1),
+            pricePaid: 0,
+            purchasedAtDay: 0,
+            terrain: const [],
+          ),
+        ],
+      );
+      expect(
+        () => validateParcelWorldState(twoParcels, content, terrain),
+        throwsA(isA<FormatException>()),
+        reason: 'a hall-less city holds exactly its claim',
       );
     });
   });
 
   group('parcel purchase and natural terrain', () {
-    test('another city\'s claim refuses purchase and founding', () {
+    test("another city's claim refuses the founding claim and expansion", () {
       // One map, exclusive parcels: the session passes every other
       // city's parcels as the claim set, and the same rules refuse
-      // them — founding included.
+      // them — the founding claim included.
       final fresh = freshWorld();
       expect(
-        () => quoteCityFounding(
+        () => quoteParcelPurchase(
           fresh,
           content,
           terrain,
-          origin: const CellCoord(3, 1),
-          facing: 'south',
+          const ParcelCoord(0, 0),
           claimedParcels: {const ParcelCoord(0, 0)},
         ),
         throwsA(
@@ -2234,17 +2395,16 @@ void main() {
             contains('Another city has claimed'),
           ),
         ),
-        reason: 'founding cannot take a foreign-held parcel',
+        reason: 'the founding claim cannot take a foreign-held parcel',
       );
-      // Without the claim the same spot founds normally — single-city
-      // callers behave exactly as before.
+      // Without the claim set the same parcel claims free —
+      // single-city callers behave exactly as before.
       expect(
-        () => quoteCityFounding(
+        () => quoteParcelPurchase(
           fresh,
           content,
           terrain,
-          origin: const CellCoord(3, 1),
-          facing: 'south',
+          const ParcelCoord(0, 0),
         ),
         returnsNormally,
       );

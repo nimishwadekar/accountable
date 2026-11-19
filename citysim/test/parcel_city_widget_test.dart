@@ -140,24 +140,61 @@ void main() {
       expect(find.text('0 parcels · 0 structures'), findsOneWidget);
       expect(
         find.text(
-          'Open the Building tool to place your city hall and found the city',
+          'Open the Parcels tool and claim your founding parcel — free',
         ),
         findsOneWidget,
       );
       expect(find.text('Could not load the world artwork.'), findsNothing);
 
-      // Found: the Building tool, a tap north of the camera's centre
-      // for the hall (its ghost pins there), and the free placement —
-      // hall, front road, and the parcel claim land together.
-      await tester.tap(find.text('Buildings').first);
+      // Founding's first act: the claim — the Parcels tool, a tap on
+      // the charted parcel under the camera, and the free claim.
+      await tester.tap(find.text('Parcels').first);
       await tester.pump();
       expect(
-        find.text(
-          'Tap a spot for your city hall · the button swaps its facing',
-        ),
+        find.text('Tap any charted parcel — your founding claim is free'),
         findsOneWidget,
       );
       final mapRect = tester.getRect(find.byType(ParcelWorldView));
+      await tester.tapAt(mapRect.center);
+      await tester.pump();
+      final reviewButton = find.text('Review parcel purchase');
+      await tester.ensureVisible(reviewButton);
+      await tester.pump();
+      await tester.tap(reviewButton);
+      await tester.pump();
+      await tester.tap(find.text('Claim parcel'));
+      await tester.pump();
+      expect(find.text('1 parcel · 0 structures'), findsOneWidget);
+      expect(store.state?.parcels.single.coord, const ParcelCoord(0, 0));
+      expect(store.state?.parcels.single.pricePaid, 0);
+      expect(
+        find.text('Place your city hall before buying more land'),
+        findsOneWidget,
+        reason: 'the hint moves to founding\'s second act',
+      );
+
+      // The second act: the Building tool, a tap north of the
+      // camera's centre for the hall (its ghost pins there), and the
+      // free placement — the hall and its front road land on the
+      // claim. The claim dialog's ensureVisible scrolled the panel
+      // down; the tool chips build lazily at its top, so scroll back
+      // up to reach them.
+      final buildingsTool = find.text('Buildings');
+      await tester.scrollUntilVisible(
+        buildingsTool,
+        -200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.pump();
+      await tester.tap(buildingsTool.first);
+      await tester.pump();
+      expect(
+        find.text(
+          'Tap a spot on your founding parcel for the city hall · the '
+          'button swaps its facing',
+        ),
+        findsOneWidget,
+      );
       // The camera centres on (4,4); a tap 64px up lands the hall's
       // origin at (2,2), its front road at (3,5) — leaving the east
       // flank free for the road plan below.
@@ -168,7 +205,7 @@ void main() {
       await tester.pump();
       await tester.tap(placeButton);
       await tester.pump();
-      await tester.tap(find.text('Found city'));
+      await tester.tap(find.text('Place city hall').last);
       await tester.pump();
       expect(find.text('1 parcel · 0 structures'), findsOneWidget);
       expect(store.state?.parcels.single.coord, const ParcelCoord(0, 0));
@@ -621,7 +658,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     // Two towns on the shared map: Alpha at (0,0), Beta at (2,0) —
-    // a charted grass parcel east of the channel.
+    // a charted grass parcel east of the channel. Beta carries its
+    // hall at (19,1) facing south, its front road the (20,4) tile.
     final alpha = foundedWorld();
     final beta = sheetTablesToWorld(
       SheetTables(
@@ -639,6 +677,16 @@ void main() {
         ],
         tiles: const [
           ['20', '4', 'road', 'complete', 'asphalt', '', '', ''],
+          [
+            '19',
+            '1',
+            'structure',
+            'complete',
+            'city-hall',
+            'city-hall',
+            'south',
+            '',
+          ],
         ],
         projects: const [],
       ),
@@ -746,7 +794,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     // The same two towns as the focus test: Alpha at (0,0), Beta at
-    // (2,0) with its road at (20,4).
+    // (2,0) with its hall at (19,1) and front road at (20,4).
     final alpha = foundedWorld();
     final beta = sheetTablesToWorld(
       SheetTables(
@@ -764,6 +812,16 @@ void main() {
         ],
         tiles: const [
           ['20', '4', 'road', 'complete', 'asphalt', '', '', ''],
+          [
+            '19',
+            '1',
+            'structure',
+            'complete',
+            'city-hall',
+            'city-hall',
+            'south',
+            '',
+          ],
         ],
         projects: const [],
       ),
@@ -875,9 +933,7 @@ void main() {
     expect(find.text('City 2'), findsOneWidget);
     expect(find.text('0 parcels · 0 structures'), findsOneWidget);
     expect(
-      find.text(
-        'Open the Building tool to place your city hall and found the city',
-      ),
+      find.text('Open the Parcels tool and claim your founding parcel — free'),
       findsOneWidget,
     );
     expect(store.tables.cities.map((record) => record.id), [
@@ -885,16 +941,44 @@ void main() {
       'city_2',
     ]);
 
-    // Founding cannot take city_1's parcel…
-    await tester.tap(find.text('Buildings'));
+    // The claim cannot take city_1's parcel…
+    await tester.tap(find.text('Parcels'));
     await tester.pump();
     final viewCenter = tester.getRect(find.byType(ParcelWorldView)).center;
     await tester.tapAt(viewCenter);
     await tester.pump();
     expect(find.text('Another city has claimed that parcel.'), findsOneWidget);
-    // …but charted unclaimed land founds free.
+    // …but charted unclaimed land claims free.
     Offset screenFor(CellCoord cell) =>
         viewCenter + (_cellWorld(cell) - _cellWorld(const CellCoord(4, 4)));
+    await tester.tapAt(screenFor(const CellCoord(20, 4)));
+    await tester.pump();
+    final reviewButton = find.text('Review parcel purchase');
+    await tester.ensureVisible(reviewButton);
+    await tester.pump();
+    await tester.tap(reviewButton);
+    await tester.pump();
+    await tester.tap(find.text('Claim parcel'));
+    await tester.pump();
+    expect(find.text('1 parcel · 0 structures'), findsOneWidget);
+    expect(
+      store.states['city_2']!.parcels.single.coord,
+      const ParcelCoord(2, 0),
+      reason: 'the claim took the parcel the tap selected',
+    );
+
+    // Founding's second act: the hall places on the claim. The claim
+    // dialog's ensureVisible scrolled the panel down; scroll back up
+    // to reach the tool chips.
+    final buildingsTool = find.text('Buildings');
+    await tester.scrollUntilVisible(
+      buildingsTool,
+      -200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pump();
+    await tester.tap(buildingsTool);
+    await tester.pump();
     await tester.tapAt(screenFor(const CellCoord(20, 4)));
     await tester.pump();
     final placeButton = find.text('Place city hall');
@@ -902,7 +986,7 @@ void main() {
     await tester.pump();
     await tester.tap(placeButton);
     await tester.pump();
-    await tester.tap(find.text('Found city'));
+    await tester.tap(find.text('Place city hall').last);
     await tester.pump();
     expect(find.text('1 parcel · 0 structures'), findsOneWidget);
 

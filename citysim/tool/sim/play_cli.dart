@@ -21,8 +21,8 @@
 //   skip <n>                      days the player didn't open the game
 //   map [col row]                 ASCII cell window around the town
 //   catalogue                     unlocked models with their stats
-//   found <px> <py>               claim the free founding parcel
-//   parcel <px> <py>              buy land (quoted)
+//   parcel <px> <py> [buy]        buy land; the first claim is free
+//   found <col> <row> [facing]    place the city hall (after claim)
 //   road <c1,r1> <c2,r2>          plan one road stretch (quoted)
 //   build <model> <col> <row>     place a building (quoted)
 //   place <model> <col> <row> <sx> <sy>   place a decoration
@@ -375,11 +375,11 @@ THE GAME, as the game itself teaches it:
   paid, and every construction advances one stage. Days you don't
   open the game, nothing progresses at all.
   Buildings construct for free. Land, roads, and bridges cost coins.
-  Your city is founded by placing its city hall — a 3x3 building
-  with a front you choose; one road tile lands before its front and
-  the parcel it all stands on is claimed free. Every later parcel is
-  bought whole, adjacent to your town, and prices rise with your
-  population.
+  Your city is founded in two acts: claim a founding parcel — free,
+  anywhere charted — then place its city hall on that parcel: a 3x3
+  building with a front you choose; one road tile lands before its
+  front. Every later parcel is bought whole, adjacent to your town,
+  and prices rise with your population.
   Buildings need a completed road along one full side of their
   footprint — and that road must connect, through the road network,
   back to the city hall's front road. Roads themselves may be paved
@@ -398,7 +398,7 @@ THE GAME, as the game itself teaches it:
 COMMANDS:
   status · report · map [col row] · catalogue
   day (open tomorrow and check in) · skip <n> (days away)
-  found <col> <row> [north|east|south|west] · parcel <parcelX> <parcelY> [buy]
+  parcel <parcelX> <parcelY> [buy] · found <col> <row> [north|east|south|west]
   road <col,row> [col,row] [buy] · build <model> <col> <row>
   place <model> <col> <row> <subtileX> <subtileY> (decorations)
   demolish <col> <row> [<sx> <sy>] [confirm] · inspect <col> <row>
@@ -406,8 +406,8 @@ COMMANDS:
 Purchases quote first: parcel and road print the price (and the
 treasury after) without spending — append "buy" to go through.
 Demolition quotes too: it prints what stands there and who loses
-homes — append "confirm" to go through. Founding is one free act:
-the hall, its front road, and the parcel claim land together.''');
+homes — append "confirm" to go through. Founding is two free acts:
+claim the parcel, then place the hall and its front road.''');
   }
 
   void _status() {
@@ -623,8 +623,7 @@ the hall, its front road, and the parcel claim land together.''');
       _act(SimAction('found', 'hall at ${cell.key} facing $facing'));
       stdout.writeln(
         'City founded · the hall rises at ${cell.key} facing $facing · '
-        'front road at ${quote.frontCell.key} · parcel ${quote.parcel.key} '
-        'claimed free'
+        'front road at ${quote.frontCell.key}'
         '${quote.clearedNatureCount > 0 ? ' · ${quote.clearedNatureCount} nature levelled' : ''}',
       );
     } on WorldRuleViolation catch (e) {
@@ -653,8 +652,11 @@ the hall, its front road, and the parcel claim land together.''');
       }
       state = purchaseParcel(state, content, terrain, coord);
       stdout.writeln(
-        'Bought parcel (${coord.x},${coord.y}) '
-        'for ${_fmt(quote.price)} coins · ${quote.landCellCount} land cells',
+        quote.price == 0
+            ? 'Claimed parcel (${coord.x},${coord.y}) free — your founding '
+                  'parcel. Place your city hall on it next (found).'
+            : 'Bought parcel (${coord.x},${coord.y}) '
+                  'for ${_fmt(quote.price)} coins · ${quote.landCellCount} land cells',
       );
       _act(
         SimAction(

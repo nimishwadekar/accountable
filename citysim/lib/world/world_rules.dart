@@ -347,13 +347,48 @@ ParcelPurchaseQuote quoteParcelPurchase(
   if (claimedParcels.contains(candidate)) {
     throw const WorldRuleViolation('Another city has claimed that parcel.');
   }
-  // Founding is the hall's act now: before the first parcel a city
-  // can only place its city hall, whose landing claims the parcel.
-  // Every purchase after founding is normal: adjacent, and priced by
-  // the settlement's size.
+  // Founding is two acts: the claim, then the hall. A city with no
+  // land makes the claim — free, anywhere charted, and only on a
+  // parcel that can host the hall (see [parcelCanHostHall]), because
+  // the claim is permanent and the hall is mandatory. A city with
+  // its claim but no hall buys nothing yet: the hall is the next and
+  // only act. Every purchase after founding is normal — adjacent,
+  // and priced by the settlement's size.
   if (state.parcels.isEmpty) {
+    final origin = candidate.origin(state.parcelSize);
+    if (terrainProvider.sample(origin, state.seed).kind == TerrainKind.fog) {
+      throw const WorldRuleViolation('That parcel is hidden in the fog.');
+    }
+    final model = rootHallModel(content);
+    if (model != null &&
+        !parcelCanHostHall(
+          parcel: candidate,
+          parcelSize: state.parcelSize,
+          hallSize: model.footprintColumns,
+          isLand: (cell) => terrainProvider.sample(cell, state.seed).isLand,
+        )) {
+      throw const WorldRuleViolation(
+        'That parcel cannot host the city hall — pick one with its '
+        '3×3 lot and front road on dry land.',
+      );
+    }
+    final cells = candidate
+        .cells(state.parcelSize)
+        .map((cell) => terrainProvider.sample(cell, state.seed))
+        .toList();
+    final base = content.economy.parcelBaseCoins;
+    final perPopulation = content.economy.parcelPerPopulationCoins;
+    return ParcelPurchaseQuote(
+      coord: candidate,
+      price: 0,
+      cells: cells,
+      basePrice: base,
+      perPopulationCoins: perPopulation,
+    );
+  }
+  if (!cityIsFounded(state, content)) {
     throw const WorldRuleViolation(
-      'Place your city hall first — founding claims its parcel.',
+      'Place your city hall first — the town grows from its root.',
     );
   }
   if (!candidate.neighbors.any(queries.ownsParcel)) {
@@ -392,6 +427,25 @@ StructureDefinition? rootHallModel(ContentBundle content) {
     if (model.isRoot) return model;
   }
   return null;
+}
+
+/// Whether the city's founding hall stands or rises — the town's
+/// root, and the mark that founding is done. Between the founding
+/// claim and the hall's placement the city owns land but is not yet
+/// founded: nothing builds, nothing buys, only the hall can place.
+bool cityIsFounded(ParcelWorldState state, ContentBundle content) {
+  final model = rootHallModel(content);
+  if (model == null) return true;
+  for (final structure in state.structures) {
+    if (structure.catalogueId == model.id) return true;
+  }
+  for (final job in state.constructions) {
+    if (job.catalogueId == model.id &&
+        job.kind == WorldConstructionKind.structure) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// The road cell at the middle of a square footprint's front face,
@@ -576,23 +630,28 @@ class CityFoundingQuote {
 
 /// Quotes founding a city: a 3×3 hall (per content's root model) at
 /// [origin] facing [facing], with one road tile planted at the middle
-/// of its front face. The parcel holding hall and road becomes the
-/// free founding parcel. Brush and trees under the ten cells are
-/// cleared by the act itself.
+/// of its front face. Founding's second act — the free claim came
+/// first — so the hall and its road stand on the city's own founding
+/// parcel, and brush or trees under the ten cells are cleared by the
+/// act itself.
 CityFoundingQuote quoteCityFounding(
   ParcelWorldState state,
   ContentBundle content,
   TerrainProvider terrainProvider, {
   required CellCoord origin,
   required String facing,
-  Set<ParcelCoord> claimedParcels = const {},
   WorldRules rules = const WorldRules(),
 }) {
   final model = rootHallModel(content);
   if (model == null) {
     throw const WorldRuleViolation('This content ships no city hall.');
   }
-  if (state.parcels.isNotEmpty) {
+  if (state.parcels.isEmpty) {
+    throw const WorldRuleViolation(
+      'Claim your founding parcel first — the Parcels tool, free.',
+    );
+  }
+  if (cityIsFounded(state, content)) {
     throw const WorldRuleViolation('Your city is already founded.');
   }
   const compass = ['north', 'east', 'south', 'west'];
@@ -606,45 +665,33 @@ CityFoundingQuote quoteCityFounding(
       parcel.y.abs() > rules.maximumCoordinate) {
     throw const WorldRuleViolation('That parcel is outside the supported map.');
   }
-  if (claimedParcels.contains(parcel)) {
-    throw const WorldRuleViolation('Another city has claimed that parcel.');
-  }
+  final queries = WorldQueries(state, terrainProvider);
   final footprint = structureFootprint(model, origin);
   final front = frontRoadCellForFacing(footprint, facing)!;
-  // Hall and road stand together on their parcel: founding claims
-  // exactly one, and a road on a neighbour's ground could never be
-  // owned.
+  // The hall rises on the founding claim: every one of its ten cells
+  // — lot and front road — must be this city's own dry land, which
+  // pins them to the one parcel the claim owns, and clear of
+  // anything standing. Nature is not "standing": founding levels its
+  // own ground.
   for (final cell in [...footprint, front]) {
-    if (parcelForCell(cell, parcelSize: state.parcelSize) != parcel) {
+    if (!queries.ownsCell(cell)) {
       throw const WorldRuleViolation(
-        'The city hall and its front road must fit within one parcel.',
+        'The city hall and its front road must fit within your '
+        'founding parcel.',
       );
     }
-  }
-  // Buyable means charted terrain: fog is the uncharted default
-  // beyond the authored map, and authored fog stays hidden.
-  if (terrainProvider
-          .sample(parcel.origin(state.parcelSize), state.seed)
-          .kind ==
-      TerrainKind.fog) {
-    throw const WorldRuleViolation('That parcel is hidden in the fog.');
-  }
-  for (final cell in [...footprint, front]) {
     if (!terrainProvider.sample(cell, state.seed).isLand) {
       throw const WorldRuleViolation(
         'The city hall and its front road need dry land.',
       );
     }
-  }
-  final landCells = parcel
-      .cells(state.parcelSize)
-      .where((cell) => terrainProvider.sample(cell, state.seed).isLand)
-      .length;
-  if (landCells < foundingLandCells) {
-    throw WorldRuleViolation(
-      'Your founding parcel needs at least $foundingLandCells land '
-      'cells — pick somewhere you can build.',
-    );
+    if (queries.roadsByCell.containsKey(cell) ||
+        queries.structuresByCell.containsKey(cell) ||
+        queries.reservedCells.contains(cell)) {
+      throw const WorldRuleViolation(
+        'Something already stands there — clear it before founding.',
+      );
+    }
   }
   final footprintCells = {...footprint, front};
   return CityFoundingQuote(
@@ -653,11 +700,10 @@ CityFoundingQuote quoteCityFounding(
     frontCell: front,
     facing: facing,
     clearedNatureCount: [
-      // Nature materializes with the parcel claim, so the count
-      // reads the terrain provider's rows, not state.props (empty
-      // before founding owns anything).
-      for (final row in terrainProvider.natureProps)
-        if (footprintCells.contains(row.cell)) row,
+      // Nature materialized with the claim, so the count reads the
+      // settlement's props.
+      for (final prop in state.props)
+        if (footprintCells.contains(prop.cell)) prop,
     ].length,
   );
 }
@@ -673,6 +719,12 @@ RoadProjectQuote quoteRoadStretch(
   }
   if (!_unique(cells.map((cell) => cell.key))) {
     throw const WorldRuleViolation('A road stretch cannot revisit a tile.');
+  }
+  // The hall roots the network; until it rises, no roads pave.
+  if (!cityIsFounded(state, content)) {
+    throw const WorldRuleViolation(
+      'Place your city hall first — the town grows from its root.',
+    );
   }
   final queries = WorldQueries(state, terrainProvider);
   for (var index = 0; index < cells.length; index++) {
@@ -811,6 +863,14 @@ StructurePlacementQuote quoteStructurePlacement(
   if (definition.isRoot) {
     throw const WorldRuleViolation(
       'The city hall places only through founding.',
+    );
+  }
+  // The hall roots everything standing: until it rises, nothing
+  // places — buildings (which need its network most of all) and
+  // decorations alike.
+  if (!cityIsFounded(state, content)) {
+    throw const WorldRuleViolation(
+      'Place your city hall first — the town grows from its root.',
     );
   }
   final queries = WorldQueries(state, terrainProvider);
@@ -1290,10 +1350,13 @@ void validateParcelWorldState(
   if (state.unlockedCatalogueIds.any((id) => content.structure(id) == null)) {
     throw const FormatException('The parcel-world model unlocks are invalid.');
   }
-  // The founding hall: a city with land must hold exactly one —
-  // standing or still rising — and its front road must stand. This
-  // is what refuses saves from before founding: no hall, no load,
-  // and no migration code ever.
+  // The founding hall: a founded city holds exactly one — standing
+  // or still rising — and its front road must stand. A city with no
+  // hall may sit mid-founding: its claim is the only act it can
+  // perform, so exactly one parcel and nothing built — anything more
+  // is a save from before founding (or a hand edit), refused by
+  // shape with no version code anywhere. The claimed parcel must be
+  // able to host the hall, exactly as the claim required.
   final hallModel = rootHallModel(content);
   if (hallModel != null) {
     final halls = [
@@ -1305,10 +1368,22 @@ void validateParcelWorldState(
       ),
     ];
     if (state.parcels.isNotEmpty && halls.isEmpty) {
-      throw const FormatException(
-        'The city owns land but has no city hall — saves from before '
-        'founding are not supported.',
-      );
+      if (state.parcels.length != 1 ||
+          state.roads.isNotEmpty ||
+          state.structures.isNotEmpty ||
+          state.bridges.isNotEmpty ||
+          state.constructions.isNotEmpty ||
+          !parcelCanHostHall(
+            parcel: state.parcels.single.coord,
+            parcelSize: state.parcelSize,
+            hallSize: hallModel.footprintColumns,
+            isLand: (cell) => terrainProvider.sample(cell, state.seed).isLand,
+          )) {
+        throw const FormatException(
+          'A city without its city hall may hold only its founding '
+          'parcel — one that can host the hall, with nothing built.',
+        );
+      }
     }
     if (halls.length > 1) {
       throw const FormatException('The city has more than one city hall.');

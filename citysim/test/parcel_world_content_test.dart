@@ -317,10 +317,10 @@ void main() {
   });
 
   test('the authored map can always be founded', () {
-    // The founding purchase needs a parcel with five or more land
-    // cells, so content validation requires the map to offer at
-    // least one — an all-water map could never start a new game.
-    // (The shipped map's own findability is pinned in
+    // The founding claim needs a parcel the city hall can stand on
+    // with its front road, so content validation requires the map to
+    // offer at least one — an all-water map could never start a new
+    // game. (The shipped map's own claimability is pinned in
     // shipped_content_test.dart.)
     final unfoundable = TerrainContent(
       generatorVersion: content.terrain.generatorVersion,
@@ -337,7 +337,7 @@ void main() {
       ).any(
         (issue) =>
             issue.severity == 'error' &&
-            issue.message.contains('$foundingLandCells or more land cells'),
+            issue.message.contains('room for the city hall'),
       ),
       isTrue,
     );

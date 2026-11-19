@@ -69,12 +69,13 @@ void main() {
       api: api,
     );
 
-    // Play: check in, found, expand, buy a road plan (in flight,
-    // nothing delivered), then save and reload mid-project.
+    // Play: check in, claim, found, expand, buy a road plan (in
+    // flight, nothing delivered), then save and reload mid-project.
     var world = grantWorldDebugCoins(
       checkInWorldForToday(newWorld(), content),
       500000,
     );
+    world = purchaseParcel(world, content, terrain, const ParcelCoord(0, 0));
     world = foundCity(
       world,
       content,
@@ -335,6 +336,7 @@ void main() {
       checkInWorldForToday(newWorld(), content),
       100,
     );
+    first = purchaseParcel(first, content, terrain, const ParcelCoord(0, 0));
     first = foundCity(
       first,
       content,

@@ -1,12 +1,46 @@
 const defaultParcelSize = 8;
 const worldRenderChunkSize = 16;
 
-/// Land cells a parcel needs before a new game may claim it as its
-/// free founding parcel — enough room for a first road and home, so
-/// the opening can never dead-end on water. A game rule, like
-/// [defaultParcelSize], not tunable content; the map must always
-/// offer at least one parcel that clears it (content validation).
-const foundingLandCells = 5;
+/// Whether a square [hallSize]×[hallSize] hall — the city hall, per
+/// content's root model — with its front road, one cell out from the
+/// middle of one face, fits entirely on [parcel]'s dry land (per
+/// [isLand]). The founding claim's buildability bar: a claimed
+/// parcel must be able to host its hall, or the city could never
+/// found itself there and the claim would seal the game shut. A game
+/// rule, like [defaultParcelSize], not tunable content; content
+/// validation runs it too, so the authored map always offers at
+/// least one parcel that clears it.
+bool parcelCanHostHall({
+  required ParcelCoord parcel,
+  required int parcelSize,
+  required int hallSize,
+  required bool Function(CellCoord) isLand,
+}) {
+  final northWest = parcel.origin(parcelSize);
+  bool cellFits(CellCoord cell) =>
+      parcelForCell(cell, parcelSize: parcelSize) == parcel && isLand(cell);
+  for (var dy = 0; dy + hallSize <= parcelSize; dy++) {
+    for (var dx = 0; dx + hallSize <= parcelSize; dx++) {
+      final origin = northWest.offset(dx, dy);
+      var hallFits = true;
+      for (var fy = 0; fy < hallSize && hallFits; fy++) {
+        for (var fx = 0; fx < hallSize && hallFits; fx++) {
+          hallFits = cellFits(origin.offset(fx, fy));
+        }
+      }
+      if (!hallFits) continue;
+      // The front road: one cell off the middle of any one face.
+      final mid = hallSize ~/ 2;
+      if (cellFits(origin.offset(mid, -1)) ||
+          cellFits(origin.offset(mid, hallSize)) ||
+          cellFits(origin.offset(hallSize, mid)) ||
+          cellFits(origin.offset(-1, mid))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 /// Physical ground size of one tile's edge, in metres. The world
 /// renders 64 px wide per tile with walkers 9 px tall at the seeded

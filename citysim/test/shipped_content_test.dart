@@ -43,14 +43,23 @@ void main() {
   );
 
   test('the shipped map can always be founded and its props are free', () {
-    // The founding purchase needs a parcel with five or more land
-    // cells, so the shipped map must offer at least one.
+    // The founding claim needs a parcel the city hall can stand on
+    // with its front road, so the shipped map must offer at least
+    // one.
+    final hall = content.catalogue.firstWhere((model) => model.isRoot);
     expect(
       content.terrain.parcels.keys.any(
-        (coord) => content.terrain.landCellCount(coord) >= foundingLandCells,
+        (coord) => parcelCanHostHall(
+          parcel: coord,
+          parcelSize: defaultParcelSize,
+          hallSize: hall.footprintColumns,
+          isLand: (cell) =>
+              (content.terrain.tiles[cell] ?? content.terrain.parcels[coord]) ==
+              TerrainKind.grass,
+        ),
       ),
       isTrue,
-      reason: 'the shipped map has a findable founding parcel',
+      reason: 'the shipped map has a claimable founding parcel',
     );
     // The map grew to 120 parcels (x −3..6, y −8..3) with the big
     // island layout — pinned so a bad editor write cannot silently

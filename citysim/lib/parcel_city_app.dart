@@ -548,16 +548,12 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   ) {
     final world = _world;
     if (world == null) return;
-    // Founding taps land on unowned ground by definition — the hall
-    // picks the parcel its spot will claim.
-    final placingHall = _tool == _WorldTool.building && world.parcels.isEmpty;
     // Nothing outside the city is selectable: a tap on foreign or
     // unowned ground — a wild tree standing on it included, whose
     // sprite hit carries down to the tile beneath — clears the
     // selection instead. The parcel tool is the one exception:
     // choosing land to buy is its whole job.
     if (_tool != _WorldTool.parcel &&
-        !placingHall &&
         !WorldQueries(world, _terrain).ownsCell(cell)) {
       setState(() {
         _selectedCatalogueId = null;
@@ -758,10 +754,11 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
       _facingOverride = null;
       _highlightCells = const {};
       // An unfounded city's building tool is the founding tool: the
-      // city hall is the one thing it can place.
+      // city hall is the one thing it can place — the claim's
+      // guidance until it lands, the placement after.
       if (tool == _WorldTool.building) {
         final world = _world;
-        if (world != null && world.parcels.isEmpty) {
+        if (world != null && !cityIsFounded(world, _requireContent)) {
           _selectedCatalogueId = rootHallModel(_requireContent)?.id;
         }
       }
@@ -855,13 +852,13 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     );
   }
 
-  /// The founding hall's facing swap shows while placing the hall: an
-  /// unfounded city, the building tool, the hall selected, a tapped
-  /// spot. The map arrow points the same way.
+  /// The founding hall's facing swap shows while placing the hall: a
+  /// claimed-but-unfounded city, the building tool, the hall
+  /// selected, a tapped spot. The map arrow points the same way.
   String? _hallFacingButton(ParcelWorldState world) {
     final catalogueId = _selectedCatalogueId;
     if (_tool != _WorldTool.building ||
-        world.parcels.isNotEmpty ||
+        cityIsFounded(world, _requireContent) ||
         _selectedCell == null ||
         catalogueId == null ||
         _requireContent.structure(catalogueId)?.isRoot != true) {
@@ -937,18 +934,30 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         coord,
         claimedParcels: _foreignParcels(),
       );
+      // Founding's first act: the free claim, with founding's own
+      // wording — the second act (the hall) follows on this parcel.
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Buy parcel ${coord.key}?'),
+          title: Text(
+            quote.price == 0
+                ? 'Claim your founding parcel?'
+                : 'Buy parcel ${coord.key}?',
+          ),
           content: Text(
-            '${formatCoins(quote.price)} coins · ${quote.landCellCount} land cells and '
-            '${quote.cells.length - quote.landCellCount} water cells.\n\n'
-            '${formatCoins(quote.basePrice)} base '
-            '+ ${formatCoins(quote.perPopulationCoins)} × '
-            '${world.population} population. '
-            'The price grows as the settlement does.\n\n'
-            'Buildings and roads are not included.',
+            quote.price == 0
+                ? 'Free · ${quote.landCellCount} land cells and '
+                      '${quote.cells.length - quote.landCellCount} water cells.\n\n'
+                      'Parcel ${coord.key} becomes your founding parcel — '
+                      'next you place your city hall on it. The claim is '
+                      'permanent.'
+                : '${formatCoins(quote.price)} coins · ${quote.landCellCount} land cells and '
+                      '${quote.cells.length - quote.landCellCount} water cells.\n\n'
+                      '${formatCoins(quote.basePrice)} base '
+                      '+ ${formatCoins(quote.perPopulationCoins)} × '
+                      '${world.population} population. '
+                      'The price grows as the settlement does.\n\n'
+                      'Buildings and roads are not included.',
           ),
           actions: [
             TextButton(
@@ -957,7 +966,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Buy parcel'),
+              child: Text(quote.price == 0 ? 'Claim parcel' : 'Buy parcel'),
             ),
           ],
         ),
@@ -991,18 +1000,16 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
         _terrain,
         origin: cell,
         facing: _hallFacing,
-        claimedParcels: _foreignParcels(),
       );
       final hall = rootHallModel(_requireContent)!;
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Found your city here?'),
+          title: const Text('Place your city hall here?'),
           content: Text(
-            'Free · the city hall rises at ${cell.key} facing $_hallFacing '
+            'Free · the hall rises at ${cell.key} facing $_hallFacing '
             'over ${hall.constructionStages} stages, with its front road at '
-            '${quote.frontCell.key}. Parcel ${quote.parcel.key} becomes your '
-            'founding parcel'
+            '${quote.frontCell.key} on your founding parcel'
             '${quote.clearedNatureCount > 0 ? ', leveling ${quote.clearedNatureCount} nature' : ''}. '
             'Buildings need their road linked back to the hall\'s front road.',
           ),
@@ -1013,7 +1020,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Found city'),
+              child: const Text('Place city hall'),
             ),
           ],
         ),
@@ -1026,7 +1033,6 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           _terrain,
           origin: cell,
           facing: _hallFacing,
-          claimedParcels: _foreignParcels(),
         ),
       );
       setState(() {
@@ -1046,8 +1052,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     if (world == null || catalogueId == null || cell == null) return;
     // The hall never places through the normal path — founding is
     // its own act, with its own quote and confirm.
-    if (world.parcels.isEmpty &&
-        _requireContent.structure(catalogueId)?.isRoot == true) {
+    if (_requireContent.structure(catalogueId)?.isRoot == true) {
       await _confirmFounding(cell);
       return;
     }
@@ -1573,15 +1578,22 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
   );
 
   String _mapHint(ParcelWorldState world) {
-    // The founding nudge: before the first parcel, every tool's hint
-    // points at the one action that matters.
+    // The founding nudges: before the claim, every tool's hint points
+    // at the Parcels tool; between claim and hall, at the hall.
     if (world.parcels.isEmpty) {
       return switch (_tool) {
+        _WorldTool.parcel =>
+          'Tap any charted parcel — your founding claim is free',
+        _ => 'Open the Parcels tool and claim your founding parcel — free',
+      };
+    }
+    if (!cityIsFounded(world, _requireContent)) {
+      return switch (_tool) {
         _WorldTool.building =>
-          'Tap a spot for your city hall · the button swaps its facing',
-        _ =>
-          'Open the Building tool to place your city hall and found '
-              'the city',
+          'Tap a spot on your founding parcel for the city hall · the '
+              'button swaps its facing',
+        _WorldTool.parcel => 'Place your city hall before buying more land',
+        _ => 'Open the Building tool to place your city hall',
       };
     }
     return switch (_tool) {
@@ -1938,7 +1950,8 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
             ),
             Text(
               world.parcels.isEmpty
-                  ? 'Free — the first parcel costs nothing.'
+                  ? 'Free — the founding claim. Place your city hall on '
+                        'it next.'
                   : '${formatCoins(quote.price)} coins · ${formatCoins(quote.basePrice)} base '
                         '+ ${formatCoins(quote.perPopulationCoins)} × '
                         '${world.population} population.',
@@ -1961,14 +1974,17 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
     );
   }
 
-  /// The founding panel: the hall's quote — parcel claimed, front
-  /// road, and the nature founding levels. The facing itself cycles
-  /// on the map's swap button, beside the arrow that shows it.
+  /// The founding panel: the hall's quote — front road and the
+  /// nature founding levels, or the nudge to claim first. The facing
+  /// itself cycles on the map's swap button, beside the arrow that
+  /// shows it.
   Widget _foundingAction(ParcelWorldState world, CellCoord? cell) {
     final hall = rootHallModel(_requireContent)!;
     CityFoundingQuote? quote;
     String? failure;
-    if (cell != null) {
+    if (world.parcels.isEmpty) {
+      failure = 'Claim your founding parcel first — the Parcels tool, free.';
+    } else if (cell != null) {
       try {
         quote = quoteCityFounding(
           world,
@@ -1976,7 +1992,6 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           _terrain,
           origin: cell,
           facing: _hallFacing,
-          claimedParcels: _foreignParcels(),
         );
       } on WorldRuleViolation catch (error) {
         failure = error.message;
@@ -1995,13 +2010,14 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            cell == null
-                ? 'Tap a spot for the hall — the map\'s arrow shows where '
-                      'its front road lands.'
+            world.parcels.isEmpty
+                ? failure!
+                : cell == null
+                ? 'Tap a spot on your founding parcel — the map\'s arrow '
+                      'shows where its front road lands.'
                 : failure ??
                       'Hall at ${cell.key} facing $_hallFacing · front road '
-                          'at ${quote!.frontCell.key} · claims parcel '
-                          '${quote.parcel.key}'
+                          'at ${quote!.frontCell.key}'
                           '${quote.clearedNatureCount > 0 ? ' · levels ${quote.clearedNatureCount} nature' : ''}',
           ),
           if (quote != null && cell != null)
@@ -2145,8 +2161,10 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
 
   Widget _catalogue(ParcelWorldState world) {
     // An unfounded city's building catalogue is the hall alone —
-    // everything else waits for a town to stand around it.
-    if (_tool == _WorldTool.building && world.parcels.isEmpty) {
+    // everything else waits for a town to stand around it. Before
+    // the claim its panel says so; after, it places.
+    if (_tool == _WorldTool.building &&
+        !cityIsFounded(world, _requireContent)) {
       final hall = rootHallModel(_requireContent);
       if (hall != null) {
         return _PanelCard(
@@ -2159,9 +2177,7 @@ class _ParcelCityPageState extends State<ParcelCityPage> {
               selected: _selectedCatalogueId == hall.id,
               leading: const Icon(Icons.account_balance_rounded),
               title: Text(hall.name),
-              subtitle: const Text(
-                'Free · its parcel becomes your founding parcel',
-              ),
+              subtitle: const Text('Free · places on your founding parcel'),
               trailing: _selectedCatalogueId == hall.id
                   ? const Icon(Icons.check_circle_rounded)
                   : const Icon(Icons.chevron_right_rounded),

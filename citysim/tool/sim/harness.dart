@@ -331,11 +331,18 @@ class SimHarness {
   }
 
   ParcelCoord? _bestFounding(Iterable<ParcelCoord> coords) {
+    // Claimable means the hall fits — the claim's own gate. Land
+    // count breaks ties: founders prefer buildable ground.
     ParcelCoord? best;
     var bestLand = -1;
     for (final coord in coords) {
+      try {
+        quoteParcelPurchase(state, content, terrain, coord);
+      } on WorldRuleViolation {
+        continue;
+      }
       final land = landCells(coord);
-      if (land >= foundingLandCells && land > bestLand) {
+      if (land > bestLand) {
         best = coord;
         bestLand = land;
       }
@@ -343,10 +350,10 @@ class SimHarness {
     return best;
   }
 
-  /// Founds the city: the hall needs a 3×3 of dry land plus a dry
-  /// front cell, all inside the parcel. The scouted parcel hosts it
-  /// or the founder drives on — a full scan, the way a player
-  /// passes a valley with no room.
+  /// Founds the city: the free claim first, then the hall — a 3×3
+  /// of dry land plus a dry front cell, all on the claim. The
+  /// scouted parcel hosts it or the founder drives on — a full
+  /// scan, the way a player passes a valley with no room.
   bool foundAt(ParcelCoord coord) {
     if (_tryFoundAt(coord)) return true;
     final charted =
@@ -375,6 +382,16 @@ class SimHarness {
   bool _tryFoundAt(ParcelCoord coord) {
     final root = rootHallModel(content);
     if (root == null) return false;
+    // Founding's first act: the free claim, which itself refuses any
+    // parcel the hall cannot stand on.
+    try {
+      state = purchaseParcel(state, content, terrain, coord);
+    } on WorldRuleViolation {
+      return false;
+    }
+    _act(
+      SimAction('claim', 'founding parcel (${coord.x},${coord.y})', coins: 0),
+    );
     final size = state.parcelSize;
     final northWest = coord.origin(size);
     // The hall prefers the rim with open country ahead of its front:

@@ -335,10 +335,11 @@ ParcelWorldState setWorldCalendarDate(ParcelWorldState state, DateTime date) {
 }
 
 /// Buys a neighboring parcel from the town treasury.
-/// Claims a parcel. The first purchase of a new game is the founding
-/// — free, unbounded by adjacency, needing five or more land cells —
-/// and everything after is a normal adjacent purchase at the
-/// settlement-scaled price (see [quoteParcelPurchase]).
+/// Claims a parcel. The founding claim — a new game's first purchase
+/// — is free and unbounded by adjacency, needing a parcel the city
+/// hall can stand on with its front road (see [quoteParcelPurchase]);
+/// everything after founding is a normal adjacent purchase at the
+/// settlement-scaled price.
 ParcelWorldState purchaseParcel(
   ParcelWorldState state,
   ContentBundle content,
@@ -396,19 +397,19 @@ ParcelWorldState purchaseParcel(
   );
 }
 
-/// Founds the city: places the city hall at [origin] facing [facing],
-/// plants one road tile at the middle of its front face, and claims
-/// the parcel holding both as the free founding parcel. Nature under
-/// the hall and road levels itself — the founders clear their own
-/// ground. The hall rises in stages like any building; the road and
-/// the outside connection are live the moment founding lands.
+/// Founds the city: places the city hall at [origin] facing [facing]
+/// and plants one road tile at the middle of its front face —
+/// founding's second act, on the parcel the free claim already
+/// owns. Nature under the hall and road levels itself — the founders
+/// clear their own ground. The hall rises in stages like any
+/// building; the road and the outside connection are live the
+/// moment founding lands.
 ParcelWorldState foundCity(
   ParcelWorldState state,
   ContentBundle content,
   TerrainProvider terrainProvider, {
   required CellCoord origin,
   required String facing,
-  Set<ParcelCoord> claimedParcels = const {},
 }) {
   final quote = quoteCityFounding(
     state,
@@ -416,30 +417,16 @@ ParcelWorldState foundCity(
     terrainProvider,
     origin: origin,
     facing: facing,
-    claimedParcels: claimedParcels,
   );
   final model = rootHallModel(content)!;
-  final parcel = OwnedParcel(
-    coord: quote.parcel,
-    pricePaid: 0,
-    purchasedAtDay: state.constructionDay,
-    terrain: quote.parcel
-        .cells(state.parcelSize)
-        .map((cell) => terrainProvider.sample(cell, state.seed))
-        .toList(),
-  );
-  // Nature materializes with the claim (the purchase path's copy),
-  // minus whatever stands under the hall and its front road.
+  // Founding levels whatever stands under the hall and its road —
+  // the claim's nature, or brush the player could not have cleared
+  // (nothing else builds before the hall).
   final levelled = {...quote.footprint, quote.frontCell};
-  final nature = [
-    for (final row in terrainProvider.natureProps)
-      if (parcelForCell(row.cell, parcelSize: state.parcelSize) == quote.parcel)
-        placedPropFromTerrain(row),
-  ];
   final survivingProps = [
-    ...state.props,
-    ...nature,
-  ].where((prop) => !levelled.contains(prop.cell)).toList();
+    for (final prop in state.props)
+      if (!levelled.contains(prop.cell)) prop,
+  ];
   final hall = WorldConstruction(
     id: 'construction-${state.nextEntityNumber}',
     kind: WorldConstructionKind.structure,
@@ -463,7 +450,6 @@ ParcelWorldState foundCity(
   );
   return state.copyWith(
     nextEntityNumber: state.nextEntityNumber + 1,
-    parcels: [...state.parcels, parcel],
     props: survivingProps,
     roads: [...state.roads, road],
     constructions: [...state.constructions, hall],

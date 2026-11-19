@@ -1200,20 +1200,6 @@ class TerrainContent {
   /// kind, not authorship.
   bool isOnMap(ParcelCoord coord) => parcels.containsKey(coord);
 
-  /// How many of the parcel's cells are land, tile overrides
-  /// included. The founding purchase needs a buildable parcel —
-  /// five or more land cells — and content validation uses the same
-  /// count to guarantee the authored map offers at least one.
-  int landCellCount(ParcelCoord coord) {
-    final base = parcels[coord];
-    if (base == null) return 0;
-    var land = 0;
-    for (final cell in coord.cells()) {
-      if ((tiles[cell] ?? base) == TerrainKind.grass) land++;
-    }
-    return land;
-  }
-
   Map<String, Object?> toJson() => {
     'generatorVersion': generatorVersion,
     'parcels': {
@@ -1496,16 +1482,35 @@ List<ContentIssue> validateContentData({
   if (terrain.parcels.isEmpty) {
     error('The terrain map needs at least one parcel.');
   }
-  // The founding purchase (a new game's first, free parcel) needs a
-  // parcel with five or more land cells, so the authored map must
-  // offer at least one — otherwise no new game can ever begin.
-  if (!terrain.parcels.keys.any(
-    (coord) => terrain.landCellCount(coord) >= foundingLandCells,
-  )) {
-    error(
-      'The terrain map needs at least one parcel with '
-      '$foundingLandCells or more land cells.',
-    );
+  // The founding claim (a new game's first, free parcel) needs a
+  // parcel that can host the city hall — its 3×3 lot and front road
+  // on dry land — so the authored map must offer at least one;
+  // otherwise no new game can ever begin. (A catalogue without a
+  // root model errors below; this check only runs when there is one.)
+  StructureDefinition? rootModel;
+  for (final model in catalogue) {
+    if (model.isRoot) {
+      rootModel = model;
+      break;
+    }
+  }
+  if (rootModel != null) {
+    final hallSize = rootModel.footprintColumns;
+    if (!terrain.parcels.keys.any(
+      (coord) => parcelCanHostHall(
+        parcel: coord,
+        parcelSize: defaultParcelSize,
+        hallSize: hallSize,
+        isLand: (cell) =>
+            (terrain.tiles[cell] ?? terrain.parcels[coord]) ==
+            TerrainKind.grass,
+      ),
+    )) {
+      error(
+        'The terrain map needs at least one parcel with room for the '
+        'city hall — its 3×3 lot and front road on dry land.',
+      );
+    }
   }
   for (final entry in terrain.parcels.entries) {
     if (entry.value == TerrainKind.fog) {

@@ -29,21 +29,23 @@ volume, optimization, or constant attendance:
 
 ## 2. Current playable loop
 
-1. Claim a founding parcel — the first purchase is free, anywhere
-   charted with room to build.
-2. Explicitly check in for the current simulated date to run the town
+1. Claim a founding parcel — free, anywhere charted that can host the
+   city hall.
+2. Place the city hall on the claim — free, with its front road.
+3. Explicitly check in for the current simulated date to run the town
    report: taxes from completed buildings, minus upkeep.
-3. Spend coins on neighboring land, roads, buildings, bridges, or
+4. Spend coins on neighboring land, roads, buildings, bridges, or
    decorations (decorations are free).
-4. Expand connected roads and accessible land, then place more structures.
-5. Revisit the settlement as it grows; there is no penalty for taking a break.
+5. Expand connected roads and accessible land, then place more structures.
+6. Revisit the settlement as it grows; there is no penalty for taking a break.
 
 A new game owns nothing and builds nothing — no starter parcel, no pre-built
 road. The founding stake (`startingTreasuryCoins`) is the opening wallet.
 Current geography is a deterministic authored parcel map in `terrain.json`
 (grass and water parcels on a bounded map with open ocean beyond it), and
 content validation guarantees the map always offers at least one parcel
-with five or more land cells, so a new game can always be founded.
+the hall can stand on with its front road, so a new game can always be
+founded.
 
 ## 3. Coins, check-ins, and calendar
 
@@ -115,19 +117,26 @@ free-construction rule intact. Capacities count people, not households:
   upkeep). Because the parcel price escalates with population while tax
   income scales with population, the parcel cadence stays roughly constant:
   weekly in the founding era, about one per check-in late game.
-- **Founding is the city hall** (added 2026-11-18, closing the
-  sparse-road-pad exploit the run-3 playtest measured — frontage
-  without a network let four buildings ride one orphan tile). A
-  city is founded by placing a 3×3 **city hall** with a chosen
-  facing (a swap button and a direction arrow place it; north,
-  east, south, or west). One road tile plants itself at the middle
-  of the hall's front face, and the parcel holding hall and road
-  becomes the free founding parcel; brush under the ten footprint
-  cells clears with the act. The hall is pure ceremony — zero
-  jobs, tax, and upkeep, five stages, church art as its
-  placeholder sprite until real art lands — and it is permanent:
-  it cannot be demolished, never appears in the catalogue, and
-  places only through founding.
+- **Founding is two acts** (re-cut 2026-11-18 from the one-act
+  hall placement, closing the sparse-road-pad exploit the run-3
+  playtest measured — frontage without a network let four buildings
+  ride one orphan tile). **Act one, the claim**: the Parcels tool
+  claims one charted parcel free, anywhere on the map, with no
+  neighbour required — but only a parcel that can host the hall (a
+  3×3 lot with its front-road cell on dry land), because the claim
+  is permanent and the hall is mandatory; a claim that could not
+  host the hall would seal the game shut. **Act two, the hall**: a
+  3×3 **city hall** places on the claim with a chosen facing (a
+  swap button and a direction arrow place it; north, east, south, or
+  west), and one road tile plants itself at the middle of the hall's
+  front face; brush under the ten footprint cells clears with the
+  act. Between claim and hall nothing else may act — no purchases,
+  no roads, no buildings — so a hall-less city holds exactly its
+  claim and nothing built. The hall is pure ceremony — zero jobs,
+  tax, and upkeep, five stages, church art as its placeholder sprite
+  until real art lands — and it is permanent: it cannot be
+  demolished, never appears in the catalogue, and places only
+  through founding.
 - **The outside connection**: that front-road tile is the root of
   the town's road network. Buildings construct only where their
   fronting road is transitively connected to it — road tiles join
@@ -146,9 +155,10 @@ free-construction rule intact. Capacities count people, not households:
   demolishing a building beside a road, which is ordinary play,
   not a trap. Every city founds its own root: multi-city maps
   never require roads between towns, and where two towns'
-  networks meet they simply join. Saves from before founding
-  (land with no hall) are refused on load, by absence — no
-  version code anywhere.
+  networks meet they simply join. Saves from before founding (land
+  built on without a hall) are refused on load, by shape — the one
+  legal hall-less city is the mid-founding claim, one parcel with
+  nothing built — and no version code anywhere.
 - **Services**: fire/police/health coverage is demanded from a population
   of 300 (`serviceRequirementPopulation`) — exactly the city milestone,
   so the demand never precedes the stations that answer it (the earlier
@@ -177,12 +187,13 @@ free-construction rule intact. Capacities count people, not households:
 ## 4. Land and expansion
 
 - Parcels are adjacent grids of cells. The current parcel size is 8×8.
-- **The founding purchase** (a new game's first) is free, needs no neighbour,
-  and requires five or more land cells — enough room for a first road and
-  home, so the opening can never dead-end on water. Every later purchase
-  is normal: it must neighbor owned land, and it may be any charted parcel,
-  grass or water alike. Owning land across a river does not make that bank
-  accessible.
+- **The founding claim** (a new game's first purchase) is free, needs no
+  neighbour, and requires room for the city hall — a 3×3 lot with its
+  front-road cell on dry land — so the opening can never dead-end on
+  water or seal itself claimless. Every later purchase is normal: it
+  must neighbor owned land and wait for the hall, and it may be any
+  charted parcel, grass or water alike. Owning land across a river does
+  not make that bank accessible.
 - Land connectivity and road connectivity are different: a player can reach dry
   land without having a connected road there.
 - The player pays for a parcel before developing it. New parcels contain no
@@ -467,6 +478,31 @@ These are candidates, not promises or requirements for the current prototype:
   path — a grander hall per milestone tier, or halls that gain
   capabilities — is pure content work on that model and its sprite
   roles.
+- Growth-dial smoothness (design research, 2026-11-18): how the
+  genre's demand meters stay smooth, and what our growth dial can
+  borrow. Cities: Skylines' RCI bars are signed pressure ratios on a
+  −50..+50 scale centered at balance — worker demand, commercial
+  workers-to-population (ideal 1:8) plus free visitor slots (ideal
+  1:3), and unemployment (5% = center) — recomputed as the
+  simulation's stocks gradually move, never as a one-shot threshold.
+  SimCity (2013) derives each bar from the other zones' unfilled
+  needs (unfilled jobs → residential, unshopped shoppers →
+  commercial, freight → industrial), so acting on one bar raises
+  another; SimCity 4 adds demand *caps* that regional connections
+  lift, and Cities: Skylines II's Economy 2.0 rework aimed demand at
+  "more responsive, reflecting the city at any given time" from
+  household wealth and consumption. The transferable lessons: (1)
+  proportional response, never cliff thresholds — our tolerance
+  gate (unemployment over 10% freezes waiting-list refill) is the
+  one hard cliff in the dial, and a smooth curve from full to zero
+  arrivals across a widening unemployment band would keep it a
+  slope, not a wall; (2) demand that regenerates — every act feeds
+  another bar (ours: homes ↔ jobs, once the cliff is a curve);
+  (3) demand floors that never read zero (our 30% contentment floor
+  already plays this role); (4) the construction pipeline itself as
+  smoothing — our one-stage-per-check-in cadence is exactly that.
+  Display stays honest stocks per the numbers-not-interpretations
+  doctrine; the smoothness work belongs in the mechanics.
 
 ### Demolition (planned — direction agreed 2026-11-18, refined same day)
 
