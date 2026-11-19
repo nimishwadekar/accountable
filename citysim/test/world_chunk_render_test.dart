@@ -1159,4 +1159,166 @@ void main() {
     imageB.dispose();
     imageC.dispose();
   });
+
+  testWidgets("passive cities' foundations pour into the terrain chunks", (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    ParcelWorldProbe.recording = true;
+
+    // The focused city owns the starter parcel; the passive city owns
+    // the parcel to its north, where a café is planned. Foundations
+    // pour at planning, and a passive project carries no site art and
+    // none of the focused city's pending-construction overlays, so
+    // the slab is the whole probe: the passive city's ground edits
+    // live in its own queries, which the focused city's terrain
+    // sampling must consult or the café's cells render plain grass.
+    final focused = _anchorWorld(content);
+    final passive = sheetTablesToWorld(
+      SheetTables(
+        userData: const {
+          'seed': '7',
+          'coins': '10',
+          'coins_earned': '10',
+          'coins_spent': '0',
+          'simulated_date': '2026-11-05',
+          'high_water_date': '2026-11-05',
+          'construction_day': '0',
+        },
+        ownedParcels: const [
+          ['0', '-1'],
+        ],
+        tiles: const [
+          ['2', '-2', 'structure', 'planned', 'cafe', 'cafe', 'south', ''],
+        ],
+        projects: const [
+          ['1', 'structure', 'cafe', '2:-2', '1'],
+        ],
+      ),
+      content: content,
+      terrainProvider: ContentTerrainProvider(content.terrain),
+    );
+    expect(passive.constructions.single.footprint, [
+      const CellCoord(2, -2),
+      const CellCoord(3, -2),
+    ], reason: 'the fixture café lies flat across its two slab cells');
+
+    final boundaryKey = GlobalKey();
+    Widget app(List<ParcelWorldState> passives, Set<ParcelCoord> foreign) =>
+        MaterialApp(
+          debugShowCheckedModeBanner: false,
+          home: Scaffold(
+            body: RepaintBoundary(
+              key: boundaryKey,
+              // The MediaQuery stays in the tree for both renders so
+              // swapping the passive set never restructures it — only
+              // the data flips, and the ambient clock stays muted.
+              child: MediaQuery(
+                data: const MediaQueryData(disableAnimations: true),
+                child: ParcelWorldView(
+                  state: focused,
+                  content: content,
+                  terrainProvider: ContentTerrainProvider(content.terrain),
+                  passiveStates: passives,
+                  foreignParcels: foreign,
+                  onCellTap: (cell, structureId, subtileX, subtileY) {},
+                ),
+              ),
+            ),
+          ),
+        );
+
+    Future<(ui.Image, ByteData)> render(
+      List<ParcelWorldState> passives,
+      Set<ParcelCoord> foreign,
+    ) async {
+      await tester.pumpWidget(app(passives, foreign));
+      var settled = false;
+      for (var attempt = 0; attempt < 10 && !settled; attempt++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 300)),
+        );
+        ParcelWorldProbe.reset();
+        for (var i = 0; i < 6; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        settled =
+            ParcelWorldProbe.samples.isNotEmpty &&
+            ParcelWorldProbe.samples.every((s) => s.chunkRecords == 0);
+      }
+      expect(settled, isTrue, reason: 'chunks should finish recording');
+      // The composed shore bands chain after the chunks record; give
+      // that async stage a real-async window before the capture.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      final image = (await _capture(tester, boundaryKey))!;
+      final bytes = (await tester.runAsync(() => image.toByteData()))!;
+      return (image, bytes);
+    }
+
+    final (withPassive, withBytes) = await render(
+      [passive],
+      {ParcelCoord(0, -1)},
+    );
+    // Same focused world, no passive cities: the chunks must
+    // re-record, which the passive set's cache key guarantees.
+    final (alone, aloneBytes) = await render(const [], const {});
+
+    int channelDelta(int a, int b) {
+      var worst = 0;
+      for (final shift in [0, 8, 16]) {
+        final delta = (((a >> shift) & 0xFF) - ((b >> shift) & 0xFF)).abs();
+        if (delta > worst) worst = delta;
+      }
+      return worst;
+    }
+
+    bool isGrass(int rgba) {
+      final g = (rgba >> 16) & 0xFF, b = (rgba >> 8) & 0xFF;
+      return g > 100 && g - b > 20;
+    }
+
+    int pixelAt(ui.Image image, ByteData bytes, CellCoord cell) =>
+        _pixelAt(image, bytes, _screenCenterOf(cell));
+
+    // The café's two cells flip from grass to grey concrete once the
+    // passive city renders.
+    for (final cell in [const CellCoord(2, -2), const CellCoord(3, -2)]) {
+      final before = pixelAt(alone, aloneBytes, cell);
+      final after = pixelAt(withPassive, withBytes, cell);
+      expect(
+        isGrass(before),
+        isTrue,
+        reason: 'without the passive city the slab cells show grass',
+      );
+      expect(
+        isGrass(after),
+        isFalse,
+        reason: 'the passive café pours concrete at ${cell.key}',
+      );
+      expect(
+        channelDelta(before, after),
+        greaterThan(20),
+        reason: 'the slab must replace the grass at ${cell.key}',
+      );
+    }
+
+    // Untouched ground in the same passive parcel renders exactly as
+    // it does without the passive city — the sampler changes only
+    // what the passive city actually edited.
+    expect(
+      pixelAt(withPassive, withBytes, const CellCoord(5, -4)),
+      pixelAt(alone, aloneBytes, const CellCoord(5, -4)),
+      reason: 'unedited passive ground renders identically',
+    );
+
+    withPassive.dispose();
+    alone.dispose();
+  }, timeout: const Timeout(Duration(minutes: 3)));
 }

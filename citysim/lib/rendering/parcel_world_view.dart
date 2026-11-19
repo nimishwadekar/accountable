@@ -1473,8 +1473,10 @@ class _ParcelWorldPainter extends CustomPainter {
   /// Queries of the passive cities, in widget order — the other
   /// cities on the shared map, rendered fully visible but inert.
   /// Their structures, props, and bridge pieces join the static
-  /// actor pass and their roads join the road layer and neighbour
-  /// masks; nothing about them is tappable or simulated.
+  /// actor pass, their roads join the road layer and neighbour
+  /// masks, and their ground — painted tiles and building
+  /// foundations — joins the terrain chunks through
+  /// [_terrainAtOnMap]; nothing about them is tappable or simulated.
   final List<WorldQueries> passiveQueries;
 
   /// Parcels owned by the passive cities — parcel mode shades them
@@ -1664,6 +1666,7 @@ class _ParcelWorldPainter extends CustomPainter {
       groundPaths.where(images.containsKey).length,
       parcelMode,
       foreignParcels,
+      passiveQueries,
     );
     terrainCache.setTextureFactor(_textureFactorFor(scale, pixelRatio));
     terrainCache.evictDistant();
@@ -2288,6 +2291,23 @@ class _ParcelWorldPainter extends CustomPainter {
     return 2;
   }
 
+  /// Ground for any cell of the shared map. Parcels are exclusive,
+  /// so at most one city's ground edits sit on a cell, and the
+  /// owner's queries are the ones that know them — a passive city's
+  /// buildings pour their concrete foundations (and paint their
+  /// tiles) through its own [WorldQueries], never the focused
+  /// city's. Cells nobody owns sample the same authored terrain
+  /// through any queries, so the focused city's answer is the base
+  /// ground itself.
+  TerrainCell _terrainAtOnMap(CellCoord cell) {
+    for (final passive in passiveQueries) {
+      if (passive.ownsCell(cell)) {
+        return passive.terrainAt(cell);
+      }
+    }
+    return queries.terrainAt(cell);
+  }
+
   /// Records one parcel chunk in world space: terrain, unowned wash,
   /// roads, and — separately, so it can draw above neighbouring
   /// chunks — the owned-parcel outline.
@@ -2305,7 +2325,7 @@ class _ParcelWorldPainter extends CustomPainter {
 
     final cells = [
       for (final cell in coord.cells(parcelSize))
-        (cell, queries.terrainAt(cell), _cellWorldCenter(cell)),
+        (cell, _terrainAtOnMap(cell), _cellWorldCenter(cell)),
     ];
 
     // Terrain pass. Roads deliberately do not bake into the chunk:
@@ -2326,7 +2346,7 @@ class _ParcelWorldPainter extends CustomPainter {
         // composes asynchronously the first time it is seen. Fog
         // cells never band — the cloud deck is their whole look, and
         // the boundary is deliberately plain.
-        final pattern = shoreBandPattern(cell, queries.terrainAt);
+        final pattern = shoreBandPattern(cell, _terrainAtOnMap);
         if (pattern != null) {
           chunk.bands.add((cell, pattern));
           onBandPattern(pattern);
@@ -4709,6 +4729,11 @@ class _TerrainChunkCache {
   /// Identity of the foreign-parcel set — the claimed tint is baked
   /// into chunk pictures, so a new set re-records the world.
   Object? foreignKey;
+
+  /// Identity of the passive-cities queries — chunk pictures sample
+  /// ground through them (the other cities' painted tiles and
+  /// building foundations), so a new set re-records the world.
+  Object? passiveKey;
   double textureFactor = 1;
   int generation = 0;
   int _stamp = 0;
@@ -4721,28 +4746,32 @@ class _TerrainChunkCache {
 
   int nextStamp() => ++_stamp;
 
-  /// Drops every chunk when the world, the ground sprite set, or the
-  /// terrain view mode changed — parcel mode swaps the ground tiles,
-  /// the unowned wash, and the owned outlines inside the recording.
-  /// Only ground art counts as a sprite change: chunk pictures
-  /// sample terrain roles alone, so a late character, car, or prop
-  /// decode must not re-record the world.
+  /// Drops every chunk when the world, the ground sprite set, the
+  /// terrain view mode, or the passive-city set changed — parcel
+  /// mode swaps the ground tiles, the unowned wash, and the owned
+  /// outlines inside the recording, and the passive set swaps the
+  /// other cities' ground. Only ground art counts as a sprite
+  /// change: chunk pictures sample terrain roles alone, so a late
+  /// character, car, or prop decode must not re-record the world.
   void resetFor(
     Object world,
     int groundImages,
     bool parcelMode,
     Object foreign,
+    Object passive,
   ) {
     if (worldKey == world &&
         groundImageCount == groundImages &&
         parcelModeKey == parcelMode &&
-        foreignKey == foreign) {
+        foreignKey == foreign &&
+        passiveKey == passive) {
       return;
     }
     worldKey = world;
     groundImageCount = groundImages;
     parcelModeKey = parcelMode;
     foreignKey = foreign;
+    passiveKey = passive;
     generation++;
     for (final chunk in chunks.values) {
       chunk.dispose();
