@@ -401,14 +401,32 @@
       "category": "buildings",
       "codeReferenced": false,
       "facings": {
-        "left": "sprites/buildings/civic/bld_church_a.png",
-        "right": "sprites/buildings/civic/bld_church_b.png"
+        "left": "sprites/buildings/civic/basic_city_hall_a.png",
+        "right": "sprites/buildings/civic/basic_city_hall_b.png"
       },
       "groundAnchor": [
         0.5,
         1
       ],
-      "renderScale": 0.75,
+      "renderScale": 0.27,
+      "sideShifts": {
+        "east": [
+          -0.08000000000000002,
+          -0.18
+        ],
+        "north": [
+          -0.08000000000000002,
+          -0.21999999999999997
+        ],
+        "south": [
+          -0.09000000000000002,
+          -0.18
+        ],
+        "west": [
+          -0.15000000000000002,
+          -0.18
+        ]
+      },
       "subcategory": "civic",
       "sways": false
     },
