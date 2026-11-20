@@ -1403,8 +1403,9 @@ void main() {
         withFire.taxes,
         reason: 'contentment scales arrivals, never taxes',
       );
-      // And the station's jobs never enter the levy: demolishing it
-      // changes upkeep and coverage, not one coin of tax.
+      // And the station carries no jobs at all — demolishing it
+      // changes upkeep and coverage, not one coin of tax or one
+      // staffable position.
       final station = world.structures.firstWhere(
         (structure) => structure.catalogueId == 'fire-station',
       );
@@ -1416,7 +1417,12 @@ void main() {
       expect(
         townLedger(withoutStation, demanding).taxes,
         withFire.taxes,
-        reason: 'civic jobs are appeal, not levy denominators',
+        reason: 'a service building offers coverage, not work',
+      );
+      expect(
+        townLedger(world, content).jobVacancy,
+        townLedger(withoutStation, content).jobVacancy,
+        reason: 'the station never carried staffable jobs',
       );
       validateParcelWorldState(world, content, terrain);
     });

@@ -87,6 +87,7 @@ class DayRecord {
     this.arrived = 0,
     this.completions = 0,
     this.nextParcelPrice,
+    this.demand,
   });
 
   final int day;
@@ -113,6 +114,11 @@ class DayRecord {
   final int completions;
   final int? nextParcelPrice;
 
+  /// The smooth-demand model's diagnostics, when that model ran:
+  /// workforce, appeal, unemployment rate, inflow, cap, vacancies —
+  /// the probe's clamp telemetry. Null under the classic model.
+  final Map<String, Object?>? demand;
+
   Map<String, Object?> toJson() => {
     'day': day,
     'date': dateKey,
@@ -136,6 +142,7 @@ class DayRecord {
     if (arrived > 0) 'arrived': arrived,
     if (completions > 0) 'completions': completions,
     if (nextParcelPrice != null) 'nextParcelPrice': nextParcelPrice,
+    if (demand != null) 'demand': demand,
     'actions': [for (final action in actions) action.toJson()],
   };
 }
@@ -210,14 +217,15 @@ class SimHarness {
   }
 
   int get jobCapacityPlanned {
+    // Jobs are jobs: every position counts, completed or in flight.
     var capacity = 0;
     for (final structure in state.structures) {
       final model = content.structure(structure.catalogueId);
-      if (model?.isCommerce ?? false) capacity += model!.jobs;
+      capacity += model?.jobs ?? 0;
     }
     for (final job in state.constructions) {
       final model = _structureModel(job);
-      if (model?.isCommerce ?? false) capacity += model!.jobs;
+      capacity += model?.jobs ?? 0;
     }
     return capacity;
   }
@@ -1096,6 +1104,7 @@ class SimHarness {
       int? contentment;
       var arrived = 0;
       var completions = 0;
+      Map<String, Object?>? demandDiag;
       if (showsUp && canCheckInWorldToday(state)) {
         state = checkInWorldForToday(state, content);
         credited = true;
@@ -1111,6 +1120,19 @@ class SimHarness {
         contentment = (payload['contentment'] as num?)?.toInt();
         arrived = (payload['populationArrived'] as num?)?.toInt() ?? 0;
         completions = (payload['completions'] as List?)?.length ?? 0;
+        final smoothDiag = <String, Object?>{
+          for (final key in [
+            'workforce',
+            'appeal',
+            'unemploymentRate',
+            'listInflow',
+            'listCap',
+            'vacantHousing',
+            'vacantJobs',
+          ])
+            if (payload[key] != null) key: payload[key],
+        };
+        if (smoothDiag.isNotEmpty) demandDiag = smoothDiag;
         persona.playDay(this);
       }
       final acted = _actionsToday.any((action) => action.ok);
@@ -1139,6 +1161,7 @@ class SimHarness {
           arrived: arrived,
           completions: completions,
           nextParcelPrice: nextParcelPrice(),
+          demand: demandDiag,
         ),
       );
       if (state.coins < 0) {

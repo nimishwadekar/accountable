@@ -669,7 +669,7 @@
         "rows": 1
       },
       "id": "community-clinic",
-      "jobs": 15,
+      "jobs": 0,
       "kind": "building",
       "name": "Community Clinic",
       "population": 0,
@@ -906,7 +906,7 @@
         "rows": 2
       },
       "id": "police-station",
-      "jobs": 25,
+      "jobs": 0,
       "kind": "building",
       "name": "Police Station",
       "population": 0,
@@ -929,7 +929,7 @@
         "rows": 2
       },
       "id": "fire-station",
-      "jobs": 20,
+      "jobs": 0,
       "kind": "building",
       "name": "Fire Station",
       "population": 0,
@@ -976,7 +976,7 @@
         "rows": 2
       },
       "id": "hospital",
-      "jobs": 120,
+      "jobs": 0,
       "kind": "building",
       "name": "Hospital",
       "population": 0,

@@ -183,79 +183,168 @@ ParcelWorldState checkInWorldForToday(
   final economy = content.economy;
   var residentialCapacity = 0;
   var staffableJobs = 0;
-  var employerJobs = 0;
   for (final structure in structures) {
     final model = content.structure(structure.catalogueId);
     if (model == null) continue;
     if (model.isResidential) {
       residentialCapacity += model.population;
-    } else if (model.isService) {
-      // Service jobs are employer appeal, never staffable positions
-      // and never levy denominators — a clinic attracts residents
-      // without diluting what the shops pay.
-      employerJobs += model.jobs;
-    } else if (model.isCommerce) {
-      staffableJobs += model.jobs;
-      employerJobs += model.jobs;
     }
+    // Jobs are jobs: every position a building offers is staffable,
+    // whatever class the building carries.
+    staffableJobs += model.jobs;
   }
   int budget(int percent) {
     if (percent <= 0) return 0;
     return (population * percent / 100).floor().clamp(1, 1 << 30);
   }
 
-  // Surplus jobs pull: each open position beyond the employed
-  // population adds pull jobs to the migration budget — commerce
-  // built ahead visibly accelerates migration, and so do staffed
-  // civic employers. The pull only feeds the budget; the waiting
-  // list's cap still bounds every burst.
-  final surplusJobs = (employerJobs - employed).clamp(0, 1 << 30);
-  final pullJobs = (surplusJobs * economy.jobPullPercentPerCheckIn / 100)
-      .floor();
-  // Contentment is the town's appeal to newcomers, never its tax
-  // collector: the whole migration pipeline — arrivals and the
-  // list's refill — runs at the contentment rate, so an unhappy
-  // town stagnates instead of going broke. Below the service
-  // requirement, contentment is always full and nothing changes.
-  final appeal = ledger.contentment / 100;
-  final migrationBudget =
-      ((budget(economy.migrationPercentPerCheckIn) + pullJobs) * appeal)
-          .floor();
-
-  // Citizens move in while the waiting list and vacant housing both
-  // exist — regardless of unemployment.
+  // The demand pass. Two models share the section: classic (the
+  // shipped behaviour — contentment-scaled migration with an
+  // unemployment tolerance gate) and smooth (the experimental
+  // probe — a labour-market workforce, a smooth unemployment
+  // response, a bed-capped demand stock, and vacancy-paced
+  // arrivals). Content selects; nothing else differs.
   final vacantHousing = residentialCapacity - population;
-  final populationArrived =
-      (waiting < migrationBudget ? waiting : migrationBudget).clamp(
-        0,
-        vacantHousing < 0 ? 0 : vacantHousing,
-      );
-  population += populationArrived;
-  waiting -= populationArrived;
+  final int populationArrived;
+  final int positionsStaffed;
+  final Map<String, Object?> demandDiag;
+  if (economy.demandModel == 'smooth') {
+    // The labour market: a workforce share of the population holds
+    // jobs; the rest are children, retirees, and bystanders.
+    final workforce = workforceOf(population, economy.workforceSharePercent);
+    if (employed > workforce) employed = workforce;
+    final unemployedWorkers = workforce - employed;
 
-  // Positions staff while citizens are unemployed and jobs vacant.
-  final employmentBudget = budget(economy.employmentPercentPerCheckIn);
-  final unemployed = population - employed;
-  final vacantJobs = staffableJobs - employed;
-  final positionsStaffed =
-      (unemployed < employmentBudget ? unemployed : employmentBudget).clamp(
-        0,
-        vacantJobs < 0 ? 0 : vacantJobs,
-      );
-  employed += positionsStaffed;
+    // Appeal: average service coverage (full below the requirement
+    // population) scaled by the unemployment response — a smoothstep
+    // across the band, never a cliff — and floored, so even a
+    // struggling town keeps a trickle of interest.
+    final coverageAverage = ledger.coverage.isEmpty
+        ? 1.0
+        : ledger.coverage.values.reduce((a, b) => a + b) /
+              ledger.coverage.length;
+    final unemploymentRate = workforce > 0
+        ? unemployedWorkers / workforce
+        : 0.0;
+    final band =
+        (economy.unemploymentZeroPercent - economy.unemploymentFullPercent) /
+        100;
+    final eased = band <= 0
+        ? (unemploymentRate >= economy.unemploymentZeroPercent / 100
+              ? 1.0
+              : 0.0)
+        : ((unemploymentRate - economy.unemploymentFullPercent / 100) / band)
+              .clamp(0.0, 1.0);
+    final response = 1 - (3 * eased * eased - 2 * eased * eased * eased);
+    var appeal = coverageAverage * response;
+    final appealFloor = economy.contentmentFloorPercent / 100;
+    if (appeal < appealFloor) appeal = appealFloor;
 
-  // The list refills while unemployment sits within tolerance —
-  // a prosperous town attracts, and some joblessness is tolerated
-  // the way real frontier towns tolerated it. Vacant homes no
-  // longer freeze the list: they drain it, and demand reads as a
-  // lower bar instead of a stuck one. Population zero is within
-  // tolerance vacuously, kickstarting a fresh town.
-  final tolerated = (population * economy.unemploymentTolerancePercent / 100)
-      .floor()
-      .clamp(1, 1 << 30);
-  if (population - employed <= tolerated) {
-    final cap = budget(economy.waitingPopulationCapPercent);
-    waiting = (waiting + migrationBudget).clamp(0, cap);
+    // The demand stock: quiet fame plus open positions, scaled by
+    // appeal, pooled in a list capped by the beds on offer.
+    final surplus = (staffableJobs - employed).clamp(0, 1 << 30);
+    final pull = (surplus * economy.jobPullPercentPerCheckIn / 100).floor();
+    final inflow =
+        ((budget(economy.migrationPercentPerCheckIn) + pull) * appeal).floor();
+    final listCap = (residentialCapacity * economy.listCapPerBedsPercent / 100)
+        .floor()
+        .clamp(1, 1 << 30);
+    waiting = (waiting + inflow).clamp(0, listCap);
+
+    // Arrivals: empty homes fill at a rate of their vacancies — a
+    // draining tank, fastest while the town is widest open.
+    final vacant = vacantHousing < 0 ? 0 : vacantHousing;
+    final fillBudget = vacant == 0
+        ? 0
+        : (vacant * economy.homeFillPerDayPercent / 100).floor().clamp(
+            1,
+            1 << 30,
+          );
+    var arrivedCap = waiting < fillBudget ? waiting : fillBudget;
+    if (arrivedCap > vacant) arrivedCap = vacant;
+    if (arrivedCap < 0) arrivedCap = 0;
+    populationArrived = arrivedCap;
+    population += populationArrived;
+    waiting -= populationArrived;
+
+    // Staffing: workers take open commerce positions at a pace of
+    // the workforce.
+    final staffBudget = (workforce * economy.employmentPercentPerCheckIn / 100)
+        .floor()
+        .clamp(1, 1 << 30);
+    final vacantJobs = staffableJobs - employed;
+    var hiresCap = unemployedWorkers < staffBudget
+        ? unemployedWorkers
+        : staffBudget;
+    if (hiresCap > vacantJobs) hiresCap = vacantJobs;
+    if (hiresCap < 0) hiresCap = 0;
+    positionsStaffed = hiresCap;
+    employed += positionsStaffed;
+
+    demandDiag = {
+      'workforce': workforce,
+      'appeal': appeal,
+      'unemploymentRate': unemploymentRate,
+      'listInflow': inflow,
+      'listCap': listCap,
+      'vacantHousing': vacant,
+      'vacantJobs': vacantJobs,
+    };
+  } else {
+    // Surplus jobs pull: each open position beyond the employed
+    // population adds pull jobs to the migration budget — commerce
+    // built ahead visibly accelerates migration. The pull only
+    // feeds the budget; the waiting list's cap still bounds every
+    // burst.
+    final surplusJobs = (staffableJobs - employed).clamp(0, 1 << 30);
+    final pullJobs = (surplusJobs * economy.jobPullPercentPerCheckIn / 100)
+        .floor();
+    // Contentment is the town's appeal to newcomers, never its tax
+    // collector: the whole migration pipeline — arrivals and the
+    // list's refill — runs at the contentment rate, so an unhappy
+    // town stagnates instead of going broke. Below the service
+    // requirement, contentment is always full and nothing changes.
+    final appeal = ledger.contentment / 100;
+    final migrationBudget =
+        ((budget(economy.migrationPercentPerCheckIn) + pullJobs) * appeal)
+            .floor();
+
+    // Citizens move in while the waiting list and vacant housing both
+    // exist — regardless of unemployment.
+    final populationArrivedClassic =
+        (waiting < migrationBudget ? waiting : migrationBudget).clamp(
+          0,
+          vacantHousing < 0 ? 0 : vacantHousing,
+        );
+    populationArrived = populationArrivedClassic;
+    population += populationArrived;
+    waiting -= populationArrived;
+
+    // Positions staff while citizens are unemployed and jobs vacant.
+    final employmentBudget = budget(economy.employmentPercentPerCheckIn);
+    final unemployed = population - employed;
+    final vacantJobs = staffableJobs - employed;
+    positionsStaffed =
+        (unemployed < employmentBudget ? unemployed : employmentBudget).clamp(
+          0,
+          vacantJobs < 0 ? 0 : vacantJobs,
+        );
+    employed += positionsStaffed;
+
+    // The list refills while unemployment sits within tolerance —
+    // a prosperous town attracts, and some joblessness is tolerated
+    // the way real frontier towns tolerated it. Vacant homes no
+    // longer freeze the list: they drain it, and demand reads as a
+    // lower bar instead of a stuck one. Population zero is within
+    // tolerance vacuously, kickstarting a fresh town.
+    final tolerated = (population * economy.unemploymentTolerancePercent / 100)
+        .floor()
+        .clamp(1, 1 << 30);
+    if (population - employed <= tolerated) {
+      final cap = budget(economy.waitingPopulationCapPercent);
+      waiting = (waiting + migrationBudget).clamp(0, cap);
+    }
+    demandDiag = const {};
   }
 
   // The population milestone crossing, once, after every population
@@ -284,8 +373,14 @@ ParcelWorldState checkInWorldForToday(
       'net': taxes - paid,
       'contentment': ledger.contentment,
       // The unemployment that produced today's taxes — the report
-      // explains income with it.
-      'unemployed': state.unemployment,
+      // explains income with it. Classic counts residents without
+      // jobs; smooth counts workers without jobs.
+      'unemployed': economy.demandModel == 'smooth'
+          ? (workforceOf(state.population, economy.workforceSharePercent) -
+                    state.employedPopulation)
+                .clamp(0, 1 << 30)
+          : state.unemployment,
+      ...demandDiag,
       'stagesAdvanced': advanced,
       'completions': completions,
       'populationArrived': populationArrived,

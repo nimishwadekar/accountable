@@ -120,12 +120,12 @@ class StructureDefinition {
   /// The occupancy-flavoured classification: a model is what it
   /// offers. Population makes it residential, jobs make it commerce,
   /// a service category makes it a service building; anything else
-  /// is plain civic (upkeep drain, no coverage). A service
-  /// building's jobs are employer appeal, never commerce: it
-  /// classifies by its service before its jobs ever reach the
-  /// commerce question.
+  /// is plain civic (upkeep drain, no coverage). Jobs are jobs —
+  /// every position is staffable — and content validation keeps
+  /// service buildings job-free, so a service category can never
+  /// masquerade as commerce.
   bool get isResidential => population > 0;
-  bool get isCommerce => jobs > 0 && serviceCategory == null;
+  bool get isCommerce => jobs > 0;
   bool get isService => serviceCategory != null;
 
   /// Disabled models stay loadable for existing saves but are hidden from
@@ -525,6 +525,12 @@ class EconomyContent {
     this.employmentPercentPerCheckIn = 5,
     this.waitingPopulationCapPercent = 10,
     this.unemploymentTolerancePercent = 10,
+    this.demandModel = 'classic',
+    this.workforceSharePercent = 100,
+    this.listCapPerBedsPercent = 10,
+    this.homeFillPerDayPercent = 25,
+    this.unemploymentFullPercent = 5,
+    this.unemploymentZeroPercent = 20,
     this.jobPullPercentPerCheckIn = 10,
     this.contentmentFloorPercent = 0,
     this.homeTaxUnemploymentFloorPercent = 0,
@@ -573,6 +579,39 @@ class EconomyContent {
   /// frontier towns tolerate some joblessness. Above it, migration
   /// pauses until staffing catches up.
   final int unemploymentTolerancePercent;
+
+  /// Experimental (smooth-demand probe): which check-in demand pass
+  /// runs. `'classic'` is the shipped behaviour; `'smooth'` runs the
+  /// appeal-and-stock model — a labour-market workforce, a smooth
+  /// unemployment response instead of the tolerance cliff, a
+  /// bed-capped demand stock, and vacancy-paced arrivals. Mechanics
+  /// selected by content, not a save-format version.
+  final String demandModel;
+
+  /// Experimental (smooth-demand): the share of the population in
+  /// the labour market — children, retirees, and the rest never
+  /// hold jobs. Staffing, unemployment, and the home levy's full
+  /// rate all measure against this workforce.
+  final int workforceSharePercent;
+
+  /// Experimental (smooth-demand): the waiting list's cap, as a
+  /// percentage of residential beds — the demand stock is bounded
+  /// by the housing it eyes.
+  final int listCapPerBedsPercent;
+
+  /// Experimental (smooth-demand): the share of vacant homes that
+  /// fill per check-in — a draining tank, fastest when the town is
+  /// widest open.
+  final int homeFillPerDayPercent;
+
+  /// Experimental (smooth-demand): workforce unemployment at or
+  /// below this percentage keeps the town's full appeal.
+  final int unemploymentFullPercent;
+
+  /// Experimental (smooth-demand): workforce unemployment at or
+  /// above this percentage zeroes the unemployment response — the
+  /// smooth replacement for the classic tolerance cliff.
+  final int unemploymentZeroPercent;
 
   /// Job-pull: each surplus job beyond the employed population adds
   /// this percentage of an arrival to the migration budget —
@@ -627,6 +666,12 @@ class EconomyContent {
     'employmentPercentPerCheckIn': employmentPercentPerCheckIn,
     'waitingPopulationCapPercent': waitingPopulationCapPercent,
     'unemploymentTolerancePercent': unemploymentTolerancePercent,
+    'demandModel': demandModel,
+    'workforceSharePercent': workforceSharePercent,
+    'listCapPerBedsPercent': listCapPerBedsPercent,
+    'homeFillPerDayPercent': homeFillPerDayPercent,
+    'unemploymentFullPercent': unemploymentFullPercent,
+    'unemploymentZeroPercent': unemploymentZeroPercent,
     'jobPullPercentPerCheckIn': jobPullPercentPerCheckIn,
     'contentmentFloorPercent': contentmentFloorPercent,
     'homeTaxUnemploymentFloorPercent': homeTaxUnemploymentFloorPercent,
@@ -644,6 +689,12 @@ class EconomyContent {
     int? employmentPercentPerCheckIn,
     int? waitingPopulationCapPercent,
     int? unemploymentTolerancePercent,
+    String? demandModel,
+    int? workforceSharePercent,
+    int? listCapPerBedsPercent,
+    int? homeFillPerDayPercent,
+    int? unemploymentFullPercent,
+    int? unemploymentZeroPercent,
     int? jobPullPercentPerCheckIn,
     int? contentmentFloorPercent,
     int? homeTaxUnemploymentFloorPercent,
@@ -664,6 +715,14 @@ class EconomyContent {
         waitingPopulationCapPercent ?? this.waitingPopulationCapPercent,
     unemploymentTolerancePercent:
         unemploymentTolerancePercent ?? this.unemploymentTolerancePercent,
+    demandModel: demandModel ?? this.demandModel,
+    workforceSharePercent: workforceSharePercent ?? this.workforceSharePercent,
+    listCapPerBedsPercent: listCapPerBedsPercent ?? this.listCapPerBedsPercent,
+    homeFillPerDayPercent: homeFillPerDayPercent ?? this.homeFillPerDayPercent,
+    unemploymentFullPercent:
+        unemploymentFullPercent ?? this.unemploymentFullPercent,
+    unemploymentZeroPercent:
+        unemploymentZeroPercent ?? this.unemploymentZeroPercent,
     jobPullPercentPerCheckIn:
         jobPullPercentPerCheckIn ?? this.jobPullPercentPerCheckIn,
     contentmentFloorPercent:
@@ -696,6 +755,12 @@ class EconomyContent {
           json['waitingPopulationCapPercent'] as int? ?? 10,
       unemploymentTolerancePercent:
           json['unemploymentTolerancePercent'] as int? ?? 10,
+      demandModel: json['demandModel'] as String? ?? 'classic',
+      workforceSharePercent: json['workforceSharePercent'] as int? ?? 100,
+      listCapPerBedsPercent: json['listCapPerBedsPercent'] as int? ?? 10,
+      homeFillPerDayPercent: json['homeFillPerDayPercent'] as int? ?? 25,
+      unemploymentFullPercent: json['unemploymentFullPercent'] as int? ?? 5,
+      unemploymentZeroPercent: json['unemploymentZeroPercent'] as int? ?? 20,
       jobPullPercentPerCheckIn: json['jobPullPercentPerCheckIn'] as int? ?? 10,
       contentmentFloorPercent: json['contentmentFloorPercent'] as int? ?? 0,
       homeTaxUnemploymentFloorPercent:
@@ -1654,6 +1719,12 @@ List<ContentIssue> validateContentData({
     if (model.serviceCategory == null && model.serviceCapacity > 0) {
       error('${model.id}: service capacity without a service category.');
     }
+    if (model.serviceCategory != null && model.jobs > 0) {
+      error(
+        '${model.id}: service buildings carry no jobs — jobs are staffable '
+        'positions, and a service building offers coverage, not work.',
+      );
+    }
     if (model.footprintColumns < 1 || model.footprintRows < 1) {
       error('${model.id}: footprint must be at least 1×1.');
     }
@@ -1997,6 +2068,22 @@ List<ContentIssue> validateContentData({
   if (economy.contentmentFloorPercent < 0 ||
       economy.contentmentFloorPercent > 100) {
     error('The contentment floor must be a percentage within [0, 100].');
+  }
+  if (economy.workforceSharePercent < 0 ||
+      economy.workforceSharePercent > 100) {
+    error('The workforce share must be a percentage within [0, 100].');
+  }
+  if (economy.demandModel != 'classic' && economy.demandModel != 'smooth') {
+    error('The demand model must be "classic" or "smooth".');
+  }
+  if (economy.unemploymentFullPercent < 0 ||
+      economy.unemploymentZeroPercent < economy.unemploymentFullPercent ||
+      economy.listCapPerBedsPercent < 0 ||
+      economy.homeFillPerDayPercent < 0) {
+    error(
+      'The smooth-demand dials must be non-negative, with the '
+      'unemployment zero point at or above its full point.',
+    );
   }
   if (economy.homeTaxUnemploymentFloorPercent < 0 ||
       economy.homeTaxUnemploymentFloorPercent > 100) {

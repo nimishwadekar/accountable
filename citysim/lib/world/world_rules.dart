@@ -193,10 +193,10 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
   // employment rate over residential capacity, commerce taxes by
   // the staffing rate over job capacity — every home pays the
   // average rate, so unemployment reads as a town condition, not a
-  // named citizen's. Service buildings are civic, never commerce:
-  // their jobs are the town's employer appeal (the arrival pull),
-  // never part of the commerce levy — a staffed clinic must not
-  // dilute what the shops pay. Civic buildings are always active.
+  // named citizen's. Jobs are jobs: every position is staffable and
+  // counts in the staffing rate, whatever class the building
+  // carries (service buildings carry none — content validation
+  // keeps them job-free). Civic buildings are always active.
   // Upkeep is always owed in full, vacant or not.
   var residentialCapacity = 0;
   var jobCapacity = 0;
@@ -213,11 +213,11 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
     } else if (model.isService) {
       civicTax += model.taxCoins;
     } else if (model.isCommerce) {
-      jobCapacity += model.jobs;
       commerceTax += model.taxCoins;
     } else {
       civicTax += model.taxCoins;
     }
+    jobCapacity += model.jobs;
     upkeep += model.upkeepCoins;
   }
   var gross = 0.0;
@@ -229,8 +229,20 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
     // paid), so it could never afford the roads or land a café
     // needed to recover. Realistic too: unemployed people still pay
     // rent and sales taxes; employment raises a town's base rather
-    // than creating it from nothing.
-    final employmentRate = employed / residentialCapacity;
+    // than creating it from nothing. The smooth-demand model
+    // measures the rate against the housing's workforce — the levy
+    // tops out when the labour market is fully employed, not when
+    // every resident works.
+    final double employmentRate;
+    if (economy.demandModel == 'smooth') {
+      final workforceCapacity =
+          residentialCapacity * economy.workforceSharePercent / 100;
+      employmentRate = workforceCapacity <= 0
+          ? 0.0
+          : (employed / workforceCapacity).clamp(0.0, 1.0);
+    } else {
+      employmentRate = employed / residentialCapacity;
+    }
     final floor = economy.homeTaxUnemploymentFloorPercent / 100;
     final homeLevyRate = employmentRate < floor ? floor : employmentRate;
     gross += homeTax * homeLevyRate;
@@ -298,7 +310,11 @@ TownLedger townLedger(ParcelWorldState state, ContentBundle content) {
     upkeep: upkeep,
     contentment: contentment,
     residentialDemand: state.waitingPopulation,
-    employmentDemand: state.unemployment,
+    employmentDemand: economy.demandModel == 'smooth'
+        ? (workforceOf(state.population, economy.workforceSharePercent) -
+                  state.employedPopulation)
+              .clamp(0, 1 << 30)
+        : state.unemployment,
     residentialVacancy: residentialCapacity - population,
     jobVacancy: jobCapacity - employed,
     coverage: coverage,
@@ -784,7 +800,8 @@ StructureDemolitionQuote quoteStructureDemolition(
     );
   }
   // The town's remaining capacities, counted the way the ledger
-  // counts them: live content over the surviving buildings.
+  // counts them: live content over the surviving buildings. Jobs
+  // are jobs — every position counts.
   var bedsAfter = 0;
   var jobsAfter = 0;
   for (final structure in state.structures) {
@@ -792,7 +809,7 @@ StructureDemolitionQuote quoteStructureDemolition(
     final other = content.structure(structure.catalogueId);
     if (other == null) continue;
     if (other.isResidential) bedsAfter += other.population;
-    if (other.isCommerce) jobsAfter += other.jobs;
+    jobsAfter += other.jobs;
   }
   final stayers = state.population < bedsAfter ? state.population : bedsAfter;
   final evicted = state.population - stayers;

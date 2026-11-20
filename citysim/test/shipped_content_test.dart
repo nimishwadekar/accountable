@@ -257,6 +257,16 @@ void main() {
     expect(byId['apartments']!.population, 40);
     expect(byId['cafe']!.jobs, 8);
     expect(byId['tall-office']!.jobs, 300);
+    // Jobs are jobs — staffable positions — and service buildings
+    // carry none: a clinic offers coverage, not work.
+    for (final id in [
+      'community-clinic',
+      'police-station',
+      'fire-station',
+      'hospital',
+    ]) {
+      expect(byId[id]!.jobs, 0, reason: id);
+    }
     expect(byId['fire-station']!.serviceCategory, 'fire');
     expect(byId['fire-station']!.serviceCapacity, 1200);
     expect(byId['community-clinic']!.serviceCategory, 'health');

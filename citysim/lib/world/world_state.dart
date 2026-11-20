@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../content/content_bundle.dart';
 import 'coordinates.dart';
 import 'terrain_provider.dart';
@@ -427,6 +429,14 @@ class ParcelWorldState {
 
 String worldDateKey(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+/// Citizens able to hold jobs out of [population] under a
+/// [sharePercent] workforce share — the smooth-demand model's labour
+/// market. Any non-empty town has at least one worker; an empty
+/// town has none.
+int workforceOf(int population, int sharePercent) => population <= 0
+    ? 0
+    : math.max(1, (population * sharePercent / 100).floor());
 
 /// A fresh world: nothing is owned, nothing is built. The player
 /// claims a founding parcel — the first purchase, free — wherever

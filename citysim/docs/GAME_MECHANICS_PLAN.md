@@ -469,10 +469,11 @@ These are candidates, not promises or requirements for the current prototype:
 - Manual category assignment in the editor: a building's economic
   class (residential / commerce / service / civic) is derived today
   from its numbers — population, jobs, serviceCategory — which the
-  2026-11-18 civic reclassification made load-bearing (a service
-  building's jobs are appeal, never levy). An editor control that
-  names the class explicitly, with validation that the numbers agree
-  with it, would retire the derivation as the single source of truth.
+  2026-11-19 jobs-are-jobs rule made load-bearing (service
+  buildings carry no jobs; jobs make commerce). An editor control
+  that names the class explicitly, with validation that the
+  numbers agree with it, would retire the derivation as the single
+  source of truth.
 - City hall upgrades: the hall is content (`isRoot` on the model),
   zero-stat and 3×3, with church art as a placeholder. An upgrade
   path — a grander hall per milestone tier, or halls that gain
@@ -756,13 +757,16 @@ shop is a pure upkeep drain.
   afford the road tile that starts its recovery. Doctrine
   extended: contentment gates growth, never income; the fix for
   low contentment — service buildings — is always free labor.
-- **Service buildings are civic, never commerce** (also
-  2026-11-18): a `serviceCategory` classifies a building before
-  its jobs ever reach the commerce levy — a staffed clinic must
-  not dilute what the shops pay (a playtest reviewer measured a
-  7% tax gap from exactly this). Civic jobs still count toward
-  the town's employer appeal, the arrival pull, but they are not
-  staffable positions and never enter the levy's denominators.
+- **Jobs are jobs** (re-cut 2026-11-19 from the 2026-11-18 civic
+  reclassification): every `jobs` value a building carries is a
+  staffable position, counted in the staffing rate, the arrival
+  pull, and the job counters alike — there is no second,
+  appeal-only kind of job. Service buildings carry **no jobs at
+  all** (content validation refuses a service model with jobs): a
+  clinic offers coverage, not work, so it neither staffs nor
+  pulls migrants. The commerce levy's denominator is the town's
+  whole job capacity, which — services being job-free — is the
+  commerce buildings' positions.
 - **Storage.** A ninth `occupancy` column on the Tiles sheet holds
   filled units per completed structure: households for residential,
   staffed positions for commerce (a cafe staffs up job-by-job
